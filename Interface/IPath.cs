@@ -1,25 +1,69 @@
+using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// 【最终纯净版】定义了所有路径算法必须遵守的核心数学接口。
+/// - 已完全移除所有与编辑器绘制和交互相关的职责。
+/// </summary>
 public interface IPath
 {
-    // 获取/设置所有数据点 (局部空间)
-    System.Collections.Generic.List<Vector3> Points { get; set; }
+    #region 属性 (Properties)
 
-    // 总段数
+    /// <summary>
+    ///获取或设置构成路径的所有数据点（ 存储在局部空间）。
+    /// </summary>
+    List<Vector3> Points { get; set; }
+
+    /// <summary>
+    ///获取路径的总段数。
+    /// </summary>
     int NumSegments { get; }
+
+    /// <summary>
+    ///获取路径中数据点的总数。
+    /// </summary>
     int NumPoints { get; }
 
-    // 在曲线上 t 位置获取一个点 (t 从 0 到 NumSegments)
+    #endregion
+
+    #region 核心方法 (Core Methods)
+
+    /// <summary>
+    /// 根据一个0到NumSegments之间的t值，获取曲线上精确的世界坐标点。
+    /// </summary>
+    /// <param name="t">沿曲线的距离参数，从0到NumSegments。</param>
+    /// <param name="owner">拥有此路径的Transform组件。</param>
+    /// <returns>世界空间中的点坐标。</returns>
     Vector3 GetPointAt (float t, Transform owner);
 
-    // 添加一个新的路径段
+    /// <summary>
+    /// 在路径末尾添加一个新的段落/点。
+    /// </summary>
+    /// <param name="newPointWorldPos">新点的世界坐标。</param>
+    /// <param name="owner">拥有此路径的Transform组件。</param>
     void AddSegment (Vector3 newPointWorldPos, Transform owner);
 
-    // 移动一个点
+    /// <summary>
+    /// 移动路径上的一个指定点。
+    /// </summary>
+    /// <param name="i">要移动的点的索引。</param>
+    /// <param name="newPointWorldPos">点的新世界坐标。</param>
+    /// <param name="owner">拥有此路径的Transform组件。</param>
     void MovePoint (int i, Vector3 newPointWorldPos, Transform owner);
 
-    //让曲线类负责绘制自己的编辑器UI
-    void DrawEditorHandles (PathCreator creator);
+    /// <summary>
+    /// 在指定的分段索引后插入一个新的点。
+    /// </summary>
+    /// <param name="segmentIndex">在其后插入新点的分段索引。</param>
+    /// <param name="newPointWorldPos">新点的世界坐标。</param>
+    /// <param name="owner">拥有此路径的Transform组件。</param>
+    void InsertSegment (int segmentIndex, Vector3 newPointWorldPos, Transform owner);
 
-    // (未来可扩展其他方法，如获取切线、法线等)
+    /// <summary>
+    /// 删除路径上的一个指定点。
+    /// </summary>
+    /// <param name="pointIndex">要删除的点的索引。</param>
+    void DeleteSegment (int pointIndex);
+
+    #endregion
 }

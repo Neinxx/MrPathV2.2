@@ -4,23 +4,27 @@ using Unity.Jobs;
 using UnityEngine;
 
 /// <summary>
-/// 一个Burst编译的Job，用于高效地生成路径的预览网格。
-/// V2.7 (Sub-mesh Support):
-/// - 支持为每个Profile分段生成独立的子网格数据。
-/// - 包含了所有之前的性能和视觉修正。
+/// 【神兵正刃版】一个Burst编译的Job，用于高效地生成路径的预览网格。
+/// - 修正了三角面顶点的环绕顺序，确保网格正面朝外。
 /// </summary>
 [BurstCompile]
 public struct GenerateMeshJob : IJob
 {
-    // --- 输入数据 ---
+    #region 输入数据 (Input Data)
+
     [ReadOnly] public PathSpineForJob spine;
     [ReadOnly] public NativeArray<ProfileSegmentData> segments;
 
-    // --- 输出数据 ---
+    #endregion
+
+    #region 输出数据 (Output Data)
+
     public NativeList<Vector3> vertices;
     public NativeList<Vector2> uvs;
     public NativeList<int> allTriangles;
     public NativeArray<int> subMeshTriangleCounts;
+
+    #endregion
 
     /// <summary>
     /// Job的执行入口点。
@@ -30,16 +34,14 @@ public struct GenerateMeshJob : IJob
         // 遍历路径骨架上的每一个采样点
         for (int i = 0; i < spine.points.Length; i++)
         {
-            // 获取当前骨架点的核心数据
             Vector3 spinePoint = spine.points[i];
             Vector3 tangent = spine.tangents[i];
             Vector3 normal = spine.normals[i];
             float timestamp = spine.timestamps[i];
 
-            // 动态计算当前点局部的“Up”向量
             Vector3 localUp = Vector3.Cross (normal, tangent);
 
-            // 遍历Profile中的每一个分段
+            // 遍历Profile中的每一个分段(图层)
             for (int j = 0; j < segments.Length; j++)
             {
                 ProfileSegmentData segment = segments[j];
@@ -66,16 +68,20 @@ public struct GenerateMeshJob : IJob
                     int current_A = baseCurrent;
                     int current_B = baseCurrent + 1;
 
-                    // 定义逆时针(CCW)顺序的三角面以正确显示正面
+                    // --- 【核心修正】采用逆时针(CCW)顺序定义三角面 ---
+
+                    // 第一个三角面
                     allTriangles.Add (prev_A);
-                    allTriangles.Add (current_A);
                     allTriangles.Add (prev_B);
+                    allTriangles.Add (current_A);
 
+                    // 第二个三角面
                     allTriangles.Add (prev_B);
-                    allTriangles.Add (current_A);
                     allTriangles.Add (current_B);
+                    allTriangles.Add (current_A);
 
-                    // 为当前子网格(分段j)的索引计数器加6
+                    // ---------------------------------------------
+
                     subMeshTriangleCounts[j] += 6;
                 }
             }

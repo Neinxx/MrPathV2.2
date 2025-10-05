@@ -10,8 +10,6 @@ public enum BlendMaskType { ProceduralNoise, PositionalGradient, CustomTexture }
 
 #endregion
 
-#region Data Structures
-
 /// <summary>
 /// 混合遮罩：定义了图层的绘制区域。
 /// </summary>
@@ -29,6 +27,28 @@ public class BlendMask
 
     [Header ("自定义贴图 (Custom Texture)")]
     public Texture2D customTexture;
+}
+
+/// <summary>
+/// 【新增】路径图层：定义了一个拥有独立几何形状和地形纹理混合配方的渲染层。
+/// 它取代了旧的 ProfileSegment。
+/// </summary>
+[System.Serializable]
+public class PathLayer
+{
+    public string name = "New Layer";
+
+    [Header ("几何属性 (Geometry)")]
+    [Tooltip ("该图层的总宽度")]
+    public float width = 5f;
+    [Tooltip ("该图层中心线距离路径中心线的水平偏移")]
+    public float horizontalOffset = 0f;
+    [Tooltip ("该图层相对于路径的垂直偏移（抬高或降低）")]
+    public float verticalOffset = 0.1f;
+
+    [Header ("外观定义 (Appearance)")]
+    [Tooltip ("用于定义该图层如何与地形混合的纹理配方")]
+    public LayerBlendRecipe terrainPaintingRecipe = new LayerBlendRecipe ();
 }
 
 /// <summary>
@@ -54,29 +74,8 @@ public class LayerBlendRecipe
 }
 
 /// <summary>
-/// 分段 (Segment)：Profile的组成部分。
-/// </summary>
-[System.Serializable]
-public class ProfileSegment
-{
-    public string name = "New Segment";
-    public SegmentOutputMode outputMode = SegmentOutputMode.TerrainPainting;
-
-    [Header ("几何属性")]
-    public float width = 5f;
-    public float horizontalOffset = 0f;
-    public float verticalOffset = 0.1f;
-
-    [Header ("外观定义")]
-    // 【修改】使用新的图层混合配方
-    public LayerBlendRecipe terrainPaintingRecipe = new LayerBlendRecipe ();
-    public Material standaloneMeshMaterial;
-}
-
-#endregion
-
-/// <summary>
-/// 剖面 (Profile)：核心的ScriptableObject资产。
+/// 【重构后】剖面 (Profile)：核心的ScriptableObject资产。
+/// 现在它由一系列有序的“路径图层”构成。
 /// </summary>
 [CreateAssetMenu (fileName = "NewPathProfile", menuName = "Path Tool/Path Profile")]
 public class PathProfile : ScriptableObject
@@ -86,6 +85,7 @@ public class PathProfile : ScriptableObject
     [Range (0.1f, 10f)]
     public float minVertexSpacing = 0.5f;
 
-    [Header ("路径分段")]
-    public List<ProfileSegment> segments = new List<ProfileSegment> ();
+    [Header ("路径渲染图层 (Layers)")]
+    [Tooltip ("定义路径外观的图层列表。第一个图层通常是主路面，后续图层是路肩或过渡带。")]
+    public List<PathLayer> layers = new List<PathLayer> ();
 }

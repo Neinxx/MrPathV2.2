@@ -12,15 +12,42 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c37d8a808c6264b6fbe4ede5e07c0b80, type: 3}
   m_Name: NewPathProfile
   m_EditorClassIdentifier: 
-  segments:
+  minVertexSpacing: 0.1
+  layers:
   - name: 1
-    outputMode: 0
-    width: 2.22
-    horizontalOffset: 0.75
-    verticalOffset: 0.87
+    width: 2.11
+    horizontalOffset: 0
+    verticalOffset: 0.001
     terrainPaintingRecipe:
-      placeholderTerrainLayer: {fileID: 8574412962073106934, guid: 3d14c2b5f080748cb879668bf87736af,
-        type: 2}
-    standaloneMeshMaterial: {fileID: 2100000, guid: 0cb720ca1fa9744c2bfc1421ea870cc7,
-      type: 2}
-  minVertexSpacing: 0.5
+      blendLayers:
+      - terrainLayer: {fileID: 8574412962073106934, guid: 6c25c761803014cf68f02047997b8c01,
+          type: 2}
+        blendMask:
+          maskType: 0
+          noiseScale: 2.68
+          noiseStrength: 1.63
+          gradient:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 0
+              inSlope: 0
+              outSlope: 0
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 1
+              inSlope: 2
+              outSlope: 2
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 0
+          customTexture: {fileID: 10309, guid: 0000000000000000f000000000000000, type: 0}

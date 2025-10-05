@@ -1,40 +1,48 @@
+// 文件路径: Editor/Settings/PathToolSettingsProvider.cs
 using UnityEditor;
 using UnityEngine;
 
 public class PathToolSettingsProvider : SettingsProvider
 {
+    private SerializedObject m_Settings;
+
     public PathToolSettingsProvider (string path, SettingsScope scope = SettingsScope.Project) : base (path, scope) { }
+
+    public override void OnActivate (string searchContext, UnityEngine.UIElements.VisualElement rootElement)
+    {
+        // 当设置窗口被打开时，获取设置资产的序列化对象
+        m_Settings = new SerializedObject (PathToolSettings.Instance);
+    }
 
     public override void OnGUI (string searchContext)
     {
-        PathToolSettings settings = PathToolSettings.Instance;
+        if (m_Settings == null || m_Settings.targetObject == null)
+            return;
 
-        // 使用 BeginChangeCheck 来检测用户是否修改了设置
-        EditorGUI.BeginChangeCheck ();
+        m_Settings.Update ();
 
-        // 绘制UI元素
+        // 使用属性绘制，可以自动处理Undo/Redo和脏标记
         EditorGUILayout.LabelField ("默认创建设置", EditorStyles.boldLabel);
-        settings.defaultObjectName = EditorGUILayout.TextField ("默认对象名", settings.defaultObjectName);
-        settings.defaultLineLength = EditorGUILayout.FloatField ("默认线段长度", settings.defaultLineLength);
-        settings.defaultCurveType = (PathCreator.CurveType) EditorGUILayout.EnumPopup ("默认曲线类型", settings.defaultCurveType);
-        EditorGUILayout.Space ();
-        EditorGUILayout.LabelField ("预览设置", EditorStyles.boldLabel);
-        settings.terrainPreviewTemplate = (Material) EditorGUILayout.ObjectField ("地形预览模板材质", settings.terrainPreviewTemplate, typeof (Material), false);
+        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultObjectName"), new GUIContent ("默认对象名"));
+        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultLineLength"), new GUIContent ("默认线段长度"));
+        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultCurveType"), new GUIContent ("默认曲线类型"));
 
-        // 如果检测到修改，则保存设置
-        if (EditorGUI.EndChangeCheck ())
-        {
-            PathToolSettings.Save ();
-        }
+        EditorGUILayout.Space ();
+
+        EditorGUILayout.LabelField ("默认外观", EditorStyles.boldLabel);
+        // 【核心修改】将原来的材质字段改为PathProfile字段
+        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultPathProfile"), new GUIContent ("默认路径外观 (Profile)"));
+
+        m_Settings.ApplyModifiedProperties ();
     }
 
     /// <summary>
-    /// 这个静态方法是关键，它将我们的设置提供者注册到Project Settings窗口中。
+    /// 将我们的设置提供者注册到Project Settings窗口中。
     /// </summary>
     [SettingsProvider]
     public static SettingsProvider CreatePathToolSettingsProvider ()
     {
-        var provider = new PathToolSettingsProvider ("Project/MrPath");
+        var provider = new PathToolSettingsProvider ("Project/MrPath Tool Settings");
         return provider;
     }
 }
