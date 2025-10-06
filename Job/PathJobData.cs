@@ -9,14 +9,14 @@ public struct PathSpineForJob
 {
     [ReadOnly] public NativeArray<Vector3> points;
     [ReadOnly] public NativeArray<Vector3> tangents;
-    [ReadOnly] public NativeArray<Vector3> normals;
+    [ReadOnly] public NativeArray<Vector3> surfaceNormals;
     [ReadOnly] public NativeArray<float> timestamps;
 
-    public PathSpineForJob (NativeArray<Vector3> p, NativeArray<Vector3> t, NativeArray<Vector3> n, NativeArray<float> ts)
+    public PathSpineForJob(NativeArray<Vector3> p, NativeArray<Vector3> t, NativeArray<Vector3> n, NativeArray<float> ts)
     {
         points = p;
         tangents = t;
-        normals = n;
+        surfaceNormals = n;
         timestamps = ts;
     }
 }

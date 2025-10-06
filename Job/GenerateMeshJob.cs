@@ -4,8 +4,8 @@ using Unity.Jobs;
 using UnityEngine;
 
 /// <summary>
-/// 【神兵正刃版】一个Burst编译的Job，用于高效地生成路径的预览网格。
-/// - 修正了三角面顶点的环绕顺序，确保网格正面朝外。
+/// 【终极纯净版】一个Burst编译的Job，用于高效地生成路径的预览网格。
+/// - 废弃了所有旧的localUp计算逻辑，完全依赖于传入的surfaceNormals。
 /// </summary>
 [BurstCompile]
 public struct GenerateMeshJob : IJob
@@ -29,32 +29,44 @@ public struct GenerateMeshJob : IJob
     /// <summary>
     /// Job的执行入口点。
     /// </summary>
-    public void Execute ()
+    public void Execute()
     {
-        // 遍历路径骨架上的每一个采样点
         for (int i = 0; i < spine.points.Length; i++)
         {
+            // --- 1. 获取三大核心法则 ---
             Vector3 spinePoint = spine.points[i];
-            Vector3 tangent = spine.tangents[i];
-            Vector3 normal = spine.normals[i];
+            Vector3 tangent = spine.tangents[i];      // “前进”方向
+            Vector3 localUp = spine.surfaceNormals[i];  // “向上”方向 (源自大地)
+
+            // --- 2. 推演“右方”法则 ---
+            Vector3 normal = Vector3.Cross(tangent, localUp).normalized;
+
+
+            Vector3 right = Vector3.Cross(tangent, localUp).normalized;
+
+
+            // --- 3. 守护：若前进与向上平行（极端情况），则使用世界右方作为备用
+            if (right.sqrMagnitude < 0.001f)
+            {
+                right = Vector3.Cross(tangent, Vector3.right).normalized;
+            }
+
             float timestamp = spine.timestamps[i];
 
-            Vector3 localUp = Vector3.Cross (normal, tangent);
-
-            // 遍历Profile中的每一个分段(图层)
             for (int j = 0; j < segments.Length; j++)
             {
                 ProfileSegmentData segment = segments[j];
 
-                // --- 顶点和UV生成 ---
-                Vector3 vertA = spinePoint + normal * (segment.horizontalOffset - segment.width / 2) + localUp * segment.verticalOffset;
-                Vector3 vertB = spinePoint + normal * (segment.horizontalOffset + segment.width / 2) + localUp * segment.verticalOffset;
-                vertices.Add (vertA);
-                vertices.Add (vertB);
-                uvs.Add (new Vector2 (0, timestamp));
-                uvs.Add (new Vector2 (1, timestamp));
+                // --- 4. 依据三大法则，构建顶点 ---
+                Vector3 vertA = spinePoint + right * (segment.horizontalOffset - segment.width / 2) + localUp * segment.verticalOffset;
+                Vector3 vertB = spinePoint + right * (segment.horizontalOffset + segment.width / 2) + localUp * segment.verticalOffset;
+                // ...
+                vertices.Add(vertA);
+                vertices.Add(vertB);
+                uvs.Add(new Vector2(0, timestamp));
+                uvs.Add(new Vector2(1, timestamp));
 
-                // --- 三角面生成 ---
+                // --- 5. 连接三角面 (逻辑不变) ---
                 if (i > 0)
                 {
                     int vertsPerPointPerSegment = 2;
@@ -71,14 +83,14 @@ public struct GenerateMeshJob : IJob
                     // --- 【核心修正】采用逆时针(CCW)顺序定义三角面 ---
 
                     // 第一个三角面
-                    allTriangles.Add (prev_A);
-                    allTriangles.Add (prev_B);
-                    allTriangles.Add (current_A);
+                    allTriangles.Add(prev_A);
+                    allTriangles.Add(prev_B);
+                    allTriangles.Add(current_A);
 
                     // 第二个三角面
-                    allTriangles.Add (prev_B);
-                    allTriangles.Add (current_B);
-                    allTriangles.Add (current_A);
+                    allTriangles.Add(prev_B);
+                    allTriangles.Add(current_B);
+                    allTriangles.Add(current_A);
 
                     // ---------------------------------------------
 

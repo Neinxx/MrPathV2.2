@@ -2,79 +2,184 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 【重排版】一个静态工厂类，负责创建和初始化新的路径对象。
+/// 路径对象创建工厂类
+/// 负责规范化路径对象的创建流程，确保初始化状态一致
 /// </summary>
 public static class PathFactory
 {
-    #region 公共接口 (Public API)
+    #region 公共接口
 
     /// <summary>
-    /// 根据 PathToolSettings 中的默认设置，创建一个新的路径对象。
+    /// 创建一个基于默认设置的新路径对象
     /// </summary>
-    public static void CreateDefaultPath ()
+    public static void CreateDefaultPath()
     {
-        // 1. 从设置资产中加载配置
-        PathToolSettings settings = PathToolSettings.Instance;
+        // 1. 验证核心配置可用性（提前失败原则）
+        if (!ValidateSettings(out PathToolSettings settings, out string errorMsg))
+        {
+            Debug.LogError($"创建路径失败：{errorMsg}");
+            return;
+        }
 
-        // 2. 创建和配置 GameObject 与核心组件
-        GameObject pathObject = new GameObject (settings.defaultObjectName);
-        PathCreator creator = pathObject.AddComponent<PathCreator> ();
+        // 2. 创建基础对象与组件
+        GameObject pathObject = CreatePathGameObject(settings);
+        PathCreator pathCreator = pathObject.AddComponent<PathCreator>();
 
-        // -- 应用默认设置 --
-        creator.curveType = settings.defaultCurveType;
+        // 3. 应用配置初始化
+        InitializePathCreator(pathCreator, settings);
 
-        // --- 【点睛之笔】 ---
-        // 在创建后，立刻赋予其默认的灵魂(Profile)，确保其立即可见
-        creator.profile = settings.defaultPathProfile;
-        // --------------------
+        // 4. 定位到场景合适位置
+        PlacePathInScene(pathObject);
 
-        // (确保Path实例被创建)
-        // creator.EnsurePathExists(); // PathCreator的Awake或OnValidate会处理，但显式调用更保险
+        // 5. 创建默认路径形状
+        CreateDefaultPathSegments(pathCreator, settings);
 
-        // 3. 放置到场景视图的焦点位置
-        PlaceInSceneView (pathObject);
-
-        // 4. 生成默认的路径形状 (一条直线)
-        SceneView sceneView = SceneView.lastActiveSceneView;
-        Vector3 lineDirection = sceneView != null ? sceneView.camera.transform.right : Vector3.right;
-
-        Vector3 worldCenter = pathObject.transform.position;
-        float defaultLength = settings.defaultLineLength;
-        Vector3 pointA = worldCenter - lineDirection * defaultLength / 2;
-        Vector3 pointB = worldCenter + lineDirection * defaultLength / 2;
-
-        creator.AddSegment (pointA);
-        creator.AddSegment (pointB);
-
-        // 5. 注册Undo，并将其设为当前选中对象
-        Undo.RegisterCreatedObjectUndo (pathObject, "Create " + settings.defaultObjectName);
-        Selection.activeGameObject = pathObject;
-        EditorGUIUtility.PingObject (pathObject);
+        // 6. 完成创建流程（Undo+选中）
+        FinalizePathCreation(pathObject);
     }
 
     #endregion
 
-    #region 内部辅助方法 (Internal Helpers)
+    #region 核心创建流程
 
     /// <summary>
-    /// 辅助方法：将一个GameObject放置在场景视图的中心，并尝试投射到下方的物体表面。
+    /// 验证设置是否有效
     /// </summary>
-    private static void PlaceInSceneView (GameObject obj)
+    private static bool ValidateSettings(out PathToolSettings settings, out string errorMessage)
+    {
+        settings = PathToolSettings.Instance;
+
+        // 检查设置实例是否存在
+        if (settings == null)
+        {
+            errorMessage = "找不到PathToolSettings实例，请确保已创建工具配置文件";
+            return false;
+        }
+
+        // 检查默认配置文件是否存在
+        if (settings.defaultPathProfile == null)
+        {
+            errorMessage = "默认路径配置文件(PathProfile)未设置，请在PathToolSettings中配置";
+            return false;
+        }
+
+        errorMessage = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// 创建路径基础游戏对象
+    /// </summary>
+    private static GameObject CreatePathGameObject(PathToolSettings settings)
+    {
+        // 使用合理的默认名称（避免空字符串）
+        string objectName = string.IsNullOrEmpty(settings.defaultObjectName)
+            ? "New Path"
+            : settings.defaultObjectName;
+
+        return new GameObject(objectName);
+    }
+
+    /// <summary>
+    /// 初始化路径创建器组件
+    /// </summary>
+    private static void InitializePathCreator(PathCreator creator, PathToolSettings settings)
+    {
+        // 1. 先赋其“魂” (Profile)
+        creator.profile = settings.defaultPathProfile;
+
+        // 2. 【人定胜天】显式召唤！
+        //    由于我们是通过代码赋值，OnValidate 不会自动触发，
+        //    所以我们必须手动调用 EnsurePathExists 来创建 Path 对象。
+        creator.EnsurePathImplementationMatchesProfile();
+    }
+
+    /// <summary>
+    /// 将路径对象放置在场景合适位置
+    /// </summary>
+    private static void PlacePathInScene(GameObject pathObject)
     {
         SceneView sceneView = SceneView.lastActiveSceneView;
-        if (sceneView == null) return;
+        if (sceneView == null)
+        {
+            // 无场景视图时，放置在世界原点
+            pathObject.transform.position = Vector3.zero;
+            return;
+        }
 
-        // 将对象放置在场景视图摄像机当前注视的焦点上
-        Vector3 spawnPos = sceneView.pivot;
+        // 计算场景视图焦点位置
+        Vector3 spawnPos = GetSceneViewFocusPosition(sceneView);
 
-        // 从摄像机向焦点发射一条射线，尝试找到一个表面
-        Ray ray = new Ray (sceneView.camera.transform.position, spawnPos - sceneView.camera.transform.position);
-        if (Physics.Raycast (ray, out RaycastHit hit, 2000f))
+        // 尝试投射到地面
+        if (Physics.Raycast(sceneView.camera.transform.position,
+                           spawnPos - sceneView.camera.transform.position,
+                           out RaycastHit hit,
+                           2000f))
         {
             spawnPos = hit.point;
         }
 
-        obj.transform.position = spawnPos;
+        pathObject.transform.position = spawnPos;
+    }
+
+    /// <summary>
+    /// 创建默认的路径线段（直线）
+    /// </summary>
+    // PathFactory.cs
+    private static void CreateDefaultPathSegments(PathCreator creator, PathToolSettings settings)
+    {
+        // OnValidate/Awake 已经确保 Path 对象存在，现在可以安全地添加点了
+        if (creator.Path == null)
+        {
+            Debug.LogError("[PathFactory] Path 对象未能成功初始化，无法添加默认点！");
+            return;
+        }
+
+        Vector3 lineDirection = GetDefaultLineDirection();
+        Vector3 centerPos = creator.transform.position;
+        float halfLength = Mathf.Max(0, settings.defaultLineLength) / 2f;
+        Vector3 startPoint = centerPos - lineDirection * halfLength;
+        Vector3 endPoint = centerPos + lineDirection * halfLength;
+
+        creator.ClearSegments();
+        creator.AddSegment(startPoint);
+        creator.AddSegment(endPoint);
+    }
+
+    /// <summary>
+    /// 完成路径创建的收尾工作
+    /// </summary>
+    private static void FinalizePathCreation(GameObject pathObject)
+    {
+        Undo.RegisterCreatedObjectUndo(pathObject, $"Create {pathObject.name}");
+        Selection.activeGameObject = pathObject;
+        EditorGUIUtility.PingObject(pathObject);
+    }
+
+    #endregion
+
+    #region 辅助方法
+
+    /// <summary>
+    /// 获取场景视图的焦点位置
+    /// </summary>
+    private static Vector3 GetSceneViewFocusPosition(SceneView sceneView)
+    {
+        // 场景视图焦点位置可能未初始化，使用摄像机前方位置作为备选
+        return sceneView.pivot.sqrMagnitude > 0.01f
+            ? sceneView.pivot
+            : sceneView.camera.transform.position + sceneView.camera.transform.forward * 10f;
+    }
+
+    /// <summary>
+    /// 获取默认的线段方向
+    /// </summary>
+    private static Vector3 GetDefaultLineDirection()
+    {
+        SceneView sceneView = SceneView.lastActiveSceneView;
+        return sceneView != null
+            ? sceneView.camera.transform.right
+            : Vector3.right; // 无场景视图时使用世界右方向
     }
 
     #endregion

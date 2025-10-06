@@ -1,48 +1,111 @@
-// 文件路径: Editor/Settings/PathToolSettingsProvider.cs
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using PathTool.Data; // 确保引入了 PathProfile 所在的命名空间
 
+/// <summary>
+/// 【金身不坏版】MrPath 工具的项目设置提供器。
+/// - 解决了因编辑器“轮回”(Domain Reload)导致的UI状态丢失问题。
+/// </summary>
 public class PathToolSettingsProvider : SettingsProvider
 {
-    private SerializedObject m_Settings;
+    private SerializedObject _settingsObj;
 
-    public PathToolSettingsProvider (string path, SettingsScope scope = SettingsScope.Project) : base (path, scope) { }
+    // 折叠状态的持久化
+    private bool _creationFoldout = true;
+    private bool _appearanceFoldout = true;
+    private const string CreationFoldoutKey = "MrPath_CreationFoldout";
+    private const string AppearanceFoldoutKey = "MrPath_AppearanceFoldout";
 
-    public override void OnActivate (string searchContext, UnityEngine.UIElements.VisualElement rootElement)
+    public PathToolSettingsProvider(string path, SettingsScope scope) : base(path, scope)
     {
-        // 当设置窗口被打开时，获取设置资产的序列化对象
-        m_Settings = new SerializedObject (PathToolSettings.Instance);
+        keywords = GetSearchKeywordsFromPath("MrPath;Path;路径");
     }
 
-    public override void OnGUI (string searchContext)
-    {
-        if (m_Settings == null || m_Settings.targetObject == null)
-            return;
-
-        m_Settings.Update ();
-
-        // 使用属性绘制，可以自动处理Undo/Redo和脏标记
-        EditorGUILayout.LabelField ("默认创建设置", EditorStyles.boldLabel);
-        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultObjectName"), new GUIContent ("默认对象名"));
-        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultLineLength"), new GUIContent ("默认线段长度"));
-        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultCurveType"), new GUIContent ("默认曲线类型"));
-
-        EditorGUILayout.Space ();
-
-        EditorGUILayout.LabelField ("默认外观", EditorStyles.boldLabel);
-        // 【核心修改】将原来的材质字段改为PathProfile字段
-        EditorGUILayout.PropertyField (m_Settings.FindProperty ("defaultPathProfile"), new GUIContent ("默认路径外观 (Profile)"));
-
-        m_Settings.ApplyModifiedProperties ();
-    }
-
-    /// <summary>
-    /// 将我们的设置提供者注册到Project Settings窗口中。
-    /// </summary>
     [SettingsProvider]
-    public static SettingsProvider CreatePathToolSettingsProvider ()
+    public static SettingsProvider Register() => new("Project/MrPath Settings", SettingsScope.Project);
+
+    // OnActivate 不再负责初始化 SerializedObject，只负责读取UI状态
+    public override void OnActivate(string searchContext, UnityEngine.UIElements.VisualElement rootElement)
     {
-        var provider = new PathToolSettingsProvider ("Project/MrPath Tool Settings");
-        return provider;
+        _creationFoldout = SessionState.GetBool(CreationFoldoutKey, true);
+        _appearanceFoldout = SessionState.GetBool(AppearanceFoldoutKey, true);
+    }
+
+    public override void OnGUI(string searchContext)
+    {
+        // --- 【核心修正】固魂之术 ---
+        // 在每次 OnGUI 时，都确保 _settingsObj 是有效的。
+        if (_settingsObj == null || _settingsObj.targetObject == null)
+        {
+            var instance = PathToolSettings.Instance;
+            if (instance == null)
+            {
+                EditorGUILayout.HelpBox("无法加载或创建 PathToolSettings 资产！", MessageType.Error);
+                return;
+            }
+            _settingsObj = new SerializedObject(instance);
+        }
+        // -------------------------
+
+        _settingsObj.Update();
+
+        EditorGUILayout.LabelField("MrPath 工具配置", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("配置路径工具的默认创建参数与外观样式。", MessageType.None);
+
+        EditorGUILayout.Space();
+
+        // --- 后续的绘制逻辑完全不变 ---
+
+        EditorGUI.BeginChangeCheck();
+        _creationFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(_creationFoldout, "默认创建设置");
+        if (EditorGUI.EndChangeCheck()) SessionState.SetBool(CreationFoldoutKey, _creationFoldout);
+
+        if (_creationFoldout) DrawCreationSettingsGroup();
+        EditorGUILayout.EndFoldoutHeaderGroup();
+
+        EditorGUI.BeginChangeCheck();
+        _appearanceFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(_appearanceFoldout, "默认外观设置");
+        if (EditorGUI.EndChangeCheck()) SessionState.SetBool(AppearanceFoldoutKey, _appearanceFoldout);
+
+        if (_appearanceFoldout) DrawAppearanceSettingsGroup();
+        EditorGUILayout.EndFoldoutHeaderGroup();
+
+        _settingsObj.ApplyModifiedProperties();
+    }
+
+    private void DrawCreationSettingsGroup()
+    {
+        EditorGUILayout.PropertyField(_settingsObj.FindProperty("defaultObjectName"), new GUIContent("默认对象名称"));
+        EditorGUILayout.PropertyField(_settingsObj.FindProperty("defaultLineLength"), new GUIContent("默认线段长度"));
+    }
+
+    private void DrawAppearanceSettingsGroup()
+    {
+        var profileProp = _settingsObj.FindProperty("defaultPathProfile");
+        EditorGUILayout.PropertyField(profileProp, new GUIContent("默认路径 Profile"));
+
+        if (profileProp.objectReferenceValue == null)
+        {
+            EditorGUILayout.HelpBox("必须指定一个默认 PathProfile！", MessageType.Error);
+            if (GUILayout.Button("快速创建并指定"))
+            {
+                CreateAndAssignDefaultProfile(profileProp);
+            }
+        }
+    }
+
+    private void CreateAndAssignDefaultProfile(SerializedProperty profileProp)
+    {
+        var profile = ScriptableObject.CreateInstance<PathProfile>();
+        string path = "Assets/Settings/DefaultPathProfile.asset";
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+        AssetDatabase.CreateAsset(profile, path);
+        AssetDatabase.SaveAssets();
+
+        profileProp.objectReferenceValue = profile;
+        _settingsObj.ApplyModifiedProperties();
+
+        EditorGUIUtility.PingObject(profile);
     }
 }

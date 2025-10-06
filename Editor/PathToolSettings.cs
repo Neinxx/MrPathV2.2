@@ -1,67 +1,78 @@
-// 文件路径: Editor/Settings/PathToolSettings.cs
 using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 【重铸版】使用 ScriptableObject 承载工具的全局设置。
-/// 这种方法能更好地处理对其他资产（如PathProfile）的引用。
+/// 【返璞归真版】MrPath 工具的全局配置类。
+/// 简化了单例模式，专注于作为数据容器的核心职责。
 /// </summary>
+[CreateAssetMenu(fileName = "MrPathSettings", menuName = "MrPath/Global Settings")]
 public class PathToolSettings : ScriptableObject
 {
-    #region 静态实例管理 (Singleton Access)
+    #region 静态实例管理
 
-    private static PathToolSettings s_Instance;
+    private static PathToolSettings _instance;
     public static PathToolSettings Instance
     {
         get
         {
-            if (s_Instance == null)
+            if (_instance == null)
             {
-                // 尝试在项目中寻找设置文件
-                string[] guids = AssetDatabase.FindAssets ("t:PathToolSettings");
+                // 优先从项目中加载
+                string[] guids = AssetDatabase.FindAssets($"t:{nameof(PathToolSettings)}");
                 if (guids.Length > 0)
                 {
-                    string path = AssetDatabase.GUIDToAssetPath (guids[0]);
-                    s_Instance = AssetDatabase.LoadAssetAtPath<PathToolSettings> (path);
+                    string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                    _instance = AssetDatabase.LoadAssetAtPath<PathToolSettings>(path);
                 }
-                else
+
+                // 加载失败或不存在，则创建新实例
+                if (_instance == null)
                 {
-                    // 如果找不到，则在默认位置创建一个新的
-                    s_Instance = CreateInstance<PathToolSettings> ();
-                    string settingsDir = "Assets/Editor/Settings";
-                    if (!Directory.Exists (settingsDir))
-                    {
-                        Directory.CreateDirectory (settingsDir);
-                    }
-                    AssetDatabase.CreateAsset (s_Instance, Path.Combine (settingsDir, "PathToolSettings.asset"));
-                    AssetDatabase.SaveAssets ();
-                    Debug.Log ("PathToolSettings.asset created at " + settingsDir);
+                    _instance = CreateInstance<PathToolSettings>();
+                    string assetPath = "Assets/Editor/MrPath/Settings/MrPathSettings.asset";
+                    Directory.CreateDirectory(Path.GetDirectoryName(assetPath));
+                    AssetDatabase.CreateAsset(_instance, assetPath);
+                    AssetDatabase.SaveAssets();
+                    Debug.Log($"[MrPath] 未找到设置文件，已在 {assetPath} 创建。");
                 }
             }
-            return s_Instance;
+            return _instance;
         }
     }
 
     #endregion
 
-    #region 默认创建设置 (Default Creation Settings)
+    #region 配置字段
 
-    [Header ("默认创建设置")]
-
-    [Tooltip ("新路径对象的默认名称")]
+    [Header("默认创建设置")]
+    [Tooltip("新创建路径对象的默认名称")]
     public string defaultObjectName = "New Path";
 
-    [Tooltip ("新路径的默认长度")]
+    [Tooltip("新创建路径的初始线段长度（单位：米）")]
+    [Min(0.1f)]
     public float defaultLineLength = 10f;
 
-    [Tooltip ("新路径的默认曲线类型")]
-    public PathCreator.CurveType defaultCurveType = PathCreator.CurveType.Bezier;
-
-    [Tooltip ("【核心修改】创建新路径时应用的默认外观配置")]
+    [Header("默认外观配置")]
+    [Tooltip("新创建路径将使用的默认外观配置文件")]
     public PathProfile defaultPathProfile;
 
-    // [废弃] public Material terrainPreviewTemplate;
+    #endregion
+
+    #region 初始化与校验
+
+    private void OnValidate()
+    {
+        // OnValidate 是校验和修正数据的最佳场所
+        if (string.IsNullOrEmpty(defaultObjectName))
+        {
+            defaultObjectName = "New Path";
+        }
+        if (defaultLineLength < 0.1f)
+        {
+            defaultLineLength = 0.1f;
+        }
+    }
 
     #endregion
 }
