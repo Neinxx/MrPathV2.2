@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using MrPathV2;
 
 public class PreviewMaterialManager : System.IDisposable
 {
@@ -42,7 +43,7 @@ public class PreviewMaterialManager : System.IDisposable
     }
 
     #region Internal Logic (No Changes)
-    private void UpdateMaterialAt(int index, PathTool.Data.PathLayer layer, Material template)
+    private void UpdateMaterialAt(int index, PathLayer layer, Material template)
     {
         if (layer == null || template == null || index < 0) { RemoveMaterialAt(index); return; }
         Texture targetDiffuse = GetLayerDiffuse(layer);
@@ -58,16 +59,16 @@ public class PreviewMaterialManager : System.IDisposable
             }
         }
     }
-    private Texture GetLayerDiffuse(PathTool.Data.PathLayer layer)
+    private Texture GetLayerDiffuse(PathLayer layer)
     {
         if (layer?.terrainPaintingRecipe?.blendLayers == null || layer.terrainPaintingRecipe.blendLayers.Count == 0)
             return null;
         return layer.terrainPaintingRecipe.blendLayers[0]?.terrainLayer?.diffuseTexture;
     }
-    private void RebuildMaterialList(List<PathTool.Data.PathLayer> layers, Material template)
+    private void RebuildMaterialList(List<PathLayer> layers, Material template)
     {
         ClearAllMaterials();
-        foreach (PathTool.Data.PathLayer layer in layers)
+        foreach (PathLayer layer in layers)
         {
             Texture diffuse = GetLayerDiffuse(layer);
             if (diffuse != null && template != null)
@@ -82,7 +83,7 @@ public class PreviewMaterialManager : System.IDisposable
             }
         }
     }
-    private Material CreateLayerMaterial(PathTool.Data.PathLayer layer, Material template, Texture diffuse)
+    private Material CreateLayerMaterial(PathLayer layer, Material template, Texture diffuse)
     {
         Material newMat = new Material(template)
         {

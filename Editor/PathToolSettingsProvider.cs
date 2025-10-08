@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
-using PathTool.Data; // 确保引入了 PathProfile 所在的命名空间
 
 /// <summary>
 /// 【金身不坏版】MrPath 工具的项目设置提供器。
