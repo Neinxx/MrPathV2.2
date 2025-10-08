@@ -14,7 +14,7 @@ public abstract class PathStrategy : ScriptableObject
 
 
     #region 数学法则契约 (Math Law Contract)
-    public abstract Vector3 GetPointAt(float t, PathData data, Transform owner);
+    public abstract Vector3 GetPointAt(float t, PathData data);
     public abstract void AddSegment(Vector3 newPointWorldPos, PathData data, Transform owner);
     public abstract void MovePoint(int flatIndex, Vector3 newPointWorldPos, PathData data, Transform owner);
     public abstract void InsertSegment(int segmentIndex, Vector3 newPointWorldPos, PathData data, Transform owner);

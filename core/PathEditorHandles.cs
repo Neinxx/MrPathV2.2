@@ -118,7 +118,7 @@ public static class PathEditorHandles
         var creator = context.creator;
         Vector3 worldPos = creator.transform.TransformPoint(localPos);
 
-        bool isHovered = (flatIndex == context.hoveredPointIndex);
+        bool isHovered = flatIndex == context.hoveredPointIndex;
 
         // --- 【【【 最终核心修正：斩断旧因果 】】】 ---
 

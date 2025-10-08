@@ -19,8 +19,23 @@ public abstract class PathChangeCommand
 public class AddPointCommand : PathChangeCommand
 {
     public readonly Vector3 Position;
+    private const float MinDistanceSq = 0.01f; // 最小距离阈值的平方 (0.1 * 0.1)
+
     public AddPointCommand(Vector3 position) { Position = position; }
-    public override void Execute(PathCreator creator) => creator.pathData.AddKnot(creator.transform.InverseTransformPoint(Position), Vector3.zero, Vector3.zero);
+
+    public override void Execute(PathCreator creator)
+    {
+        // 【新增】在添加前进行距离检查
+        if (creator.pathData.KnotCount > 0)
+        {
+            Vector3 lastPoint = creator.transform.TransformPoint(creator.pathData.GetPosition(creator.pathData.KnotCount - 1));
+            if ((Position - lastPoint).sqrMagnitude < MinDistanceSq)
+            {
+                return; // 距离太近，取消添加
+            }
+        }
+        creator.pathData.AddKnot(creator.transform.InverseTransformPoint(Position), Vector3.zero, Vector3.zero);
+    }
 }
 
 public class InsertPointCommand : PathChangeCommand
@@ -54,8 +69,17 @@ public class MovePointCommand : PathChangeCommand
     public MovePointCommand(int pointFlatIndex, Vector3 newPosition) { PointFlatIndex = pointFlatIndex; NewPosition = newPosition; }
     public override void Execute(PathCreator creator)
     {
+        Vector3 finalPos = NewPosition;
+        // 【新增】如果开启吸附，在应用移动前，先将新位置吸附到地形
+        if (creator.profile.snapToTerrain)
+        {
+            var heightProvider = new TerrainHeightProvider(); // 临时创建一个provider来获取高度
+            finalPos.y = heightProvider.GetHeight(finalPos);
+            heightProvider.Dispose();
+        }
+
         var strategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
-        strategy?.MovePoint(PointFlatIndex, NewPosition, creator.pathData, creator.transform);
+        strategy?.MovePoint(PointFlatIndex, finalPos, creator.pathData, creator.transform);
     }
 }
 

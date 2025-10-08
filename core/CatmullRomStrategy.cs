@@ -15,11 +15,14 @@ public class CatmullRomStrategy : PathStrategy
 {
     #region 数学法则实现 (Math Law Implementation)
 
-    public override Vector3 GetPointAt(float t, PathData data, Transform owner)
+    // 假设这是你的 CatmullRomPathStrategy.cs 文件
+    public override Vector3 GetPointAt(float t, PathData data)
     {
-        if (data.KnotCount == 0) return owner.position;
-        if (data.SegmentCount == 0) return owner.TransformPoint(data.GetPosition(0));
+        // --- 修正后的守护逻辑 ---
+        if (data.KnotCount == 0) return Vector3.zero;
+        if (data.SegmentCount == 0) return data.GetPosition(0);
 
+        // --- 核心计算逻辑 (保持不变) ---
         int p1_idx = Mathf.Clamp(Mathf.FloorToInt(t), 0, data.SegmentCount - 1);
         float localT = t - p1_idx;
 
@@ -32,9 +35,13 @@ public class CatmullRomStrategy : PathStrategy
         Vector3 p2 = data.GetPosition(p2_idx);
         Vector3 p3 = data.GetPosition(p3_idx);
 
-        float t2 = localT * localT, t3 = t2 * localT;
+        // --- Catmull-Rom 公式 (保持不变) ---
+        float t2 = localT * localT;
+        float t3 = t2 * localT;
         Vector3 point = 0.5f * ((2 * p1) + (-p0 + p2) * localT + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
-        return owner.TransformPoint(point);
+
+        // --- 最终返回：纯粹的本地坐标 ---
+        return point;
     }
 
     public override void AddSegment(Vector3 newPointWorldPos, PathData data, Transform owner)

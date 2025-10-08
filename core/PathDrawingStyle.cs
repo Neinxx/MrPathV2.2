@@ -45,5 +45,5 @@ public class PathDrawingStyle
 
     [Header("辅助线样式")]
     [Tooltip("连接主节点和切线控制点的虚线颜色")]
-    public Color bezierControlLineColor = new Color(1, 1, 1, 0.4f);
+    public Color bezierControlLineColor = new(1, 1, 1, 0.4f);
 }

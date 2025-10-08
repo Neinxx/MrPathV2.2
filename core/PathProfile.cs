@@ -22,10 +22,22 @@ public class PathProfile : ScriptableObject
 
     [Tooltip("路径采样精度（单位：米），值越小曲线越平滑但性能消耗越高")]
     [Range(0.1f, 10f)] public float generationPrecision = 1f;
+    [Header("地形修改设置 (Terrain Modification)")]
 
+
+    [Header("网格生成设置 (Mesh Generation)")]
+    [Tooltip("保持路面水平，不允许左右倾斜。适用于公路、铁路等。")]
+    public bool forceHorizontal = true; // 【新增】防倾斜开关
     [Header("地形吸附")]
     [Tooltip("是否让路径自动贴合下方地形高度")]
     public bool snapToTerrain = true;
+    [Tooltip("路面边缘与原始地形混合的过渡带宽度(米)。")]
+    [Range(0f, 10f)]
+    public float edgeFalloffWidth = 1.5f; // 【新增】边缘衰减宽度
+                                          // 【新增/修改】以下是路径吸附时的平滑参数
+    [Tooltip("路径高度平滑的计算范围（单位：顶点数）。值越大，平滑范围越广。")]
+    [Range(0, 10)]
+    public int heightSmoothRange = 2; // 对应之前的 heightSmoothness
 
     [Tooltip("地形高度的影响权重（0=完全不吸附，1=完全贴合）")]
     [Range(0f, 1f)] public float snapStrength = 1f;
@@ -40,6 +52,7 @@ public class PathProfile : ScriptableObject
     #region 编辑器辅助（提升配置安全性）
     // (大师赞许：优秀的编辑器安全校验，体现了专业工具的素养。)
 
+
     /// <summary>
     /// 初始化默认图层（新建资产时调用）
     /// </summary>
@@ -48,9 +61,11 @@ public class PathProfile : ScriptableObject
         layers ??= new List<PathLayer>();
         if (layers.Count == 0)
         {
-            layers.Add(new PathLayer { name = "Base Layer" });
+            var defaultLayer = new PathLayer { name = "Base Layer", width = 2.0f };
+            layers.Add(defaultLayer);
         }
     }
+
 
     /// <summary>
     /// 验证配置有效性（保存时触发）

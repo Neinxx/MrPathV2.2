@@ -17,18 +17,37 @@ public class BezierStrategy : PathStrategy
 
     #region 数学法则实现
 
-    public override Vector3 GetPointAt(float t, PathData data, Transform owner)
+    // 假设这是你的 BezierPathStrategy.cs 文件
+    public override Vector3 GetPointAt(float t, PathData data)
     {
-        if (data.KnotCount == 0) return owner.position;
-        if (data.SegmentCount == 0) return owner.TransformPoint(data.GetPosition(0));
+        // --- 修正后的守护逻辑 ---
+        if (data.KnotCount == 0) return Vector3.zero;
+        if (data.SegmentCount == 0) return data.GetPosition(0);
+
+        // --- 核心计算逻辑 (保持不变) ---
         int segmentIndex = Mathf.Clamp(Mathf.FloorToInt(t), 0, data.SegmentCount - 1);
         float localT = t - segmentIndex;
+
         PathData.Knot startKnot = data.GetKnot(segmentIndex);
         PathData.Knot endKnot = data.GetKnot(segmentIndex + 1);
-        Vector3 p0 = startKnot.Position, p1 = startKnot.GlobalTangentOut, p2 = endKnot.GlobalTangentIn, p3 = endKnot.Position;
+
+        // --- 【【【 最关键的修正 】】】 ---
+        // 所有的点现在都在纯粹的本地空间中定义
+        // p1 和 p2 是控制点，它们的位置是锚点位置加上其相对的切线向量
+        Vector3 p0 = startKnot.Position;
+        Vector3 p1 = startKnot.Position + startKnot.TangentOut; // 使用相对切线
+        Vector3 p2 = endKnot.Position + endKnot.TangentIn;     // 使用相对切线
+        Vector3 p3 = endKnot.Position;
+
+        // --- 贝塞尔曲线公式 (保持不变) ---
         float u = 1 - localT;
-        Vector3 point = u * u * u * p0 + 3 * u * u * localT * p1 + 3 * u * localT * localT * p2 + localT * localT * localT * p3;
-        return owner.TransformPoint(point);
+        float t_sq = localT * localT;
+        float u_sq = u * u;
+
+        Vector3 point = (u_sq * u * p0) + (3 * u_sq * localT * p1) + (3 * u * t_sq * p2) + (t_sq * localT * p3);
+
+        // --- 最终返回：纯粹的本地坐标 ---
+        return point;
     }
 
     public override void AddSegment(Vector3 newPointWorldPos, PathData data, Transform owner)

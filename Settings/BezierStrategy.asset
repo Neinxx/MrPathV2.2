@@ -12,3 +12,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bce559123d78304aa62bc710d63a0a0, type: 3}
   m_Name: BezierStrategy
   m_EditorClassIdentifier: 
+  drawingStyle:
+    curveColor: {r: 1, g: 1, b: 1, a: 0.7058824}
+    curveHoverColor: {r: 0, g: 1, b: 1, a: 1}
+    curveThickness: 6.51
+    knotStyle:
+      fillColor: {r: 1, g: 1, b: 1, a: 1}
+      borderColor: {r: 0, g: 0, b: 0, a: 1}
+      size: 0.1
+    tangentStyle:
+      fillColor: {r: 1, g: 1, b: 1, a: 1}
+      borderColor: {r: 0, g: 0, b: 0, a: 1}
+      size: 0.1
+    hoverStyle:
+      fillColor: {r: 1, g: 1, b: 1, a: 1}
+      borderColor: {r: 0, g: 0, b: 0, a: 1}
+      size: 0.1
+    insertionPreviewStyle:
+      fillColor: {r: 1, g: 1, b: 1, a: 1}
+      borderColor: {r: 0, g: 0, b: 0, a: 1}
+      size: 0.1
+    bezierControlLineColor: {r: 1, g: 1, b: 1, a: 0.4}
+  defaultTangentScale: 0.333

@@ -1,123 +1,77 @@
-// 请用此完整代码替换你的 PreviewMaterialManager.cs
-
+// PreviewMaterialManager.cs (守护者版)
 using System.Collections.Generic;
 using UnityEngine;
 using MrPathV2;
 
 public class PreviewMaterialManager : System.IDisposable
 {
-    private readonly List<Material> _instancedMaterials = new();
-    private readonly List<Material> _frameRenderMaterials = new();
+    private Material _instancedMaterial;
 
-    public void UpdateMaterials(PathProfile profile, Material template)
-    {
-        if (profile == null || profile.layers == null || template == null)
-        {
-            ClearAllMaterials();
-            return;
-        }
-        if (profile.layers.Count != _frameRenderMaterials.Count)
-        {
-            RebuildMaterialList(profile.layers, template);
-            return;
-        }
-        for (int i = 0; i < profile.layers.Count; i++)
-        {
-            UpdateMaterialAt(i, profile.layers[i], template);
-        }
-    }
-
-    // 【【【 核心修正 I：斩草除根 】】】
-    /// <summary>
-    /// 获取当前帧的渲染材质列表（只读）。
-    /// 返回内部列表的直接引用，以避免在每帧都产生垃圾。
-    /// </summary>
     public List<Material> GetFrameRenderMaterials()
     {
-        return _frameRenderMaterials; // 直接返回正本，不再复制
+        var list = new List<Material>(1);
+        if (_instancedMaterial != null)
+        {
+            list.Add(_instancedMaterial);
+        }
+        return list;
+    }
+
+    public void UpdateMaterials(PathProfile profile, Material templateSplatShaderMaterial)
+    {
+        if (profile == null || profile.layers == null || templateSplatShaderMaterial == null)
+        {
+            ClearMaterial();
+            return;
+        }
+
+        if (_instancedMaterial == null || _instancedMaterial.shader != templateSplatShaderMaterial.shader)
+        {
+            ClearMaterial();
+            _instancedMaterial = new Material(templateSplatShaderMaterial)
+            {
+                name = "PathSplatPreview_Instanced",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+        }
+
+        var layers = profile.layers;
+        for (int i = 0; i < 4; i++)
+        {
+            if (i < layers.Count && layers[i].terrainPaintingRecipe?.blendLayers.Count > 0)
+            {
+                var terrainLayer = layers[i].terrainPaintingRecipe.blendLayers[0].terrainLayer;
+                if (terrainLayer != null)
+                {
+                    _instancedMaterial.SetTexture($"_Layer{i}_Texture", terrainLayer.diffuseTexture);
+
+                    // ✨✨✨【守护神通】✨✨✨
+                    // 在传递 Tiling 数据前，进行安全检查
+                    Vector2 tileSize = terrainLayer.tileSize;
+                    if (Mathf.Approximately(tileSize.x, 0f)) tileSize.x = 1f; // 若x为0，设为1
+                    if (Mathf.Approximately(tileSize.y, 0f)) tileSize.y = 1f; // 若y为0，设为1
+
+                    _instancedMaterial.SetVector($"_Layer{i}_Tiling", new Vector4(tileSize.x, tileSize.y, 0, 0));
+                }
+            }
+            else
+            {
+                _instancedMaterial.SetTexture($"_Layer{i}_Texture", Texture2D.whiteTexture);
+            }
+        }
     }
 
     public void Dispose()
     {
-        ClearAllMaterials();
+        ClearMaterial();
     }
 
-    #region Internal Logic (No Changes)
-    private void UpdateMaterialAt(int index, PathLayer layer, Material template)
+    private void ClearMaterial()
     {
-        if (layer == null || template == null || index < 0) { RemoveMaterialAt(index); return; }
-        Texture targetDiffuse = GetLayerDiffuse(layer);
-        Material currentMat = GetMaterialAt(index);
-        bool needRebuild = currentMat == null || !_instancedMaterials.Contains(currentMat) || currentMat.mainTexture != targetDiffuse;
-        if (needRebuild)
+        if (_instancedMaterial != null)
         {
-            if (currentMat != null) { RemoveMaterialAt(index); }
-            if (targetDiffuse != null)
-            {
-                Material newMat = CreateLayerMaterial(layer, template, targetDiffuse);
-                InsertMaterialAt(index, newMat);
-            }
+            Object.DestroyImmediate(_instancedMaterial);
+            _instancedMaterial = null;
         }
     }
-    private Texture GetLayerDiffuse(PathLayer layer)
-    {
-        if (layer?.terrainPaintingRecipe?.blendLayers == null || layer.terrainPaintingRecipe.blendLayers.Count == 0)
-            return null;
-        return layer.terrainPaintingRecipe.blendLayers[0]?.terrainLayer?.diffuseTexture;
-    }
-    private void RebuildMaterialList(List<PathLayer> layers, Material template)
-    {
-        ClearAllMaterials();
-        foreach (PathLayer layer in layers)
-        {
-            Texture diffuse = GetLayerDiffuse(layer);
-            if (diffuse != null && template != null)
-            {
-                Material mat = CreateLayerMaterial(layer, template, diffuse);
-                _instancedMaterials.Add(mat);
-                _frameRenderMaterials.Add(mat);
-            }
-            else
-            {
-                _frameRenderMaterials.Add(null);
-            }
-        }
-    }
-    private Material CreateLayerMaterial(PathLayer layer, Material template, Texture diffuse)
-    {
-        Material newMat = new Material(template)
-        {
-            mainTexture = diffuse,
-            name = $"PreviewMat_{layer.name}_{diffuse.name}",
-            hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor
-        };
-        return newMat;
-    }
-    private void InsertMaterialAt(int index, Material mat)
-    {
-        if (mat == null) return;
-        if (index < _frameRenderMaterials.Count) _frameRenderMaterials[index] = mat;
-        else _frameRenderMaterials.Add(mat);
-        if (!_instancedMaterials.Contains(mat)) _instancedMaterials.Add(mat);
-    }
-    private void RemoveMaterialAt(int index)
-    {
-        if (index < 0 || index >= _frameRenderMaterials.Count) return;
-        Material matToRemove = _frameRenderMaterials[index];
-        if (matToRemove != null && _instancedMaterials.Contains(matToRemove))
-        {
-            Object.DestroyImmediate(matToRemove);
-            _instancedMaterials.Remove(matToRemove);
-        }
-        _frameRenderMaterials[index] = null;
-    }
-    private Material GetMaterialAt(int index) => index >= 0 && index < _frameRenderMaterials.Count ? _frameRenderMaterials[index] : null;
-    private void ClearAllMaterials()
-    {
-        foreach (Material mat in _instancedMaterials)
-            if (mat != null) Object.DestroyImmediate(mat);
-        _instancedMaterials.Clear();
-        _frameRenderMaterials.Clear();
-    }
-    #endregion
 }

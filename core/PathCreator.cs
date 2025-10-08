@@ -55,17 +55,38 @@ public class PathCreator : MonoBehaviour
 
     #region Public API (供编辑器或其他脚本调用)
     /// <summary>
-    /// 获取曲线上某一点的世界坐标。
+    /// 【已修正】获取曲线上某一点的世界坐标。
+    /// 这是坐标转换的唯一出口。
     /// </summary>
     public Vector3 GetPointAt(float t)
     {
         var strategy = CurrentStrategy;
         if (strategy != null && NumPoints > 0)
         {
-            return strategy.GetPointAt(t, pathData, transform);
+            // 1. 从策略层获取纯粹的、未经转换的“本地坐标”
+            Vector3 localPoint = strategy.GetPointAt(t, pathData);
+
+            // 2. 在这里，由 PathCreator 亲自完成到世界空间的转换
+            return transform.TransformPoint(localPoint);
         }
         return transform.position;
     }
+
+    /// <summary>
+    /// 【已修正】获取曲线上某一点的本地坐标。
+    /// 这个方法现在变得极其高效，因为它直接返回策略层的计算结果。
+    /// </summary>
+    public Vector3 GetPointAtLocal(float t)
+    {
+        var strategy = CurrentStrategy;
+        if (strategy != null && NumPoints > 0)
+        {
+            // 直接返回策略层在本地空间计算的结果，没有任何多余转换
+            return strategy.GetPointAt(t, pathData);
+        }
+        return Vector3.zero;
+    }
+
     /// <summary>
     /// 统一的敕令执行入口。
     /// 所有对路径的修改，都必须通过此方法。
@@ -87,9 +108,11 @@ public class PathCreator : MonoBehaviour
         // 所有监听者（如 PathEditorTool）都应响应该事件并刷新自身状态。
         PathModified?.Invoke(null);
     }
-
-
-
-
     #endregion
+
+
+
+
+
+
 }

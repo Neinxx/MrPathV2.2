@@ -1,19 +1,20 @@
-
-
+// PathEditorTool.cs (最终升格版)
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 [EditorTool("Path Editor Tool", typeof(PathCreator))]
 public class PathEditorTool : EditorTool
 {
-    #region 状态与护法
+    #region 状态与护法 (State & Controllers)
     private PreviewMeshController _meshController;
     private TerrainHeightProvider _heightProvider;
     private PreviewMaterialManager _materialManager;
     private PathInputHandler _inputHandler;
-    private Material _terrainMatTemplate;
+
+    private Material _splatMaterialTemplate;
 
     private int _hoveredPointIdx = -1;
     private int _hoveredSegmentIdx = -1;
@@ -21,13 +22,22 @@ public class PathEditorTool : EditorTool
     private bool _isPathDirty = true;
     private PathSpine? _latestPathSpine;
 
-    // 【【【 化虚为实 • 核心法宝 】】】
     private GameObject _previewObject;
     private MeshFilter _previewMeshFilter;
     private MeshRenderer _previewMeshRenderer;
+
+    // ✨✨✨【升格】✨✨✨
+    // 新增状态，用于锁定UI，防止重复执行
+    private bool _isApplyingHeight;
+    private bool _isApplyingPaint;
     #endregion
 
+    public static PathEditorTool CurrentInstance { get; private set; }
 
+    public PathEditorTool()
+    {
+        CurrentInstance = this;
+    }
 
     #region 生命周期 (Lifecycle)
     void OnEnable()
@@ -36,20 +46,22 @@ public class PathEditorTool : EditorTool
         _heightProvider = new TerrainHeightProvider();
         _materialManager = new PreviewMaterialManager();
         _inputHandler = new PathInputHandler();
-        _terrainMatTemplate = Resources.Load<Material>("PathPreviewMaterial");
 
-        // 步骤 1: 铸造法宝
+        _splatMaterialTemplate = Resources.Load<Material>("test");
+        if (_splatMaterialTemplate == null)
+        {
+            Debug.LogError("未能从 Resources 文件夹加载 'PathSplatPreviewMaterial'。请确认该材质存在。");
+        }
+
         CreatePreviewObject();
 
         Undo.undoRedoPerformed += MarkPathAsDirty;
-        // 确保初次激活时，路径会被刷新
         MarkPathAsDirty();
 
-        // 我们需要在target变化时，重新订阅事件
         ToolManager.activeToolChanged += OnActiveToolChanged;
         if (target is PathCreator creator)
         {
-            creator.PathModified += OnPathModified; ;
+            creator.PathModified += OnPathModified;
         }
     }
 
@@ -60,18 +72,21 @@ public class PathEditorTool : EditorTool
         _materialManager?.Dispose();
         Undo.undoRedoPerformed -= MarkPathAsDirty;
 
-        // 步骤 2: 销毁法宝
         DestroyPreviewObject();
         ToolManager.activeToolChanged -= OnActiveToolChanged;
         if (target is PathCreator creator)
         {
             creator.PathModified -= OnPathModified;
         }
+
+        // 确保在禁用工具时，应用状态被重置
+        _isApplyingHeight = false;
+        _isApplyingPaint = false;
     }
     #endregion
 
-    #region EditorTool 核心
-    public override GUIContent toolbarIcon => new(EditorGUIUtility.IconContent("Animator icon").image, "路径编辑器");
+    #region EditorTool 核心 (Core GUI Loop)
+    public override GUIContent toolbarIcon => new(EditorGUIUtility.IconContent("Terrain Icon").image, "路径编辑器");
 
     public override void OnToolGUI(EditorWindow window)
     {
@@ -82,17 +97,14 @@ public class PathEditorTool : EditorTool
             _previewObject?.SetActive(false);
             return;
         }
-        else
-        {
-            _previewObject?.SetActive(true);
-        }
 
-
+        _previewObject?.SetActive(true);
 
         if (_isPathDirty)
         {
             _latestPathSpine = PathSampler.SamplePath(creator, _heightProvider);
-            _meshController.StartMeshGeneration(_latestPathSpine.Value, creator.profile.layers);
+            if (_latestPathSpine.HasValue)
+                _meshController.StartMeshGeneration(_latestPathSpine.Value, creator.profile);
             _isPathDirty = false;
         }
 
@@ -101,37 +113,140 @@ public class PathEditorTool : EditorTool
         UpdateHoverStateFromContext(context);
         _inputHandler.HandleInputEvents(Event.current, creator, context.hoveredPathT, context.hoveredPointIndex);
 
-
-        // 【【【 御使法宝 • 顺天应时 】】】
-        // 检查网格是否已炼制完成
         if (_meshController.TryFinalizeMesh())
         {
-            // 若已完成，则更新法宝之骨架与皮囊
             UpdatePreviewObject(creator);
         }
-
-        // 确保材质总是最新的 (例如，当用户在Inspector中调整颜色时)
         UpdatePreviewMaterials(creator);
+
+        DrawApplyToTerrainUI();
 
         sceneView.Repaint();
     }
     #endregion
 
-    #region 法宝操控核心 (Preview Object Management)
+    #region ✨✨✨【升格】✨✨✨ 场景UI 与 敕令分发
+
+    private void DrawApplyToTerrainUI()
+    {
+        Handles.BeginGUI();
+
+        // 获取当前激活的Scene视图（处理多视图情况）
+        SceneView currentSceneView = SceneView.currentDrawingSceneView;
+        if (currentSceneView == null)
+        {
+            Handles.EndGUI();
+            return;
+        }
+
+        // 窗口尺寸（更贴近Unity原生工具的紧凑风格）
+        float windowWidth = 180;
+        float windowHeight = 110;
+
+        // 计算右下角位置（基于Scene视图的实际客户区）
+        Rect sceneViewClientRect = currentSceneView.position;
+        // 减去窗口边框和标题栏高度，确保定位准确
+        float xPos = sceneViewClientRect.xMax - windowWidth - 15; // 右侧边距
+        float yPos = sceneViewClientRect.yMax - windowHeight - 40; // 底部边距（考虑编辑器顶部栏）
+        Rect windowRect = new Rect(xPos, yPos, windowWidth, windowHeight);
+
+        // 绘制窗口（使用原生窗口外观）
+        GUILayout.Window(GetHashCode(), windowRect, id =>
+        {
+            // 内部间距调整
+            GUILayout.BeginVertical();
+            GUILayout.Space(6);
+
+            // 标题（使用原生加粗标签）
+            GUILayout.Label("路径应用工具", EditorStyles.boldLabel);
+
+
+            GUILayout.Space(4);
+
+            // 操作状态检查
+            bool canExecute = !_isApplyingHeight && !_isApplyingPaint;
+
+            using (new EditorGUI.DisabledScope(!canExecute))
+            {
+                // 压平地形按钮
+                GUI.backgroundColor = _isApplyingHeight ? Color.yellow : new Color(0.6f, 0.85f, 1f);
+                string flattenText = _isApplyingHeight ? "正在压平..." : "1. 压平地形";
+                if (GUILayout.Button(flattenText, EditorStyles.toolbarButton, GUILayout.Height(26)))
+                {
+                    OnFlattenTerrainClicked();
+                }
+
+                GUILayout.Space(3);
+
+                // 绘制纹理按钮
+                GUI.backgroundColor = _isApplyingPaint ? Color.yellow : new Color(1f, 0.75f, 1f);
+                string paintText = _isApplyingPaint ? "正在绘制..." : "2. 绘制纹理";
+                if (GUILayout.Button(paintText, EditorStyles.toolbarButton, GUILayout.Height(26)))
+                {
+                    OnPaintTerrainClicked();
+                }
+            }
+
+            GUILayout.Space(4);
+            GUILayout.EndVertical();
+
+            // 允许拖动窗口（标题栏区域）
+            GUI.DragWindow(new Rect(0, 0, windowWidth, 20));
+
+        }, "路径转地形"); // 窗口标题
+
+        Handles.EndGUI();
+        GUI.backgroundColor = Color.white; // 恢复默认背景色
+    }
+
+    private void OnFlattenTerrainClicked()
+    {
+        var creator = target as PathCreator;
+        if (!IsPathValid(creator)) return;
+        var command = new FlattenTerrainCommand(creator, _heightProvider);
+        _ = ExecuteCommandAsync(command, b => _isApplyingHeight = b);
+    }
+
+    private void OnPaintTerrainClicked()
+    {
+        var creator = target as PathCreator;
+        if (!IsPathValid(creator)) return;
+        var command = new PaintTerrainCommand(creator, _heightProvider);
+        _ = ExecuteCommandAsync(command, b => _isApplyingPaint = b);
+    }
+
+    private async Task ExecuteCommandAsync(TerrainCommandBase command, System.Action<bool> setIsApplying)
+    {
+        setIsApplying(true);
+        try
+        {
+            EditorUtility.DisplayProgressBar("应用路径到地形", $"正在执行: {command.GetCommandName()}...", 0.3f);
+            await command.ExecuteAsync();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"执行 {command.GetCommandName()} 失败: {ex.Message}\n{ex.StackTrace}", target);
+            EditorUtility.DisplayDialog("执行失败", $"操作 {command.GetCommandName()} 失败，详情请查看控制台日志。", "确定");
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+            setIsApplying(false);
+        }
+    }
+
+    #endregion
+
+    #region 预览对象管理 (Preview Object Management)
+    // ... 此区域代码保持不变 ...
     private void CreatePreviewObject()
     {
         if (_previewObject == null)
         {
             _previewObject = new GameObject("Path_Preview_Object");
-            // 此乃“无形”之真意，让此物存在，却不在场景中可见，亦不被保存
             _previewObject.hideFlags = HideFlags.HideAndDontSave;
-            // 关闭碰撞，仅作显示
             var collider = _previewObject.GetComponent<Collider>();
-            if (collider != null)
-            {
-                collider.enabled = false;
-            }
-
+            if (collider != null) collider.enabled = false;
             _previewMeshFilter = _previewObject.AddComponent<MeshFilter>();
             _previewMeshRenderer = _previewObject.AddComponent<MeshRenderer>();
         }
@@ -146,41 +261,26 @@ public class PathEditorTool : EditorTool
         }
     }
 
-    /// <summary>
-    /// 当网格数据更新时，更新预览对象的骨架 (Mesh)
-    /// </summary>
     private void UpdatePreviewObject(PathCreator creator)
     {
         if (_previewObject == null || _meshController == null) return;
         Mesh previewMesh = _meshController.PreviewMesh;
         if (previewMesh == null) return;
-
-        // 赋予骨架
         _previewMeshFilter.sharedMesh = previewMesh;
     }
 
-    /// <summary>
-    /// 每一帧都检查并更新预览对象的皮囊 (Materials)
-    /// </summary>
     private void UpdatePreviewMaterials(PathCreator creator)
     {
-        if (_previewMeshRenderer == null || creator?.profile == null) return;
+        if (_previewMeshRenderer == null || creator?.profile == null || _splatMaterialTemplate == null) return;
 
-        // 更新材质池
-        _materialManager.UpdateMaterials(creator.profile, _terrainMatTemplate);
-        // 获取最新的材质清单
+        _materialManager.UpdateMaterials(creator.profile, _splatMaterialTemplate);
         List<Material> renderMats = _materialManager.GetFrameRenderMaterials();
-        // 赋予皮囊
         _previewMeshRenderer.sharedMaterials = renderMats.ToArray();
     }
-
-    // 【【【 功法变更：移除旧法 】】】
-    // 我们不再需要 DrawPreviewMesh 方法，因为它已被新的工作流取代
-    // private void DrawPreviewMesh(PathCreator creator) { ... }
-
     #endregion
 
     #region 辅助方法 (Helpers)
+    // ... 此区域代码保持不变 ...
     private bool IsPathValid(PathCreator c) => c != null && c.profile != null && c.pathData.KnotCount >= 2;
     private PathEditorHandles.HandleDrawContext CreateHandleContext(PathCreator creator) => new()
     {
@@ -190,19 +290,14 @@ public class PathEditorTool : EditorTool
         isDragging = _isDraggingHandle,
         hoveredPointIndex = _hoveredPointIdx,
         hoveredSegmentIndex = _hoveredSegmentIdx,
-        // hoveredPathT 应该由 PathEditorHandles.Draw 内部计算并写回 context
     };
     private void UpdateHoverStateFromContext(PathEditorHandles.HandleDrawContext context)
     {
         _hoveredPointIdx = context.hoveredPointIndex;
         _hoveredSegmentIdx = context.hoveredSegmentIndex;
-        // isDragging 的状态更新也应更稳健
         _isDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
     }
 
-    /// <summary>
-    /// 【核心动作】将路径标记为“脏”，触发下一帧的重绘。这是一个无参数的方法。
-    /// </summary>
     public void MarkPathAsDirty()
     {
         _isPathDirty = true;
@@ -210,27 +305,10 @@ public class PathEditorTool : EditorTool
         SceneView.RepaintAll();
     }
 
-    /// <summary>
-    /// 【信使一号】专门用于响应 PathCreator.PathModified 事件。
-    /// 它接收 PathCommand 参数（尽管在此我们用不到它），然后调用核心动作。
-    /// </summary>
-    private void OnPathModified(PathChangeCommand command)
-    {
-        MarkPathAsDirty();
-    }
-
-    /// <summary>
-    /// 【信使二号】专门用于响应 ToolManager.activeToolChanged 事件。
-    /// 它没有参数，负责处理工具切换时的事件订阅逻辑。
-    /// </summary>
+    private void OnPathModified(PathChangeCommand command) => MarkPathAsDirty();
     private void OnActiveToolChanged()
     {
-        var lastTarget = target as PathCreator;
-        if (lastTarget != null)
-        {
-            lastTarget.PathModified -= OnPathModified;
-        }
-
+        if (target is PathCreator lastTarget) lastTarget.PathModified -= OnPathModified;
         if (ToolManager.IsActiveTool(this) && target is PathCreator newCreator)
         {
             newCreator.PathModified += OnPathModified;
