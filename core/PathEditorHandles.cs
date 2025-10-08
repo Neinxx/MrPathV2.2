@@ -2,7 +2,6 @@
 using UnityEditor;
 using UnityEngine;
 
-
 /// <summary>
 /// 【最终定稿 • 天之纲领】
 /// 
@@ -69,6 +68,11 @@ public static class PathEditorHandles
     {
         if (context.isDragging) return;
 
+        // 重置悬停状态
+        context.hoveredPointIndex = -1;
+        context.hoveredSegmentIndex = -1;
+        context.hoveredPathT = -1;
+
         // 将“哪个点被悬停”的复杂判断，完全交给法则自己去处理
         strategy.UpdatePointHover(ref context);
 
@@ -77,14 +81,66 @@ public static class PathEditorHandles
             // 如果没有点被悬停，才进行“线”的悬停检测
             UpdatePathHover(ref context);
         }
-        else
+    }
+
+    // --- 【【【 心法重铸之处 】】】 ---
+    private static void UpdatePathHover(ref HandleDrawContext context)
+    {
+        var creator = context.creator;
+        Event e = Event.current;
+        float minSqrDist = float.MaxValue;
+        float closestT = -1;
+
+        // 定义一个合理的屏幕空间拾取距离阈值
+        const float pickDistanceThreshold = 10f;
+
+        for (int i = 0; i < creator.NumSegments; i++)
         {
-            context.hoveredSegmentIndex = -1;
-            context.hoveredPathT = -1;
+            // 使用更精细的步长来检测曲线
+            const int stepsPerSegment = 20;
+            Vector3 prevPoint = creator.GetPointAt(i);
+
+            for (int j = 1; j <= stepsPerSegment; j++)
+            {
+                float t = i + (float)j / stepsPerSegment;
+                Vector3 currentPoint = creator.GetPointAt(t);
+
+                // 将3D线段投影到2D屏幕空间，然后计算鼠标到线段的距离
+                float distToSegment = HandleUtility.DistancePointToLineSegment(
+                    e.mousePosition,
+                    HandleUtility.WorldToGUIPoint(prevPoint),
+                    HandleUtility.WorldToGUIPoint(currentPoint)
+                );
+
+                if (distToSegment < minSqrDist)
+                {
+                    minSqrDist = distToSegment;
+
+                    // 当找到更近的线段时，精确计算出这一点在线段上的t值
+                    Vector3 closestPoint3D = HandleUtility.ClosestPointToPolyLine(prevPoint, currentPoint);
+                    float segmentLength = Vector3.Distance(prevPoint, currentPoint);
+                    if (segmentLength > 0.001f)
+                    {
+                        float localT = Vector3.Distance(prevPoint, closestPoint3D) / segmentLength;
+                        closestT = i + (localT * ((float)j / stepsPerSegment - (float)(j - 1) / stepsPerSegment)) + (float)(j - 1) / stepsPerSegment;
+                    }
+                    else
+                    {
+                        closestT = i;
+                    }
+                }
+                prevPoint = currentPoint;
+            }
+        }
+
+        // 只有当最近距离小于阈值时，才认为悬停成功
+        if (minSqrDist < pickDistanceThreshold)
+        {
+            context.hoveredPathT = closestT;
+            context.hoveredSegmentIndex = Mathf.FloorToInt(closestT);
         }
     }
 
-    private static void UpdatePathHover(ref HandleDrawContext context) { /* ... 之前的精确路径悬停检测逻辑 ... */ }
 
     private static void DrawInsertionPreviewHandle(ref HandleDrawContext context, Camera camera, PathDrawingStyle style)
     {
@@ -99,13 +155,13 @@ public static class PathEditorHandles
             Handles.DrawSolidDisc(previewPos, camera.transform.forward, handleSize * previewStyle.size);
             Handles.color = previewStyle.borderColor;
             Handles.DrawWireDisc(previewPos, camera.transform.forward, handleSize * previewStyle.size, 1.5f);
+
+            // 重绘场景，确保预览的实时性
+            HandleUtility.Repaint();
         }
     }
 
     #endregion
-
-
-
 
     #region 共享神通 (Shared Techniques)
 
@@ -120,22 +176,14 @@ public static class PathEditorHandles
 
         bool isHovered = (flatIndex == context.hoveredPointIndex);
 
-        // --- 【【【 最终核心修正：斩断旧因果 】】】 ---
-
-        // 1. (错误代码) var hoverStyle = context.creator.profile.strategy.drawingStyle.hoverStyle;
-
-        // 2. (正确代码) 安全地从注册中心获取当前法则，并从中取得悬停样式
         var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
         if (currentStrategy == null || currentStrategy.drawingStyle == null)
         {
-            // 如果获取不到法则或样式，绘制一个默认的红色错误提示Handle，防止后续代码报错
             Handles.color = Color.red;
             Handles.SphereHandleCap(0, worldPos, Quaternion.identity, HandleUtility.GetHandleSize(worldPos) * 0.1f, EventType.Repaint);
             return;
         }
         var hoverStyle = currentStrategy.drawingStyle.hoverStyle;
-
-        // --- 【【【 修正结束 】】】 ---
 
         var finalStyle = isHovered ? hoverStyle : style;
         float size = isHovered ? finalStyle.size * 1.2f : finalStyle.size;
@@ -146,17 +194,14 @@ public static class PathEditorHandles
         Handles.color = finalStyle.borderColor;
         Handles.DrawWireDisc(worldPos, camera.transform.forward, handleSize * size, 2f);
 
-        // 交互逻辑不变
         Handles.color = Color.clear;
         EditorGUI.BeginChangeCheck();
         Vector3 newWorldPos = Handles.FreeMoveHandle(worldPos, Quaternion.identity, handleSize * size * 1.2f, Vector3.zero, Handles.RectangleHandleCap);
         if (EditorGUI.EndChangeCheck())
         {
             Undo.RecordObject(creator, "Move Path Point");
-
             creator.ExecuteCommand(new MovePointCommand(flatIndex, newWorldPos));
         }
     }
-
     #endregion
 }
