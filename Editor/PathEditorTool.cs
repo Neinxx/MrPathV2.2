@@ -1,4 +1,4 @@
-// 请用此最终、完美的完整代码，替换你的 PathEditorTool.cs
+
 
 using UnityEditor;
 using UnityEditor.EditorTools;
@@ -27,6 +27,8 @@ public class PathEditorTool : EditorTool
     private MeshRenderer _previewMeshRenderer;
     #endregion
 
+
+
     #region 生命周期 (Lifecycle)
     void OnEnable()
     {
@@ -42,6 +44,13 @@ public class PathEditorTool : EditorTool
         Undo.undoRedoPerformed += MarkPathAsDirty;
         // 确保初次激活时，路径会被刷新
         MarkPathAsDirty();
+
+        // 我们需要在target变化时，重新订阅事件
+        ToolManager.activeToolChanged += OnActiveToolChanged;
+        if (target is PathCreator creator)
+        {
+            creator.PathModified += OnPathModified; ;
+        }
     }
 
     void OnDisable()
@@ -53,6 +62,11 @@ public class PathEditorTool : EditorTool
 
         // 步骤 2: 销毁法宝
         DestroyPreviewObject();
+        ToolManager.activeToolChanged -= OnActiveToolChanged;
+        if (target is PathCreator creator)
+        {
+            creator.PathModified -= OnPathModified;
+        }
     }
     #endregion
 
@@ -61,21 +75,19 @@ public class PathEditorTool : EditorTool
 
     public override void OnToolGUI(EditorWindow window)
     {
-        if (!(window is SceneView sceneView)) return;
+        if (window is not SceneView sceneView) return;
         var creator = target as PathCreator;
-        if (creator == null || !IsPathValid(creator))
+        if (!IsPathValid(creator))
         {
-            // 若路径失效，确保预览对象也被隐藏
-            if (_previewObject != null) _previewObject.SetActive(false);
+            _previewObject?.SetActive(false);
             return;
         }
         else
         {
-            if (_previewObject != null) _previewObject.SetActive(true);
+            _previewObject?.SetActive(true);
         }
 
-        creator.PathChanged -= OnPathDataChanged;
-        creator.PathChanged += OnPathDataChanged;
+
 
         if (_isPathDirty)
         {
@@ -87,7 +99,8 @@ public class PathEditorTool : EditorTool
         var context = CreateHandleContext(creator);
         PathEditorHandles.Draw(ref context);
         UpdateHoverStateFromContext(context);
-        _inputHandler.HandleInputEvents(Event.current, creator, _hoveredPointIdx, _hoveredSegmentIdx);
+        _inputHandler.HandleInputEvents(Event.current, creator, context.hoveredPathT, context.hoveredPointIndex);
+
 
         // 【【【 御使法宝 • 顺天应时 】】】
         // 检查网格是否已炼制完成
@@ -168,7 +181,7 @@ public class PathEditorTool : EditorTool
     #endregion
 
     #region 辅助方法 (Helpers)
-    private bool IsPathValid(PathCreator c) => c.Path != null && c.profile != null;
+    private bool IsPathValid(PathCreator c) => c != null && c.profile != null && c.pathData.KnotCount >= 2;
     private PathEditorHandles.HandleDrawContext CreateHandleContext(PathCreator creator) => new()
     {
         creator = creator,
@@ -176,19 +189,53 @@ public class PathEditorTool : EditorTool
         latestSpine = _latestPathSpine,
         isDragging = _isDraggingHandle,
         hoveredPointIndex = _hoveredPointIdx,
-        hoveredSegmentIndex = _hoveredSegmentIdx
+        hoveredSegmentIndex = _hoveredSegmentIdx,
+        // hoveredPathT 应该由 PathEditorHandles.Draw 内部计算并写回 context
     };
     private void UpdateHoverStateFromContext(PathEditorHandles.HandleDrawContext context)
     {
         _hoveredPointIdx = context.hoveredPointIndex;
         _hoveredSegmentIdx = context.hoveredSegmentIndex;
-        _isDraggingHandle = (context.isDragging || _isDraggingHandle) && GUIUtility.hotControl != 0;
+        // isDragging 的状态更新也应更稳健
+        _isDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
     }
-    private void MarkPathAsDirty()
+
+    /// <summary>
+    /// 【核心动作】将路径标记为“脏”，触发下一帧的重绘。这是一个无参数的方法。
+    /// </summary>
+    public void MarkPathAsDirty()
     {
         _isPathDirty = true;
         _latestPathSpine = null;
+        SceneView.RepaintAll();
     }
-    private void OnPathDataChanged(object s, PathChangedEventArgs e) => MarkPathAsDirty();
+
+    /// <summary>
+    /// 【信使一号】专门用于响应 PathCreator.PathModified 事件。
+    /// 它接收 PathCommand 参数（尽管在此我们用不到它），然后调用核心动作。
+    /// </summary>
+    private void OnPathModified(PathChangeCommand command)
+    {
+        MarkPathAsDirty();
+    }
+
+    /// <summary>
+    /// 【信使二号】专门用于响应 ToolManager.activeToolChanged 事件。
+    /// 它没有参数，负责处理工具切换时的事件订阅逻辑。
+    /// </summary>
+    private void OnActiveToolChanged()
+    {
+        var lastTarget = target as PathCreator;
+        if (lastTarget != null)
+        {
+            lastTarget.PathModified -= OnPathModified;
+        }
+
+        if (ToolManager.IsActiveTool(this) && target is PathCreator newCreator)
+        {
+            newCreator.PathModified += OnPathModified;
+            MarkPathAsDirty();
+        }
+    }
     #endregion
 }

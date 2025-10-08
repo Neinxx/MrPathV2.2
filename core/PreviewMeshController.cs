@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MrPathV2;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
@@ -30,7 +31,7 @@ public class PreviewMeshController : System.IDisposable
     /// </summary>
     /// <param name="spine">路径骨架数据。</param>
     /// <param name="layers">所有图层的几何数据。</param>
-    public void StartMeshGeneration(PathSpine spine, List<PathTool.Data.PathLayer> layers)
+    public void StartMeshGeneration(PathSpine spine, List<PathLayer> layers)
     {
         if (m_IsJobRunning) return;
 
@@ -115,7 +116,7 @@ public class PreviewMeshController : System.IDisposable
     private NativeList<Vector2> m_JobUVs;
     private NativeArray<int> m_SubMeshTriangleCounts;
 
-    private void AllocateAndPrepareJobData(PathSpine spine, List<PathTool.Data.PathLayer> layers)
+    private void AllocateAndPrepareJobData(PathSpine spine, List<PathLayer> layers)
     {
         m_SpinePoints = new NativeArray<Vector3>(spine.points, Allocator.Persistent);
         m_SpineTangents = new NativeArray<Vector3>(spine.tangents, Allocator.Persistent);

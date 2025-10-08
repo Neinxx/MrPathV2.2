@@ -1,7 +1,5 @@
 using UnityEditor;
 using UnityEditorInternal;
-using UnityEngine;
-using PathTool.Data;
 
 [CustomEditor(typeof(PathProfile))]
 public class PathProfileEditor : Editor
