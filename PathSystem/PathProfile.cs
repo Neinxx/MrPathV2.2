@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
-using PathTool.Data;
+
+
+namespace MrPathV2
+{
 /// <summary>
 /// 路径配置文件：定义路径的整体行为、生成规则和外观样式
 /// </summary>
@@ -69,4 +72,5 @@ public class PathProfile : ScriptableObject
         }
     }
     #endregion
+}
 }

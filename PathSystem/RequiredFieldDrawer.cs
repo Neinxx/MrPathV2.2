@@ -2,7 +2,7 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-using PathTool.Data; // 如果将 RequiredFieldAttribute 放入命名空间
+
 
 /// <summary>
 /// 标记字段为必填项的特性

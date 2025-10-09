@@ -1,15 +1,17 @@
 using UnityEditor;
-
-/// <summary>
-/// V1.8 (Factory Pattern):
-/// 创建逻辑已完全移至PathFactory。本类只负责调用工厂，实现完全解耦。
-/// </summary>
-public static class PathMenu
+namespace MrPathV2
 {
-    [MenuItem ("GameObject/MrPath/Create Path", false, 10)]
-    public static void CreatePathObject ()
+    /// <summary>
+    /// V1.8 (Factory Pattern):
+    /// 创建逻辑已完全移至PathFactory。本类只负责调用工厂，实现完全解耦。
+    /// </summary>
+    public static class PathMenu
     {
-        // 只需向工厂发出一个简单的请求
-        PathFactory.CreateDefaultPath ();
+        [MenuItem("GameObject/MrPath/Create Path", false, 10)]
+        public static void CreatePathObject()
+        {
+            // 只需向工厂发出一个简单的请求
+            PathFactory.CreateDefaultPath();
+        }
     }
 }
