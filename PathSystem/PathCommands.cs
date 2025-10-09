@@ -1,4 +1,4 @@
-// 请用此最终、完美的完整代码，替换你的 PathCommands.cs
+
 
 using System.Collections.Generic;
 using System.Linq;
@@ -8,16 +8,16 @@ using Unity.Jobs;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Commands
+namespace MrPathV2
 {
     public interface ICommand { Task ExecuteAsync(); }
 
     public class ApplyPathToTerrainCommand : ICommand
     {
         private readonly PathCreator _creator;
-        private readonly TerrainHeightProvider _heightProvider;
+        private readonly IHeightProvider _heightProvider;
 
-        public ApplyPathToTerrainCommand(PathCreator creator, TerrainHeightProvider heightProvider)
+        public ApplyPathToTerrainCommand(PathCreator creator, IHeightProvider heightProvider)
         {
             _creator = creator;
             _heightProvider = heightProvider;
