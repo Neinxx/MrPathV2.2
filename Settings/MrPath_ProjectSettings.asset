@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2df02a3cdd971474ba0f9384bf16f9bb, type: 3}
+  m_Name: MrPath_ProjectSettings
+  m_EditorClassIdentifier: 
+  creationDefaults: {fileID: 11400000, guid: 316c5985f45ccba49a2f0a26565a8bae, type: 2}
+  appearanceDefaults: {fileID: 11400000, guid: 0567ed5b6bd31be429db5fba2077fe70, type: 2}
+  sceneUISettings: {fileID: 11400000, guid: 634d2c6db227a7743ad63aa23353640f, type: 2}
+  terrainOperations: {fileID: 11400000, guid: 236a4d2eb78d16a40a8a5550b45397ed, type: 2}
+  advancedSettings: {fileID: 11400000, guid: e738d329c6d078241bf0a889b5af48d7, type: 2}

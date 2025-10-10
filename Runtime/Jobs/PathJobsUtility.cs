@@ -1,21 +1,16 @@
-// PathJobsUtility.cs (已修正构造函数)
+// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Runtime/Jobs/PathJobsUtility.cs (最终统一版)
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using MrPathV2;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+
 namespace MrPathV2
 {
-
     public static class PathJobsUtility
     {
-        #region 共享数据结构
-
-        public struct SpineData : IDisposable
+        public struct SpineData : IDisposable 
         {
-
             [ReadOnly] public NativeArray<float3> points;
             [ReadOnly] public NativeArray<float3> tangents;
             [ReadOnly] public NativeArray<float3> normals;
@@ -43,71 +38,100 @@ namespace MrPathV2
             }
         }
 
-        public struct LayerData
-        {
-            public float width;
-            public float horizontalOffset;
-            public float verticalOffset;
-            public float falloff;
-        }
-
         public struct ProfileData : IDisposable
         {
+            [ReadOnly] public float roadWidth;
+            [ReadOnly] public float falloffWidth;
+            [ReadOnly] public bool forceHorizontal;
+            
+            [ReadOnly] private NativeArray<float> _bakedCrossSection;
+            [ReadOnly] private NativeArray<float> _bakedFalloff;
+            
             [ReadOnly] public NativeArray<LayerData> layers;
             [ReadOnly] public NativeArray<int> terrainLayerIndices;
-            [ReadOnly] public bool forceHorizontal; // 【新增】防倾斜开关字段
-
-            public bool IsCreated => layers.IsCreated;
             public int Length => layers.Length;
 
-            // 【修正】构造函数签名，增加 PathProfile 参数
-            public ProfileData(List<PathLayer> sourceLayers, Dictionary<TerrainLayer, int> terrainLayerMap, PathProfile profile, Allocator allocator)
+            public bool IsCreated => _bakedCrossSection.IsCreated;
+            private const int BAKE_RESOLUTION = 64;
+
+            public ProfileData(PathProfile profile, Dictionary<TerrainLayer, int> terrainLayerMap, Allocator allocator)
             {
-                // 【修正】为 forceHorizontal 字段赋值
+                roadWidth = profile.roadWidth;
+                falloffWidth = profile.falloffWidth;
                 forceHorizontal = profile.forceHorizontal;
 
-                layers = new NativeArray<LayerData>(sourceLayers.Count, allocator, NativeArrayOptions.UninitializedMemory);
-                for (int i = 0; i < sourceLayers.Count; i++)
-                {
-                    var gradient = sourceLayers[i].terrainPaintingRecipe?.blendLayers?.FirstOrDefault()?.blendMask?.gradient;
-                    float falloffStart = (gradient != null && gradient.keys.Length > 0) ? gradient.keys[0].time : -1.0f;
-                    float falloffRatio = (math.clamp(falloffStart, -1.0f, 1.0f) + 1.0f) / 2.0f;
+                _bakedCrossSection = new NativeArray<float>(BAKE_RESOLUTION, allocator);
+                BakeCurve(profile.crossSection, _bakedCrossSection, -1, 1);
 
-                    layers[i] = new LayerData
-                    {
-                        width = sourceLayers[i].width,
-                        horizontalOffset = sourceLayers[i].horizontalOffset,
-                        verticalOffset = sourceLayers[i].verticalOffset,
-                        falloff = falloffRatio
-                    };
-                }
+                _bakedFalloff = new NativeArray<float>(BAKE_RESOLUTION, allocator);
+                BakeCurve(profile.falloffShape, _bakedFalloff, 0, 1);
+                
+                var sourceLayers = profile.layers;
+                layers = new NativeArray<LayerData>(sourceLayers.Count, allocator);
+                terrainLayerIndices = new NativeArray<int>(sourceLayers.Count, allocator);
 
-                if (terrainLayerMap != null)
+                if (sourceLayers != null && sourceLayers.Count > 0)
                 {
-                    terrainLayerIndices = new NativeArray<int>(sourceLayers.Count, allocator);
                     for (int i = 0; i < sourceLayers.Count; i++)
                     {
-                        int mapping = -1;
-                        var recipe = sourceLayers[i].terrainPaintingRecipe;
-                        if (recipe != null && recipe.blendLayers.Count > 0 && recipe.blendLayers[0].terrainLayer != null)
+                        // 这部分仅用于纹理绘制，几何数据不再使用
+                        layers[i] = new LayerData { /* ... 填充旧的 layer 数据 ... */ };
+                        
+                        if (terrainLayerMap != null)
                         {
-                            if (!terrainLayerMap.TryGetValue(recipe.blendLayers[0].terrainLayer, out mapping)) { mapping = -1; }
+                            int mapping = -1;
+                            var recipe = sourceLayers[i].terrainPaintingRecipe;
+                            if (recipe != null && recipe.blendLayers.Count > 0 && recipe.blendLayers[0].terrainLayer != null)
+                            {
+                                if (!terrainLayerMap.TryGetValue(recipe.blendLayers[0].terrainLayer, out mapping)) { mapping = -1; }
+                            }
+                            terrainLayerIndices[i] = mapping;
+                        } else {
+                            terrainLayerIndices[i] = -1;
                         }
-                        terrainLayerIndices[i] = mapping;
                     }
                 }
-                else
+            }
+            
+            public float EvaluateCrossSection(float t) => EvaluateBakedCurve(_bakedCrossSection, t, -1, 1);
+            public float EvaluateFalloff(float t) => EvaluateBakedCurve(_bakedFalloff, t, 0, 1);
+
+            private static void BakeCurve(AnimationCurve curve, NativeArray<float> bakedData, float start, float end)
+            {
+                for (int i = 0; i < BAKE_RESOLUTION; i++)
                 {
-                    terrainLayerIndices = new NativeArray<int>(0, allocator);
+                    float time = start + (end - start) * (i / (float)(BAKE_RESOLUTION - 1));
+                    bakedData[i] = curve.Evaluate(time);
                 }
+            }
+            
+            private static float EvaluateBakedCurve(NativeArray<float> bakedData, float t, float start, float end)
+            {
+                float normalizedT = (t - start) / (end - start);
+                float floatIndex = normalizedT * (BAKE_RESOLUTION - 1);
+                int indexA = (int)math.floor(floatIndex);
+                int indexB = (int)math.ceil(floatIndex);
+                if (indexA < 0) return bakedData[0];
+                if (indexB >= BAKE_RESOLUTION) return bakedData[BAKE_RESOLUTION - 1];
+                if (indexA == indexB) return bakedData[indexA];
+                return math.lerp(bakedData[indexA], bakedData[indexB], floatIndex - indexA);
             }
 
             public void Dispose()
             {
+                if (_bakedCrossSection.IsCreated) _bakedCrossSection.Dispose();
+                if (_bakedFalloff.IsCreated) _bakedFalloff.Dispose();
                 if (layers.IsCreated) layers.Dispose();
                 if (terrainLayerIndices.IsCreated) terrainLayerIndices.Dispose();
             }
         }
-        #endregion
+        
+        public struct LayerData 
+        {
+            public float width;
+            public float horizontalOffset;
+            public float falloff;
+            public float3 verticalOffset;
+        }
     }
 }

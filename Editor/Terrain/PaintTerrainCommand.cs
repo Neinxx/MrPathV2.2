@@ -1,11 +1,10 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Terrain/PaintTerrainCommand.cs (最终修正版)
+// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Terrain/PaintTerrainCommand.cs (最终统一版)
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEditor;
 using UnityEngine;
-using Unity.Mathematics;
 using System.Threading;
 
 namespace MrPathV2
@@ -13,20 +12,16 @@ namespace MrPathV2
     public class PaintTerrainCommand : TerrainCommandBase
     {
         public PaintTerrainCommand(PathCreator creator, IHeightProvider heightProvider) : base(creator, heightProvider) { }
-
         public override string GetCommandName() => "绘制纹理 (Paint Textures)";
-
-        /// <summary>
-        /// 【最终修正】实现与基类完全匹配的新方法。
-        /// </summary>
-        protected override async Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spineForContour, NativeArray<float3> meshVertices, NativeArray<int> meshTriangles, CancellationToken token)
+        
+        protected override async Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spine, CancellationToken token)
         {
             var handles = new NativeList<JobHandle>(Allocator.Temp);
-            var workItems = new List<(Terrain terrain, float[,,] alphamaps3D, NativeArray<float> alphamapsNative)>();
+            var workItems = new List<(Terrain t, float[,,] a3D, NativeArray<float> an)>();
             var profileDataList = new List<PathJobsUtility.ProfileData>();
 
-            RoadContourGenerator.GenerateContour(spineForContour, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
-            var spineData = new PathJobsUtility.SpineData(spineForContour, Allocator.Persistent); // Paint Job 仍需要 SpineData
+            RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
+            var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
 
             try
             {
@@ -34,62 +29,55 @@ namespace MrPathV2
                 {
                     token.ThrowIfCancellationRequested();
                     Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
-                    var terrainData = terrain.terrainData;
-                    if (terrainData.alphamapLayers == 0) continue;
+                    var td = terrain.terrainData;
+                    if (td.alphamapLayers == 0) continue;
 
-                    var alphamaps3D = terrainData.GetAlphamaps(0, 0, terrainData.alphamapResolution, terrainData.alphamapResolution);
-                    var alphamapsNative = new NativeArray<float>(alphamaps3D.Length, Allocator.TempJob);
-                    Copy3DTo1D(alphamaps3D, alphamapsNative);
+                    var a3D = td.GetAlphamaps(0, 0, td.alphamapResolution, td.alphamapResolution);
+                    var an = new NativeArray<float>(a3D.Length, Allocator.TempJob);
+                    Copy3DTo1D(a3D, an);
 
                     var layerMap = BuildTerrainLayerMap(terrain);
-                    var profileData = new PathJobsUtility.ProfileData(Creator.profile.layers, layerMap, Creator.profile, Allocator.Persistent);
-                    profileDataList.Add(profileData);
+                    var pData = new PathJobsUtility.ProfileData(Creator.profile, layerMap, Allocator.Persistent);
+                    profileDataList.Add(pData);
 
                     var job = new ModifyAlphamapsJob
                     {
                         spine = spineData,
-                        profile = profileData,
+                        profile = pData,
                         terrainPos = terrain.GetPosition(),
-                        terrainSize = terrainData.size,
-                        alphamapResolution = terrainData.alphamapResolution,
-                        alphamapLayerCount = terrainData.alphamapLayers,
-                        alphamaps = alphamapsNative,
+                        terrainSize = td.size,
+                        alphamapResolution = td.alphamapResolution,
+                        alphamapLayerCount = td.alphamapLayers,
+                        alphamaps = an,
                         roadContour = roadContour,
                         contourBounds = contourBounds
                     };
-                    var handle = job.Schedule(terrainData.alphamapResolution * terrainData.alphamapResolution, 256);
-                    handles.Add(handle);
-                    workItems.Add((terrain, alphamaps3D, alphamapsNative));
+                    handles.Add(job.Schedule(td.alphamapResolution * td.alphamapResolution, 256));
+                    workItems.Add((terrain, a3D, an));
                 }
 
-                var combinedHandle = JobHandle.CombineDependencies(handles.AsArray());
-                while (!combinedHandle.IsCompleted)
-                {
-                    token.ThrowIfCancellationRequested();
-                    await Task.Yield();
-                }
-                combinedHandle.Complete();
-
+                var combined = JobHandle.CombineDependencies(handles.AsArray());
+                while (!combined.IsCompleted) { await Task.Yield(); token.ThrowIfCancellationRequested(); }
+                combined.Complete();
                 token.ThrowIfCancellationRequested();
 
                 foreach (var item in workItems)
                 {
-                    Copy1DTo3D(item.alphamapsNative, item.alphamaps3D);
-                    item.terrain.terrainData.SetAlphamaps(0, 0, item.alphamaps3D);
+                    Copy1DTo3D(item.an, item.a3D);
+                    item.t.terrainData.SetAlphamaps(0, 0, item.a3D);
                 }
             }
             finally
             {
                 if (handles.IsCreated) handles.Dispose();
-                foreach (var item in workItems) { if (item.alphamapsNative.IsCreated) item.alphamapsNative.Dispose(); }
+                foreach (var item in workItems) { if (item.an.IsCreated) item.an.Dispose(); }
                 foreach (var p in profileDataList) { if (p.IsCreated) p.Dispose(); }
                 if (roadContour.IsCreated) roadContour.Dispose();
                 if (spineData.IsCreated) spineData.Dispose();
                 HeightProvider?.MarkAsDirty();
             }
         }
-
-        private void Copy3DTo1D(float[,,] s, NativeArray<float> d) { int h = s.GetLength(0), w = s.GetLength(1), dp = s.GetLength(2); for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) for (int z = 0; z < dp; z++) d[y * w * dp + x * dp + z] = s[y, x, z]; }
-        private void Copy1DTo3D(NativeArray<float> s, float[,,] d) { int h = d.GetLength(0), w = d.GetLength(1), dp = d.GetLength(2); for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) for (int z = 0; z < dp; z++) d[y, x, z] = s[y * w * dp + x * dp + z]; }
+        private void Copy3DTo1D(float[,,]s,NativeArray<float>d){int h=s.GetLength(0),w=s.GetLength(1),dp=s.GetLength(2);for(int y=0;y<h;y++)for(int x=0;x<w;x++)for(int z=0;z<dp;z++)d[y*w*dp+x*dp+z]=s[y,x,z];}
+        private void Copy1DTo3D(NativeArray<float>s,float[,,]d){int h=d.GetLength(0),w=d.GetLength(1),dp=d.GetLength(2);for(int y=0;y<h;y++)for(int x=0;x<w;x++)for(int z=0;z<dp;z++)d[y,x,z]=s[y*w*dp+x*dp+z];}
     }
 }

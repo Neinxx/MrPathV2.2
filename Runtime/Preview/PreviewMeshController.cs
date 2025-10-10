@@ -1,14 +1,13 @@
-// PreviewMeshController.cs (终极健壮、工整版)
-using System.Collections.Generic;
+// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Runtime/Preview/PreviewMeshController.cs (最终统一版)
+using System;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
 using Unity.Mathematics;
-using System;
+
 namespace MrPathV2
 {
-
-    public class PreviewMeshController : System.IDisposable
+    public class PreviewMeshController : IDisposable
     {
         private struct JobData : IDisposable
         {
@@ -22,13 +21,13 @@ namespace MrPathV2
 
             public JobData(PathSpine worldSpine, PathProfile profile, Allocator allocator)
             {
-                this.profile = new PathJobsUtility.ProfileData(profile.layers, null, profile, allocator);
-                spine = new PathJobsUtility.SpineData(worldSpine, allocator);
-                vertices = new NativeList<float3>(allocator);
-                triangles = new NativeList<int>(allocator);
-                uvs = new NativeList<float2>(allocator);
-                colors = new NativeList<Color32>(allocator);
-                normals = new NativeList<float3>(allocator);
+                this.profile = new PathJobsUtility.ProfileData(profile, null, allocator);
+                this.spine = new PathJobsUtility.SpineData(worldSpine, allocator);
+                this.vertices = new NativeList<float3>(allocator);
+                this.triangles = new NativeList<int>(allocator);
+                this.uvs = new NativeList<float2>(allocator);
+                this.colors = new NativeList<Color32>(allocator);
+                this.normals = new NativeList<float3>(allocator);
             }
 
             public void Dispose()
@@ -47,7 +46,7 @@ namespace MrPathV2
 
         private JobHandle m_MeshUpdateJobHandle;
         private bool m_IsJobRunning = false;
-        private JobData? m_CurrentJobData; // 【核心】使用可空结构体
+        private JobData? m_CurrentJobData;
 
         public PreviewMeshController()
         {
@@ -63,19 +62,17 @@ namespace MrPathV2
                 m_MeshUpdateJobHandle.Complete();
                 m_IsJobRunning = false;
             }
-
             if (m_CurrentJobData.HasValue)
             {
                 m_CurrentJobData.Value.Dispose();
-                m_CurrentJobData = null; // 清理后，设置为null
+                m_CurrentJobData = null;
             }
         }
 
         public void StartMeshGeneration(PathSpine worldSpine, PathProfile profile)
         {
             CompleteAndDisposeJob();
-
-            if (worldSpine.VertexCount < 2 || profile?.layers == null || profile.layers.Count == 0)
+            if (worldSpine.VertexCount < 2 || profile == null)
             {
                 PreviewMesh.Clear();
                 return;
@@ -106,7 +103,6 @@ namespace MrPathV2
                 m_IsJobRunning = false;
 
                 PreviewMesh.Clear();
-
                 if (m_CurrentJobData.HasValue)
                 {
                     var jobData = m_CurrentJobData.Value;
@@ -120,7 +116,8 @@ namespace MrPathV2
                         PreviewMesh.RecalculateBounds();
                     }
                 }
-
+                
+                CompleteAndDisposeJob();
                 return true;
             }
             return false;
@@ -129,7 +126,10 @@ namespace MrPathV2
         public void Dispose()
         {
             CompleteAndDisposeJob();
-            if (PreviewMesh != null) UnityEngine.Object.DestroyImmediate(PreviewMesh);
+            if (PreviewMesh != null)
+            {
+                UnityEngine.Object.DestroyImmediate(PreviewMesh);
+            }
         }
     }
 }

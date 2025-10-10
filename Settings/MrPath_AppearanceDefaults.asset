@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5bbccf13c4d6b314f86a9076115d250c, type: 3}
+  m_Name: MrPath_AppearanceDefaults
+  m_EditorClassIdentifier: 
+  defaultPathProfile: {fileID: 11400000, guid: 438a49d06a5cd704cb4a37abc769850e, type: 2}
+  previewMaterialTemplate: {fileID: 2100000, guid: 180f86f4bd8676b4ea600cf3a5e87709,
+    type: 2}
+  previewAlpha: 1

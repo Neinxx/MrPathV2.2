@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8cb4881903b9874f858b6a074f36a91, type: 3}
+  m_Name: MrPath_TerrainOperations
+  m_EditorClassIdentifier: 
+  operations:
+  - {fileID: 11400000, guid: 2381c28a661329e46b77e5eaeecc2ccd, type: 2}
+  - {fileID: 11400000, guid: 63084a4daf1e4c1478e1c05d4e8d0406, type: 2}

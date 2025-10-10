@@ -64,7 +64,8 @@ namespace MrPathV2
             var mats = _materialManager?.GetFrameRenderMaterials();
             if (mats == null || mats.Count == 0)
             {
-                // 无材质时也允许线框预览（可选：省略）
+                // 无材质时也允许线框预览
+                Graphics.DrawMesh(mesh, Matrix4x4.identity, _templateMaterial, 0);
                 return;
             }
 

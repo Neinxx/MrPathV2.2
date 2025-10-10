@@ -9,10 +9,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a2c9f9c7c2a4d2e95d3b1a7f4c2e6a1, type: 3}
-  m_Name: Paint Terrain Operation
+  m_Script: {fileID: 11500000, guid: 8b7b7c3d8f1a4b0c9b0f3e2a0d6c1a12, type: 3}
+  m_Name: Flatten Terrain Operation
   m_EditorClassIdentifier: 
   displayName: "\u64CD\u4F5C"
   icon: {fileID: 0}
-  buttonColor: {r: 1, g: 0.45911944, b: 0.45911944, a: 1}
+  buttonColor: {r: 1, g: 1, b: 1, a: 1}
   order: 0
