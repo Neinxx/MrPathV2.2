@@ -2,6 +2,7 @@ Shader "MrPath/PathPreviewSplat(URP)"
 {
     Properties
     {
+        _PreviewAlpha("Preview Alpha", Range(0,1)) = 0.5
         _Layer0_Texture("Layer 0 (R)", 2D) = "white" {}
         _Layer0_Tiling("Layer 0 Tiling", Vector) = (1, 1, 0, 0)
         _Layer1_Texture("Layer 1 (G)", 2D) = "white" {}
@@ -16,14 +17,16 @@ Shader "MrPath/PathPreviewSplat(URP)"
     {
         Tags
         {
-            "RenderType" = "Opaque"
+            "RenderType" = "Transparent"
             "RenderPipeline" = "UniversalPipeline"
-            "Queue" = "Geometry"
+            "Queue" = "Transparent"
         }
         LOD 100
 
         Pass
         {
+            Blend SrcAlpha OneMinusSrcAlpha
+            ZWrite Off
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -47,6 +50,7 @@ Shader "MrPath/PathPreviewSplat(URP)"
             TEXTURE2D(_Layer1_Texture); SAMPLER(sampler_Layer1_Texture); float4 _Layer1_Texture_ST; float2 _Layer1_Tiling;
             TEXTURE2D(_Layer2_Texture); SAMPLER(sampler_Layer2_Texture); float4 _Layer2_Texture_ST; float2 _Layer2_Tiling;
             TEXTURE2D(_Layer3_Texture); SAMPLER(sampler_Layer3_Texture); float4 _Layer3_Texture_ST; float2 _Layer3_Tiling;
+            float _PreviewAlpha;
 
             Varyings vert(Attributes input)
             {
@@ -80,9 +84,10 @@ Shader "MrPath/PathPreviewSplat(URP)"
 
                 half4 finalColor = col0 * input.color.r + col1 * input.color.g + col2 * input.color.b + col3 * input.color.a;
 
-                // ✨✨✨【显形神通】✨✨✨
-                // 强制最终颜色的 alpha 值为1，确保其在不透明队列中完全可见
-                finalColor.a = 1.0;
+                // ✨✨✨【半透明显形】✨✨✨
+                // 使用可配置的预览透明度，避免遮挡场景交互
+                float previewAlpha = _PreviewAlpha; // 由材质属性驱动
+                finalColor.a = saturate(previewAlpha);
 
                 return finalColor;
             }

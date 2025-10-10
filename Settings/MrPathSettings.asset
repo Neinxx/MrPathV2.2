@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f607899390ee14403927545a8afb20b6, type: 3}
+  m_Name: MrPathSettings
+  m_EditorClassIdentifier: 
+  defaultObjectName: 'MrPathV2 '
+  defaultLineLength: 10.92
+  defaultPathProfile: {fileID: 11400000, guid: 288317a4d16d7854bae84f7085213908, type: 2}
+  previewMaterialTemplate: {fileID: 2100000, guid: 180f86f4bd8676b4ea600cf3a5e87709,
+    type: 2}
+  previewAlpha: 1
+  previewGeneratorFactory: {fileID: 11400000, guid: c923aada09babe440887f0406e3a502d,
+    type: 2}
+  heightProviderFactory: {fileID: 11400000, guid: 6f249817a780bc84584ea67bf2f12c9a,
+    type: 2}
+  previewMaterialManagerFactory: {fileID: 11400000, guid: bd76f388d5102e045a2491cc11f7b7db,
+    type: 2}
+  bezierStrategy: {fileID: 0}
+  catmullRomStrategy: {fileID: 0}
+  sceneUiWindowWidth: 180
+  sceneUiWindowHeight: 110
+  sceneUiRightMargin: 15
+  sceneUiBottomMargin: 40
+  operations:
+  - {fileID: 11400000, guid: 9ef3869637f6cda4f939acb1617c0c3e, type: 2}
+  - {fileID: 11400000, guid: 65618329fd1e8f940aae34941bf4ff2f, type: 2}
+  enableDefaultShortcuts: 1
