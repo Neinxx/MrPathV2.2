@@ -227,7 +227,7 @@ namespace MrPathV2
                     alphamaps[baseAlphaIndex + splatIndex] = math.max(currentWeight, blend);
                 }
             }
-
+            //int
             int finalBaseAlphaIndex = index * alphamapLayerCount;
             float totalWeight = 0;
             for (int i = 0; i < alphamapLayerCount; i++) { totalWeight += alphamaps[finalBaseAlphaIndex + i]; }
