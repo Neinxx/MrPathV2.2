@@ -14,5 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   displayName: "\u64CD\u4F5C"
   icon: {fileID: 0}
-  buttonColor: {r: 1, g: 1, b: 1, a: 1}
+  buttonColor: {r: 1, g: 0.45911944, b: 0.45911944, a: 1}
   order: 0

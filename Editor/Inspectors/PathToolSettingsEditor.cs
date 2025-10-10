@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace MrPathV2
 {
-    [CustomEditor(typeof(PathToolSettings))]
+    [CustomEditor(typeof(MrPathSettingsProvider))]
     public class PathToolSettingsEditor : Editor
     {
         public override void OnInspectorGUI()

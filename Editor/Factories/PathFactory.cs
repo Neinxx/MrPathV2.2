@@ -1,80 +1,85 @@
+// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Factories/PathFactory.cs
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+
 namespace MrPathV2
 {
-    /// <summary>
-    /// 【最终适配版】路径对象创建工厂类
-    /// 
-    /// (大师赞许：创建流程清晰，验证逻辑前置，场景定位智能，
-    /// 这是一个非常专业的编辑器工具类。适配新架构只需一行关键改动。)
-    /// </summary>
     public static class PathFactory
     {
-        #region 公共接口
-
         [MenuItem("GameObject/MrPath/Create Default Path", false, 10)]
         public static void CreateDefaultPath()
         {
-            if (!ValidateSettings(out PathToolSettings settings, out string errorMsg))
+            // 现在从新的配置系统获取设置
+            if (!ValidateSettings(out var creationDefaults, out var appearanceDefaults, out string errorMsg))
             {
                 Debug.LogError($"创建路径失败：{errorMsg}");
                 return;
             }
 
-            GameObject pathObject = CreatePathGameObject(settings);
+            GameObject pathObject = CreatePathGameObject(creationDefaults);
             PathCreator pathCreator = pathObject.AddComponent<PathCreator>();
 
-            // 关键的初始化流程现在变得更简单了
-            InitializePathCreator(pathCreator, settings);
+            InitializePathCreator(pathCreator, appearanceDefaults);
 
             PlacePathInScene(pathObject);
-            CreateDefaultPathSegments(pathCreator, settings);
+            CreateDefaultPathSegments(pathCreator, creationDefaults);
             FinalizePathCreation(pathObject);
         }
 
-        #endregion
-
-        #region 核心创建流程
-
-        private static bool ValidateSettings(out PathToolSettings settings, out string errorMessage)
+        private static bool ValidateSettings(out MrPathCreationDefaults creationDefaults, out MrPathAppearanceDefaults appearanceDefaults, out string errorMessage)
         {
-            settings = PathToolSettings.Instance;
-            if (settings == null)
+            var settings = MrPathProjectSettings.GetOrCreateSettings();
+            creationDefaults = settings.creationDefaults;
+            appearanceDefaults = settings.appearanceDefaults;
+
+            if (creationDefaults == null || appearanceDefaults == null)
             {
-                errorMessage = "找不到项目设置，请通过 Project Settings -> MrPath Settings 配置工具。";
+                errorMessage = "核心配置资产丢失，请通过 Project Settings -> MrPath 修复。";
                 return false;
             }
-            if (settings.defaultPathProfile == null)
+            if (appearanceDefaults.defaultPathProfile == null)
             {
-                errorMessage = "默认路径配置文件(PathProfile)未设置，请在 Project Settings -> MrPath Settings 中配置。";
+                errorMessage = "默认路径配置文件(PathProfile)未设置，请在 'MrPath_AppearanceDefaults' 资产中配置。";
                 return false;
             }
             errorMessage = string.Empty;
             return true;
         }
 
-        private static GameObject CreatePathGameObject(PathToolSettings settings)
+        private static GameObject CreatePathGameObject(MrPathCreationDefaults settings)
         {
             string objectName = string.IsNullOrEmpty(settings.defaultObjectName) ? "New Path" : settings.defaultObjectName;
             return new GameObject(objectName);
         }
 
-        private static void InitializePathCreator(PathCreator creator, PathToolSettings settings)
+        private static void InitializePathCreator(PathCreator creator, MrPathAppearanceDefaults settings)
         {
-            // 1. 先赋其“魂” (Profile)
+            // 赋其“魂” (Profile)
             creator.profile = settings.defaultPathProfile;
-
-            // --- 【【【 核心修改：无为而治 】】】 ---
-            // 2. 删除了 creator.EnsurePathImplementationMatchesProfile(); 这一行！
-            // 在我们新的架构中，PathCreator 的设计已大道至简。它不再需要一个额外的“初始化”命令。
-            // 只要为它赋予了 profile，它就自然而然地知道了该去注册中心查询哪个法则。
-            // 它永远处于一个有效的、可工作的状态。
         }
 
+        private static void CreateDefaultPathSegments(PathCreator creator, MrPathCreationDefaults settings)
+        {
+            Vector3 lineDirection = GetDefaultLineDirection();
+            Vector3 centerPos = creator.transform.position;
+            float halfLength = Mathf.Max(0, settings.defaultLineLength) / 2f;
+            Vector3 startPoint = centerPos - lineDirection * halfLength;
+            Vector3 endPoint = centerPos + lineDirection * halfLength;
+
+            var creationCommands = new List<PathChangeCommand>
+            {
+                new ClearPointsCommand(),
+                new AddPointCommand(startPoint),
+                new AddPointCommand(endPoint)
+            };
+            var batchCommand = new BatchCommand(creationCommands);
+            creator.ExecuteCommand(batchCommand);
+        }
+
+        // --- 以下辅助方法无需修改 ---
         private static void PlacePathInScene(GameObject pathObject)
         {
-            // ... 此方法无需任何修改 ...
             SceneView sceneView = SceneView.lastActiveSceneView;
             if (sceneView == null)
             {
@@ -89,65 +94,26 @@ namespace MrPathV2
             pathObject.transform.position = spawnPos;
         }
 
-        private static void CreateDefaultPathSegments(PathCreator creator, PathToolSettings settings)
-        {
-            // (大师批注：在我们的新设计中，creator.pathData 在 PathCreator 被创建时就已经
-            // new PathData()，所以它永远不为null。这个检查可以移除，以示对新架构的信心。)
-            // if (creator.pathData == null) { ... }
-
-            Vector3 lineDirection = GetDefaultLineDirection();
-            Vector3 centerPos = creator.transform.position;
-            float halfLength = Mathf.Max(0, settings.defaultLineLength) / 2f;
-            Vector3 startPoint = centerPos - lineDirection * halfLength;
-            Vector3 endPoint = centerPos + lineDirection * halfLength;
-            PathData pathData = creator.pathData;
-
-            var creationCommands = new List<PathChangeCommand>
-        {
-            new ClearPointsCommand(),
-            new AddPointCommand(startPoint),
-            new AddPointCommand(endPoint)
-        };
-            var batchCommand = new BatchCommand(creationCommands);
-
-            // 2. 向执行者下达这道唯一的、完整的创世敕令
-            creator.ExecuteCommand(batchCommand);
-        }
-
         private static void FinalizePathCreation(GameObject pathObject)
         {
-            // ... 此方法无需任何修改 ...
             Undo.RegisterCreatedObjectUndo(pathObject, $"Create {pathObject.name}");
             Selection.activeGameObject = pathObject;
             EditorGUIUtility.PingObject(pathObject);
         }
 
-        #endregion
-
-        #region 辅助方法
-
-        /// <summary>
-        /// 获取场景视图的焦点位置
-        /// </summary>
         private static Vector3 GetSceneViewFocusPosition(SceneView sceneView)
         {
-            // 场景视图焦点位置可能未初始化，使用摄像机前方位置作为备选
             return sceneView.pivot.sqrMagnitude > 0.01f
                 ? sceneView.pivot
                 : sceneView.camera.transform.position + sceneView.camera.transform.forward * 10f;
         }
 
-        /// <summary>
-        /// 获取默认的线段方向
-        /// </summary>
         private static Vector3 GetDefaultLineDirection()
         {
             SceneView sceneView = SceneView.lastActiveSceneView;
             return sceneView != null
                 ? sceneView.camera.transform.right
-                : Vector3.right; // 无场景视图时使用世界右方向
+                : Vector3.right;
         }
-
-        #endregion
     }
 }

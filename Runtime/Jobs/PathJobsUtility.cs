@@ -15,7 +15,7 @@ namespace MrPathV2
 
         public struct SpineData : IDisposable
         {
-            // ... 此结构体保持不变 ...
+
             [ReadOnly] public NativeArray<float3> points;
             [ReadOnly] public NativeArray<float3> tangents;
             [ReadOnly] public NativeArray<float3> normals;

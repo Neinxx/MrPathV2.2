@@ -7,96 +7,117 @@ namespace MrPathV2
     {
         private const float MIN_POINT_DISTANCE_SQUARED = 0.0001f;
 
+
+
         public static PathSpine SamplePath(PathCreator creator, IHeightProvider heightProvider)
         {
             if (creator == null || creator.profile == null) return new PathSpine();
 
+            // 1. 生成理想的、平滑的局部空间脊线
             PathSpine localSpine = GenerateIdealSpine(creator, creator.profile.generationPrecision);
             if (localSpine.VertexCount < 2) return new PathSpine();
 
+            // 2. 根据配置决定是否进行地形吸附
             PathSpine worldSpine;
-            if (creator.profile.snapToTerrain)
+            if (creator.profile.snapToTerrain && heightProvider != null)
             {
-                // 【修正】将 creator.profile 传入，以便获取新的平滑参数
-                worldSpine = ProjectSpineToTerrain(
-                    localSpine,
-                    creator.transform,
-                    heightProvider,
-                    creator.profile
-                );
+                // 【核心重构】调用全新的地形吸附算法
+                worldSpine = DrapeSpineOnTerrain(localSpine, creator.transform, heightProvider, creator.profile);
             }
             else
             {
+                // 如果不吸附，则简单转换到世界空间
                 worldSpine = TransformSpineToWorld(localSpine, creator.transform);
             }
 
+            // 3. 清理并最终确定脊线数据
             return PurifySpine(worldSpine);
         }
 
-        // 【修正】ProjectSpineToTerrain 的方法签名已更新
-        private static PathSpine ProjectSpineToTerrain(PathSpine localSpine, Transform owner, IHeightProvider heightProvider, PathProfile profile)
+        /// <summary>
+        /// 【全新算法】将路径脊线通过“悬挂与松弛”算法应用到地形上。
+        /// </summary>
+        private static PathSpine DrapeSpineOnTerrain(PathSpine localSpine, Transform owner, IHeightProvider heightProvider, PathProfile profile)
         {
-            // 如果吸附强度为0，则等同于不吸附
-            if (Mathf.Approximately(profile.snapStrength, 0f))
-            {
-                return TransformSpineToWorld(localSpine, owner);
-            }
+            int pointCount = localSpine.VertexCount;
+            var worldPoints = new Vector3[pointCount];
+            var terrainHeights = new float[pointCount];
+            float pathAverageHeight = 0;
+            float terrainAverageHeight = 0;
 
-            var worldPoints = new Vector3[localSpine.VertexCount];
-            for (int i = 0; i < localSpine.VertexCount; i++)
+            // --- 步骤 0: 转换到世界空间并采样地形 ---
+            for (int i = 0; i < pointCount; i++)
             {
                 worldPoints[i] = owner.TransformPoint(localSpine.points[i]);
+                terrainHeights[i] = heightProvider.GetHeight(worldPoints[i]);
+                pathAverageHeight += worldPoints[i].y;
+                terrainAverageHeight += terrainHeights[i];
+            }
+            pathAverageHeight /= pointCount;
+            terrainAverageHeight /= pointCount;
+
+            // --- 步骤 1: 整体高度对齐 ---
+            float elevationDifference = terrainAverageHeight - pathAverageHeight;
+            for (int i = 0; i < pointCount; i++)
+            {
+                worldPoints[i].y += elevationDifference;
             }
 
-            // 【核心修正】在吸附前，保存一份原始、未吸附的世界坐标点
-            var originalWorldPoints = new Vector3[localSpine.VertexCount];
-            worldPoints.CopyTo(originalWorldPoints, 0);
-
-            if (heightProvider != null)
+            // --- 步骤 2: 向上悬挂 (Upward Drape) ---
+            for (int i = 0; i < pointCount; i++)
             {
-                for (int i = 0; i < worldPoints.Length; i++)
+                if (worldPoints[i].y < terrainHeights[i])
                 {
-                    float terrainHeight = heightProvider.GetHeight(worldPoints[i]);
-                    worldPoints[i].y = Mathf.Lerp(worldPoints[i].y, terrainHeight, profile.snapStrength);
+                    worldPoints[i].y = terrainHeights[i];
                 }
             }
 
-            if (profile.heightSmoothRange > 0)
+            // --- 步骤 3: 迭代松弛平滑 (Iterative Relaxation) ---
+            if (profile.smoothness > 0)
             {
-                // 【核心修正】使用新的参数，正确地调用平滑函数
-                SmoothHeightProfile(ref worldPoints, profile.heightSmoothRange, profile.heightSmoothRange, originalWorldPoints);
+                // 我们使用一个临时数组来存储每次迭代的结果，避免原地修改导致错误
+                var smoothedHeights = new float[pointCount];
+
+                for (int iter = 0; iter < profile.smoothness; iter++)
+                {
+                    for (int i = 0; i < pointCount; i++)
+                    {
+                        // 将每个点的高度设置为其邻居的平均高度
+                        if (i > 0 && i < pointCount - 1)
+                        {
+                            smoothedHeights[i] = (worldPoints[i - 1].y + worldPoints[i + 1].y) / 2f;
+                        }
+                        else
+                        {
+                            smoothedHeights[i] = worldPoints[i].y; // 保持端点不变
+                        }
+                    }
+
+                    // 将平滑后的结果应用回 worldPoints，但要确保不穿地
+                    for (int i = 0; i < pointCount; i++)
+                    {
+                        worldPoints[i].y = Mathf.Max(smoothedHeights[i], terrainHeights[i]);
+                    }
+                }
             }
 
+            // --- 步骤 4: 应用最终的高度偏移 ---
+            if (Mathf.Abs(profile.heightOffset) > 0.001f)
+            {
+                for (int i = 0; i < pointCount; i++)
+                {
+                    worldPoints[i].y += profile.heightOffset;
+                }
+            }
+
+            // --- 最后: 重新计算切线和法线 ---
             var worldTangents = RecalculateTangentsFromPoints(worldPoints);
             var worldNormals = GetSurfaceNormals(worldPoints, heightProvider);
 
             return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.timestamps);
         }
 
-        // 【修正】SmoothHeightProfile 的新算法实现
-        private static void SmoothHeightProfile(ref Vector3[] snappedPoints, int windowSize, float smoothStrength, Vector3[] originalPoints)
-        {
-            if (windowSize <= 0 || snappedPoints.Length < 3) return;
 
-            // 1. 先对吸附后的点进行一次模糊，得到一个“绝对平滑”的基准
-            var blurredHeights = new float[snappedPoints.Length];
-            for (int i = 0; i < snappedPoints.Length; i++)
-            {
-                float sumOfHeights = 0; int count = 0;
-                for (int j = Mathf.Max(0, i - windowSize); j <= Mathf.Min(snappedPoints.Length - 1, i + windowSize); j++)
-                {
-                    sumOfHeights += snappedPoints[j].y; count++;
-                }
-                if (count > 0) blurredHeights[i] = sumOfHeights / count;
-                else blurredHeights[i] = snappedPoints[i].y;
-            }
-
-            // 2. 在“绝对平滑”和“绝对原始”之间进行插值，由 smoothStrength 控制
-            for (int i = 0; i < snappedPoints.Length; i++)
-            {
-                snappedPoints[i].y = Mathf.Lerp(blurredHeights[i], originalPoints[i].y, smoothStrength);
-            }
-        }
 
         // --- 其他所有辅助方法保持不变 ---
         // ... (GenerateIdealSpine, GenerateEquidistantPoints, TransformSpineToWorld, etc.)

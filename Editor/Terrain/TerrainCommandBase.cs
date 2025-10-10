@@ -1,12 +1,15 @@
-// TerrainCommandBase.cs (内存安全版)
+// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Terrain/TerrainCommandBase.cs (WYSIWYG 最终版)
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEditor;
 using System.Linq;
+using System;
+
 namespace MrPathV2
 {
     public abstract class TerrainCommandBase
@@ -21,60 +24,75 @@ namespace MrPathV2
         }
 
         public abstract string GetCommandName();
-
-        public async Task ExecuteAsync()
-        {
-            if (!Validate(out var spine, out var terrains)) return;
-
-            // 【修正】使用 Allocator.Persistent 来避免 TempJob 的4帧超时问题
-            RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
-            var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
-
-            try
-            {
-                await ProcessTerrainsAsync(terrains, spineData, roadContour, contourBounds, CancellationToken.None);
-            }
-            finally
-            {
-                // 依赖我们强大的 try-finally 结构来确保内存被释放
-                if (spineData.IsCreated) spineData.Dispose();
-                if (roadContour.IsCreated) roadContour.Dispose();
-            }
-
-            StitchTerrains(terrains);
-            Debug.Log($"[Mr. Path] {GetCommandName()} 操作已成功应用到地形！");
-        }
+        public Task ExecuteAsync() => ExecuteAsync(CancellationToken.None);
 
         public async Task ExecuteAsync(CancellationToken token)
         {
             if (!Validate(out var spine, out var terrains)) return;
 
-            RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
-            var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
+            token.ThrowIfCancellationRequested();
+
+            GenerateMeshGeometry(spine, Creator.profile, out var meshVertices, out var meshTriangles, Allocator.Persistent);
 
             try
             {
-                await ProcessTerrainsAsync(terrains, spineData, roadContour, contourBounds, token);
+                // 传递原始的 'spine' (PathSpine类型)，子类将根据需要使用它
+                await ProcessTerrainsAsync(terrains, spine, meshVertices, meshTriangles, token);
+
+                token.ThrowIfCancellationRequested();
+                StitchTerrains(terrains);
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.Log($"[Mr.Path] 用户取消了 {GetCommandName()} 操作。");
             }
             finally
             {
-                if (spineData.IsCreated) spineData.Dispose();
-                if (roadContour.IsCreated) roadContour.Dispose();
+                if (meshVertices.IsCreated) meshVertices.Dispose();
+                if (meshTriangles.IsCreated) meshTriangles.Dispose();
             }
-
-            StitchTerrains(terrains);
-            Debug.Log($"[Mr. Path] {GetCommandName()} 操作已成功应用到地形！");
         }
 
-        protected abstract Task ProcessTerrains(List<Terrain> terrains, PathJobsUtility.SpineData spineData, NativeArray<float2> roadContour, float4 contourBounds);
+        /// <summary>
+        /// 【最终修正】这是唯一需要子类实现的抽象方法。它接收 'PathSpine' 类型用于轮廓生成，并接收精确的网格几何数据。
+        /// </summary>
+        protected abstract Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spineForContour, NativeArray<float3> meshVertices, NativeArray<int> meshTriangles, CancellationToken token);
 
-        protected virtual Task ProcessTerrainsAsync(List<Terrain> terrains, PathJobsUtility.SpineData spineData, NativeArray<float2> roadContour, float4 contourBounds, CancellationToken token)
+        /// <summary>
+        /// 【最终修正】此方法的签名现在是正确的，它接收 'PathSpine' 类型。
+        /// </summary>
+        private void GenerateMeshGeometry(PathSpine spine, PathProfile profile, out NativeArray<float3> vertices, out NativeArray<int> triangles, Allocator allocator)
         {
-            // 默认实现调用旧的抽象方法，保持向后兼容
-            return ProcessTerrains(terrains, spineData, roadContour, contourBounds);
+            var spineData = new PathJobsUtility.SpineData(spine, Allocator.TempJob);
+            var profileData = new PathJobsUtility.ProfileData(profile.layers, null, profile, Allocator.TempJob);
+
+            using var tempVertices = new NativeList<float3>(Allocator.TempJob);
+            using var tempTriangles = new NativeList<int>(Allocator.TempJob);
+            using var tempUvs = new NativeList<float2>(Allocator.TempJob);
+            using var tempColors = new NativeList<Color32>(Allocator.TempJob);
+            using var tempNormals = new NativeList<float3>(Allocator.TempJob);
+
+            var job = new GenerateMeshJob
+            {
+                spine = spineData,
+                profile = profileData,
+                vertices = tempVertices,
+                triangles = tempTriangles,
+                uvs = tempUvs,
+                colors = tempColors,
+                normals = tempNormals
+            };
+
+            job.Run();
+
+            vertices = new NativeArray<float3>(tempVertices.AsArray(), allocator);
+            triangles = new NativeArray<int>(tempTriangles.AsArray(), allocator);
+
+            spineData.Dispose();
+            profileData.Dispose();
         }
 
-        // ... FindAffectedTerrains 和其他所有辅助方法都保持不变 ...
+        // --- 以下所有辅助方法保持不变 ---
         protected bool Validate(out PathSpine spine, out List<Terrain> affectedTerrains)
         {
             spine = default; affectedTerrains = null;
@@ -82,7 +100,7 @@ namespace MrPathV2
             spine = PathSampler.SamplePath(Creator, HeightProvider);
             if (spine.VertexCount < 2) { Debug.LogWarning("路径采样点不足，无法应用。"); return false; }
             affectedTerrains = FindAffectedTerrains(spine);
-            if (affectedTerrains.Count == 0) { return false; }
+            if (affectedTerrains.Count == 0) { Debug.LogWarning("路径未影响任何活动地形。"); return false; }
             return true;
         }
         private List<Terrain> FindAffectedTerrains(PathSpine spine)
@@ -102,10 +120,8 @@ namespace MrPathV2
             if (spine.VertexCount == 0) return new Bounds();
             var pathBounds = new Bounds(spine.points[0], Vector3.zero);
             for (int i = 1; i < spine.VertexCount; i++) { pathBounds.Encapsulate(spine.points[i]); }
-            float maxExtent = 0;
-            if (Creator.profile != null && Creator.profile.layers.Count > 0) { maxExtent = Creator.profile.layers.Max(l => Mathf.Abs(l.horizontalOffset) + l.width / 2f); }
-            float totalExpansion = maxExtent + 5f;
-            pathBounds.Expand(new Vector3(totalExpansion * 2, 0, totalExpansion * 2));
+            float maxExtent = Creator.profile != null && Creator.profile.layers.Count > 0 ? Creator.profile.layers.Max(l => Mathf.Abs(l.horizontalOffset) + l.width / 2f) : 0;
+            pathBounds.Expand(new Vector3(maxExtent * 2, 0, maxExtent * 2));
             return new Bounds(new Vector3(pathBounds.center.x, pathBounds.center.y, pathBounds.center.z), new Vector3(pathBounds.size.x, float.MaxValue, pathBounds.size.z));
         }
         protected Dictionary<TerrainLayer, int> BuildTerrainLayerMap(Terrain terrain)

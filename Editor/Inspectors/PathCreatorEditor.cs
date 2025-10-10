@@ -1,41 +1,28 @@
-// PathCreatorEditor.cs
+// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Inspectors/PathCreatorEditor.cs
 using UnityEditor;
 using UnityEngine;
 using System.IO;
-// using UnityEditor.EditorTools; // 旧版工具已删除，移除冗余引用
+
 namespace MrPathV2
 {
     /// <summary>
-    /// 【最终定稿 • 大师级】PathCreator 的自定义编辑器
-    /// 
-    /// 这份代码是整个工具“脸面”的最终形态。它遵循以下设计哲学：
-    /// 
-    /// - 优雅 (Elegant): 结构清晰，职责分明。使用内嵌编辑器提供一流的UX。
-    /// - 可读 (Readable): 使用 #region 和详尽的“心法注释”来阐明每一部分的设计意图。
-    /// - 高性能 (Performant): 缓存重用编辑器实例，避免不必要的GUI重绘，采用事件驱动的刷新机制。
-    /// - 鲁棒 (Robust): 完整处理资源生命周期和事件订阅/退订，防止内存泄漏；
-    ///   始终使用 SerializedObject 处理属性，确保Undo/Redo和Prefab的兼容性。
-    /// - 逻辑清晰 (Logical): 编辑器只负责“呈现”和“应用修改”。它相信组件自身（通过OnValidate）
-    ///   能够响应变化，实现了完美的关注点分离。
-    /// - 干净 (Clean): 移除了所有对旧架构的依赖，代码精炼，无冗余。
+    /// [最终整合版] PathCreator 的自定义编辑器。
+    /// 它是工具的核心交互界面，集成了 Inspector 面板、场景路径绘制、用户输入处理
+    /// 以及数据驱动的地形操作UI面板，遵循单一职责和最佳用户体验原则。
     /// </summary>
     [CustomEditor(typeof(PathCreator))]
     public class PathCreatorEditor : Editor
     {
-        #region 字段与属性 (Fields & Properties)
+        #region 字段
 
         private PathCreator _targetCreator;
 
-        // --- 内嵌编辑器所需的核心缓存 ---
+        // --- 内嵌编辑器 ---
         private Editor _profileEmbeddedEditor;
         private SerializedObject _profileSO;
-
-        // --- UI状态管理 ---
-        // 将折叠状态保存在编辑器本地，而非序列化到资产中，
-        // 这是避免多人协作时互相干扰UI状态的关键技巧。
         private bool _profileLocalExpanded = true;
 
-        // --- 场景交互与预览状态 ---
+        // --- 核心服务与处理器 ---
         private IPreviewGenerator _previewGenerator;
         private IHeightProvider _heightProvider;
         private PreviewMaterialManager _materialManager;
@@ -43,96 +30,90 @@ namespace MrPathV2
         private PathPreviewManager _previewManager;
         private TerrainOperationHandler _terrainHandler;
 
-        private Material _splatMaterialTemplate;
-
+        // --- 场景交互状态 ---
         private int _hoveredPointIdx = -1;
         private int _hoveredSegmentIdx = -1;
         private bool _isDraggingHandle;
 
+        // --- 地形操作状态 ---
         private bool _isApplyingHeight;
         private bool _isApplyingPaint;
 
         #endregion
 
-        #region 生命周期与事件订阅 (Lifecycle & Event Subscription)
+        #region 生命周期
 
         private void OnEnable()
         {
             _targetCreator = target as PathCreator;
             if (_targetCreator == null) return;
 
-            // 初始化对 Profile 的引用，以便创建内嵌编辑器
             if (_targetCreator.profile != null)
             {
                 InitProfileReferences(_targetCreator.profile);
             }
 
-            // 初始化场景交互与预览组件（通过工厂注入）
-            var settings = PathToolSettings.Instance;
-            _previewGenerator = (settings.previewGeneratorFactory != null) ? settings.previewGeneratorFactory.Create() : new PreviewMeshControllerAdapter(new PreviewMeshController());
-            _heightProvider = (settings.heightProviderFactory != null) ? settings.heightProviderFactory.Create() : new TerrainHeightProviderAdapter(new TerrainHeightProvider());
-            _materialManager = (settings.previewMaterialManagerFactory != null) ? settings.previewMaterialManagerFactory.Create() : new PreviewMaterialManager();
+            // 从新的模块化配置系统中获取所有依赖
+            var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
+            var advancedSettings = projectSettings.advancedSettings;
+            var appearanceSettings = projectSettings.appearanceDefaults;
+
+            // 初始化核心服务
+            _previewGenerator = (advancedSettings?.previewGeneratorFactory != null) ? advancedSettings.previewGeneratorFactory.Create() : new PreviewMeshControllerAdapter(new PreviewMeshController());
+            _heightProvider = (advancedSettings?.heightProviderFactory != null) ? advancedSettings.heightProviderFactory.Create() : new TerrainHeightProviderAdapter(new TerrainHeightProvider());
+            _materialManager = (advancedSettings?.previewMaterialManagerFactory != null) ? advancedSettings.previewMaterialManagerFactory.Create() : new PreviewMaterialManager();
+
+            // 初始化处理器
             _inputHandler = new PathInputHandler();
-
-            _splatMaterialTemplate = settings.previewMaterialTemplate != null ? settings.previewMaterialTemplate : Resources.Load<Material>("test");
-            if (_splatMaterialTemplate == null)
-            {
-                Debug.LogWarning("未配置预览材质模板，已回退到 Resources/test，若不存在将无法显示预览。");
-            }
-
-            _previewManager = new PathPreviewManager(_previewGenerator, _materialManager, _splatMaterialTemplate);
             _terrainHandler = new TerrainOperationHandler(_heightProvider);
 
-            Undo.undoRedoPerformed += MarkPathAsDirty;
-            MarkPathAsDirty();
+            // 初始化预览管理器
+            Material splatMaterialTemplate = appearanceSettings?.previewMaterialTemplate;
+            _previewManager = new PathPreviewManager(_previewGenerator, _materialManager, splatMaterialTemplate);
 
+            // 订阅事件
+            Undo.undoRedoPerformed += MarkPathAsDirty;
             _targetCreator.PathModified += OnPathModified;
 
+            MarkPathAsDirty(); // 首次启用时强制刷新
         }
 
         private void OnDisable()
         {
-            // OnDisable 是编辑器脚本的“金钟罩”，必须在这里清理所有引用的资源和事件，
-            // 否则会导致内存泄漏和令人头痛的空引用错误。
-
+            // 严格清理所有资源和事件订阅，防止内存泄漏
             if (_profileEmbeddedEditor != null)
             {
                 DestroyImmediate(_profileEmbeddedEditor);
-                _profileEmbeddedEditor = null;
             }
-            _profileSO = null;
 
             _previewManager?.Dispose();
             _heightProvider?.Dispose();
             _materialManager?.Dispose();
             _terrainHandler?.Dispose();
+
             Undo.undoRedoPerformed -= MarkPathAsDirty;
             if (_targetCreator != null)
             {
                 _targetCreator.PathModified -= OnPathModified;
             }
 
+            // 重置状态
             _isApplyingHeight = false;
             _isApplyingPaint = false;
-
-
         }
 
         #endregion
 
-        #region 主GUI循环 (Main GUI Loop)
+        #region GUI 绘制
 
         public override void OnInspectorGUI()
         {
             if (_targetCreator == null) return;
 
-            // 始终从 serializedObject 开始，这是保证Undo/Redo正确的基石。
             serializedObject.Update();
 
-            // 绘制核心属性
             DrawCoreProperties();
 
-            // 根据 Profile 是否存在，决定绘制内嵌编辑器还是提示信息
             if (_targetCreator.profile != null)
             {
                 DrawEmbeddedProfileUI();
@@ -142,52 +123,164 @@ namespace MrPathV2
                 DrawProfileMissingUI();
             }
 
-            // 应用所有修改
             serializedObject.ApplyModifiedProperties();
         }
 
-        #endregion
-
-        #region 场景交互 (Scene GUI & Handles)
         private void OnSceneGUI()
         {
-            var creator = _targetCreator;
-            if (!IsPathValid(creator))
+            if (!IsPathValid(_targetCreator))
             {
                 _previewManager?.SetActive(false);
                 return;
             }
+            _previewManager.SetActive(true);
 
-            _previewManager.RefreshIfDirty(creator, _heightProvider);
+            // 刷新预览网格
+            _previewManager.RefreshIfDirty(_targetCreator, _heightProvider);
 
-            var context = CreateHandleContext(creator);
+            // 绘制路径Handles并处理输入
+            var context = CreateHandleContext(_targetCreator);
             PathEditorHandles.Draw(ref context);
             UpdateHoverStateFromContext(context);
-            _inputHandler.HandleInputEvents(Event.current, creator, context.hoveredPathT, context.hoveredPointIndex);
+            _inputHandler.HandleInputEvents(Event.current, _targetCreator, context.hoveredPathT, context.hoveredPointIndex);
 
+            // 绘制集成的地形操作UI面板
             DrawApplyToTerrainUI();
-            DrawCoordinateTooltip(creator, context);
+            // DrawModernApplyToTerrainUI();
+
+            DrawCoordinateTooltip(_targetCreator, context);
 
             SceneView.RepaintAll();
         }
+
+        private void DrawModernApplyToTerrainUI()
+        {
+            Handles.BeginGUI();
+
+            var uiSettings = MrPathProjectSettings.GetOrCreateSettings().sceneUISettings;
+            if (uiSettings == null) { Handles.EndGUI(); return; }
+
+            // 使用一个更大的尺寸以容纳更美观的布局
+            float windowWidth = 200f;
+            float windowHeight = 150f;
+
+            Rect windowRect = new Rect(
+                SceneView.currentDrawingSceneView.position.width - windowWidth - uiSettings.sceneUiRightMargin,
+                SceneView.currentDrawingSceneView.position.height - windowHeight - uiSettings.sceneUiBottomMargin,
+                windowWidth,
+                windowHeight
+            );
+
+            // 使用一个半透明的深色背景，模仿Unity原生面板
+            GUI.Box(windowRect, GUIContent.none, EditorStyles.helpBox);
+
+            GUILayout.BeginArea(windowRect);
+
+            // 标题
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(8);
+            GUILayout.Label("Mr.Path 地形工具", EditorStyles.boldLabel);
+            GUILayout.EndHorizontal();
+
+            GUIHelper.DrawSeparator(); // 绘制一条分隔线
+
+            // 按钮区域
+            GUILayout.BeginVertical(new GUIStyle { padding = new RectOffset(8, 8, 4, 4) });
+
+            var terrainOps = MrPathProjectSettings.GetOrCreateSettings().terrainOperations;
+            var ops = terrainOps?.operations;
+            bool isAnyOperationRunning = _isApplyingHeight || _isApplyingPaint;
+
+            if (ops != null && ops.Length > 0)
+            {
+                System.Array.Sort(ops, (a, b) => a.order.CompareTo(b.order));
+
+                foreach (var op in ops)
+                {
+                    if (op == null) continue;
+
+                    bool isThisOpRunning = (op.CreateCommand(_targetCreator, null) is FlattenTerrainCommand && _isApplyingHeight) ||
+                                           (op.CreateCommand(_targetCreator, null) is PaintTerrainCommand && _isApplyingPaint);
+
+                    using (new EditorGUI.DisabledScope(isAnyOperationRunning && !isThisOpRunning))
+                    {
+                        string buttonText = isThisOpRunning ? "正在执行..." : op.displayName;
+                        // 使用内置图标创建内容
+                        GUIContent content = new GUIContent(buttonText, GetIconForOperation(op.displayName));
+
+                        if (GUILayout.Button(content, GUILayout.Height(28)))
+                        {
+                            ExecuteOperation(op);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (GUILayout.Button("配置地形操作"))
+                {
+                    SettingsService.OpenProjectSettings("Project/MrPath");
+                }
+            }
+
+            GUILayout.FlexibleSpace();
+
+            // 底部按钮
+            using (new EditorGUI.DisabledScope(!isAnyOperationRunning))
+            {
+                if (GUILayout.Button(new GUIContent(" 取消操作", GUIHelper.GetIcon("d_winbtn_win_close")), GUILayout.Height(22)))
+                {
+                    _terrainHandler?.Cancel();
+                }
+            }
+            if (GUILayout.Button(new GUIContent(" 刷新地形缓存", GUIHelper.GetIcon("d_Refresh")), GUILayout.Height(22)))
+            {
+                _heightProvider?.MarkAsDirty();
+                MarkPathAsDirty();
+                SceneView.currentDrawingSceneView.ShowNotification(new GUIContent("地形缓存已刷新"));
+            }
+
+            GUILayout.EndVertical();
+            GUILayout.EndArea();
+
+            Handles.EndGUI();
+        }
+        private Texture2D GetIconForOperation(string opName)
+        {
+            if (opName.Contains("压平") || opName.ToLower().Contains("flatten"))
+                return GUIHelper.GetIcon("d_TerrainInspector.TerrainToolSmoothHeight");
+            if (opName.Contains("绘制") || opName.ToLower().Contains("paint"))
+                return GUIHelper.GetIcon("d_TerrainInspector.TerrainToolPaint");
+
+            return GUIHelper.GetIcon("d_CustomTool");
+        }
+        /// <summary>
+        /// 提供UI绘制辅助功能，如获取内置图标和绘制分隔线。
+        /// </summary>
+        public static class GUIHelper
+        {
+            private static readonly Color separatorColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+
+            public static Texture2D GetIcon(string iconName)
+            {
+                return EditorGUIUtility.IconContent(iconName).image as Texture2D;
+            }
+
+            public static void DrawSeparator(int height = 1)
+            {
+                Rect rect = EditorGUILayout.GetControlRect(false, height);
+                rect.height = height;
+                EditorGUI.DrawRect(rect, separatorColor);
+            }
+        }
         #endregion
 
-        #region UI绘制方法 (UI Drawing Methods)
+        #region UI 绘制辅助方法
 
         private void DrawCoreProperties()
         {
-            var profileProperty = serializedObject.FindProperty("profile");
-            EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(profileProperty);
-            if (EditorGUI.EndChangeCheck())
-            {
-                // 当用户直接更换Profile资产时，应用修改。
-                // OnValidate会自动触发，进而触发事件链，无需额外操作。
-                serializedObject.ApplyModifiedProperties();
-            }
-
-            var pathDataProperty = serializedObject.FindProperty("pathData");
-            EditorGUILayout.PropertyField(pathDataProperty, true);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("profile"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("pathData"), true);
             EditorGUILayout.Space();
         }
 
@@ -202,6 +295,7 @@ namespace MrPathV2
 
         private void DrawEmbeddedProfileUI()
         {
+            // ... (此部分代码无需修改，保持原样)
             if (_profileSO == null || _profileSO.targetObject != _targetCreator.profile)
             {
                 InitProfileReferences(_targetCreator.profile);
@@ -209,131 +303,36 @@ namespace MrPathV2
             if (_profileSO == null) return;
 
             _profileSO.Update();
-
             using (new EditorGUILayout.VerticalScope("Box"))
             {
                 _profileLocalExpanded = EditorGUILayout.Foldout(_profileLocalExpanded, "路径配置文件 (Profile)", true, EditorStyles.foldoutHeader);
-
                 if (_profileLocalExpanded)
                 {
                     EditorGUI.indentLevel++;
-
-                    // 使用 BeginChangeCheck 监控内嵌编辑器中的所有UI变化
                     EditorGUI.BeginChangeCheck();
                     {
                         if (_profileEmbeddedEditor == null || _profileEmbeddedEditor.target != _targetCreator.profile)
                         {
                             _profileEmbeddedEditor = CreateEditor(_targetCreator.profile);
                         }
-                        // 绘制 Profile 的 Inspector 内容
                         _profileEmbeddedEditor?.OnInspectorGUI();
                     }
                     if (EditorGUI.EndChangeCheck())
                     {
-
-                        // 步骤 1: 签发“诏书” (保存修改)
                         _profileSO.ApplyModifiedProperties();
-
                         if (_targetCreator != null)
                         {
                             _targetCreator.NotifyProfileModified();
                         }
-
-                        // 步骤 3 (可选但推荐): 强制重绘场景，确保即时响应
-                        //  SceneView.RepaintAll();
-
-
-
-
-
                     }
-
                     EditorGUI.indentLevel--;
                 }
             }
         }
-        #endregion
 
-        #region 事件处理器 (Event Handlers)
-        private void OnPathModified(PathChangeCommand command) => MarkPathAsDirty();
-        #endregion
-
-        #region 辅助方法 (Helper Methods)
-
-
-
-        private void InitProfileReferences(PathProfile profile)
-        {
-            _profileSO = (profile != null) ? new SerializedObject(profile) : null;
-        }
-
-        private void CreateDefaultProfile()
-        {
-            var newProfile = CreateInstance<PathProfile>();
-            newProfile.name = "Default PathProfile";
-            // ... (可以添加更详细的默认值设置)
-
-            // 安全地创建资产目录和文件
-            string saveDir = "Assets/__temp/MrPathV2.2/Settings/Profiles";
-            Directory.CreateDirectory(saveDir);
-            string savePath = AssetDatabase.GenerateUniqueAssetPath($"{saveDir}/{newProfile.name}.asset");
-
-            AssetDatabase.CreateAsset(newProfile, savePath);
-#if UNITY_2020_3_OR_NEWER
-            AssetDatabase.SaveAssetIfDirty(newProfile);
-#else
-            AssetDatabase.SaveAssets();
-#endif
-
-            // 自动将新创建的Profile赋给当前对象
-            serializedObject.FindProperty("profile").objectReferenceValue = newProfile;
-            serializedObject.ApplyModifiedProperties();
-
-            EditorGUIUtility.PingObject(newProfile);
-        }
-
-        private bool IsPathValid(PathCreator c)
-        {
-            return c != null && c.profile != null && c.pathData.KnotCount >= 2;
-        }
-
-        private PathEditorHandles.HandleDrawContext CreateHandleContext(PathCreator creator) => new()
-        {
-            creator = creator,
-            heightProvider = _heightProvider,
-            latestSpine = _previewManager?.LatestSpine,
-            isDragging = _isDraggingHandle,
-            hoveredPointIndex = _hoveredPointIdx,
-            hoveredSegmentIndex = _hoveredSegmentIdx,
-        };
-
-        private void UpdateHoverStateFromContext(PathEditorHandles.HandleDrawContext context)
-        {
-            _hoveredPointIdx = context.hoveredPointIndex;
-            _hoveredSegmentIdx = context.hoveredSegmentIndex;
-            _isDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
-        }
-
-        public void MarkPathAsDirty()
-        {
-            _previewManager?.MarkDirty();
-            SceneView.RepaintAll();
-        }
-
-        private void DrawCoordinateTooltip(PathCreator creator, PathEditorHandles.HandleDrawContext context)
-        {
-            if (creator == null) return;
-            if (context.hoveredPathT > -1)
-            {
-                Vector3 worldPos = creator.GetPointAt(context.hoveredPathT);
-                Handles.BeginGUI();
-                Vector2 screen = HandleUtility.WorldToGUIPoint(worldPos);
-                var rect = new Rect(screen.x + 12, screen.y + 12, 160, 22);
-                GUI.Label(rect, $"Pos: {worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2}", EditorStyles.helpBox);
-                Handles.EndGUI();
-            }
-        }
-
+        /// <summary>
+        /// [核心集成] 绘制场景右下角的地形操作UI面板。
+        /// </summary>
         private void DrawApplyToTerrainUI()
         {
             Handles.BeginGUI();
@@ -345,166 +344,174 @@ namespace MrPathV2
                 return;
             }
 
-            var settings = PathToolSettings.Instance;
-            float windowWidth = settings.sceneUiWindowWidth;
-            float windowHeight = settings.sceneUiWindowHeight;
+            // 从新的配置系统获取UI布局设置
+            var uiSettings = MrPathProjectSettings.GetOrCreateSettings().sceneUISettings;
+            if (uiSettings == null)
+            {
+                Handles.EndGUI();
+                return;
+            }
 
-            Rect sceneViewClientRect = currentSceneView.position;
-            float xPos = sceneViewClientRect.xMax - windowWidth - settings.sceneUiRightMargin;
-            float yPos = sceneViewClientRect.yMax - windowHeight - settings.sceneUiBottomMargin;
-            Rect windowRect = new Rect(xPos, yPos, windowWidth, windowHeight);
+            Rect windowRect = new Rect(
+                currentSceneView.position.width - uiSettings.sceneUiWindowWidth - uiSettings.sceneUiRightMargin,
+                currentSceneView.position.height - uiSettings.sceneUiWindowHeight - uiSettings.sceneUiBottomMargin,
+                uiSettings.sceneUiWindowWidth,
+                uiSettings.sceneUiWindowHeight
+            );
 
             GUILayout.Window(GetHashCode(), windowRect, id =>
             {
-                GUILayout.BeginVertical();
-                GUILayout.Space(6);
-                GUILayout.Label("路径应用工具", EditorStyles.boldLabel);
-                GUILayout.Space(4);
+                GUILayout.Label("MrPathV2.31", EditorStyles.boldLabel);
 
-                var ops = settings.operations;
+                // 从新的配置系统获取操作列表
+                var terrainOps = MrPathProjectSettings.GetOrCreateSettings().terrainOperations;
+                var ops = terrainOps?.operations;
+
                 if (ops != null && ops.Length > 0)
                 {
                     System.Array.Sort(ops, (a, b) => a.order.CompareTo(b.order));
+                    bool isAnyOperationRunning = _isApplyingHeight || _isApplyingPaint;
+
                     foreach (var op in ops)
                     {
                         if (op == null) continue;
-                        bool isBusy = _isApplyingHeight || _isApplyingPaint;
-                        using (new EditorGUI.DisabledScope(isBusy))
+
+                        // 判断当前按钮对应的操作是否正在运行
+                        bool isThisOpRunning = (op.CreateCommand(_targetCreator, null) is FlattenTerrainCommand && _isApplyingHeight) ||
+                                              (op.CreateCommand(_targetCreator, null) is PaintTerrainCommand && _isApplyingPaint);
+
+                        using (new EditorGUI.DisabledScope(isAnyOperationRunning))
                         {
-                            GUI.backgroundColor = op.buttonColor;
-                            string label = op.displayName;
-                            if (GUILayout.Button(new GUIContent(label, op.icon), EditorStyles.toolbarButton, GUILayout.Height(26)))
+                            GUI.backgroundColor = isThisOpRunning ? Color.yellow : op.buttonColor;
+                            string buttonText = isThisOpRunning ? "正在执行..." : op.displayName;
+
+                            if (GUILayout.Button(new GUIContent(buttonText, op.icon), GUILayout.Height(26)))
                             {
                                 ExecuteOperation(op);
                             }
-                            GUILayout.Space(3);
                         }
                     }
                 }
                 else
                 {
-                    GUILayout.Label("未配置任何路径地形操作。请在 Project/MrPath Settings -> Operations 中添加操作资产。", EditorStyles.helpBox);
-                    if (GUILayout.Button("打开设置 (Project/MrPath Settings)", EditorStyles.toolbarButton, GUILayout.Height(22)))
+                    if (GUILayout.Button("配置地形操作", GUILayout.Height(22)))
                     {
-                        SettingsService.OpenProjectSettings("Project/MrPath Settings");
+                        SettingsService.OpenProjectSettings("Project/MrPath");
                     }
                 }
 
-                GUILayout.Space(3);
-                using (new EditorGUI.DisabledScope(_isApplyingHeight == false && _isApplyingPaint == false))
-                {
-                    GUI.backgroundColor = new Color(1f, 0.5f, 0.5f);
-                    if (GUILayout.Button("取消当前操作", EditorStyles.toolbarButton, GUILayout.Height(22)))
-                    {
-                        _terrainHandler?.Cancel();
-                    }
-                }
+                GUILayout.FlexibleSpace();
 
-                GUILayout.Space(3);
+                // 取消和刷新按钮
+                //  using (new EditorGUI.DisabledScope(!_isApplyingHeight && !_isApplyingPaint))
+                // {
+                //     GUI.backgroundColor = new Color(1f, 0.5f, 0.5f);
+                //     if (GUILayout.Button("取消当前操作", GUILayout.Height(22)))
+                //     {
+                //         // _terrainHandler?.Cancel();
+                //         //模拟按ctrl+z
+                //         EditorApplication.ExecuteMenuItem("Edit/Undo");
+                //     }
+                // }
+
                 GUI.backgroundColor = new Color(0.8f, 0.95f, 0.6f);
-                if (GUILayout.Button("刷新地形缓存", EditorStyles.toolbarButton, GUILayout.Height(22)))
+                if (GUILayout.Button("刷新地形缓存", GUILayout.Height(22)))
                 {
                     _heightProvider?.MarkAsDirty();
                     MarkPathAsDirty();
                     currentSceneView.ShowNotification(new GUIContent("地形缓存已刷新"));
                 }
 
-                GUILayout.Space(4);
-                GUILayout.EndVertical();
+                GUI.DragWindow(new Rect(0, 0, 10000, 20));
 
-                GUI.DragWindow(new Rect(0, 0, windowWidth, 20));
-
-            }, "路径转地形");
+            }, "Mr.Path");
 
             Handles.EndGUI();
             GUI.backgroundColor = Color.white;
         }
 
+        #endregion
+
+        #region 逻辑与辅助方法
+
+        private void OnPathModified(PathChangeCommand command) => MarkPathAsDirty();
+        public void MarkPathAsDirty()
+        {
+            _previewManager?.MarkDirty();
+            SceneView.RepaintAll();
+        }
+
+        /// <summary>
+        /// [核心集成] 执行一个地形操作命令。
+        /// </summary>
         private void ExecuteOperation(PathTerrainOperation op)
         {
-            var creator = _targetCreator;
-            if (creator == null) return;
+            if (_targetCreator == null || !op.CanExecute(_targetCreator)) return;
 
-            // 校验 PathProfile
-            if (creator.profile == null)
+            // 运行时检查，确保Profile和策略都已配置
+            if (_targetCreator.profile == null || PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType) == null)
             {
-                EditorUtility.DisplayDialog("未配置路径 Profile", "请先在 PathCreator 组件上指定 PathProfile。", "确定");
+                EditorUtility.DisplayDialog("配置错误", "路径缺少 Profile 或未找到对应的路径策略 (Strategy)。\n请检查 Path Creator 的 Profile 字段以及 Project/MrPath 设置中的高级设置。", "确定");
                 return;
             }
 
-            // 校验策略注册与当前策略
-            var registry = MrPathV2.PathStrategyRegistry.Instance;
-            var strategy = registry?.GetStrategy(creator.profile.curveType);
-            if (strategy == null)
-            {
-                EditorUtility.DisplayDialog("未配置路径策略", "未找到 PathStrategyRegistry 或对应曲线类型的策略资产。请在 Project/MrPath Settings 中创建注册表并填充策略。", "打开设置");
-                SettingsService.OpenProjectSettings("Project/MrPath Settings");
-                return;
-            }
-
-            if (!op.CanExecute(creator)) return;
-            var cmd = op.CreateCommand(creator, _heightProvider);
+            var cmd = op.CreateCommand(_targetCreator, _heightProvider);
             if (cmd == null) return;
 
+            // 根据命令类型设置不同的状态旗标
             if (cmd is FlattenTerrainCommand)
-            {
                 _ = _terrainHandler.ExecuteAsync(cmd, b => _isApplyingHeight = b);
-            }
             else if (cmd is PaintTerrainCommand)
-            {
                 _ = _terrainHandler.ExecuteAsync(cmd, b => _isApplyingPaint = b);
-            }
-            else
-            {
+            else // 对于未知或复合命令，同时设置两个旗标以锁定UI
                 _ = _terrainHandler.ExecuteAsync(cmd, b => { _isApplyingHeight = b; _isApplyingPaint = b; });
-            }
         }
 
-        private void OnFlattenTerrainClicked()
+        // --- 其他无需修改的辅助方法 ---
+        private void InitProfileReferences(PathProfile profile)
         {
-            var creator = _targetCreator;
-            if (!IsPathValid(creator)) return;
-
-            if (creator.profile == null)
-            {
-                EditorUtility.DisplayDialog("未配置路径 Profile", "请先在 PathCreator 组件上指定 PathProfile。", "确定");
-                return;
-            }
-            var registry = MrPathV2.PathStrategyRegistry.Instance;
-            var strategy = registry?.GetStrategy(creator.profile.curveType);
-            if (strategy == null)
-            {
-                EditorUtility.DisplayDialog("未配置路径策略", "未找到 PathStrategyRegistry 或对应曲线类型的策略资产。请在 Project/MrPath Settings 中创建注册表并填充策略。", "打开设置");
-                SettingsService.OpenProjectSettings("Project/MrPath Settings");
-                return;
-            }
-
-            var command = new FlattenTerrainCommand(creator, _heightProvider);
-            _ = _terrainHandler.ExecuteAsync(command, b => _isApplyingHeight = b);
+            _profileSO = (profile != null) ? new SerializedObject(profile) : null;
         }
-
-        private void OnPaintTerrainClicked()
+        private void CreateDefaultProfile()
         {
-            var creator = _targetCreator;
-            if (!IsPathValid(creator)) return;
-
-            if (creator.profile == null)
-            {
-                EditorUtility.DisplayDialog("未配置路径 Profile", "请先在 PathCreator 组件上指定 PathProfile。", "确定");
-                return;
-            }
-            var registry = MrPathV2.PathStrategyRegistry.Instance;
-            var strategy = registry?.GetStrategy(creator.profile.curveType);
-            if (strategy == null)
-            {
-                EditorUtility.DisplayDialog("未配置路径策略", "未找到 PathStrategyRegistry 或对应曲线类型的策略资产。请在 Project/MrPath Settings 中创建注册表并填充策略。", "打开设置");
-                SettingsService.OpenProjectSettings("Project/MrPath Settings");
-                return;
-            }
-
-            var command = new PaintTerrainCommand(creator, _heightProvider);
-            _ = _terrainHandler.ExecuteAsync(command, b => _isApplyingPaint = b);
+            var newProfile = CreateInstance<PathProfile>();
+            string saveDir = "Assets/__temp/MrPathV2.2/Settings/Profiles";
+            Directory.CreateDirectory(saveDir);
+            string savePath = AssetDatabase.GenerateUniqueAssetPath($"{saveDir}/Default PathProfile.asset");
+            AssetDatabase.CreateAsset(newProfile, savePath);
+            AssetDatabase.SaveAssets();
+            serializedObject.FindProperty("profile").objectReferenceValue = newProfile;
+            serializedObject.ApplyModifiedProperties();
+            EditorGUIUtility.PingObject(newProfile);
         }
+        private bool IsPathValid(PathCreator c) => c != null && c.profile != null && c.pathData.KnotCount >= 2;
+        private PathEditorHandles.HandleDrawContext CreateHandleContext(PathCreator creator) => new()
+        {
+            creator = creator,
+            heightProvider = _heightProvider,
+            latestSpine = _previewManager?.LatestSpine,
+            isDragging = _isDraggingHandle,
+            hoveredPointIndex = _hoveredPointIdx,
+            hoveredSegmentIndex = _hoveredSegmentIdx,
+        };
+        private void UpdateHoverStateFromContext(PathEditorHandles.HandleDrawContext context)
+        {
+            _hoveredPointIdx = context.hoveredPointIndex;
+            _hoveredSegmentIdx = context.hoveredSegmentIndex;
+            _isDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
+        }
+        private void DrawCoordinateTooltip(PathCreator creator, PathEditorHandles.HandleDrawContext context)
+        {
+            if (creator != null && context.hoveredPathT > -1)
+            {
+                Vector3 worldPos = creator.GetPointAt(context.hoveredPathT);
+                Handles.BeginGUI();
+                Vector2 screen = HandleUtility.WorldToGUIPoint(worldPos);
+                GUI.Label(new Rect(screen.x + 12, screen.y + 12, 160, 22), $"Pos: {worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2}", EditorStyles.helpBox);
+                Handles.EndGUI();
+            }
+        }
+
         #endregion
     }
 }
