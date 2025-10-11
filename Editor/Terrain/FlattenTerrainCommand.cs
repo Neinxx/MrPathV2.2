@@ -20,8 +20,19 @@ namespace MrPathV2
             var workItems = new List<(Terrain terrain, float[,] h, NativeArray<float> hn, NativeArray<float> ohn)>();
 
             var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
-            var profileData = new PathJobsUtility.ProfileData(Creator.profile, null, Allocator.Persistent);
+            var profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
             RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
+            // 优先使用外部提供的预览包围盒；若不可用，再回退到基于脊线+Profile 的二维 AABB
+            if (PreferredBoundsXZ.HasValue)
+            {
+                var pb = PreferredBoundsXZ.Value;
+                contourBounds = new Unity.Mathematics.float4(pb.x, pb.y, pb.z, pb.w);
+            }
+            else if (!roadContour.IsCreated || roadContour.Length < 3)
+            {
+                var fallback = GetExpandedXZBounds(spine, Creator.profile);
+                contourBounds = new Unity.Mathematics.float4(fallback.x, fallback.y, fallback.z, fallback.w);
+            }
 
             try
             {
@@ -48,7 +59,8 @@ namespace MrPathV2
                         roadContour = roadContour,
                         contourBounds = contourBounds
                     };
-                    handles.Add(job.Schedule(hn.Length, 256));
+                    var h = job.Schedule(hn.Length, 256);
+                    handles.Add(h);
                     workItems.Add((terrain, h2D, hn, ohn));
                 }
 
@@ -66,7 +78,11 @@ namespace MrPathV2
             finally
             {
                 if (handles.IsCreated) handles.Dispose();
-                foreach (var item in workItems) { if (item.hn.IsCreated) item.hn.Dispose(); if (item.ohn.IsCreated) item.ohn.Dispose(); }
+                foreach (var item in workItems)
+                {
+                    if (item.hn.IsCreated) item.hn.Dispose();
+                    if (item.ohn.IsCreated) item.ohn.Dispose();
+                }
                 if (spineData.IsCreated) spineData.Dispose();
                 if (profileData.IsCreated) profileData.Dispose();
                 if (roadContour.IsCreated) roadContour.Dispose();

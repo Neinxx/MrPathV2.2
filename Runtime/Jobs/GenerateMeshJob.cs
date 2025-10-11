@@ -1,98 +1,137 @@
-// GenerateMeshJob.cs (终极稳定版 - 逐段构建算法)
+// 文件路径: Runtime/Jobs/GenerateMeshJob.cs (并行固定容量版)
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
+
 namespace MrPathV2
 {
-    [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
-    public struct GenerateMeshJob : IJob
+    /// <summary>
+    /// 并行生成顶点与UV（固定容量，避免 Add 扩容）。
+    /// 顶点索引映射：index -> (i=row, j=col)，其中 row=i= index/segments, col=j= index%segments。
+    /// </summary>
+    [BurstCompile]
+    public struct GenerateVerticesJob : IJobParallelFor
     {
         [ReadOnly] public PathJobsUtility.SpineData spine;
         [ReadOnly] public PathJobsUtility.ProfileData profile;
 
-        public NativeList<float3> vertices;
-        public NativeList<int> triangles;
-        public NativeList<float2> uvs;
-        public NativeList<Color32> colors;
-        public NativeList<float3> normals;
+        [WriteOnly] public NativeArray<float3> vertices;
+        [WriteOnly] public NativeArray<float2> uvs;
+        [ReadOnly] public int segments;
 
-        public void Execute()
+        public void Execute(int index)
         {
-            if (spine.Length < 2 || profile.Length == 0) return;
+            if (spine.Length < 2 || segments < 2) return;
+            int i = index / segments;
+            int j = index % segments;
+            if (i < 0 || i >= spine.Length) return;
 
-            for (int layerIndex = 0; layerIndex < profile.Length; layerIndex++)
-            {
-                var layer = profile.layers[layerIndex];
-                int vertexOffset = vertices.Length;
-
-                // --- 逐段构建算法 ---
-                for (int i = 0; i < spine.Length - 1; i++)
-                {
-                    // 获取当前段 和 下一段 的顶点信息
-                    GetSegmentVertices(i, layer, out float3 v0, out float3 v1);
-                    GetSegmentVertices(i + 1, layer, out float3 v2, out float3 v3);
-
-                    // 添加顶点
-                    vertices.Add(v0); // 左下
-                    vertices.Add(v1); // 右下
-                    vertices.Add(v2); // 左上
-                    vertices.Add(v3); // 右上
-
-                    // 添加 UV 和 颜色
-                    float vCoord_i = (float)i / (spine.Length - 1);
-                    float vCoord_i1 = (float)(i + 1) / (spine.Length - 1);
-                    uvs.Add(new float2(0, vCoord_i)); uvs.Add(new float2(1, vCoord_i));
-                    uvs.Add(new float2(0, vCoord_i1)); uvs.Add(new float2(1, vCoord_i1));
-
-                    Color32 layerColor = GetColorForLayer(layerIndex);
-                    colors.Add(layerColor); colors.Add(layerColor);
-                    colors.Add(layerColor); colors.Add(layerColor);
-
-                    // 添加法线
-                    normals.Add(spine.normals[i]); normals.Add(spine.normals[i]);
-                    normals.Add(spine.normals[i + 1]); normals.Add(spine.normals[i + 1]);
-
-                    // 添加三角形索引
-                    int baseIndex = vertexOffset + i * 4;
-                    triangles.Add(baseIndex + 0); // 左下
-                    triangles.Add(baseIndex + 2); // 左上
-                    triangles.Add(baseIndex + 1); // 右下
-
-                    triangles.Add(baseIndex + 1); // 右下
-                    triangles.Add(baseIndex + 2); // 左上
-                    triangles.Add(baseIndex + 3); // 右上
-                }
-            }
-        }
-
-        // 辅助方法，用于获取在指定脊椎点上的路面左右顶点
-        private void GetSegmentVertices(int spineIndex, PathJobsUtility.LayerData layer, out float3 vertLeft, out float3 vertRight)
-        {
-            float3 spinePoint = spine.points[spineIndex];
-            float3 tangent = spine.tangents[spineIndex];
-            float3 normal = spine.normals[spineIndex];
-
+            float3 spinePoint = spine.points[i];
+            float3 tangent = spine.tangents[i];
+            float3 normal = spine.normals[i];
             float3 upVector = profile.forceHorizontal ? new float3(0, 1, 0) : normal;
             float3 right = math.normalize(math.cross(upVector, tangent));
 
-            float halfWidth = layer.width / 2f;
-            float3 horizontalOffsetVec = right * layer.horizontalOffset;
-            float3 widthOffsetVec = right * halfWidth;
-            float3 verticalOffsetVec = normal * layer.verticalOffset;
+            float t = j / (float)(segments - 1);
+            float signedT = t * 2f - 1f;
+            float3 offset = right * (signedT * profile.roadWidth * 0.5f);
 
-            vertLeft = spinePoint + horizontalOffsetVec - widthOffsetVec + verticalOffsetVec;
-            vertRight = spinePoint + horizontalOffsetVec + widthOffsetVec + verticalOffsetVec;
+            // 高性能预览：移除截面竖向抬升，保持网格平整
+            vertices[index] = spinePoint + offset;
+            uvs[index] = new float2(t, (float)i / math.max(1, (spine.Length - 1)));
         }
+    }
 
-        private Color32 GetColorForLayer(int layerIndex)
+    /// <summary>
+    /// 并行生成索引缓冲（固定容量）。
+    /// 四边形索引映射：quadIndex -> (i=row, j=col)，其中 row=i=quadIndex/(segments-1), col=j=quadIndex%(segments-1)。
+    /// 每个四边形写入6个三角索引到 indices[quadIndex*6..quadIndex*6+5]。
+    /// </summary>
+    [BurstCompile]
+    public struct GenerateIndicesJob : IJobParallelFor
+    {
+        // 写入每个四边形的6个索引，不与job迭代索引一一对应，因此需解除并行写入限制
+        [NativeDisableParallelForRestriction]
+        [WriteOnly] public NativeArray<int> indices;
+        [ReadOnly] public int segments;
+        [ReadOnly] public int spineLength;
+
+        public void Execute(int quadIndex)
         {
-            byte r = (byte)(layerIndex == 0 ? 255 : 0);
-            byte g = (byte)(layerIndex == 1 ? 255 : 0);
-            byte b = (byte)(layerIndex == 2 ? 255 : 0);
-            byte a = (byte)(layerIndex == 3 ? 255 : 0);
-            return new Color32(r, g, b, a);
+            if (spineLength < 2 || segments < 2) return;
+            int quadsPerRow = segments - 1;
+            int i = quadIndex / quadsPerRow;
+            int j = quadIndex % quadsPerRow;
+            if (i < 0 || i >= spineLength - 1) return;
+
+            int baseIndex = i * segments;
+            int v0 = baseIndex + j;
+            int v1 = baseIndex + j + 1;
+            int v2 = baseIndex + segments + j;
+            int v3 = baseIndex + segments + j + 1;
+
+            int outBase = quadIndex * 6;
+            indices[outBase + 0] = v0;
+            indices[outBase + 1] = v2;
+            indices[outBase + 2] = v1;
+            indices[outBase + 3] = v1;
+            indices[outBase + 4] = v2;
+            indices[outBase + 5] = v3;
+        }
+    }
+
+    /// <summary>
+    /// 并行生成顶点颜色（RGBA最多4层），使用 Strip + Blend 算法与地形路径一致。
+    /// </summary>
+    [BurstCompile]
+    public struct GenerateVertexColorsJob : IJobParallelFor
+    {
+        [ReadOnly] public PathJobsUtility.SpineData spine;
+        [ReadOnly] public int segments;
+        [ReadOnly] public RecipeData recipe;
+
+        [WriteOnly] public NativeArray<float4> colors; // RGBA 权重
+
+        public void Execute(int index)
+        {
+            if (spine.Length < 2 || segments < 2) return;
+            int i = index / segments;
+            int j = index % segments;
+            if (i < 0 || i >= spine.Length) return;
+
+            float t = j / (float)(segments - 1);         // 0..1 左->右
+            float signedT = t * 2f - 1f;                  // -1..1 中心为0
+            float normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
+
+            // 只取前4层作为预览（RGBA），其余层忽略
+            float r = 0f, g = 0f, b = 0f, a = 0f;
+            int layerCount = math.min(4, recipe.Length);
+            for (int k = 0; k < layerCount; k++)
+            {
+                float layerMask = TerrainJobsUtility.EvaluateStrip(recipe.strips, recipe.stripSlices[k], recipe.stripResolution, normalizedDist);
+                int blendMode = recipe.blendModes[k];
+                switch (k)
+                {
+                    case 0: r = TerrainJobsUtility.Blend(r, layerMask, blendMode); break;
+                    case 1: g = TerrainJobsUtility.Blend(g, layerMask, blendMode); break;
+                    case 2: b = TerrainJobsUtility.Blend(b, layerMask, blendMode); break;
+                    case 3: a = TerrainJobsUtility.Blend(a, layerMask, blendMode); break;
+                }
+            }
+
+            // 归一化，便于直觉预览
+            float sum = r + g + b + a;
+            if (sum > 1e-6f)
+            {
+                float inv = 1f / sum; r *= inv; g *= inv; b *= inv; a *= inv;
+            }
+            else
+            {
+                r = 1f; g = 0f; b = 0f; a = 0f; // 保底：红通道显示
+            }
+
+            colors[index] = new float4(r, g, b, a);
         }
     }
 }

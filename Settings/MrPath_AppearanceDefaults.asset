@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: MrPath_AppearanceDefaults
   m_EditorClassIdentifier: 
   defaultPathProfile: {fileID: 11400000, guid: 438a49d06a5cd704cb4a37abc769850e, type: 2}
-  previewMaterialTemplate: {fileID: 2100000, guid: 180f86f4bd8676b4ea600cf3a5e87709,
+  previewMaterialTemplate: {fileID: 2100000, guid: 7577f28e9815c469ca7391866e76199a,
     type: 2}
   previewAlpha: 1

@@ -1,5 +1,4 @@
-// 文件路径: Runtime/Core/PathProfile.cs (专业剖面版)
-using System.Collections.Generic;
+
 using UnityEngine;
 
 namespace MrPathV2
@@ -13,7 +12,6 @@ namespace MrPathV2
         [Tooltip("道路的总宽度")]
         public float roadWidth = 5f;
 
-        // --- 【核心重构：引入动态剖面】 ---
         [Header("道路剖面与边缘")]
         [Tooltip("定义道路横截面的形状。X轴[-1, 1]代表从左到右，Y轴代表相对高度。")]
         public AnimationCurve crossSection = new AnimationCurve(new Keyframe(-1, 0), new Keyframe(1, 0));
@@ -31,18 +29,11 @@ namespace MrPathV2
 
         [Header("网格生成")]
         public bool forceHorizontal = true;
+        [Tooltip("预览网格在宽度上的分段数")]
+        [Range(2, 64)] public int crossSectionSegments = 16;
 
-        // 【废弃】图层列表不再用于定义几何形状，仅用于纹理绘制
-        [HideInInspector]
-        public List<PathLayer> layers = new List<PathLayer>();
-
-        private void OnEnable()
-        {
-            // 初始化默认值
-            if (crossSection == null || crossSection.keys.Length == 0)
-                crossSection = new AnimationCurve(new Keyframe(-1, 0, 0, 0), new Keyframe(1, 0, 0, 0));
-            if (falloffShape == null || falloffShape.keys.Length == 0)
-                falloffShape = AnimationCurve.EaseInOut(0, 1, 1, 0);
-        }
+        [Header("道路纹理配方")]
+        [Tooltip("拖入 StylizedRoadRecipe 以定义道路的纹理分布与风格")]
+        public StylizedRoadRecipe roadRecipe;
     }
 }

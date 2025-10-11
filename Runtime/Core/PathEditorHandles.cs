@@ -185,7 +185,15 @@ public static class PathEditorHandles
         {
             Undo.RecordObject(creator, "Move Path Point");
 
-            creator.ExecuteCommand(new MovePointCommand(flatIndex, newWorldPos, context.heightProvider));
+            // 编辑器在创建命令之前决定是否需要地形吸附
+            Vector3 finalPos = newWorldPos;
+            if (creator.profile != null && creator.profile.snapToTerrain && context.heightProvider != null)
+            {
+                finalPos.y = context.heightProvider.GetHeight(finalPos);
+            }
+
+            // 纯命令：仅记录最终位置数据
+            creator.ExecuteCommand(new MovePointCommand(flatIndex, finalPos));
         }
     }
 

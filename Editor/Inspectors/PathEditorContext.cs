@@ -28,9 +28,10 @@ namespace MrPathV2
         public int HoveredSegmentIdx { get; set; } = -1;
         public bool IsDraggingHandle { get; set; }
 
-        // 地形操作状态
-        public bool IsApplyingHeight { get; set; }
-        public bool IsApplyingPaint { get; set; }
+        // 地形操作状态（统一）
+        // 当前正在执行的操作标识，用于 UI 高亮与禁用逻辑。
+        // 由 TerrainOperationHandler 在执行期间设置/清除。
+        public string CurrentOperationId { get; set; }
 
         public void Initialize(PathCreator creator)
         {
@@ -59,8 +60,7 @@ namespace MrPathV2
             MaterialManager?.Dispose();
             TerrainHandler?.Dispose();
 
-            IsApplyingHeight = false;
-            IsApplyingPaint = false;
+            CurrentOperationId = null;
         }
 
         public void MarkDirty()

@@ -6,6 +6,7 @@ using Unity.Jobs;
 using UnityEditor;
 using UnityEngine;
 using System.Threading;
+using MrPathV2;
 
 namespace MrPathV2
 {
@@ -19,8 +20,20 @@ namespace MrPathV2
             var handles = new NativeList<JobHandle>(Allocator.Temp);
             var workItems = new List<(Terrain t, float[,,] a3D, NativeArray<float> an)>();
             var profileDataList = new List<PathJobsUtility.ProfileData>();
+            var recipeDataList = new List<RecipeData>();
 
             RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
+            // 优先使用外部提供的预览包围盒；若不可用，再回退到基于脊线+Profile 的二维 AABB
+            if (PreferredBoundsXZ.HasValue)
+            {
+                var pb = PreferredBoundsXZ.Value;
+                contourBounds = new Unity.Mathematics.float4(pb.x, pb.y, pb.z, pb.w);
+            }
+            else if (!roadContour.IsCreated || roadContour.Length < 3)
+            {
+                var fallback = TerrainCommandBase.GetExpandedXZBounds(spine, Creator.profile);
+                contourBounds = new Unity.Mathematics.float4(fallback.x, fallback.y, fallback.z, fallback.w);
+            }
             var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
 
             try
@@ -30,20 +43,37 @@ namespace MrPathV2
                     token.ThrowIfCancellationRequested();
                     Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
                     var td = terrain.terrainData;
-                    if (td.alphamapLayers == 0) continue;
+
+                    var recipeAsset = Creator.profile.roadRecipe;
+                    if (recipeAsset == null)
+                    {
+                        Debug.LogWarning("未配置道路配方(StylizedRoadRecipe)，跳过该地形的纹理绘制。");
+                        continue;
+                    }
+
+                    // 确保地形包含配方中的 TerrainLayer（自动添加缺失图层）
+                    var layerMap = LayerResolver.Resolve(terrain, recipeAsset);
+                    // 重新读取图层数量，避免在添加前因0而提前跳过
+                    if (td.alphamapLayers == 0)
+                    {
+                        Debug.LogWarning($"地形 \"{terrain.name}\" 当前不含任何 TerrainLayer，且配方未能添加有效图层，跳过纹理绘制。");
+                        continue;
+                    }
 
                     var a3D = td.GetAlphamaps(0, 0, td.alphamapResolution, td.alphamapResolution);
                     var an = new NativeArray<float>(a3D.Length, Allocator.TempJob);
                     Copy3DTo1D(a3D, an);
 
-                    var layerMap = BuildTerrainLayerMap(terrain);
-                    var pData = new PathJobsUtility.ProfileData(Creator.profile, layerMap, Allocator.Persistent);
+                    var pData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
                     profileDataList.Add(pData);
+                    var rData = new RecipeData(recipeAsset, layerMap, Allocator.Persistent);
+                    recipeDataList.Add(rData);
 
-                    var job = new ModifyAlphamapsJob
+                    var job = new PaintSplatmapJob
                     {
                         spine = spineData,
                         profile = pData,
+                        recipe = rData,
                         terrainPos = terrain.GetPosition(),
                         terrainSize = td.size,
                         alphamapResolution = td.alphamapResolution,
@@ -72,6 +102,7 @@ namespace MrPathV2
                 if (handles.IsCreated) handles.Dispose();
                 foreach (var item in workItems) { if (item.an.IsCreated) item.an.Dispose(); }
                 foreach (var p in profileDataList) { if (p.IsCreated) p.Dispose(); }
+                foreach (var r in recipeDataList) { r.Dispose(); }
                 if (roadContour.IsCreated) roadContour.Dispose();
                 if (spineData.IsCreated) spineData.Dispose();
                 HeightProvider?.MarkAsDirty();

@@ -55,7 +55,12 @@ namespace MrPathV2
             {
                 var blendLayers = layer.terrainPaintingRecipe?.blendLayers;
                 if (blendLayers != null && blendLayers.Count > 0)
-                    totalKeyframes += blendLayers[0].blendMask.gradient.keys.Length;
+                {
+                    var first = blendLayers[0];
+                    var gradAsset = first.mask as MrPathV2.GradientMask;
+                    var curve = gradAsset != null ? gradAsset.gradient : first.blendMask.gradient;
+                    totalKeyframes += (curve != null ? curve.keys.Length : 0);
+                }
             }
             _allGradientKeys = new NativeArray<Keyframe>(totalKeyframes, allocator);
 
@@ -73,7 +78,8 @@ namespace MrPathV2
                 _terrainLayerIndices[i] = (terrainLayerAsset != null && terrainLayerMap != null && terrainLayerMap.ContainsKey(terrainLayerAsset))
                     ? terrainLayerMap[terrainLayerAsset] : -1;
 
-                var gradient = blendLayer?.blendMask?.gradient ?? new AnimationCurve();
+                var gradAsset2 = blendLayer?.mask as MrPathV2.GradientMask;
+                var gradient = gradAsset2 != null ? gradAsset2.gradient : (blendLayer?.blendMask?.gradient ?? new AnimationCurve());
                 var keys = gradient.keys;
 
                 for (int k = 0; k < keys.Length; k++) _allGradientKeys[keyframeOffset + k] = keys[k];

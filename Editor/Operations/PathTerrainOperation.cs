@@ -13,6 +13,8 @@ namespace MrPathV2
         public Texture2D icon;
         public Color buttonColor = Color.white;
         public int order = 0;
+        [Tooltip("稳定的操作标识（可选）。若为空，将使用 displayName 或资产名称作为标识。")]
+        public string operationId = string.Empty;
 
         /// <summary>
         /// 校验是否可执行。默认要求路径有效。

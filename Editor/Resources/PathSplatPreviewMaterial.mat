@@ -45,19 +45,19 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Layer0_Texture:
-        m_Texture: {fileID: 2800000, guid: d9575597438004e4f8b5af1d2b6cf3ba, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Layer1_Texture:
-        m_Texture: {fileID: 2800000, guid: b5f33a4a09d41eb48a3c9a27b1bbc6e4, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Layer2_Texture:
-        m_Texture: {fileID: 2800000, guid: 46a6bbeaeb655b041bee53434a13f801, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Layer3_Texture:
-        m_Texture: {fileID: 2800000, guid: fac83ed2d9b32f34e83fc5a0c9eee3e2, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
@@ -112,6 +112,7 @@ Material:
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
+    - _PreviewAlpha: 0.5
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _SampleGI: 0

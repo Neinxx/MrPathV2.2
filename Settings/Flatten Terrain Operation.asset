@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8b7b7c3d8f1a4b0c9b0f3e2a0d6c1a12, type: 3}
   m_Name: Flatten Terrain Operation
   m_EditorClassIdentifier: 
-  displayName: "\u64CD\u4F5C"
+  displayName: "\u538B\u5E73\u5730\u5F62"
   icon: {fileID: 0}
   buttonColor: {r: 1, g: 1, b: 1, a: 1}
   order: 0
+  operationId: 123

@@ -10,10 +10,6 @@ namespace MrPathV2
     /// </summary>
     public abstract class PathChangeCommand
     {
-        /// <summary>
-        /// 执行本敕令。
-        /// </summary>
-        /// <param name="creator">被操作的PathCreator对象</param>
         public abstract void Execute(PathCreator creator);
     }
 
@@ -66,27 +62,19 @@ namespace MrPathV2
     public class MovePointCommand : PathChangeCommand
     {
         public readonly int PointFlatIndex;
-        public readonly Vector3 NewPosition;
-        private readonly IHeightProvider _heightProvider;
+        public readonly Vector3 NewPosition; // 纯粹的最终位置数据
 
-        public MovePointCommand(int pointFlatIndex, Vector3 newPosition, IHeightProvider heightProvider = null)
+        public MovePointCommand(int pointFlatIndex, Vector3 newPosition)
         {
             PointFlatIndex = pointFlatIndex;
             NewPosition = newPosition;
-            _heightProvider = heightProvider;
         }
 
         public override void Execute(PathCreator creator)
         {
-            Vector3 finalPos = NewPosition;
-            // 如果开启吸附，使用注入的 IHeightProvider 进行高度采样
-            if (creator.profile.snapToTerrain && _heightProvider != null)
-            {
-                finalPos.y = _heightProvider.GetHeight(finalPos);
-            }
-
+            // 命令仅负责应用最终数据，不参与外部服务逻辑
             var strategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
-            strategy?.MovePoint(PointFlatIndex, finalPos, creator.pathData, creator.transform);
+            strategy?.MovePoint(PointFlatIndex, NewPosition, creator.pathData, creator.transform);
         }
     }
 

@@ -13,6 +13,8 @@ namespace MrPathV2
     {
         protected readonly PathCreator Creator;
         protected readonly IHeightProvider HeightProvider;
+        // 可选：来自预览网格的首选 XZ 包围盒 (minX, minZ, maxX, maxZ)
+        public Vector4? PreferredBoundsXZ { get; private set; }
 
         protected TerrainCommandBase(PathCreator creator, IHeightProvider heightProvider)
         {
@@ -39,6 +41,14 @@ namespace MrPathV2
         }
 
         protected abstract Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spine, CancellationToken token);
+
+        /// <summary>
+        /// 设置首选的预览包围盒（XZ 平面），用于作业的粗剔除。
+        /// </summary>
+        public void SetPreviewBoundsXZ(Vector4 boundsXZ)
+        {
+            PreferredBoundsXZ = boundsXZ;
+        }
         
         protected bool Validate(out PathSpine spine, out List<Terrain> affectedTerrains)
         {
@@ -70,6 +80,28 @@ namespace MrPathV2
             float maxExtent = Creator.profile != null ? Creator.profile.roadWidth / 2f + Creator.profile.falloffWidth : 0;
             pathBounds.Expand(new Vector3(maxExtent * 2, 0, maxExtent * 2));
             return new Bounds(new Vector3(pathBounds.center.x, pathBounds.center.y, pathBounds.center.z), new Vector3(pathBounds.size.x, float.MaxValue, pathBounds.size.z));
+        }
+
+        /// <summary>
+        /// 计算二维展开的 AABB（XZ 平面），用于作业的粗剔除或轮廓不可用时的退化。
+        /// </summary>
+        protected static Vector4 GetExpandedXZBounds(PathSpine spine, PathProfile profile)
+        {
+            // PathSpine is a struct; it cannot be null. Only check vertex count.
+            if (spine.VertexCount == 0)
+                return new Vector4(float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
+
+            float halfWidth = (profile != null ? profile.roadWidth * 0.5f + profile.falloffWidth : 0f);
+            float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
+            for (int i = 0; i < spine.VertexCount; i++)
+            {
+                var p = spine.points[i];
+                minX = Mathf.Min(minX, p.x - halfWidth);
+                minZ = Mathf.Min(minZ, p.z - halfWidth);
+                maxX = Mathf.Max(maxX, p.x + halfWidth);
+                maxZ = Mathf.Max(maxZ, p.z + halfWidth);
+            }
+            return new Vector4(minX, minZ, maxX, maxZ);
         }
         protected Dictionary<TerrainLayer, int> BuildTerrainLayerMap(Terrain terrain)
         {

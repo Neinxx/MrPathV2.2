@@ -26,7 +26,7 @@ Shader "MrPath/PathPreviewSplat(URP)"
         Pass
         {
             Blend SrcAlpha OneMinusSrcAlpha
-            ZWrite Off
+            ZWrite On
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -64,17 +64,16 @@ Shader "MrPath/PathPreviewSplat(URP)"
 
             half4 frag(Varyings input) : SV_Target
             {
-                // ✨✨✨【铠甲神通】✨✨✨
-                // 在除法前，为 Tiling 值增加一个极小量，避免除以零
-                float2 tiling0 = _Layer0_Tiling + 0.0001;
-                float2 tiling1 = _Layer1_Tiling + 0.0001;
-                float2 tiling2 = _Layer2_Tiling + 0.0001;
-                float2 tiling3 = _Layer3_Tiling + 0.0001;
+                // 为 Tiling 增加下限，避免零值导致采样异常
+                float2 t0 = max(_Layer0_Tiling.xy, float2(0.0001, 0.0001));
+                float2 t1 = max(_Layer1_Tiling.xy, float2(0.0001, 0.0001));
+                float2 t2 = max(_Layer2_Tiling.xy, float2(0.0001, 0.0001));
+                float2 t3 = max(_Layer3_Tiling.xy, float2(0.0001, 0.0001));
 
-                float2 uv0 = input.uv * _Layer0_Tiling.xy;
-                float2 uv1 = input.uv * _Layer1_Tiling.xy;
-                float2 uv2 = input.uv * _Layer2_Tiling.xy;
-                float2 uv3 = input.uv * _Layer3_Tiling.xy;
+                float2 uv0 = input.uv * t0;
+                float2 uv1 = input.uv * t1;
+                float2 uv2 = input.uv * t2;
+                float2 uv3 = input.uv * t3;
 
                 half4 col0 = SAMPLE_TEXTURE2D(_Layer0_Texture, sampler_Layer0_Texture, uv0);
                 half4 col1 = SAMPLE_TEXTURE2D(_Layer1_Texture, sampler_Layer1_Texture, uv1);
@@ -84,10 +83,8 @@ Shader "MrPath/PathPreviewSplat(URP)"
 
                 half4 finalColor = col0 * input.color.r + col1 * input.color.g + col2 * input.color.b + col3 * input.color.a;
 
-                // ✨✨✨【半透明显形】✨✨✨
                 // 使用可配置的预览透明度，避免遮挡场景交互
-                float previewAlpha = _PreviewAlpha; // 由材质属性驱动
-                finalColor.a = saturate(previewAlpha);
+                finalColor.a = saturate(_PreviewAlpha);
 
                 return finalColor;
             }

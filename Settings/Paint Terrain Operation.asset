@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3a2c9f9c7c2a4d2e95d3b1a7f4c2e6a1, type: 3}
   m_Name: Paint Terrain Operation
   m_EditorClassIdentifier: 
-  displayName: "\u64CD\u4F5C"
+  displayName: "\u7ED8\u5236\u7EB9\u7406"
   icon: {fileID: 0}
   buttonColor: {r: 1, g: 1, b: 1, a: 1}
   order: 0
+  operationId: 124

@@ -11,14 +11,14 @@ namespace MrPathV2
         {
             serializedObject.Update();
 
-            // 使用 DrawPropertiesExcluding 自动绘制所有未被手动处理的属性，此乃最强“无为而治”之法
+            // 使用 DrawPropertiesE  xcluding 自动绘制所有未被手 动处理的属性，此乃最强“无为而治”之法
             DrawPropertiesExcluding(serializedObject, "m_Script", "layers");
 
             EditorGUILayout.Space();
 
             // 懒加载并绘制图层列表
             if (_layerList == null) InitializeLayerList();
-            _layerList.DoLayoutList();
+         //   _layerList.DoLayoutList();
 
             serializedObject.ApplyModifiedProperties();
         }

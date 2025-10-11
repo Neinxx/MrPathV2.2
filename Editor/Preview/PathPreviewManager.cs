@@ -62,6 +62,12 @@ namespace MrPathV2
             if (mesh == null) return;
 
             var mats = _materialManager?.GetFrameRenderMaterials();
+
+            // 仅在 Repaint 事件中绘制，避免非重绘事件（如 Layout、MouseMove）导致的重复绘制与闪烁
+            if (Event.current == null || Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
             if (mats == null || mats.Count == 0)
             {
                 // 无材质时也允许线框预览

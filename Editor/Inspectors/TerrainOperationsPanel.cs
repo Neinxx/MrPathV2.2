@@ -51,15 +51,15 @@ namespace MrPathV2
                 if (ops != null && ops.Length > 0)
                 {
                     System.Array.Sort(ops, (a, b) => a.order.CompareTo(b.order));
-                    bool isAnyOperationRunning = _ctx.IsApplyingHeight || _ctx.IsApplyingPaint;
+                    bool isAnyOperationRunning = !string.IsNullOrEmpty(_ctx.CurrentOperationId);
 
                     foreach (var op in ops)
                     {
                         if (op == null) continue;
 
-                        // 判断当前按钮对应的操作是否正在运行
-                        bool isThisOpRunning = (op.CreateCommand(_ctx.Target, null) is FlattenTerrainCommand && _ctx.IsApplyingHeight) ||
-                                              (op.CreateCommand(_ctx.Target, null) is PaintTerrainCommand && _ctx.IsApplyingPaint);
+                        // 判断当前按钮对应的操作是否正在运行（基于操作ID）
+                        string opId = !string.IsNullOrEmpty(op.operationId) ? op.operationId : (op.displayName ?? op.name);
+                        bool isThisOpRunning = !string.IsNullOrEmpty(_ctx.CurrentOperationId) && _ctx.CurrentOperationId == opId;
 
                         using (new EditorGUI.DisabledScope(isAnyOperationRunning))
                         {
@@ -112,12 +112,20 @@ namespace MrPathV2
             var cmd = op.CreateCommand(_ctx.Target, _ctx.HeightProvider);
             if (cmd == null) return;
 
-            if (cmd is FlattenTerrainCommand)
-                _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => _ctx.IsApplyingHeight = b);
-            else if (cmd is PaintTerrainCommand)
-                _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => _ctx.IsApplyingPaint = b);
-            else
-                _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => { _ctx.IsApplyingHeight = b; _ctx.IsApplyingPaint = b; });
+            // 从预览生成器读取预览网格包围盒（世界坐标），传递到命令以用于作业粗剔除
+            var previewMesh = _ctx.PreviewGenerator?.PreviewMesh;
+            if (previewMesh != null)
+            {
+                previewMesh.RecalculateBounds();
+                var b = previewMesh.bounds;
+                if (b.size.x > 0 && b.size.z > 0)
+                {
+                    var boundsXZ = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
+                    cmd.SetPreviewBoundsXZ(boundsXZ);
+                }
+            }
+            string opId = !string.IsNullOrEmpty(op.operationId) ? op.operationId : (op.displayName ?? op.name);
+            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => _ctx.CurrentOperationId = b ? opId : null);
         }
     }
 }

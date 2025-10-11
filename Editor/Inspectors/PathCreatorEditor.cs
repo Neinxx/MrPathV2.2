@@ -1,8 +1,6 @@
 // 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Inspectors/PathCreatorEditor.cs
 using UnityEditor;
 using UnityEngine;
-using System.IO;
-using Haven.PathPainter2;
 
 namespace MrPathV2
 {
