@@ -61,15 +61,26 @@ namespace MrPathV2
         /// <summary>
         /// 一个通用的辅助方法，用于获取或创建子配置资产。
         /// </summary>
+
+
         private static T GetOrCreateSubAsset<T>(string fileName) where T : ScriptableObject
         {
-            string path = $"Assets/__temp/MrPathV2.2/Settings/{fileName}.asset";
-            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+            // 直接拼接目标相对路径（相对于 Assets 目录）
+            string relativePath = Path.Combine("MrPathV2.2", "Settings", $"{fileName}.asset");
+            // 转换为 AssetDatabase 要求的格式（以 Assets/ 开头，统一使用 / 斜杠）
+            string fullPath = Path.Combine("Assets", relativePath).Replace("\\", "/");
+
+            var asset = AssetDatabase.LoadAssetAtPath<T>(fullPath);
             if (asset == null)
             {
                 asset = CreateInstance<T>();
-                AssetDatabase.CreateAsset(asset, path);
-                // 注意：这里不需要立刻保存，GetOrCreateSettings()的末尾会统一保存
+                // 确保目录存在（自动创建不存在的文件夹）
+                string directoryPath = Path.GetDirectoryName(fullPath);
+                if (!Directory.Exists(directoryPath))
+                {
+                    Directory.CreateDirectory(directoryPath);
+                }
+                AssetDatabase.CreateAsset(asset, fullPath);
             }
             return asset;
         }

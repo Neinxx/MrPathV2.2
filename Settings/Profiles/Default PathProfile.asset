@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   curveType: 1
   generationPrecision: 0.1
-  roadWidth: 3.21
+  roadWidth: 13.88
   crossSection:
     serializedVersion: 2
     m_Curve:
