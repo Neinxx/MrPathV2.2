@@ -2,7 +2,7 @@ Shader "MrPath/PathPreviewSplat(URP)"
 {
     Properties
     {
-        _PreviewAlpha("Preview Alpha", Range(0,1)) = 0.5
+        _PreviewAlpha("Preview Alpha", Range(0, 1)) = 0.5
         _Layer0_Texture("Layer 0 (R)", 2D) = "white" {}
         _Layer0_Tiling("Layer 0 Tiling", Vector) = (1, 1, 0, 0)
         _Layer1_Texture("Layer 1 (G)", 2D) = "white" {}

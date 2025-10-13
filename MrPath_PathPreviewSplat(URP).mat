@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: MrPath_Path Preview Splat (URP)
+  m_Name: MrPath_PathPreviewSplat(URP)
   m_Shader: {fileID: 4800000, guid: c780b5f46b7208b43a240e353dd95abc, type: 3}
   m_ValidKeywords: []
   m_InvalidKeywords: []
@@ -37,7 +37,8 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
-    m_Floats: []
+    m_Floats:
+    - _PreviewAlpha: 0.954
     m_Colors:
     - _Layer0_Tiling: {r: 1, g: 1, b: 0, a: 0}
     - _Layer1_Tiling: {r: 1, g: 1, b: 0, a: 0}

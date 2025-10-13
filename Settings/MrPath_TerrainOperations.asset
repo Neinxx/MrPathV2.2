@@ -13,5 +13,5 @@ MonoBehaviour:
   m_Name: MrPath_TerrainOperations
   m_EditorClassIdentifier: 
   operations:
-  - {fileID: 11400000, guid: 2381c28a661329e46b77e5eaeecc2ccd, type: 2}
-  - {fileID: 11400000, guid: 63084a4daf1e4c1478e1c05d4e8d0406, type: 2}
+  - {fileID: 11400000, guid: 386a7d13cd311ad4c8b4cb43d78ff830, type: 2}
+  - {fileID: 11400000, guid: 5f99dacbb545bba43958dec94bcbdeb0, type: 2}

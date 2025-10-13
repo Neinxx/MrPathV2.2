@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5bbccf13c4d6b314f86a9076115d250c, type: 3}
   m_Name: MrPath_AppearanceDefaults
   m_EditorClassIdentifier: 
-  defaultPathProfile: {fileID: 11400000, guid: 438a49d06a5cd704cb4a37abc769850e, type: 2}
-  previewMaterialTemplate: {fileID: 2100000, guid: 7577f28e9815c469ca7391866e76199a,
+  defaultPathProfile: {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
+  previewMaterialTemplate: {fileID: 2100000, guid: 1dc494d1d43f81943a61eb09f77d2f47,
     type: 2}
   previewAlpha: 1

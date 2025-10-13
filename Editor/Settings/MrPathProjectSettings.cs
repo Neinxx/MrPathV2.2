@@ -1,4 +1,4 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Settings/MrPathProjectSettings.cs
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using System.IO;
@@ -12,7 +12,7 @@ namespace MrPathV2
     public class MrPathProjectSettings : ScriptableObject
     {
         // 定义了主设置文件的唯一、标准路径
-        public const string k_SettingsPath = "Assets/__temp/MrPathV2.2/Settings/MrPath_ProjectSettings.asset";
+        public const string k_SettingsPath = "Assets/MrPathV2.2/Settings/MrPath_ProjectSettings.asset";
 
         // --- 子配置资产的引用 ---
         [Tooltip("新路径创建时的默认值配置")]
@@ -69,7 +69,7 @@ namespace MrPathV2
             string relativePath = Path.Combine("MrPathV2.2", "Settings", $"{fileName}.asset");
             // 转换为 AssetDatabase 要求的格式（以 Assets/ 开头，统一使用 / 斜杠）
             string fullPath = Path.Combine("Assets", relativePath).Replace("\\", "/");
-
+        
             var asset = AssetDatabase.LoadAssetAtPath<T>(fullPath);
             if (asset == null)
             {
@@ -84,5 +84,9 @@ namespace MrPathV2
             }
             return asset;
         }
+        [Tooltip("路径配置文件集合")] // 添加注释，描述属性用途
+        public List<PathProfile> profiles = new List<PathProfile>(); // 初始化为一个空列表
+        [Tooltip("道路配方集合")]
+        public List<StylizedRoadRecipe> roadRecipes = new List<StylizedRoadRecipe>();
     }
 }

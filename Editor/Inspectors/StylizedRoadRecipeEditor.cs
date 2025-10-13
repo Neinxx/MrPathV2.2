@@ -1,12 +1,31 @@
 using UnityEditor;
-using UnityEditorInternal;
 using UnityEngine;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System;
+using UnityEditorInternal;
+using Object = UnityEngine.Object;
 
 namespace MrPathV2
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
     public class StylizedRoadRecipeEditor : Editor
     {
+        private static class UIConstants
+        {
+            /// <summary>卡片垂直内边距</summary>
+            public const float CardVerticalPadding = 2f;
+            /// <summary>字段之间的标准垂直间距</summary>
+            public const float FieldVerticalSpacing = 8f;
+            /// <summary>折叠箭头宽度</summary>
+            public const float FoldoutWidth = 15f;
+            /// <summary>启用开关宽度</summary>
+            public const float EnabledToggleWidth = 20f;
+            /// <summary>Ping按钮宽度</summary>
+            public const float PingButtonWidth = 22f;
+        }
+
         private const int PREVIEW_WIDTH = 512;
         private const int PREVIEW_HEIGHT = 128;
         private const double MIN_UPDATE_INTERVAL = 0.1;
@@ -14,26 +33,45 @@ namespace MrPathV2
         private Texture2D _previewTexture;
         private double _lastUpdateTime;
         private int _lastRecipeHash;
+        private StylizedRoadRecipe _recipe;
 
         private int _selectedPreviewMode = 0; // 0: Channels, 1: Combined
-        private int _selectedChannel = 0;     // 0: RGB, 1: R, 2: G, 3: B, 4: A
+        private int _selectedChannel = 0;     // 0: R, 1: G, 2: B, 3: A
 
-        private ReorderableList _layersList;
-        private SerializedProperty _layersProp;
+        private SerializedProperty _blendLayersProp;
+
+        private Type[] _maskTypes;
+        private string[] _maskTypeNames;
+        private int _selectedMaskTypeIndex = 0;
+
+        private ReorderableList _layerList;
 
 
         #region 生命周期
 
+        private void OnUndoRedo()
+        {
+            UpdatePreviewTexture();
+            Repaint();
+        }
+
         private void OnEnable()
         {
-            _layersProp = serializedObject.FindProperty("blendLayers");
-            if (_layersProp == null) return;
+            _blendLayersProp = serializedObject.FindProperty("blendLayers");
+            _recipe = target as StylizedRoadRecipe;
+            if (_recipe == null) return;
+
+            FindAvailableMaskTypes();
 
             SetupReorderableList();
+
+            Undo.undoRedoPerformed += OnUndoRedo;
+            UpdatePreviewTexture();
         }
 
         private void OnDisable()
         {
+            Undo.undoRedoPerformed -= OnUndoRedo;
             if (_previewTexture != null) DestroyImmediate(_previewTexture);
         }
 
@@ -41,66 +79,224 @@ namespace MrPathV2
 
         public override void OnInspectorGUI()
         {
+            var recipe = target as StylizedRoadRecipe;
+            if (recipe == null) return;
+
             serializedObject.Update();
-            EditorGUI.BeginChangeCheck();
 
-            DrawHeader();
+            DrawHeader(recipe);
 
-            // --- 可滚动区域：只包含图层列表 ---
-            // 这种布局确保了即使列表很长，下方的预览区域也始终可见
-            using (var scrollView = new EditorGUILayout.ScrollViewScope(Vector2.zero, false, false, GUI.skin.horizontalScrollbar, GUI.skin.verticalScrollbar, GUI.skin.box))
+            _layerList.DoLayoutList();
+
+            GUILayout.FlexibleSpace();
+
+            EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
+
+            using (new EditorGUILayout.VerticalScope(GUI.skin.box))
             {
-                DrawLayerList();
+                DrawPreview(recipe);
+                EditorGUILayout.Space();
+                DrawMaskCreator();
             }
 
-            // --- 固定在底部的区域 ---
-            GUILayout.FlexibleSpace(); // 这个是关键！它会把下面的内容推到窗口底部
-            DrawPreview();
-
-            bool uiChanged = EditorGUI.EndChangeCheck();
-            bool propertiesChanged = serializedObject.ApplyModifiedProperties();
-
-            if (propertiesChanged)
+            if (serializedObject.ApplyModifiedProperties())
             {
-                var recipe = target as StylizedRoadRecipe;
-                if (recipe != null) EditorUtility.SetDirty(recipe);
+                UpdatePreviewTexture();
                 PropagateRecipeChange();
             }
         }
 
-        private new void DrawHeader()
+        private void DrawMaskCreator()
         {
-            EditorGUILayout.LabelField(RecipeEditorStyles.Title, RecipeEditorStyles.headerLabelStyle);
-            EditorGUILayout.HelpBox(RecipeEditorStyles.InfoHelpBox, MessageType.Info);
             EditorGUILayout.Space();
-        }
-
-        private void DrawLayerList()
-        {
-            _layersList?.DoLayoutList();
-        }
-
-        private void DrawPreview()
-        {
-            using (new EditorGUILayout.VerticalScope(RecipeEditorStyles.previewBoxStyle))
+            using (new EditorGUILayout.HorizontalScope())
             {
-                // 预览区标题
-                GUILayout.Label(RecipeEditorStyles.PreviewHeader, EditorStyles.boldLabel);
+                _selectedMaskTypeIndex = EditorGUILayout.Popup(new GUIContent("遮罩列表"), _selectedMaskTypeIndex, _maskTypeNames);
 
-                // 更新预览纹理
-                UpdatePreviewTexture();
-
-                // 绘制预览控制工具栏
-                DrawPreviewToolbar();
-
-                // 绘制预览图
-                Rect previewRect = GUILayoutUtility.GetRect(PREVIEW_WIDTH, PREVIEW_HEIGHT, GUILayout.ExpandWidth(true));
-                DrawPreviewTexture(previewRect);
-
-                // 绘制预览帮助文本
-                string helpText = _selectedPreviewMode == 0 ? RecipeEditorStyles.PreviewHelpBoxChannels : RecipeEditorStyles.PreviewHelpBoxCombined;
-                EditorGUILayout.HelpBox(helpText, MessageType.None);
+                if (GUILayout.Button("创建遮罩", GUILayout.Width(100)))
+                {
+                    CreateMaskAsset();
+                }
             }
+        }
+
+        private void FindAvailableMaskTypes()
+        {
+            _maskTypes = Assembly.GetAssembly(typeof(BlendMaskBase)).GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
+                .ToArray();
+            _maskTypeNames = _maskTypes.Select(t => t.Name).ToArray();
+        }
+
+        private void CreateMaskAsset()
+        {
+            if (_maskTypes == null || _maskTypes.Length == 0) return;
+
+            var recipe = target as StylizedRoadRecipe;
+            if (recipe == null) return;
+
+            var selectedType = _maskTypes[_selectedMaskTypeIndex];
+            var newMask = ScriptableObject.CreateInstance(selectedType);
+
+            string recipePath = AssetDatabase.GetAssetPath(recipe);
+            string folder = Path.GetDirectoryName(recipePath);
+            string masksFolder = Path.Combine(folder, "Masks").Replace("\\", "/");
+            EnsureFolderExists(masksFolder);
+
+            string assetPath = Path.Combine(masksFolder, $"{recipe.name}_{selectedType.Name}.asset").Replace("\\", "/");
+            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+
+            AssetDatabase.CreateAsset(newMask, uniquePath);
+            AssetDatabase.SaveAssets();
+            EditorGUIUtility.PingObject(newMask);
+            Debug.Log($"MrPath: 已在 {uniquePath} 创建新的 {selectedType.Name} 资产。");
+        }
+
+        private void DrawHeader(StylizedRoadRecipe recipe)
+        {
+
+        }
+
+        private void SetupReorderableList()
+        {
+            _layerList = new ReorderableList(serializedObject, _blendLayersProp, true, false, true, true);
+            _layerList.drawElementCallback = (rect, index, isActive, isFocused) =>
+            {
+                var layerProp = _layerList.serializedProperty.GetArrayElementAtIndex(index);
+                DrawLayerCard(rect, layerProp, index);
+            };
+            _layerList.elementHeightCallback = (index) =>
+            {
+                var layerProp = _layerList.serializedProperty.GetArrayElementAtIndex(index);
+                return GetPropertyHeight(layerProp);
+            };
+            _layerList.onAddCallback = (list) =>
+            {
+                var index = list.serializedProperty.arraySize;
+                list.serializedProperty.arraySize++;
+                list.index = index;
+                var newLayerProp = list.serializedProperty.GetArrayElementAtIndex(index);
+                newLayerProp.FindPropertyRelative("enabled").boolValue = true;
+                newLayerProp.FindPropertyRelative("opacity").floatValue = 1f;
+                newLayerProp.FindPropertyRelative("blendMode").enumValueIndex = 0;
+                newLayerProp.FindPropertyRelative("terrainLayer").objectReferenceValue = null;
+                newLayerProp.FindPropertyRelative("mask").objectReferenceValue = null;
+                newLayerProp.FindPropertyRelative("isExpanded").boolValue = true;
+            };
+        }
+
+        private float GetPropertyHeight(SerializedProperty layerProp)
+        {
+            var isExpanded = layerProp.FindPropertyRelative("isExpanded");
+            float height = EditorGUIUtility.singleLineHeight; // Header
+            if (isExpanded.boolValue)
+            {
+                // 4 properties, each with line height and spacing
+                height += 4 * (EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing);
+            }
+            return height + UIConstants.CardVerticalPadding * 2; // Top and bottom padding
+        }
+
+        private void DrawLayerCard(Rect rect, SerializedProperty layerProp, int index)
+        {
+            var layer = _recipe.blendLayers[index];
+
+            // Adjust rect for padding
+            rect.y += UIConstants.CardVerticalPadding;
+            rect.height = EditorGUIUtility.singleLineHeight;
+
+            // --- Header ---
+            var headerRect = new Rect(rect.x, rect.y, rect.width, EditorGUIUtility.singleLineHeight);
+
+            // Foldout
+            var foldoutRect = headerRect;
+            foldoutRect.width = UIConstants.FoldoutWidth;
+            layer.isExpanded = EditorGUI.Foldout(foldoutRect, layer.isExpanded, GUIContent.none, false);
+
+            // Enabled Toggle
+            var enabledRect = headerRect;
+            enabledRect.x = headerRect.xMax - UIConstants.EnabledToggleWidth;
+            enabledRect.width = UIConstants.EnabledToggleWidth;
+            var enabledProp = layerProp.FindPropertyRelative("enabled");
+            enabledProp.boolValue = EditorGUI.Toggle(enabledRect, enabledProp.boolValue);
+
+            // Name Field
+            var nameRect = headerRect;
+            nameRect.x += UIConstants.FoldoutWidth;
+            nameRect.width -= (UIConstants.FoldoutWidth + UIConstants.EnabledToggleWidth);
+            var nameProp = layerProp.FindPropertyRelative("name");
+            nameProp.stringValue = EditorGUI.TextField(nameRect, nameProp.stringValue);
+
+            if (layer.isExpanded)
+            {
+                var contentRect = new Rect(rect.x, rect.y, rect.width, rect.height);
+                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
+                contentRect.x += UIConstants.FoldoutWidth; // Indent content
+                contentRect.width -= UIConstants.FoldoutWidth;
+
+                // --- Blend Mode ---
+                var blendModeProp = layerProp.FindPropertyRelative("blendMode");
+                EditorGUI.PropertyField(contentRect, blendModeProp, new GUIContent("图层混合"));
+                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
+
+                // --- Opacity ---
+                var opacityProp = layerProp.FindPropertyRelative("opacity");
+                EditorGUI.PropertyField(contentRect, opacityProp, new GUIContent("混合强度"));
+                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
+
+                // --- Terrain Layer ---
+                var terrainLayerProp = layerProp.FindPropertyRelative("terrainLayer");
+                DrawObjectFieldWithPing(contentRect, terrainLayerProp, "地形层");
+                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
+
+                // --- Mask ---
+                var maskProp = layerProp.FindPropertyRelative("mask");
+                DrawObjectFieldWithPing(contentRect, maskProp, "遮罩");
+            }
+        }
+
+        private void DrawObjectFieldWithPing(Rect position, SerializedProperty property, string label)
+        {
+            var labelRect = position;
+            labelRect.width = EditorGUIUtility.labelWidth;
+            EditorGUI.LabelField(labelRect, label);
+
+            var fieldRect = position;
+            fieldRect.x += EditorGUIUtility.labelWidth;
+            fieldRect.width -= (EditorGUIUtility.labelWidth + UIConstants.PingButtonWidth);
+            EditorGUI.PropertyField(fieldRect, property, GUIContent.none);
+
+            var buttonRect = position;
+            buttonRect.x = fieldRect.xMax;
+            buttonRect.width = UIConstants.PingButtonWidth;
+            using (new EditorGUI.DisabledScope(property.objectReferenceValue == null))
+            {
+                var icon = EditorGUIUtility.IconContent("d_Target");
+                if (GUI.Button(buttonRect, icon, EditorStyles.label))
+                {
+                    EditorGUIUtility.PingObject(property.objectReferenceValue);
+                }
+            }
+        }
+
+        private void DrawPreview(StylizedRoadRecipe recipe)
+        {
+            // 预览区标题
+            GUILayout.Label(RecipeEditorStyles.PreviewHeader);
+
+            // 更新预览纹理
+            UpdatePreviewTexture();
+
+            // 绘制预览控制工具栏
+            DrawPreviewToolbar();
+
+            // 绘制预览图
+            Rect previewRect = GUILayoutUtility.GetRect(PREVIEW_WIDTH, PREVIEW_HEIGHT, GUILayout.ExpandWidth(true));
+            DrawPreviewTexture(previewRect);
+
+            // 绘制预览帮助文本
+            string helpText = _selectedPreviewMode == 0 ? RecipeEditorStyles.PreviewHelpBoxChannels : RecipeEditorStyles.PreviewHelpBoxCombined;
+            EditorGUILayout.HelpBox(helpText, MessageType.None);
         }
         private void DrawPreviewToolbar()
         {
@@ -118,45 +314,6 @@ namespace MrPathV2
                 }
             }
         }
-        #region ReorderableList 设置
-
-        private void SetupReorderableList()
-        {
-            _layersList = new ReorderableList(serializedObject, _layersProp, true, true, true, true)
-            {
-                drawHeaderCallback = rect => EditorGUI.LabelField(rect, RecipeEditorStyles.LayersHeader),
-                elementHeight = EditorGUIUtility.singleLineHeight *6 + 20, // 增加垂直间距
-                drawElementCallback = (rect, index, isActive, isFocused) =>
-                {
-                    var element = _layersProp.GetArrayElementAtIndex(index);
-                    rect.y += 2;
-                    rect.height = EditorGUIUtility.singleLineHeight;
-
-                    // 为了更好的对齐和布局
-                    float toggleWidth = 80f;
-                    float mainWidth = rect.width - toggleWidth - 5;
-                    Rect mainRect = new Rect(rect.x, rect.y, mainWidth, rect.height);
-                    Rect toggleRect = new Rect(mainRect.xMax + 5, rect.y, toggleWidth, rect.height);
-
-                    // 第1行: Layer + Enabled Toggle
-                    EditorGUI.PropertyField(mainRect, element.FindPropertyRelative("terrainLayer"), new GUIContent("地形层"));
-                    EditorGUI.PropertyField(toggleRect, element.FindPropertyRelative("enabled"), GUIContent.none);
-
-                    // 第2行: Mask
-                    mainRect.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
-                    EditorGUI.PropertyField(mainRect, element.FindPropertyRelative("mask"), new GUIContent("遮罩"));
-
-                    // 第3行: Blend Mode + Opacity Slider
-                    mainRect.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
-                    Rect blendRect = new Rect(mainRect.x, mainRect.y, mainRect.width * 0.4f, mainRect.height);
-                    Rect opacityRect = new Rect(blendRect.xMax + 5, mainRect.y, mainRect.width * 0.6f - 5, mainRect.height);
-                    EditorGUI.PropertyField(blendRect, element.FindPropertyRelative("blendMode"), GUIContent.none);
-                    EditorGUI.PropertyField(opacityRect, element.FindPropertyRelative("opacity"), GUIContent.none);
-                }
-            };
-        }
-
-        #endregion
 
         private void UpdatePreviewTexture()
         {
@@ -184,9 +341,9 @@ namespace MrPathV2
                 _lastUpdateTime = EditorApplication.timeSinceStartup;
             }
         }
-          private void GenerateChannelsPreview(StylizedRoadRecipe recipe, Texture2D target)
+        private void GenerateChannelsPreview(StylizedRoadRecipe recipe, Texture2D target)
         {
-             if (recipe == null || target == null) return;
+            if (recipe == null || target == null) return;
             var colors = new Color[target.width * target.height];
 
             int layerCount = Mathf.Min(4, recipe.blendLayers != null ? recipe.blendLayers.Count : 0);
@@ -264,7 +421,7 @@ namespace MrPathV2
 
         private void GenerateCombinedPreview(StylizedRoadRecipe recipe, Texture2D target)
         {
-           if (recipe == null || target == null) return;
+            if (recipe == null || target == null) return;
             var colors = new Color[target.width * target.height];
 
             // 背景初始化为黑色
@@ -339,7 +496,7 @@ namespace MrPathV2
         private void DrawPreviewTexture(Rect rect)
         {
             if (_previewTexture == null) return;
-            
+
             // 使用自定义着色器来显示单通道
             if (_selectedPreviewMode == 0 && _selectedChannel > 0)
             {
@@ -357,12 +514,12 @@ namespace MrPathV2
             {
                 GUI.DrawTexture(rect, _previewTexture, ScaleMode.StretchToFill, false);
             }
-            
+
             // 绘制中心线
             float centerX = rect.x + rect.width * 0.5f;
             EditorGUI.DrawRect(new Rect(centerX - 0.5f, rect.y, 1f, rect.height), new Color(1f, 1f, 1f, 0.5f));
         }
-        
+
         // 将当前配方的变更传播给场景中的 PathCreator，以驱动预览刷新
         private void PropagateRecipeChange()
         {
@@ -382,9 +539,9 @@ namespace MrPathV2
             // 刷新所有场景视图，确保立即看到更新
             SceneView.RepaintAll();
         }
-      
 
-       
+
+
 
         private Color SampleLayerColor(TerrainLayer layer, float u)
         {
@@ -394,11 +551,11 @@ namespace MrPathV2
             {
                 return tex.GetPixelBilinear(u, 0.5f);
             }
-            return Color.white; 
+            return Color.white;
         }
 
-        
-     
+
+
 
         private float Blend(float baseValue, float layerValue, BlendMode mode)
         {
@@ -451,16 +608,32 @@ namespace MrPathV2
         }
 
 
-      
 
-        
+
+
+        private void EnsureFolderExists(string folderPath)
+        {
+            if (AssetDatabase.IsValidFolder(folderPath)) return;
+            string parent = Path.GetDirectoryName(folderPath);
+            string newFolderName = Path.GetFileName(folderPath);
+            if (!AssetDatabase.IsValidFolder(parent))
+            {
+                EnsureFolderExists(parent);
+            }
+            AssetDatabase.CreateFolder(parent, newFolderName);
+        }
+
+
+
+
+
         private int ComputeRecipeHash(StylizedRoadRecipe recipe)
         {
             unchecked
             {
                 int h = 17;
                 if (recipe == null || recipe.blendLayers == null) return h;
-                
+
                 h = h * 23 + recipe.blendLayers.Count;
                 foreach (var layer in recipe.blendLayers)
                 {
@@ -474,7 +647,7 @@ namespace MrPathV2
                     if (brush == null) continue;
 
                     h = h * 23 + brush.GetInstanceID();
-                    
+
                     // [核心增强] 识别所有噪声类型
                     switch (brush)
                     {
@@ -501,7 +674,7 @@ namespace MrPathV2
                             h = h * 23 + bsnm.strengthVariation.GetHashCode(); h = h * 23 + bsnm.strokeWidth.GetHashCode();
                             h = h * 23 + bsnm.widthVariation.GetHashCode(); h = h * 23 + bsnm.jitter.GetHashCode();
                             break;
-                       
+
                     }
                 }
                 return h;

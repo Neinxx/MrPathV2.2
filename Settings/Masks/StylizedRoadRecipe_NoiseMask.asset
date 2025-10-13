@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
-  m_Name: New Noise Mask
+  m_Name: StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
-  scale: 5.55
-  strength: 0.649
+  scale: 10
+  strength: 1

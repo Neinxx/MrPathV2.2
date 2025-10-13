@@ -9,6 +9,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 929a538aef99939409cf79aa0fccf3f1, type: 3}
-  m_Name: Default Preview Material Manager Factory
+  m_Script: {fileID: 11500000, guid: e8cb4881903b9874f858b6a074f36a91, type: 3}
+  m_Name: DefaultTerrainOperation
   m_EditorClassIdentifier: 
+  operations:
+  - {fileID: 11400000, guid: 386a7d13cd311ad4c8b4cb43d78ff830, type: 2}
+  - {fileID: 11400000, guid: 5f99dacbb545bba43958dec94bcbdeb0, type: 2}

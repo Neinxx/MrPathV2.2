@@ -40,6 +40,7 @@ namespace MrPathV2
     [Serializable]
     public class BlendLayer
     {
+        public string name = "New Layer";
         [Tooltip("关联的地形图层资产")]
    
         public TerrainLayer terrainLayer;
@@ -56,6 +57,8 @@ namespace MrPathV2
         [Range(0f, 1f)] public float opacity = 1f;
         [Tooltip("是否启用该图层参与复合预览与导出")]
         public bool enabled = true;
+
+        [HideInInspector] public bool isExpanded = true;
     }
 
     [Serializable]

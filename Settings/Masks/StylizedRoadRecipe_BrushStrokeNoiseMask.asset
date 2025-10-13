@@ -9,6 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f2943f21fc3a7c43b9de65ab5d90956, type: 3}
-  m_Name: Default Preview Generator Factory
+  m_Script: {fileID: 11500000, guid: af06d4dead14eb847b4504bc43ad56fa, type: 3}
+  m_Name: StylizedRoadRecipe_BrushStrokeNoiseMask
   m_EditorClassIdentifier: 
+  scale: 5
+  strength: 1
+  strengthVariation: 0.5
+  strokeWidth: 0.8
+  widthVariation: 0.7
+  jitter: 1

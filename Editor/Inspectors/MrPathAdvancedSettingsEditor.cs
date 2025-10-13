@@ -2,6 +2,7 @@
 using UnityEditor;
 using UnityEngine;
 using System.IO;
+using System.Linq;
 
 namespace MrPathV2
 {
@@ -43,6 +44,34 @@ namespace MrPathV2
             }
         }
 
+        private string GetDynamicStrategiesPath()
+        {
+            string mrPathFolder = AssetDatabase.FindAssets("MrPathV2.2").Select(AssetDatabase.GUIDToAssetPath)
+                .FirstOrDefault(path => path.EndsWith("MrPathV2.2"));
+
+            if (string.IsNullOrEmpty(mrPathFolder))
+            {
+                Debug.LogError("未找到 MrPathV2.2 文件夹！");
+                return null;
+            }
+
+            return Path.Combine(mrPathFolder, "Settings", "Strategies").Replace("\\", "/");
+        }
+
+        private string GetDynamicResourcesPath()
+        {
+            string mrPathFolder = AssetDatabase.FindAssets("MrPathV2.2").Select(AssetDatabase.GUIDToAssetPath)
+                .FirstOrDefault(path => path.EndsWith("MrPathV2.2"));
+
+            if (string.IsNullOrEmpty(mrPathFolder))
+            {
+                Debug.LogError("未找到 MrPathV2.2 文件夹！");
+                return null;
+            }
+
+            return Path.Combine(mrPathFolder, "Settings", "Resources").Replace("\\", "/");
+        }
+
         private void CreateDefaultStrategies()
         {
             var settings = (MrPathAdvancedSettings)target;
@@ -50,7 +79,9 @@ namespace MrPathV2
             var bezierProp = so.FindProperty("bezierStrategy");
             var catmullProp = so.FindProperty("catmullRomStrategy");
 
-            string dir = "Assets/__temp/MrPathV2.2/Settings/Strategies";
+            string dir = GetDynamicStrategiesPath();
+            if (string.IsNullOrEmpty(dir)) return;
+
             Directory.CreateDirectory(dir);
 
             if (bezierProp.objectReferenceValue == null)
@@ -82,7 +113,7 @@ namespace MrPathV2
             var settings = (MrPathAdvancedSettings)target;
 
             // 确保注册表资产存在
-            string registryPath = "Assets/__temp/MrPathV2.2/Settings/Resources/PathStrategyRegistry.asset";
+            string registryPath = Path.Combine(GetDynamicResourcesPath(), "PathStrategyRegistry.asset").Replace("\\", "/");
             var registry = AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(registryPath);
             if (registry == null)
             {
