@@ -91,7 +91,6 @@ namespace MrPathV2
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
     public struct ModifyAlphamapsJob : IJobParallelFor
     {
-        // ... (ModifyAlphamapsJob 的所有代码保持不变，因为它也需要 IsPointInContour)
         [ReadOnly] public PathJobsUtility.SpineData spine;
         [ReadOnly] public PathJobsUtility.ProfileData profile;
         [ReadOnly] public RecipeData recipe;
@@ -151,7 +150,15 @@ namespace MrPathV2
                 if (splatIndex < 0 || splatIndex >= alphamapLayerCount) continue;
                 if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
 
-                float layerMask = TerrainJobsUtility.EvaluateStrip(recipe.strips, recipe.stripSlices[i], recipe.stripResolution, normalizedDist);
+                float layerMask;
+                if (recipe.maskLUT256.IsCreated)
+                {
+                    layerMask = TerrainJobsUtility.SampleMaskLUT(recipe.maskLUT256, i, normalizedDist);
+                }
+                else
+                {
+                    layerMask = TerrainJobsUtility.EvaluateStrip(recipe.strips, recipe.stripSlices[i], recipe.stripResolution, normalizedDist) * recipe.opacities[i];
+                }
                 if (layerMask > 1e-6f) anyPainted = true;
 
                 int mode = recipe.blendModes[i];
@@ -166,12 +173,21 @@ namespace MrPathV2
                 alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
             }
 
-            float total = 0; for (int i = 0; i < alphamapLayerCount; i++) total += alphamaps[baseAlphaIndex + i];
-            if (total > 1e-5f)
+            // 修改归一化逻辑：仅在命中 2 个及以上图层时才归一化，保持单图层遮罩梯度
+            int paintedCount = 0;
+            float total = 0f;
+            for (int i = 0; i < alphamapLayerCount; i++)
             {
-                for (int i = 0; i < alphamapLayerCount; i++) alphamaps[baseAlphaIndex + i] /= total;
+                float v = alphamaps[baseAlphaIndex + i];
+                total += v;
+                if (v > 1e-4f) paintedCount++;
             }
-            else if (firstValidSplatIndex >= 0)
+            if (paintedCount > 1 && total > 1e-5f)
+            {
+                float invTotal = 1f / total;
+                for (int i = 0; i < alphamapLayerCount; i++) alphamaps[baseAlphaIndex + i] *= invTotal;
+            }
+            else if (paintedCount == 0 && firstValidSplatIndex >= 0)
             {
                 alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
             }

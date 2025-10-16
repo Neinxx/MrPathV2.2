@@ -329,5 +329,31 @@ namespace MrPathV2
             
             return math.saturate(result);
         }
+        
+        public static float SampleMaskLUT(NativeArray<float4> lut256, int layerIndex, float normalizedDist)
+        {
+            // 验证数组与输入
+            if (!lut256.IsCreated || lut256.Length == 0)
+                return 0f;
+            if (layerIndex < 0 || layerIndex > 3)
+                return 0f;
+            if (math.isnan(normalizedDist) || math.isinf(normalizedDist))
+                normalizedDist = 0f;
+
+            int resolution = lut256.Length; // 预期256
+            int maxIdx = resolution - 1;
+            float fIdx = math.saturate(normalizedDist) * maxIdx;
+            int idxA = (int)math.floor(fIdx);
+            int idxB = math.min(idxA + 1, maxIdx);
+            float w = fIdx - idxA;
+
+            float4 a = lut256[idxA];
+            float4 b = lut256[idxB];
+            float va = layerIndex == 0 ? a.x : layerIndex == 1 ? a.y : layerIndex == 2 ? a.z : a.w;
+            float vb = layerIndex == 0 ? b.x : layerIndex == 1 ? b.y : layerIndex == 2 ? b.z : b.w;
+            if (math.isnan(va) || math.isinf(va)) va = 0f;
+            if (math.isnan(vb) || math.isinf(vb)) vb = 0f;
+            return math.lerp(va, vb, w);
+        }
     }
 }

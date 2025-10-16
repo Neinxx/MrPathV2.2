@@ -107,15 +107,23 @@ namespace MrPathV2
             if (i < 0 || i >= spine.Length) return;
 
             float t = j / (float)(segments - 1);         // 0..1 左->右
-            float signedT = t * 2f - 1f;                  // -1..1 中心为0
-            float normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
+             float signedT = t * 2f - 1f;                  // -1..1 中心为0
+             float normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
 
             // 只取前4层作为预览（RGBA），其余层忽略
             float r = 0f, g = 0f, b = 0f, a = 0f;
             int layerCount = math.min(4, recipe.Length);
             for (int k = 0; k < layerCount; k++)
             {
-                float layerMask = TerrainJobsUtility.EvaluateStrip(recipe.strips, recipe.stripSlices[k], recipe.stripResolution, normalizedDist);
+                float layerMask;
+                if (recipe.maskLUT256.IsCreated)
+                {
+                    layerMask = TerrainJobsUtility.SampleMaskLUT(recipe.maskLUT256, k, normalizedDist);
+                }
+                else
+                {
+                    layerMask = TerrainJobsUtility.EvaluateStrip(recipe.strips, recipe.stripSlices[k], recipe.stripResolution, normalizedDist) * recipe.opacities[k];
+                }
                 int blendMode = recipe.blendModes[k];
                 switch (k)
                 {
@@ -126,17 +134,7 @@ namespace MrPathV2
                 }
             }
 
-            // 归一化，便于直觉预览
-            float sum = r + g + b + a;
-            if (sum > 1e-6f)
-            {
-                float inv = 1f / sum; r *= inv; g *= inv; b *= inv; a *= inv;
-            }
-            else
-            {
-                r = 1f; g = 0f; b = 0f; a = 0f; // 保底：红通道显示
-            }
-
+            // 不再在顶点阶段归一化，保持 LUT 的原始不透明度信息
             colors[index] = new float4(r, g, b, a) * baseColor;
         }
     }

@@ -6,6 +6,7 @@ Shader "MrPathV2/StylizedRoadPreview"
         _LayerTex ("Layer Texture", 2D) = "white" {}
         _MaskLUT ("Mask LUT", 2D) = "white" {}
         _LayerTiling ("Layer Tiling", Vector) = (1,1,0,0)
+        _LayerTint ("Layer Tint", Color) = (1,1,1,1)
         _LayerOpacity ("Layer Opacity", Float) = 1
         _BlendMode ("Blend Mode", Float) = 0
     }
@@ -42,6 +43,7 @@ Shader "MrPathV2/StylizedRoadPreview"
             // 平铺参数
             CBUFFER_START(UnityPerMaterial)
                 float4 _LayerTiling;
+                float4 _LayerTint; // added
                 float4 _PreviousResultTex_ST;
                 float4 _LayerTex_ST;
                 float4 _MaskLUT_ST;
@@ -77,31 +79,32 @@ Shader "MrPathV2/StylizedRoadPreview"
             // 片元着色器
             half4 frag(Varyings input) : SV_Target
             {
-                // 采样掩码LUT
-                float maskInfluence = SAMPLE_TEXTURE2D(_MaskLUT, sampler_MaskLUT, float2(input.uv.y, 0.5)).r;
-                
-                // 采样之前的结果
+                // 采样掩码 LUT：沿着 u 轴取样以保持与场景预览一致（0..1 映射到道路横向宽度）
+                float maskInfluence = SAMPLE_TEXTURE2D(_MaskLUT, sampler_MaskLUT, float2(input.uv.x, 0.5)).r;
+
+                // 采样此前累积结果
                 half4 prevColor = SAMPLE_TEXTURE2D(_PreviousResultTex, sampler_PreviousResultTex, input.uv);
 
-                // 计算带平铺的UV并采样图层纹理
-                float2 layerUV = input.uv * _LayerTiling.xy;
-                half4 layerColor = SAMPLE_TEXTURE2D(_LayerTex, sampler_LayerTex, layerUV);
-                layerColor *= _LayerOpacity;
+                // 计算平铺 UV 并采样当前图层纹理
+                float2 layerUV = input.uv * _LayerTiling.xy + _LayerTiling.zw;
+                half4 layerColor = SAMPLE_TEXTURE2D(_LayerTex, sampler_LayerTex, layerUV) * _LayerTint;
 
+                // 应用图层透明度，并与掩码影响相乘，确保与 TerrainJobs 权重一致
+                layerColor *= (_LayerOpacity * maskInfluence);
 
                 // 根据 BlendMode 进行混合
                 half4 result;
                 if (_BlendMode < 0.5)       // Normal
                 {
-                    result = lerp(prevColor, layerColor, maskInfluence);
+                    result = lerp(prevColor, layerColor, layerColor.a); // 使用 layerColor alpha 作为插值
                 }
                 else if (_BlendMode < 1.5)  // Add
                 {
-                    result = prevColor + layerColor * maskInfluence;
+                    result = prevColor + layerColor;
                 }
-               else                         // Multiply
+                else                         // Multiply
                 {
-                    result = lerp(prevColor, prevColor * layerColor, maskInfluence);
+                    result = lerp(prevColor, prevColor * layerColor, layerColor.a);
                 }
 
                 return saturate(result);

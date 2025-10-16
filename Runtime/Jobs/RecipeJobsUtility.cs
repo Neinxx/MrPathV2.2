@@ -24,6 +24,7 @@ namespace MrPathV2
         // 兼容旧实现：仍保留曲线关键帧（用于外部可能的评估复用），但当前共享算法使用 strips
         [ReadOnly] public NativeArray<Keyframe> gradientKeys;   // 合并后的所有关键帧
         [ReadOnly] public NativeArray<int2> gradientKeySlices;  // 每层对应的 keys 片段范围
+        [ReadOnly] public NativeArray<float4> maskLUT256;   // 长度=256，每像素RGBA对应前4层
         public int Length { get; private set; }
 
         public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, Allocator allocator)
@@ -37,6 +38,8 @@ namespace MrPathV2
             strips = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(math.max(1, stripResolution) * math.max(1, Length), allocator);
             stripSlices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
             gradientKeySlices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
+            // 新增：为 256x1 RGBA LUT 分配空间
+            maskLUT256 = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float4>(256, allocator);
 
             int totalKeyframes = 0;
             if (blends != null)
@@ -61,7 +64,7 @@ namespace MrPathV2
                 terrainLayerIndices[i] = idx;
 
                 blendModes[i] = b != null ? (int)b.blendMode : 0; // 默认 Normal=0
-                opacities[i] = Mathf.Clamp01(b != null ? b.opacity : 1f);
+                opacities[i] = Mathf.Clamp01(b != null ? b.opacity * recipe.masterOpacity : recipe.masterOpacity);
 
                 // 兼容：若使用 GradientMask 资产则读取其曲线关键帧，否则读取旧字段
                 var gradAsset = b?.mask as GradientMask;
@@ -125,6 +128,40 @@ namespace MrPathV2
                 }
                 stripOffset += stripResolution;
             }
+            // 生成 LUT：256长度，每像素RGBA存4层(已混合并归一化)
+            for(int p=0;p<256;p++)
+            {
+                float normalizedDist = p / 255f; // 0..1 center=0 edges=1
+                 float r=0,g=0,b=0,a=0;
+                for(int li=0;li<math.min(4,Length);li++)
+                {
+                    // 计算遮罩值（已包含不透明度）
+                    int sliceStart = stripSlices[li].x;
+                    int res = stripResolution;
+                    float fIdx = normalizedDist * (res - 1);
+                    int ia=(int)math.floor(fIdx);
+                    ia = math.clamp(ia,0,res-1);
+                    int ib=math.min(ia+1,res-1);
+                    float w=fIdx-ia;
+                    float va=strips[sliceStart+ia];
+                    float vb=strips[sliceStart+ib];
+                    float v=math.lerp(va,vb,w);
+                    // Blend
+                    int mode = blendModes[li];
+                    switch(li){
+                        case 0: r = TerrainJobsUtility.Blend(r,v,mode); break;
+                        case 1: g = TerrainJobsUtility.Blend(g,v,mode); break;
+                        case 2: b = TerrainJobsUtility.Blend(b,v,mode); break;
+                        case 3: a = TerrainJobsUtility.Blend(a,v,mode); break;
+                    }
+                }
+                // 不再对权重做归一化，保留原始不透明度，后续使用阶段再统一归一化/Clamp
+                r = math.clamp(r, 0f, 1f);
+                g = math.clamp(g, 0f, 1f);
+                b = math.clamp(b, 0f, 1f);
+                a = math.clamp(a, 0f, 1f);
+                maskLUT256[p]=new float4(r,g,b,a);
+            }
         }
 
         // 验证数据是否已创建
@@ -139,6 +176,7 @@ namespace MrPathV2
             if (stripSlices.IsCreated) stripSlices.Dispose();
             if (gradientKeys.IsCreated) gradientKeys.Dispose();
             if (gradientKeySlices.IsCreated) gradientKeySlices.Dispose();
+            if (maskLUT256.IsCreated) maskLUT256.Dispose();
         }
     }
 

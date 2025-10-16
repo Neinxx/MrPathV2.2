@@ -217,6 +217,12 @@ namespace MrPathV2
             if (baseAlphaIndex < 0 || baseAlphaIndex + alphamapLayerCount > alphamaps.Length)
                 return;
 
+            // 先清零该像素全部图层权重，避免与原地形混合导致显色过淡
+            for(int l=0;l<alphamapLayerCount;l++)
+            {
+                alphamaps[baseAlphaIndex + l] = 0f;
+            }
+
             // 应用配方层混合
             bool anyLayerPainted = false;
             int firstValidSplatIndex = -1;
@@ -231,12 +237,20 @@ namespace MrPathV2
                     firstValidSplatIndex = splatIndex;
 
                 // 计算遮罩值
-                float maskValue = TerrainJobsUtility.EvaluateStrip(
-                    recipe.strips, 
-                    recipe.stripSlices[layerIndex], 
-                    recipe.stripResolution, 
-                    normalizedDist
-                );
+                float maskValue;
+                if (recipe.maskLUT256.IsCreated)
+                {
+                    maskValue = TerrainJobsUtility.SampleMaskLUT(recipe.maskLUT256, layerIndex, normalizedDist);
+                }
+                else
+                {
+                    // 当 LUT 不可用时退化为 Strip 采样（已包含不透明度）
+                    maskValue = TerrainJobsUtility.EvaluateStrip(
+                        recipe.strips,
+                        recipe.stripSlices[layerIndex],
+                        recipe.stripResolution,
+                        normalizedDist);
+                }
 
                 if (maskValue > EPSILON)
                     anyLayerPainted = true;
@@ -265,15 +279,18 @@ namespace MrPathV2
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void NormalizeAlphaWeights(int baseAlphaIndex, int firstValidSplatIndex)
         {
-            // 计算总权重
+            // 仅当绘制了 2 个及以上图层时才进行归一化，
+            // 避免单图层被强行拉升到 1 失去遮罩梯度。
+            int paintedCount = 0;
             float totalWeight = 0f;
             for (int i = 0; i < alphamapLayerCount; i++)
             {
-                totalWeight += alphamaps[baseAlphaIndex + i];
+                float v = alphamaps[baseAlphaIndex + i];
+                totalWeight += v;
+                if (v > 1e-4f) paintedCount++;
             }
 
-            // 归一化或设置默认值
-            if (totalWeight > NORMALIZATION_THRESHOLD)
+            if (paintedCount > 1 && totalWeight > NORMALIZATION_THRESHOLD)
             {
                 float invTotalWeight = 1f / totalWeight;
                 for (int i = 0; i < alphamapLayerCount; i++)
@@ -281,9 +298,9 @@ namespace MrPathV2
                     alphamaps[baseAlphaIndex + i] *= invTotalWeight;
                 }
             }
-            else if (firstValidSplatIndex >= 0)
+            else if (paintedCount == 0 && firstValidSplatIndex >= 0)
             {
-                // 如果总权重接近0，设置首个有效层为1
+                // 如果未命中任何图层，设置首个有效层为1
                 for (int i = 0; i < alphamapLayerCount; i++)
                 {
                     alphamaps[baseAlphaIndex + i] = (i == firstValidSplatIndex) ? 1f : 0f;

@@ -25,9 +25,7 @@ namespace MrPathV2
         [Tooltip("一个随机种子，用于在其他参数相同时，也能获得不同的噪声形状")]
         public float seed = 0.0f;
 
-        /// <summary>
-        /// 【修改】辅助函数现在也需要 worldWidth
-        /// </summary>
+        
         protected float TransformPosition(float horizontalPosition, float worldWidth)
         {
             // 1. 将输入的 -1 to 1 范围映射到 0 to 1

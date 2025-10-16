@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 
+
 namespace MrPathV2
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
@@ -16,7 +17,7 @@ namespace MrPathV2
     {
         public static event Action<StylizedRoadRecipe> OnRecipeModified;
 
-        
+
         private StylizedRoadRecipe _recipe;
         private int _lastRecipeHash;
 
@@ -31,14 +32,7 @@ namespace MrPathV2
         private static bool _missingShaderLogged;
         private readonly Dictionary<BlendMaskBase, Texture2D> _maskLUTCache = new Dictionary<BlendMaskBase, Texture2D>();
 
-        // --- CPU Resources ---
-        private Texture2D _cpuPreviewTexture;
-
-        private int _selectedPreviewMode = 1;
-        private readonly GUIContent[] _previewModeIcons = {
-            new GUIContent("Channels", "通道权重预览 (CPU)"),
-            new GUIContent("Combined", "最终效果混合预览 (GPU)")
-        };
+        // CPU 预览逻辑已移除
 
         private Type _selectedMaskType;
         private static readonly Type[] _maskTypes = FindAvailableMaskTypes();
@@ -82,7 +76,7 @@ namespace MrPathV2
             foreach (var lut in _maskLUTCache.Values) DestroyImmediate(lut);
             _maskLUTCache.Clear();
 
-            if (_cpuPreviewTexture != null) DestroyImmediate(_cpuPreviewTexture);
+
         }
 
         public override void OnInspectorGUI()
@@ -119,28 +113,13 @@ namespace MrPathV2
         {
             EditorGUILayout.LabelField("最终效果预览", EditorStyles.boldLabel);
 
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                GUILayout.FlexibleSpace();
-                int newMode = GUILayout.Toolbar(_selectedPreviewMode, _previewModeIcons, GUILayout.MaxWidth(220));
-                if (newMode != _selectedPreviewMode)
-                {
-                    _selectedPreviewMode = newMode;
-                    _lastRecipeHash = -1;
-                }
-                GUILayout.FlexibleSpace();
-            }
-
-
+            // GPU 预览不再需要模式切换工具栏
+            // 直接计算并绘制 GPU 预览结果
             Rect previewRect = GUILayoutUtility.GetRect(0, 180, GUILayout.ExpandWidth(true));
 
             if (_lastRecipeHash == -1) UpdatePreviewTexture();
 
-            if (_selectedPreviewMode == 0 && _cpuPreviewTexture != null)
-            {
-                GUI.DrawTexture(previewRect, _cpuPreviewTexture, ScaleMode.StretchToFill, false);
-            }
-            else if (_selectedPreviewMode == 1 && _previewRT != null)
+            if (_previewRT != null)
             {
                 GUI.DrawTexture(previewRect, _previewRT, ScaleMode.StretchToFill, false);
             }
@@ -150,29 +129,17 @@ namespace MrPathV2
             {
                 EditorGUI.DrawRect(new Rect(previewRect.x, centerY - 0.5f, previewRect.width, 1f), new Color(1, 1, 1, 0.5f));
             }
-            
 
-            string helpText = _selectedPreviewMode == 0 ?
-                "白线为道路中心。RGBA 通道分别代表前四个图层的权重分布 (CPU 渲染，可能卡顿)。" :
-                "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。";
+            const string helpText = "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。";
             EditorGUILayout.HelpBox(helpText, MessageType.None);
-            // EditorGUILayout.Space(2);
-            // _showCenterLine = EditorGUILayout.Toggle("显示中心线", _showCenterLine);
-            // EditorGUILayout.Space(2);
         }
 
         #region Preview Generation
 
         private void UpdatePreviewTexture()
         {
-            if (_selectedPreviewMode == 0)
-            {
-                GenerateChannelsPreviewCPU(_recipe);
-            }
-            else
-            {
-                if (_previewMaterial != null) GenerateCombinedPreviewGPU(_recipe);
-            }
+            // 统一使用 GPU 预览
+            if (_previewMaterial != null) GenerateCombinedPreviewGPU(_recipe);
             Repaint();
         }
 
@@ -207,39 +174,35 @@ namespace MrPathV2
             for (int i = 0; i < activeLayers.Count; i++)
             {
                 var layer = activeLayers[i];
-                Texture2D maskLUT = GetOrCreateMaskLUT(layer.mask, previewWorldWidth);
-                Texture layerTex = layer.terrainLayer.diffuseTexture ?? Texture2D.whiteTexture;
+                // 使用 PreviewPipelineUtility 统一计算 tiling 并生成 LUT
+                Vector2 tiling = PreviewPipelineUtility.CalcLayerTiling(previewWorldWidth, layer.terrainLayer);
+                var pli = new PreviewPipelineUtility.PreviewLayerInfo(
+                    layer.terrainLayer.diffuseTexture as Texture2D ?? Texture2D.whiteTexture,
+                    tiling,
+                    Vector2.zero,
+                    Color.white,
+                    Mathf.Clamp01(layer.opacity * recipe.masterOpacity),
+                    layer.blendMode,
+                    layer.mask);
+                // Build single-layer LUT (only R channel used)
+                Texture2D maskLUT = PreviewPipelineUtility.BuildMaskLUT(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
+                 _previewMaterial.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
+                 _previewMaterial.SetColor("_LayerTint", Color.white);
+                 _previewMaterial.SetFloat("_LayerOpacity", pli.opacity);
+                 _previewMaterial.SetFloat("_BlendMode", (float)pli.blendMode);
+                 _previewMaterial.SetTexture("_LayerTex", pli.texture);
+                 _previewMaterial.SetTexture("_MaskLUT", maskLUT);
 
-                // 【修改】计算并传递 Tiling 信息
-                // -----------------------------------------------------------------
-                // 1. 获取 TerrainLayer 的 TileSize，它表示贴图在世界空间中覆盖的尺寸。
-                Vector2 tileSize = layer.terrainLayer.tileSize;
-                // 防止除以零
-                if (tileSize.x == 0) tileSize.x = 1;
-                if (tileSize.y == 0) tileSize.y = 1;
-                
-                // 2. 计算在我们的预览宽度内，贴图应该重复多少次。
-                // 垂直方向的平铺我们暂时用不到，但为了完整性可以一并计算。
-                float tilingX = previewWorldWidth / tileSize.x;
-                float tilingY = previewWorldWidth / tileSize.y;
-                // 3. 将平铺数据传递给着色器。
-                _previewMaterial.SetVector("_LayerTiling", new Vector4(tilingX, tilingY, 0, 0));
-                _previewMaterial.SetFloat("_LayerOpacity", Mathf.Clamp01(layer.opacity));
-                _previewMaterial.SetFloat("_BlendMode", (float)layer.blendMode);
-                _previewMaterial.SetTexture("_LayerTex", layerTex);
-                _previewMaterial.SetTexture("_MaskLUT", maskLUT);
-
-                // ... 乒乓切换和 Blit 的代码不变 ...
-                if (i % 2 == 0)
-                {
-                    _previewMaterial.SetTexture("_PreviousResultTex", rt1);
-                    Graphics.Blit(rt1, rt2, _previewMaterial);
-                }
-                else
-                {
-                    _previewMaterial.SetTexture("_PreviousResultTex", rt2);
-                    Graphics.Blit(rt2, rt1, _previewMaterial);
-                }
+                 if (i % 2 == 0)
+                 {
+                     _previewMaterial.SetTexture("_PreviousResultTex", rt1);
+                     Graphics.Blit(rt1, rt2, _previewMaterial);
+                 }
+                 else
+                 {
+                     _previewMaterial.SetTexture("_PreviousResultTex", rt2);
+                     Graphics.Blit(rt2, rt1, _previewMaterial);
+                 }
             }
 
             // ... 结尾部分不变 ...
@@ -270,7 +233,7 @@ namespace MrPathV2
                 float pos = Mathf.Lerp(-1f, 1f, i / 255f);
 
                 // 【修改】将 PREVIEW_WORLD_WIDTH 传递给 Evaluate 方法
-                
+
                 float value = mask.Evaluate(pos, previewWorldWidth);
 
                 pixels[i] = new Color(value, 0, 0, 0);
@@ -284,68 +247,15 @@ namespace MrPathV2
         /// <summary>
         /// 【FIX】Filled in the missing CPU preview logic
         /// </summary>
-        private void GenerateChannelsPreviewCPU(StylizedRoadRecipe recipe)
-        {
-            if (_cpuPreviewTexture == null || _cpuPreviewTexture.width != 512 || _cpuPreviewTexture.height != 256)
-            {
-                if (_cpuPreviewTexture != null) DestroyImmediate(_cpuPreviewTexture);
-                _cpuPreviewTexture = new Texture2D(512, 256, TextureFormat.RGBA32, false);
-            }
+        // (removed GenerateChannelsPreviewCPU method as GPU replaces it)
 
-            if (recipe == null) return;
-            var pixels = new Color[_cpuPreviewTexture.width * _cpuPreviewTexture.height];
-           
-           int layerCount = Mathf.Min(4, recipe.blendLayers.Count);
-           float previewWorldWidth = GetPreviewWorldWidth(recipe);
-
-            for (int y = 0; y < _cpuPreviewTexture.height; y++)
-            {
-                float t = y / (float)(_cpuPreviewTexture.height - 1);
-                float pos = Mathf.Lerp(-1f, 1f, t);
-
-                float r = 0f, g = 0f, b = 0f, a = 0f;
-
-                if (layerCount > 0)
-                {
-                    for (int i = 0; i < layerCount; i++)
-                    {
-                        var layer = recipe.blendLayers[i];
-                        if (layer == null || !layer.enabled || layer.mask == null) continue;
-                       
-                       float v = Mathf.Clamp01(layer.mask.Evaluate(pos, previewWorldWidth)) * Mathf.Clamp01(layer.opacity);
-                        switch (i)
-                        {
-                            case 0: r = Blend(0, v, layer.blendMode); break;
-                            case 1: g = Blend(0, v, layer.blendMode); break;
-                            case 2: b = Blend(0, v, layer.blendMode); break;
-                            case 3: a = Blend(0, v, layer.blendMode); break;
-                        }
-                    }
-                }
-
-                float sum = r + g + b + a;
-                if (sum > 1e-6f) { float inv = 1f / sum; r *= inv; g *= inv; b *= inv; a *= inv; }
-
-                var finalColor = new Color(r, g, b, a);
-                for (int x = 0; x < _cpuPreviewTexture.width; x++)
-                {
-                    pixels[y * _cpuPreviewTexture.width + x] = finalColor;
-                }
-            }
-            _cpuPreviewTexture.SetPixels(pixels);
-            _cpuPreviewTexture.Apply(false, false);
-        }
-
-        #endregion
-
-        #region Hashing & Unchanged Methods
-
+        
         private int ComputeRecipeHash(StylizedRoadRecipe r)
         {
             unchecked
             {
                 int hash = 17;
-                hash = hash * 23 + _selectedPreviewMode.GetHashCode();
+
                 if (r == null) return hash;
 
                 foreach (var layer in r.blendLayers)

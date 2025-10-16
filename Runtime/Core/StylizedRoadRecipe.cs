@@ -42,5 +42,9 @@ namespace MrPathV2
 
         [Tooltip("道路边缘与地形混合的过渡距离（米）。")]
         public float falloff = 1.5f;
+
+        [Tooltip("配方整体透明度 (0-1)，用于统一控制所有图层的不透明度。")]
+        [Range(0f,1f)]
+        public float masterOpacity = 1f;
     }
 }

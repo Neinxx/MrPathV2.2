@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
   strength: 1
-  tiling: {x: 52.11, y: 24.63}
-  offset: {x: 0.36, y: -9.62}
-  seed: 20.79
-  scale: 3.3
+  tiling: {x: 6.63, y: 6.79}
+  offset: {x: 2.77, y: 13.31}
+  seed: 54.31
+  scale: 0.4
