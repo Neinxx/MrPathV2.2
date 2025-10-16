@@ -123,6 +123,13 @@ namespace MrPathV2
             tangentsOut.Clear();
         }
 
+        public void ShiftAllPositions(Vector3 delta)
+        {
+            for (int i = 0; i < positions.Count; i++)
+            {
+                positions[i] += delta;
+            }
+        }
         #endregion
     }
 }

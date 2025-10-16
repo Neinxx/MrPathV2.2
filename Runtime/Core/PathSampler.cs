@@ -140,7 +140,9 @@ namespace MrPathV2
             localPoints.Add(lastSampledPoint); cumulativeDistances.Add(0);
             float distanceSinceLastSample = 0f;
             Vector3 previousFineStepPoint = lastSampledPoint;
-            const float step = 0.005f;
+            // const float step = 0.005f;
+            // 依据路径分段动态调整采样步长，确保每段约采样20次，且不低于0.01
+            float step = Mathf.Max(1f / (creator.NumSegments * 20f), 0.01f);
             for (float t = step; t <= creator.NumSegments; t += step)
             {
                 Vector3 currentFineStepPoint = creator.GetPointAtLocal(t);

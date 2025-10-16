@@ -1,6 +1,7 @@
 
 using Unity.Collections;
 using Unity.Mathematics;
+using MrPathV2.Extensions;
 
 namespace MrPathV2
 {
@@ -10,7 +11,7 @@ namespace MrPathV2
         {
             if (spine.VertexCount < 2 || profile == null)
             {
-                contour = new NativeArray<float2>(0, allocator);
+                contour = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float2>(0, allocator);
                 bounds = float4.zero;
                 return;
             }
@@ -18,8 +19,8 @@ namespace MrPathV2
             // 【核心修正】从新的 Profile 参数中获取道路的总范围
             float maxExtent = profile.roadWidth / 2f + profile.falloffWidth;
 
-            var leftPoints = new NativeList<float2>(Allocator.Temp);
-            var rightPoints = new NativeList<float2>(Allocator.Temp);
+            var leftPoints = new NativeList<float2>(spine.VertexCount, Allocator.Temp);
+            var rightPoints = new NativeList<float2>(spine.VertexCount, Allocator.Temp);
 
             for (int i = 0; i < spine.VertexCount; i++)
             {
@@ -51,7 +52,18 @@ namespace MrPathV2
                 contourList.Add(leftPoints[i]);
             }
 
-            contour = contourList.AsArray();
+            leftPoints.Dispose();
+            rightPoints.Dispose();
+
+            // 创建一个新的 NativeArray 来复制数据，而不是直接使用 AsArray()
+            contour = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float2>(contourList.Length, allocator);
+            for (int i = 0; i < contourList.Length; i++)
+            {
+                contour[i] = contourList[i];
+            }
+            
+            // 现在可以安全地释放 contourList
+            contourList.Dispose();
 
             if (contour.Length > 0)
             {
@@ -60,9 +72,6 @@ namespace MrPathV2
                 bounds = new float4(min, max);
             }
             else { bounds = float4.zero; }
-
-            leftPoints.Dispose();
-            rightPoints.Dispose();
         }
     }
 }

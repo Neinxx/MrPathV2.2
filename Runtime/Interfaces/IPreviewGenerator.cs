@@ -26,6 +26,12 @@ namespace MrPathV2
         bool TryFinalizeMesh();
 
         /// <summary>
+        /// 强制等待Job完成并完成网格生成。
+        /// </summary>
+        /// <returns>是否成功完成网格生成</returns>
+        bool ForceFinalizeMesh();
+
+        /// <summary>
         /// 释放内部资源（如Job与Mesh）。
         /// </summary>
         void Dispose();

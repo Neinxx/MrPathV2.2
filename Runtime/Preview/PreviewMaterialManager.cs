@@ -1,95 +1,165 @@
-// PreviewMaterialManager.cs (守护者版)
+
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+
 namespace MrPathV2
 {
-
-    public class PreviewMaterialManager : System.IDisposable
+    /// <summary>
+    /// Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current profile/template.
+    /// Supports both PathPreviewSplat and StylizedRoadPreview shaders.
+    /// </summary>
+    public sealed class PreviewMaterialManager : IDisposable
     {
-        private Material _instancedMaterial;
-        public Material CurrentMaterial => _instancedMaterial;
+        private enum ShaderFlavor { Splat, Stylized, Unknown }
 
-        public List<Material> GetFrameRenderMaterials()
+        private Material _instance;
+        private ShaderFlavor _flavor = ShaderFlavor.Unknown;
+        private int _lastHash = -1;
+        private bool _dirty = true;
+
+        private readonly List<Material> _cachedList = new(1);
+
+        public Material Current => _instance;
+
+        public List<Material> GetRenderMaterials()
         {
-            var list = new List<Material>(1);
-            if (_instancedMaterial != null)
+            if (_dirty)
             {
-                list.Add(_instancedMaterial);
+                _cachedList.Clear();
+                if (_instance != null) _cachedList.Add(_instance);
+                _dirty = false;
             }
-            return list;
+            return _cachedList;
         }
 
-        public void UpdateMaterials(PathProfile profile, Material templateSplatShaderMaterial, float previewAlpha = 0.5f)
+        public void Update(PathProfile profile, Material template, float previewAlpha)
         {
-            if (profile == null  || templateSplatShaderMaterial == null)
+            if (profile == null || template == null)
             {
-                ClearMaterial();
+                Clear();
                 return;
             }
 
-            if (_instancedMaterial == null || _instancedMaterial.shader != templateSplatShaderMaterial.shader)
+            var newHash = CalculateHash(profile, template, previewAlpha);
+            if (newHash == _lastHash && _instance != null) return;
+            _lastHash = newHash;
+
+            if (_instance == null || _instance.shader != template.shader)
             {
-                ClearMaterial();
-                _instancedMaterial = new Material(templateSplatShaderMaterial)
-                {
-                    name = "PathSplatPreview_Instanced",
-                    hideFlags = HideFlags.HideAndDontSave
-                };
+                Clear();
+                _instance = new Material(template) { hideFlags = HideFlags.HideAndDontSave };
+                _flavor = DetectFlavor(_instance.shader);
             }
 
-            // 从 Profile 的 roadRecipe 填充最多4层纹理与Tiling
+            switch (_flavor)
+            {
+                case ShaderFlavor.Splat:
+                    ApplySplat(profile, previewAlpha);
+                    break;
+                case ShaderFlavor.Stylized:
+                    ApplyStylized(profile);
+                    break;
+            }
+
+            _dirty = true;
+        }
+
+        #region Apply helpers
+
+        private void ApplySplat(PathProfile profile, float alpha)
+        {
             var recipe = profile.roadRecipe;
-            for (int i = 0; i < 4; i++)
+            for (var i = 0; i < 4; i++)
             {
-                TerrainLayer terrainLayer = null;
-                if (recipe != null && recipe.blendLayers != null && i < recipe.blendLayers.Count)
-                {
-                    terrainLayer = recipe.blendLayers[i]?.terrainLayer;
-                }
-                if (terrainLayer != null)
-                {
-                    var tex = terrainLayer.diffuseTexture;
-                    if (tex == null)
-                    {
-                        // 当地形层未配置漫反射贴图时，用白贴图回退，避免材质空纹理导致发灰/闪烁
-                        _instancedMaterial.SetTexture($"_Layer{i}_Texture", Texture2D.whiteTexture);
-                        _instancedMaterial.SetVector($"_Layer{i}_Tiling", new Vector4(1, 1, 0, 0));
-                    }
-                    else
-                    {
-                        _instancedMaterial.SetTexture($"_Layer{i}_Texture", tex);
-                        Vector2 tileSize = terrainLayer.tileSize;
-                        if (Mathf.Approximately(tileSize.x, 0f)) tileSize.x = 1f;
-                        if (Mathf.Approximately(tileSize.y, 0f)) tileSize.y = 1f;
-                        _instancedMaterial.SetVector($"_Layer{i}_Tiling", new Vector4(tileSize.x, tileSize.y, 0, 0));
-                    }
-                }
-                else
-                {
-                    _instancedMaterial.SetTexture($"_Layer{i}_Texture", Texture2D.whiteTexture);
-                    _instancedMaterial.SetVector($"_Layer{i}_Tiling", new Vector4(1, 1, 0, 0));
-                }
+                TerrainLayer layer = null;
+                if (recipe?.blendLayers != null && i < recipe.blendLayers.Count)
+                    layer = recipe.blendLayers[i]?.terrainLayer;
+                SetLayer(i, layer);
             }
 
-            // 应用预览透明度（Shader 属性 _PreviewAlpha）
-            _instancedMaterial.SetFloat("_PreviewAlpha", Mathf.Clamp01(previewAlpha));
-            // 边缘渐隐宽度（可按需暴露到设置处）
-            _instancedMaterial.SetFloat("_EdgeFadeStart", 0.7f);
-            _instancedMaterial.SetFloat("_EdgeFadeEnd", 1.0f);
+            _instance.SetFloat("_PreviewAlpha", Mathf.Clamp01(alpha));
+            _instance.SetFloat("_EdgeFadeStart", 0.7f);
+            _instance.SetFloat("_EdgeFadeEnd", 1f);
         }
 
-        public void Dispose()
+        private void ApplyStylized(PathProfile profile)
         {
-            ClearMaterial();
-        }
-
-        private void ClearMaterial()
-        {
-            if (_instancedMaterial != null)
+            var layer = profile.roadRecipe?.blendLayers?[0]?.terrainLayer;
+            if (layer?.diffuseTexture != null)
             {
-                Object.DestroyImmediate(_instancedMaterial);
-                _instancedMaterial = null;
+                _instance.SetTexture("_LayerTex", layer.diffuseTexture);
+                var sz = layer.tileSize;
+                if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
+                if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
+                _instance.SetVector("_LayerTiling", new Vector4(sz.x, sz.y, 0, 0));
+            }
+            else
+            {
+                _instance.SetTexture("_LayerTex", Texture2D.whiteTexture);
+                _instance.SetVector("_LayerTiling", Vector4.one);
+            }
+
+            _instance.SetFloat("_LayerOpacity", 1f);
+            _instance.SetFloat("_BlendMode", 0f);
+        }
+
+        private void SetLayer(int index, TerrainLayer layer)
+        {
+            if (layer?.diffuseTexture != null)
+            {
+                _instance.SetTexture($"_Layer{index}_Texture", layer.diffuseTexture);
+                var sz = layer.tileSize;
+                if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
+                if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
+                _instance.SetVector($"_Layer{index}_Tiling", new Vector4(sz.x, sz.y, 0, 0));
+                _instance.SetColor($"_Layer{index}_Color", layer.specular);
+            }
+            else
+            {
+                _instance.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
+                _instance.SetVector($"_Layer{index}_Tiling", Vector4.one);
+                _instance.SetColor($"_Layer{index}_Color", Color.white);
             }
         }
+
+        #endregion
+
+        #region Utilities
+
+        private static ShaderFlavor DetectFlavor(Shader shader)
+        {
+            if (shader == null) return ShaderFlavor.Unknown;
+            var name = shader.name;
+            return name.Contains("StylizedRoadPreview") ? ShaderFlavor.Stylized :
+                   name.Contains("PathPreviewSplat") ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
+        }
+
+        private static int CalculateHash(PathProfile profile, Material template, float alpha)
+        {
+            unchecked
+            {
+                var hash = 17;
+                hash = hash * 31 + (profile?.GetHashCode() ?? 0);
+                hash = hash * 31 + (template?.GetHashCode() ?? 0);
+                hash = hash * 31 + alpha.GetHashCode();
+                hash = hash * 31 + (profile?.roadRecipe?.GetHashCode() ?? 0);
+                return hash;
+            }
+        }
+
+        private void Clear()
+        {
+            if (_instance != null)
+            {
+                UnityEngine.Object.DestroyImmediate(_instance);
+                _instance = null;
+            }
+            _dirty = true;
+        }
+
+        public void Dispose() => Clear();
+
+        #endregion
     }
 }

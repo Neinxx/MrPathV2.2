@@ -1,4 +1,5 @@
 
+using System;
 using UnityEngine;
 
 namespace MrPathV2
@@ -30,10 +31,49 @@ namespace MrPathV2
         [Header("网格生成")]
         public bool forceHorizontal = true;
         [Tooltip("预览网格在宽度上的分段数")]
-        [Range(2, 64)] public int crossSectionSegments = 16;
+        [Range(3, 64)] public int crossSectionSegments = 16;
 
-        [Header("道路纹理配方")]
+        [Header("渲染预览")]
+        [Tooltip("是否在场景中显示预览网格")] public bool showPreviewMesh = true;
         [Tooltip("拖入 StylizedRoadRecipe 以定义道路的纹理分布与风格")]
         public StylizedRoadRecipe roadRecipe;
+
+        private const int MIN_SEGMENTS = 3;
+        private const int MAX_SEGMENTS = 64;
+
+        private void OnValidate()
+        {
+            // Keep generated parameters within safe range
+            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MIN_SEGMENTS, MAX_SEGMENTS);
+            roadWidth = Mathf.Max(0.01f, roadWidth);
+            falloffWidth = Mathf.Max(0f, falloffWidth);
+
+            // Ensure cross section curve has endpoints at -1 and 1
+            EnsureKey(ref crossSection, -1f, 0f);
+            EnsureKey(ref crossSection, 1f, 0f);
+
+            // Ensure falloff curve starts at 0->1 and ends at 1->0
+            EnsureKey(ref falloffShape, 0f, 1f);
+            EnsureKey(ref falloffShape, 1f, 0f);
+        }
+
+        private static void EnsureKey(ref AnimationCurve curve, float time, float value)
+        {
+            int idx = Array.FindIndex(curve.keys, k => Mathf.Approximately(k.time, time));
+            if (idx >= 0)
+            {
+                // Update value if needed
+                if (!Mathf.Approximately(curve.keys[idx].value, value))
+                {
+                    var k = curve.keys[idx];
+                    k.value = value;
+                    curve.MoveKey(idx, k);
+                }
+            }
+            else
+            {
+                curve.AddKey(new Keyframe(time, value));
+            }
+        }
     }
 }

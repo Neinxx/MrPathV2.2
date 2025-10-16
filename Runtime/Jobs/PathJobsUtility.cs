@@ -3,25 +3,29 @@ using System;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using MrPathV2.Extensions;
+using NativeArrayExtensions = MrPathV2.Extensions.NativeArrayExtensions;
 
 namespace MrPathV2
 {
     public static class PathJobsUtility
     {
         // ... SpineData 结构体保持不变 ...
-        public struct SpineData : IDisposable 
+        public struct SpineData : IDisposable
         {
-            [ReadOnly] public NativeArray<float3> points;
-            [ReadOnly] public NativeArray<float3> tangents;
-            [ReadOnly] public NativeArray<float3> normals;
-            public bool IsCreated => points.IsCreated;
-            public int Length => points.Length;
+            public NativeArray<float3> points;
+            public NativeArray<float3> tangents;
+            public NativeArray<float3> normals;
+
+            public int Length => points.IsCreated ? points.Length : 0;
+            public bool IsCreated => points.IsCreated && tangents.IsCreated && normals.IsCreated;
 
             public SpineData(PathSpine spine, Allocator allocator)
             {
-                points = new NativeArray<float3>(spine.VertexCount, allocator);
-                tangents = new NativeArray<float3>(spine.VertexCount, allocator);
-                normals = new NativeArray<float3>(spine.VertexCount, allocator);
+                points = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
+                tangents = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
+                normals = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
+                
                 for (int i = 0; i < spine.VertexCount; i++)
                 {
                     points[i] = spine.points[i];
@@ -29,11 +33,12 @@ namespace MrPathV2
                     normals[i] = spine.surfaceNormals[i];
                 }
             }
+            
             public void Dispose()
             {
-                if(points.IsCreated) points.Dispose();
-                if(tangents.IsCreated) tangents.Dispose();
-                if(normals.IsCreated) normals.Dispose();
+                points.SafeDispose();
+                tangents.SafeDispose();
+                normals.SafeDispose();
             }
         }
 
@@ -45,11 +50,12 @@ namespace MrPathV2
             [ReadOnly] public bool forceHorizontal;
             [ReadOnly] public int crossSectionSegments;
 
-            [ReadOnly] private NativeArray<float> _bakedCrossSection;
-            [ReadOnly] private NativeArray<float> _bakedFalloff;
+            private NativeArray<float> _bakedCrossSection;
+            private NativeArray<float> _bakedFalloff;
 
-            public bool IsCreated => _bakedCrossSection.IsCreated;
             private const int BAKE_RESOLUTION = 64;
+
+            public bool IsCreated => _bakedCrossSection.IsCreated && _bakedFalloff.IsCreated;
 
             public ProfileData(PathProfile profile, Allocator allocator)
             {
@@ -58,10 +64,10 @@ namespace MrPathV2
                 forceHorizontal = profile.forceHorizontal;
                 crossSectionSegments = profile.crossSectionSegments;
 
-                _bakedCrossSection = new NativeArray<float>(BAKE_RESOLUTION, allocator);
+                _bakedCrossSection = NativeArrayExtensions.CreateTracked<float>(BAKE_RESOLUTION, allocator);
+                _bakedFalloff = NativeArrayExtensions.CreateTracked<float>(BAKE_RESOLUTION, allocator);
+                
                 BakeCurve(profile.crossSection, _bakedCrossSection, -1, 1);
-
-                _bakedFalloff = new NativeArray<float>(BAKE_RESOLUTION, allocator);
                 BakeCurve(profile.falloffShape, _bakedFalloff, 0, 1);
             }
 
@@ -89,9 +95,18 @@ namespace MrPathV2
 
             public void Dispose()
             {
-                if (_bakedCrossSection.IsCreated) _bakedCrossSection.Dispose();
-                if (_bakedFalloff.IsCreated) _bakedFalloff.Dispose();
+                _bakedCrossSection.SafeDispose();
+                _bakedFalloff.SafeDispose();
             }
+        }
+        public static SpineData CreateSpineData(PathSpine spine, Allocator allocator)
+        {
+            return new SpineData(spine, allocator);
+        }
+
+        public static ProfileData CreateProfileData(PathProfile profile, Allocator allocator)
+        {
+            return new ProfileData(profile, allocator);
         }
     }
 }

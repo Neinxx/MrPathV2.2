@@ -19,7 +19,7 @@ namespace MrPathV2
 
         #region 数学法则实现
 
-        // 假设这是你的 BezierPathStrategy.cs 文件
+       
         public override Vector3 GetPointAt(float t, PathData data)
         {
             // --- 修正后的守护逻辑 ---
@@ -165,15 +165,66 @@ namespace MrPathV2
         private void DrawControlLines(ref PathEditorHandles.HandleDrawContext context)
         {
             var creator = context.creator;
-            Handles.color = drawingStyle.bezierControlLineColor;
-            for (int i = 0; i < creator.NumPoints; i++)
+            PreviewLineRenderer lineRenderer = null;
+            bool shouldDispose = false;
+            
+            if (context.lineRenderer != null)
             {
-                var knot = creator.pathData.GetKnot(i);
-                Vector3 worldPos = creator.transform.TransformPoint(knot.Position);
-                Vector3 globalTanIn = creator.transform.TransformPoint(knot.GlobalTangentIn);
-                Vector3 globalTanOut = creator.transform.TransformPoint(knot.GlobalTangentOut);
-                if (i > 0) Handles.DrawDottedLine(worldPos, globalTanIn, 4f);
-                if (i < creator.NumPoints - 1) Handles.DrawDottedLine(worldPos, globalTanOut, 4f);
+                lineRenderer = context.lineRenderer;
+                shouldDispose = false;
+            }
+            else
+            {
+                lineRenderer = new PreviewLineRenderer();
+                shouldDispose = true;
+            }
+
+            // 清除上一帧遗留的控制线，避免重复累积导致卡顿
+            if (!shouldDispose)
+            {
+                lineRenderer.Clear(PreviewLineRenderer.LineType.ControlLine);
+            }
+            
+            try
+            {
+                // 设置控制线样式
+                var controlLineStyle = new PreviewLineRenderer.LineStyle
+                {
+                    color = drawingStyle.bezierControlLineColor,
+                    thickness = 1f,
+                    dashed = true,
+                    dashSize = 4f,
+                    antiAliased = true
+                };
+                
+                // 添加控制线到渲染器
+                for (int i = 0; i < creator.NumPoints; i++)
+                {
+                    var knot = creator.pathData.GetKnot(i);
+                    Vector3 worldPos = creator.transform.TransformPoint(knot.Position);
+                    Vector3 globalTanIn = creator.transform.TransformPoint(knot.GlobalTangentIn);
+                    Vector3 globalTanOut = creator.transform.TransformPoint(knot.GlobalTangentOut);
+                    
+                    if (i > 0) 
+                    {
+                        lineRenderer.AddLine(worldPos, globalTanIn, PreviewLineRenderer.LineType.ControlLine, controlLineStyle);
+                    }
+                    if (i < creator.NumPoints - 1) 
+                    {
+                        lineRenderer.AddLine(worldPos, globalTanOut, PreviewLineRenderer.LineType.ControlLine, controlLineStyle);
+                    }
+                }
+                
+                // 渲染所有线条
+                lineRenderer.Render();
+            }
+            finally
+            {
+                // 如果是临时创建的lineRenderer，需要释放资源
+                if (shouldDispose && lineRenderer != null)
+                {
+                    lineRenderer.Dispose();
+                }
             }
         }
 #if UNITY_EDITOR

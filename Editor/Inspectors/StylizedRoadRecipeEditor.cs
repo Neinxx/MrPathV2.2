@@ -1,684 +1,416 @@
+// MrPathV2/Editor/Inspectors/StylizedRoadRecipeEditor.cs - Final Corrected Version
+
 using UnityEditor;
 using UnityEngine;
+using Sirenix.OdinInspector.Editor;
+using Sirenix.Utilities.Editor;
+using System;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System;
-using UnityEditorInternal;
-using Object = UnityEngine.Object;
+using System.Collections.Generic;
 
 namespace MrPathV2
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
-    public class StylizedRoadRecipeEditor : Editor
+    public class StylizedRoadRecipeEditor : OdinEditor
     {
-        private static class UIConstants
-        {
-            /// <summary>卡片垂直内边距</summary>
-            public const float CardVerticalPadding = 2f;
-            /// <summary>字段之间的标准垂直间距</summary>
-            public const float FieldVerticalSpacing = 8f;
-            /// <summary>折叠箭头宽度</summary>
-            public const float FoldoutWidth = 15f;
-            /// <summary>启用开关宽度</summary>
-            public const float EnabledToggleWidth = 20f;
-            /// <summary>Ping按钮宽度</summary>
-            public const float PingButtonWidth = 22f;
-        }
+        public static event Action<StylizedRoadRecipe> OnRecipeModified;
 
-        private const int PREVIEW_WIDTH = 512;
-        private const int PREVIEW_HEIGHT = 128;
-        private const double MIN_UPDATE_INTERVAL = 0.1;
-
-        private Texture2D _previewTexture;
-        private double _lastUpdateTime;
-        private int _lastRecipeHash;
+        
         private StylizedRoadRecipe _recipe;
+        private int _lastRecipeHash;
 
-        private int _selectedPreviewMode = 0; // 0: Channels, 1: Combined
-        private int _selectedChannel = 0;     // 0: R, 1: G, 2: B, 3: A
+        // --- GPU Resources ---
+        private RenderTexture _previewRT;
 
-        private SerializedProperty _blendLayersProp;
+        // 使用静态共享材质，避免每次打开 Inspector 都重新分配 GPU 资源
+        private static Shader _previewShader;
+        private bool _showCenterLine;
+        private static Material _sharedPreviewMaterial;
+        private Material _previewMaterial;
+        private static bool _missingShaderLogged;
+        private readonly Dictionary<BlendMaskBase, Texture2D> _maskLUTCache = new Dictionary<BlendMaskBase, Texture2D>();
 
-        private Type[] _maskTypes;
-        private string[] _maskTypeNames;
-        private int _selectedMaskTypeIndex = 0;
+        // --- CPU Resources ---
+        private Texture2D _cpuPreviewTexture;
 
-        private ReorderableList _layerList;
+        private int _selectedPreviewMode = 1;
+        private readonly GUIContent[] _previewModeIcons = {
+            new GUIContent("Channels", "通道权重预览 (CPU)"),
+            new GUIContent("Combined", "最终效果混合预览 (GPU)")
+        };
 
+        private Type _selectedMaskType;
+        private static readonly Type[] _maskTypes = FindAvailableMaskTypes();
 
-        #region 生命周期
-
-        private void OnUndoRedo()
+        protected override void OnEnable()
         {
-            UpdatePreviewTexture();
-            Repaint();
-        }
-
-        private void OnEnable()
-        {
-            _blendLayersProp = serializedObject.FindProperty("blendLayers");
+            base.OnEnable();
             _recipe = target as StylizedRoadRecipe;
-            if (_recipe == null) return;
+            if (_maskTypes.Length > 0)
+                _selectedMaskType = _maskTypes[0];
 
-            FindAvailableMaskTypes();
 
-            SetupReorderableList();
+            // --- 预览材质初始化（静态共享）---
+            if (_previewShader == null)
+            {
+                _previewShader = Shader.Find("MrPathV2/StylizedRoadPreview");
+                if (_previewShader == null && !_missingShaderLogged)
+                {
+                    Debug.LogError("MrPath: 预览 Shader 'MrPathV2/StylizedRoadPreview' 未找到！请确认文件存在。");
+                    _missingShaderLogged = true;
+                }
+            }
 
-            Undo.undoRedoPerformed += OnUndoRedo;
-            UpdatePreviewTexture();
+            if (_sharedPreviewMaterial == null && _previewShader != null)
+            {
+                _sharedPreviewMaterial = new Material(_previewShader) { hideFlags = HideFlags.HideAndDontSave };
+            }
+
+            _previewMaterial = _sharedPreviewMaterial; // 使用共享实例，避免重复创建/销毁
+
+            this.Tree.OnPropertyValueChanged += (prop, path) => OnRecipeModified?.Invoke(_recipe);
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
-            Undo.undoRedoPerformed -= OnUndoRedo;
-            if (_previewTexture != null) DestroyImmediate(_previewTexture);
-        }
+            base.OnDisable();
+            if (_previewRT != null) _previewRT.Release();
 
-        #endregion
+
+            // 不再销毁 _previewMaterial，因为它是静态共享实例
+            foreach (var lut in _maskLUTCache.Values) DestroyImmediate(lut);
+            _maskLUTCache.Clear();
+
+            if (_cpuPreviewTexture != null) DestroyImmediate(_cpuPreviewTexture);
+        }
 
         public override void OnInspectorGUI()
         {
-            var recipe = target as StylizedRoadRecipe;
-            if (recipe == null) return;
-
-            serializedObject.Update();
-
-            DrawHeader(recipe);
-
-            _layerList.DoLayoutList();
-
+            base.OnInspectorGUI();
             GUILayout.FlexibleSpace();
 
-            EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
-
-            using (new EditorGUILayout.VerticalScope(GUI.skin.box))
-            {
-                DrawPreview(recipe);
-                EditorGUILayout.Space();
-                DrawMaskCreator();
-            }
-
-            if (serializedObject.ApplyModifiedProperties())
-            {
-                UpdatePreviewTexture();
-                PropagateRecipeChange();
-            }
-        }
-
-        private void DrawMaskCreator()
-        {
+            SirenixEditorGUI.BeginBox();
+            DrawPreview();
             EditorGUILayout.Space();
+            DrawMaskCreator();
+            SirenixEditorGUI.EndBox();
+
+            CheckForChanges();
+        }
+
+        private void CheckForChanges()
+        {
+            int currentHash = ComputeRecipeHash(_recipe);
+            if (currentHash != _lastRecipeHash)
+            {
+                _lastRecipeHash = currentHash;
+
+                // 【FIX】Clear the LUT cache to force regeneration of mask textures
+                foreach (var lut in _maskLUTCache.Values) DestroyImmediate(lut);
+                _maskLUTCache.Clear();
+
+                UpdatePreviewTexture();
+                OnRecipeModified?.Invoke(_recipe);
+            }
+        }
+
+        private void DrawPreview()
+        {
+            EditorGUILayout.LabelField("最终效果预览", EditorStyles.boldLabel);
+
             using (new EditorGUILayout.HorizontalScope())
             {
-                _selectedMaskTypeIndex = EditorGUILayout.Popup(new GUIContent("遮罩列表"), _selectedMaskTypeIndex, _maskTypeNames);
-
-                if (GUILayout.Button("创建遮罩", GUILayout.Width(100)))
+                GUILayout.FlexibleSpace();
+                int newMode = GUILayout.Toolbar(_selectedPreviewMode, _previewModeIcons, GUILayout.MaxWidth(220));
+                if (newMode != _selectedPreviewMode)
                 {
-                    CreateMaskAsset();
+                    _selectedPreviewMode = newMode;
+                    _lastRecipeHash = -1;
                 }
+                GUILayout.FlexibleSpace();
             }
-        }
 
-        private void FindAvailableMaskTypes()
-        {
-            _maskTypes = Assembly.GetAssembly(typeof(BlendMaskBase)).GetTypes()
-                .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
-                .ToArray();
-            _maskTypeNames = _maskTypes.Select(t => t.Name).ToArray();
-        }
 
-        private void CreateMaskAsset()
-        {
-            if (_maskTypes == null || _maskTypes.Length == 0) return;
+            Rect previewRect = GUILayoutUtility.GetRect(0, 180, GUILayout.ExpandWidth(true));
 
-            var recipe = target as StylizedRoadRecipe;
-            if (recipe == null) return;
+            if (_lastRecipeHash == -1) UpdatePreviewTexture();
 
-            var selectedType = _maskTypes[_selectedMaskTypeIndex];
-            var newMask = ScriptableObject.CreateInstance(selectedType);
-
-            string recipePath = AssetDatabase.GetAssetPath(recipe);
-            string folder = Path.GetDirectoryName(recipePath);
-            string masksFolder = Path.Combine(folder, "Masks").Replace("\\", "/");
-            EnsureFolderExists(masksFolder);
-
-            string assetPath = Path.Combine(masksFolder, $"{recipe.name}_{selectedType.Name}.asset").Replace("\\", "/");
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
-
-            AssetDatabase.CreateAsset(newMask, uniquePath);
-            AssetDatabase.SaveAssets();
-            EditorGUIUtility.PingObject(newMask);
-            Debug.Log($"MrPath: 已在 {uniquePath} 创建新的 {selectedType.Name} 资产。");
-        }
-
-        private void DrawHeader(StylizedRoadRecipe recipe)
-        {
-
-        }
-
-        private void SetupReorderableList()
-        {
-            _layerList = new ReorderableList(serializedObject, _blendLayersProp, true, false, true, true);
-            _layerList.drawElementCallback = (rect, index, isActive, isFocused) =>
+            if (_selectedPreviewMode == 0 && _cpuPreviewTexture != null)
             {
-                var layerProp = _layerList.serializedProperty.GetArrayElementAtIndex(index);
-                DrawLayerCard(rect, layerProp, index);
-            };
-            _layerList.elementHeightCallback = (index) =>
-            {
-                var layerProp = _layerList.serializedProperty.GetArrayElementAtIndex(index);
-                return GetPropertyHeight(layerProp);
-            };
-            _layerList.onAddCallback = (list) =>
-            {
-                var index = list.serializedProperty.arraySize;
-                list.serializedProperty.arraySize++;
-                list.index = index;
-                var newLayerProp = list.serializedProperty.GetArrayElementAtIndex(index);
-                newLayerProp.FindPropertyRelative("enabled").boolValue = true;
-                newLayerProp.FindPropertyRelative("opacity").floatValue = 1f;
-                newLayerProp.FindPropertyRelative("blendMode").enumValueIndex = 0;
-                newLayerProp.FindPropertyRelative("terrainLayer").objectReferenceValue = null;
-                newLayerProp.FindPropertyRelative("mask").objectReferenceValue = null;
-                newLayerProp.FindPropertyRelative("isExpanded").boolValue = true;
-            };
-        }
-
-        private float GetPropertyHeight(SerializedProperty layerProp)
-        {
-            var isExpanded = layerProp.FindPropertyRelative("isExpanded");
-            float height = EditorGUIUtility.singleLineHeight; // Header
-            if (isExpanded.boolValue)
-            {
-                // 4 properties, each with line height and spacing
-                height += 4 * (EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing);
+                GUI.DrawTexture(previewRect, _cpuPreviewTexture, ScaleMode.StretchToFill, false);
             }
-            return height + UIConstants.CardVerticalPadding * 2; // Top and bottom padding
-        }
-
-        private void DrawLayerCard(Rect rect, SerializedProperty layerProp, int index)
-        {
-            var layer = _recipe.blendLayers[index];
-
-            // Adjust rect for padding
-            rect.y += UIConstants.CardVerticalPadding;
-            rect.height = EditorGUIUtility.singleLineHeight;
-
-            // --- Header ---
-            var headerRect = new Rect(rect.x, rect.y, rect.width, EditorGUIUtility.singleLineHeight);
-
-            // Foldout
-            var foldoutRect = headerRect;
-            foldoutRect.width = UIConstants.FoldoutWidth;
-            layer.isExpanded = EditorGUI.Foldout(foldoutRect, layer.isExpanded, GUIContent.none, false);
-
-            // Enabled Toggle
-            var enabledRect = headerRect;
-            enabledRect.x = headerRect.xMax - UIConstants.EnabledToggleWidth;
-            enabledRect.width = UIConstants.EnabledToggleWidth;
-            var enabledProp = layerProp.FindPropertyRelative("enabled");
-            enabledProp.boolValue = EditorGUI.Toggle(enabledRect, enabledProp.boolValue);
-
-            // Name Field
-            var nameRect = headerRect;
-            nameRect.x += UIConstants.FoldoutWidth;
-            nameRect.width -= (UIConstants.FoldoutWidth + UIConstants.EnabledToggleWidth);
-            var nameProp = layerProp.FindPropertyRelative("name");
-            nameProp.stringValue = EditorGUI.TextField(nameRect, nameProp.stringValue);
-
-            if (layer.isExpanded)
+            else if (_selectedPreviewMode == 1 && _previewRT != null)
             {
-                var contentRect = new Rect(rect.x, rect.y, rect.width, rect.height);
-                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
-                contentRect.x += UIConstants.FoldoutWidth; // Indent content
-                contentRect.width -= UIConstants.FoldoutWidth;
-
-                // --- Blend Mode ---
-                var blendModeProp = layerProp.FindPropertyRelative("blendMode");
-                EditorGUI.PropertyField(contentRect, blendModeProp, new GUIContent("图层混合"));
-                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
-
-                // --- Opacity ---
-                var opacityProp = layerProp.FindPropertyRelative("opacity");
-                EditorGUI.PropertyField(contentRect, opacityProp, new GUIContent("混合强度"));
-                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
-
-                // --- Terrain Layer ---
-                var terrainLayerProp = layerProp.FindPropertyRelative("terrainLayer");
-                DrawObjectFieldWithPing(contentRect, terrainLayerProp, "地形层");
-                contentRect.y += EditorGUIUtility.singleLineHeight + UIConstants.FieldVerticalSpacing;
-
-                // --- Mask ---
-                var maskProp = layerProp.FindPropertyRelative("mask");
-                DrawObjectFieldWithPing(contentRect, maskProp, "遮罩");
+                GUI.DrawTexture(previewRect, _previewRT, ScaleMode.StretchToFill, false);
             }
-        }
 
-        private void DrawObjectFieldWithPing(Rect position, SerializedProperty property, string label)
-        {
-            var labelRect = position;
-            labelRect.width = EditorGUIUtility.labelWidth;
-            EditorGUI.LabelField(labelRect, label);
-
-            var fieldRect = position;
-            fieldRect.x += EditorGUIUtility.labelWidth;
-            fieldRect.width -= (EditorGUIUtility.labelWidth + UIConstants.PingButtonWidth);
-            EditorGUI.PropertyField(fieldRect, property, GUIContent.none);
-
-            var buttonRect = position;
-            buttonRect.x = fieldRect.xMax;
-            buttonRect.width = UIConstants.PingButtonWidth;
-            using (new EditorGUI.DisabledScope(property.objectReferenceValue == null))
+            float centerY = previewRect.y + previewRect.height * 0.5f;
+            if (_showCenterLine)
             {
-                var icon = EditorGUIUtility.IconContent("d_Target");
-                if (GUI.Button(buttonRect, icon, EditorStyles.label))
-                {
-                    EditorGUIUtility.PingObject(property.objectReferenceValue);
-                }
+                EditorGUI.DrawRect(new Rect(previewRect.x, centerY - 0.5f, previewRect.width, 1f), new Color(1, 1, 1, 0.5f));
             }
-        }
+            
 
-        private void DrawPreview(StylizedRoadRecipe recipe)
-        {
-            // 预览区标题
-            GUILayout.Label(RecipeEditorStyles.PreviewHeader);
-
-            // 更新预览纹理
-            UpdatePreviewTexture();
-
-            // 绘制预览控制工具栏
-            DrawPreviewToolbar();
-
-            // 绘制预览图
-            Rect previewRect = GUILayoutUtility.GetRect(PREVIEW_WIDTH, PREVIEW_HEIGHT, GUILayout.ExpandWidth(true));
-            DrawPreviewTexture(previewRect);
-
-            // 绘制预览帮助文本
-            string helpText = _selectedPreviewMode == 0 ? RecipeEditorStyles.PreviewHelpBoxChannels : RecipeEditorStyles.PreviewHelpBoxCombined;
+            string helpText = _selectedPreviewMode == 0 ?
+                "白线为道路中心。RGBA 通道分别代表前四个图层的权重分布 (CPU 渲染，可能卡顿)。" :
+                "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。";
             EditorGUILayout.HelpBox(helpText, MessageType.None);
+            // EditorGUILayout.Space(2);
+            // _showCenterLine = EditorGUILayout.Toggle("显示中心线", _showCenterLine);
+            // EditorGUILayout.Space(2);
         }
-        private void DrawPreviewToolbar()
-        {
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                // 预览模式切换 (Channels / Combined)
-                _selectedPreviewMode = GUILayout.Toolbar(_selectedPreviewMode, RecipeEditorStyles.PreviewModeIcons, EditorStyles.miniButton, GUILayout.Width(80));
 
-                GUILayout.Space(10);
-
-                // 通道切换 (仅在 Channels 模式下显示)
-                if (_selectedPreviewMode == 0)
-                {
-                    _selectedChannel = GUILayout.Toolbar(_selectedChannel, RecipeEditorStyles.ChannelIcons, EditorStyles.miniButton);
-                }
-            }
-        }
+        #region Preview Generation
 
         private void UpdatePreviewTexture()
         {
-            if (_previewTexture == null)
+            if (_selectedPreviewMode == 0)
             {
-                _previewTexture = new Texture2D(PREVIEW_WIDTH, PREVIEW_HEIGHT, TextureFormat.RGBA32, false)
-                {
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear,
-                    hideFlags = HideFlags.DontSave
-                };
+                GenerateChannelsPreviewCPU(_recipe);
             }
-
-            var recipe = target as StylizedRoadRecipe;
-            int currentHash = ComputeRecipeHash(recipe) * 31 + _selectedPreviewMode;
-
-            if (currentHash != _lastRecipeHash || EditorApplication.timeSinceStartup - _lastUpdateTime > MIN_UPDATE_INTERVAL)
+            else
             {
-                if (_selectedPreviewMode == 0) // Channels
-                    GenerateChannelsPreview(recipe, _previewTexture);
-                else // Combined
-                    GenerateCombinedPreview(recipe, _previewTexture);
-
-                _lastRecipeHash = currentHash;
-                _lastUpdateTime = EditorApplication.timeSinceStartup;
+                if (_previewMaterial != null) GenerateCombinedPreviewGPU(_recipe);
             }
+            Repaint();
         }
-        private void GenerateChannelsPreview(StylizedRoadRecipe recipe, Texture2D target)
-        {
-            if (recipe == null || target == null) return;
-            var colors = new Color[target.width * target.height];
 
-            int layerCount = Mathf.Min(4, recipe.blendLayers != null ? recipe.blendLayers.Count : 0);
-            if (layerCount == 0)
+        private void GenerateCombinedPreviewGPU(StylizedRoadRecipe recipe)
+        {
+            if (_previewRT == null || _previewRT.width != 512 || _previewRT.height != 256)
             {
-                for (int i = 0; i < colors.Length; i++) colors[i] = new Color(0.3f, 0.3f, 0.3f, 1f);
-                target.SetPixels(colors); target.Apply(false, false); return;
+                if (_previewRT != null) _previewRT.Release();
+                _previewRT = new RenderTexture(512, 256, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Default);
+                _previewRT.Create();
             }
 
-            for (int x = 0; x < target.width; x++)
+            float previewWorldWidth = GetPreviewWorldWidth(recipe);
+            var activeLayers = recipe.blendLayers.Where(l => l.enabled && l.mask != null && l.terrainLayer != null).ToList();
+            if (activeLayers.Count == 0)
             {
-                float t = x / (float)(target.width - 1);  // 0..1
-                float pos = Mathf.Lerp(-1f, 1f, t);        // -1..1，0 为中心
+                // ... 清空 RT 的代码不变 ...
+                var oldActive = RenderTexture.active;
+                RenderTexture.active = _previewRT;
+                GL.Clear(true, true, Color.clear);
+                RenderTexture.active = oldActive;
+                return;
+            }
+
+            // --- 乒乓渲染 ---
+            RenderTexture rt1 = RenderTexture.GetTemporary(_previewRT.descriptor);
+            RenderTexture rt2 = RenderTexture.GetTemporary(_previewRT.descriptor);
+
+            Graphics.SetRenderTarget(rt1);
+            GL.Clear(true, true, Color.clear);
+
+            for (int i = 0; i < activeLayers.Count; i++)
+            {
+                var layer = activeLayers[i];
+                Texture2D maskLUT = GetOrCreateMaskLUT(layer.mask, previewWorldWidth);
+                Texture layerTex = layer.terrainLayer.diffuseTexture ?? Texture2D.whiteTexture;
+
+                // 【修改】计算并传递 Tiling 信息
+                // -----------------------------------------------------------------
+                // 1. 获取 TerrainLayer 的 TileSize，它表示贴图在世界空间中覆盖的尺寸。
+                Vector2 tileSize = layer.terrainLayer.tileSize;
+                // 防止除以零
+                if (tileSize.x == 0) tileSize.x = 1;
+                if (tileSize.y == 0) tileSize.y = 1;
+                
+                // 2. 计算在我们的预览宽度内，贴图应该重复多少次。
+                // 垂直方向的平铺我们暂时用不到，但为了完整性可以一并计算。
+                float tilingX = previewWorldWidth / tileSize.x;
+                float tilingY = previewWorldWidth / tileSize.y;
+                // 3. 将平铺数据传递给着色器。
+                _previewMaterial.SetVector("_LayerTiling", new Vector4(tilingX, tilingY, 0, 0));
+                _previewMaterial.SetFloat("_LayerOpacity", Mathf.Clamp01(layer.opacity));
+                _previewMaterial.SetFloat("_BlendMode", (float)layer.blendMode);
+                _previewMaterial.SetTexture("_LayerTex", layerTex);
+                _previewMaterial.SetTexture("_MaskLUT", maskLUT);
+
+                // ... 乒乓切换和 Blit 的代码不变 ...
+                if (i % 2 == 0)
+                {
+                    _previewMaterial.SetTexture("_PreviousResultTex", rt1);
+                    Graphics.Blit(rt1, rt2, _previewMaterial);
+                }
+                else
+                {
+                    _previewMaterial.SetTexture("_PreviousResultTex", rt2);
+                    Graphics.Blit(rt2, rt1, _previewMaterial);
+                }
+            }
+
+            // ... 结尾部分不变 ...
+            Graphics.Blit(activeLayers.Count % 2 != 0 ? rt2 : rt1, _previewRT);
+            RenderTexture.ReleaseTemporary(rt1);
+            RenderTexture.ReleaseTemporary(rt2);
+        }
+
+        // 根据配方（Recipe）的实际道路宽度，动态计算预览所使用的世界宽度。
+        private static float GetPreviewWorldWidth(StylizedRoadRecipe recipe)
+        {
+            if (recipe == null) return 10f;          // 合理的默认值，避免 Null 引发异常
+            return Mathf.Max(0.1f, recipe.width);   // 避免出现 0 带来的除零错误
+        }
+
+        private Texture2D GetOrCreateMaskLUT(BlendMaskBase mask, float previewWorldWidth)
+        {
+            if (_maskLUTCache.TryGetValue(mask, out Texture2D lut))
+            {
+                return lut;
+            }
+
+            lut = new Texture2D(256, 1, TextureFormat.RFloat, false);
+            lut.wrapMode = TextureWrapMode.Clamp;
+            var pixels = new Color[256];
+            for (int i = 0; i < 256; i++)
+            {
+                float pos = Mathf.Lerp(-1f, 1f, i / 255f);
+
+                // 【修改】将 PREVIEW_WORLD_WIDTH 传递给 Evaluate 方法
+                
+                float value = mask.Evaluate(pos, previewWorldWidth);
+
+                pixels[i] = new Color(value, 0, 0, 0);
+            }
+            lut.SetPixels(pixels);
+            lut.Apply(false);
+            _maskLUTCache[mask] = lut;
+            return lut;
+        }
+
+        /// <summary>
+        /// 【FIX】Filled in the missing CPU preview logic
+        /// </summary>
+        private void GenerateChannelsPreviewCPU(StylizedRoadRecipe recipe)
+        {
+            if (_cpuPreviewTexture == null || _cpuPreviewTexture.width != 512 || _cpuPreviewTexture.height != 256)
+            {
+                if (_cpuPreviewTexture != null) DestroyImmediate(_cpuPreviewTexture);
+                _cpuPreviewTexture = new Texture2D(512, 256, TextureFormat.RGBA32, false);
+            }
+
+            if (recipe == null) return;
+            var pixels = new Color[_cpuPreviewTexture.width * _cpuPreviewTexture.height];
+           
+           int layerCount = Mathf.Min(4, recipe.blendLayers.Count);
+           float previewWorldWidth = GetPreviewWorldWidth(recipe);
+
+            for (int y = 0; y < _cpuPreviewTexture.height; y++)
+            {
+                float t = y / (float)(_cpuPreviewTexture.height - 1);
+                float pos = Mathf.Lerp(-1f, 1f, t);
 
                 float r = 0f, g = 0f, b = 0f, a = 0f;
-                for (int i = 0; i < layerCount; i++)
+
+                if (layerCount > 0)
                 {
-                    var layer = recipe.blendLayers[i];
-                    if (layer == null || !layer.enabled) continue;
-                    var brush = layer.mask;          // 新笔刷资产
-                    var mask = layer.blendMask;      // 旧字段回退
-                    float v = 1f;
-                    if (brush != null)
+                    for (int i = 0; i < layerCount; i++)
                     {
-                        v = Mathf.Clamp01(brush.Evaluate(pos));
-                    }
-                    else if (mask != null)
-                    {
-                        switch (mask.maskType)
+                        var layer = recipe.blendLayers[i];
+                        if (layer == null || !layer.enabled || layer.mask == null) continue;
+                       
+                       float v = Mathf.Clamp01(layer.mask.Evaluate(pos, previewWorldWidth)) * Mathf.Clamp01(layer.opacity);
+                        switch (i)
                         {
-                            case BlendMaskType.PositionalGradient:
-                                v = mask.gradient != null ? Mathf.Clamp01(mask.gradient.Evaluate(pos)) : 1f;
-                                break;
-                            case BlendMaskType.ProceduralNoise:
-                                float scale = Mathf.Max(0.0001f, mask.noiseScale);
-                                v = Mathf.Clamp01(Mathf.PerlinNoise(x / scale, 0.5f) * mask.noiseStrength);
-                                break;
-                            case BlendMaskType.CustomTexture:
-                                if (mask.customTexture != null)
-                                {
-                                    var tex2D = mask.customTexture as Texture2D;
-                                    if (tex2D != null && tex2D.isReadable)
-                                    {
-                                        var texX = Mathf.Clamp(Mathf.RoundToInt(t * (tex2D.width - 1)), 0, tex2D.width - 1);
-                                        v = tex2D.GetPixel(texX, tex2D.height / 2).a;
-                                    }
-                                    else
-                                    {
-                                        v = 1f; // 不可读时回退为满影响，避免异常
-                                    }
-                                }
-                                else v = 0f;
-                                break;
+                            case 0: r = Blend(0, v, layer.blendMode); break;
+                            case 1: g = Blend(0, v, layer.blendMode); break;
+                            case 2: b = Blend(0, v, layer.blendMode); break;
+                            case 3: a = Blend(0, v, layer.blendMode); break;
                         }
-                    }
-                    v *= Mathf.Clamp01(layer.opacity);
-                    switch (i)
-                    {
-                        case 0: r = Blend(r, v, layer.blendMode); break;
-                        case 1: g = Blend(g, v, layer.blendMode); break;
-                        case 2: b = Blend(b, v, layer.blendMode); break;
-                        case 3: a = Blend(a, v, layer.blendMode); break;
                     }
                 }
 
                 float sum = r + g + b + a;
                 if (sum > 1e-6f) { float inv = 1f / sum; r *= inv; g *= inv; b *= inv; a *= inv; }
-                var c = new Color(r, g, b, a);
-                for (int y = 0; y < target.height; y++) colors[y * target.width + x] = c;
-            }
 
-            target.SetPixels(colors);
-            target.Apply(false, false);
+                var finalColor = new Color(r, g, b, a);
+                for (int x = 0; x < _cpuPreviewTexture.width; x++)
+                {
+                    pixels[y * _cpuPreviewTexture.width + x] = finalColor;
+                }
+            }
+            _cpuPreviewTexture.SetPixels(pixels);
+            _cpuPreviewTexture.Apply(false, false);
         }
 
-        private void GenerateCombinedPreview(StylizedRoadRecipe recipe, Texture2D target)
+        #endregion
+
+        #region Hashing & Unchanged Methods
+
+        private int ComputeRecipeHash(StylizedRoadRecipe r)
         {
-            if (recipe == null || target == null) return;
-            var colors = new Color[target.width * target.height];
-
-            // 背景初始化为黑色
-            for (int i = 0; i < colors.Length; i++) colors[i] = Color.black;
-
-            // 横向坐标映射到 -1..1；每列按 Mask 灰度遮罩 Layer 的地形贴图颜色，再跨层叠加
-            for (int x = 0; x < target.width; x++)
+            unchecked
             {
-                float t = (float)x / (target.width - 1);
-                float pos = Mathf.Lerp(-1f, 1f, t);
+                int hash = 17;
+                hash = hash * 23 + _selectedPreviewMode.GetHashCode();
+                if (r == null) return hash;
 
-                Color columnColor = Color.black;
-                foreach (var layer in recipe.blendLayers)
+                foreach (var layer in r.blendLayers)
                 {
-                    if (layer == null || !layer.enabled) continue;
-                    var brush = layer.mask;          // 新笔刷资产
-                    var mask = layer.blendMask;      // 旧字段回退
-                    float v = 1f;
-                    if (brush != null)
+                    if (layer == null) continue;
+                    hash = hash * 23 + layer.enabled.GetHashCode();
+                    hash = hash * 23 + layer.opacity.GetHashCode();
+                    hash = hash * 23 + layer.blendMode.GetHashCode();
+                    hash = hash * 23 + (layer.terrainLayer != null ? layer.terrainLayer.GetInstanceID() : 0);
+
+                    if (layer.mask != null)
                     {
-                        v = Mathf.Clamp01(brush.Evaluate(pos));
+                        hash = hash * 23 + JsonUtility.ToJson(layer.mask).GetHashCode();
                     }
-                    else if (mask != null)
-                    {
-                        switch (mask.maskType)
-                        {
-                            case BlendMaskType.PositionalGradient:
-                                v = mask.gradient != null ? Mathf.Clamp01(mask.gradient.Evaluate(pos)) : 1f;
-                                break;
-                            case BlendMaskType.ProceduralNoise:
-                                float scale = Mathf.Max(0.0001f, mask.noiseScale);
-                                v = Mathf.Clamp01(Mathf.PerlinNoise(x / scale, 0.5f) * mask.noiseStrength);
-                                break;
-                            case BlendMaskType.CustomTexture:
-                                if (mask.customTexture != null)
-                                {
-                                    var tex2D = mask.customTexture as Texture2D;
-                                    if (tex2D != null && tex2D.isReadable)
-                                    {
-                                        var u = t;
-                                        var texX = Mathf.Clamp(Mathf.RoundToInt(u * (tex2D.width - 1)), 0, tex2D.width - 1);
-                                        v = tex2D.GetPixel(texX, tex2D.height / 2).a; // 取 Alpha 为遮罩
-                                    }
-                                    else
-                                    {
-                                        v = 1f; // 不可读时回退为满影响，避免异常
-                                    }
-                                }
-                                else v = 0f;
-                                break;
-                        }
-                    }
-
-                    // 采样该 Layer 的地形贴图颜色（简化为沿横向采样一行）
-                    var layerColor = SampleLayerColor(layer.terrainLayer, t);
-
-                    // 应用不透明度与 Mask 强度；v 作为当前层对列颜色的影响权重
-                    float influence = Mathf.Clamp01(layer.opacity) * Mathf.Clamp01(v);
-
-                    // 先按 BlendMode 计算本层与已有列颜色的组合结果，再按 influence 线性插值应用
-                    var blended = BlendColor(columnColor, layerColor, layer.blendMode);
-                    columnColor = Color.Lerp(columnColor, blended, influence);
                 }
-
-                for (int y = 0; y < target.height; y++) colors[y * target.width + x] = columnColor;
+                return hash;
             }
-
-            target.SetPixels(colors);
-            target.Apply(false, false);
         }
 
-        private void DrawPreviewTexture(Rect rect)
+        private void DrawMaskCreator()
         {
-            if (_previewTexture == null) return;
-
-            // 使用自定义着色器来显示单通道
-            if (_selectedPreviewMode == 0 && _selectedChannel > 0)
+            using (new EditorGUILayout.HorizontalScope())
             {
-                var shader = Shader.Find("Hidden/MrPath/ChannelView");
-                if (shader != null)
+                if (_maskTypes.Length > 0)
                 {
-                    var mat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-                    mat.SetTexture("_MainTex", _previewTexture);
-                    mat.SetFloat("_Channel", (float)_selectedChannel); // 1=R, 2=G, 3=B, 4=A
-                    EditorGUI.DrawPreviewTexture(rect, _previewTexture, mat, ScaleMode.StretchToFill);
-                    DestroyImmediate(mat);
+                    int currentIndex = Array.IndexOf(_maskTypes, _selectedMaskType);
+                    var typeNames = _maskTypes.Select(t => t.Name).ToArray();
+                    int newIndex = EditorGUILayout.Popup(new GUIContent("遮罩列表"), currentIndex, typeNames);
+                    if (newIndex != currentIndex) _selectedMaskType = _maskTypes[newIndex];
                 }
+                if (GUILayout.Button("创建遮罩", GUILayout.Width(100))) { CreateMaskAsset(); }
             }
-            else // RGB 或 Combined 模式直接绘制
-            {
-                GUI.DrawTexture(rect, _previewTexture, ScaleMode.StretchToFill, false);
-            }
-
-            // 绘制中心线
-            float centerX = rect.x + rect.width * 0.5f;
-            EditorGUI.DrawRect(new Rect(centerX - 0.5f, rect.y, 1f, rect.height), new Color(1f, 1f, 1f, 0.5f));
         }
-
-        // 将当前配方的变更传播给场景中的 PathCreator，以驱动预览刷新
-        private void PropagateRecipeChange()
+        private void CreateMaskAsset()
         {
-            var recipe = target as StylizedRoadRecipe;
-            if (recipe == null) return;
-
-            var creators = Object.FindObjectsOfType<PathCreator>();
-            foreach (var creator in creators)
-            {
-                var profile = creator?.profile;
-                if (profile != null && profile.roadRecipe == recipe)
-                {
-                    creator.NotifyProfileModified();
-                }
-            }
-
-            // 刷新所有场景视图，确保立即看到更新
-            SceneView.RepaintAll();
+            if (_selectedMaskType == null) { Debug.LogError("没有可用的遮罩类型！"); return; }
+            var newMask = CreateInstance(_selectedMaskType);
+            string recipePath = AssetDatabase.GetAssetPath(_recipe);
+            string folder = Path.GetDirectoryName(recipePath) ?? "Assets";
+            string masksFolder = Path.Combine(folder, "Masks");
+            if (!AssetDatabase.IsValidFolder(masksFolder)) { AssetDatabase.CreateFolder(folder, "Masks"); }
+            string assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{_selectedMaskType.Name}.asset").Replace("\\", "/");
+            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+            AssetDatabase.CreateAsset(newMask, uniquePath);
+            AssetDatabase.SaveAssets();
+            EditorGUIUtility.PingObject(newMask);
+            Debug.Log($"MrPath: 已在 {uniquePath} 创建新的 {_selectedMaskType.Name} 资产。");
         }
-
-
-
-
-        private Color SampleLayerColor(TerrainLayer layer, float u)
+        private static Type[] FindAvailableMaskTypes()
         {
-            if (layer == null || layer.diffuseTexture == null) return Color.white;
-            var tex = layer.diffuseTexture as Texture2D;
-            if (tex != null && tex.isReadable)
-            {
-                return tex.GetPixelBilinear(u, 0.5f);
-            }
-            return Color.white;
+            return AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(assembly => assembly.GetTypes())
+                .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
+                .ToArray();
         }
-
-
-
-
         private float Blend(float baseValue, float layerValue, BlendMode mode)
         {
             switch (mode)
             {
-                case BlendMode.Multiply: return baseValue * layerValue;
+                case BlendMode.Normal: return layerValue;
                 case BlendMode.Add: return Mathf.Clamp01(baseValue + layerValue);
-                case BlendMode.Additive: return Mathf.Clamp01(baseValue + layerValue);
-                case BlendMode.Lerp: return Mathf.Lerp(baseValue, layerValue, Mathf.Clamp01(layerValue));
-                case BlendMode.Overlay:
-                    return baseValue < 0.5f
-                        ? 2f * baseValue * layerValue
-                        : 1f - 2f * (1f - baseValue) * (1f - layerValue);
-                case BlendMode.Screen: return 1f - (1f - baseValue) * (1f - layerValue);
-                default: return layerValue; // Normal：上方覆盖当前列
+                case BlendMode.Multiply: return baseValue * layerValue;
+                default: return layerValue;
             }
         }
-
-        private Color BlendColor(Color baseColor, Color layerColor, BlendMode mode)
-        {
-            switch (mode)
-            {
-                case BlendMode.Multiply:
-                    return new Color(baseColor.r * layerColor.r, baseColor.g * layerColor.g, baseColor.b * layerColor.b, 1f);
-                case BlendMode.Add:
-                case BlendMode.Additive:
-                    return new Color(
-                        Mathf.Clamp01(baseColor.r + layerColor.r),
-                        Mathf.Clamp01(baseColor.g + layerColor.g),
-                        Mathf.Clamp01(baseColor.b + layerColor.b),
-                        1f);
-                case BlendMode.Lerp:
-                    return Color.Lerp(baseColor, layerColor, 0.5f);
-                case BlendMode.Overlay:
-                    float Overlay(float a, float b) => a < 0.5f ? 2f * a * b : 1f - 2f * (1f - a) * (1f - b);
-                    return new Color(
-                        Overlay(baseColor.r, layerColor.r),
-                        Overlay(baseColor.g, layerColor.g),
-                        Overlay(baseColor.b, layerColor.b),
-                        1f);
-                case BlendMode.Screen:
-                    return new Color(
-                        1f - (1f - baseColor.r) * (1f - layerColor.r),
-                        1f - (1f - baseColor.g) * (1f - layerColor.g),
-                        1f - (1f - baseColor.b) * (1f - layerColor.b),
-                        1f);
-                default:
-                    return layerColor; // Normal：直接使用上方图层颜色
-            }
-        }
-
-
-
-
-
-        private void EnsureFolderExists(string folderPath)
-        {
-            if (AssetDatabase.IsValidFolder(folderPath)) return;
-            string parent = Path.GetDirectoryName(folderPath);
-            string newFolderName = Path.GetFileName(folderPath);
-            if (!AssetDatabase.IsValidFolder(parent))
-            {
-                EnsureFolderExists(parent);
-            }
-            AssetDatabase.CreateFolder(parent, newFolderName);
-        }
-
-
-
-
-
-        private int ComputeRecipeHash(StylizedRoadRecipe recipe)
-        {
-            unchecked
-            {
-                int h = 17;
-                if (recipe == null || recipe.blendLayers == null) return h;
-
-                h = h * 23 + recipe.blendLayers.Count;
-                foreach (var layer in recipe.blendLayers)
-                {
-                    if (layer == null) continue;
-                    h = h * 23 + (int)layer.blendMode;
-                    h = h * 23 + layer.opacity.GetHashCode();
-                    h = h * 23 + layer.enabled.GetHashCode();
-                    if (layer.terrainLayer != null) h = h * 23 + layer.terrainLayer.GetInstanceID();
-
-                    var brush = layer.mask;
-                    if (brush == null) continue;
-
-                    h = h * 23 + brush.GetInstanceID();
-
-                    // [核心增强] 识别所有噪声类型
-                    switch (brush)
-                    {
-                        case GradientMask gm:
-                            if (gm.gradient != null) h = h * 23 + gm.gradient.GetHashCode();
-                            break;
-                        case NoiseMask nm:
-                            h = h * 23 + nm.scale.GetHashCode(); h = h * 23 + nm.strength.GetHashCode();
-                            break;
-                        // case FractalNoiseMask fnm:
-                        //     h = h * 23 + fnm.scale.GetHashCode(); h = h * 23 + fnm.strength.GetHashCode();
-                        //     h = h * 23 + fnm.octaves.GetHashCode(); h = h * 23 + fnm.lacunarity.GetHashCode(); h = h * 23 + fnm.persistence.GetHashCode();
-                        //     break;
-                        // case RidgeNoiseMask rnm:
-                        //     h = h * 23 + rnm.scale.GetHashCode(); h = h * 23 + rnm.strength.GetHashCode();
-                        //     h = h * 23 + rnm.octaves.GetHashCode(); h = h * 23 + rnm.ridgeSharpness.GetHashCode();
-                        //     break;
-                        // case VoronoiNoiseMask vnm:
-                        //     h = h * 23 + vnm.scale.GetHashCode(); h = h * 23 + vnm.strength.GetHashCode();
-                        //     h = h * 23 + vnm.type.GetHashCode(); h = h * 23 + vnm.randomness.GetHashCode();
-                        //     break;
-                        case BrushStrokeNoiseMask bsnm:
-                            h = h * 23 + bsnm.scale.GetHashCode(); h = h * 23 + bsnm.strength.GetHashCode();
-                            h = h * 23 + bsnm.strengthVariation.GetHashCode(); h = h * 23 + bsnm.strokeWidth.GetHashCode();
-                            h = h * 23 + bsnm.widthVariation.GetHashCode(); h = h * 23 + bsnm.jitter.GetHashCode();
-                            break;
-
-                    }
-                }
-                return h;
-            }
-        }
+        #endregion
     }
 }

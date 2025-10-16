@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af06d4dead14eb847b4504bc43ad56fa, type: 3}
   m_Name: StylizedRoadRecipe_BrushStrokeNoiseMask
   m_EditorClassIdentifier: 
-  scale: 5
-  strength: 1
-  strengthVariation: 0.5
-  strokeWidth: 0.8
-  widthVariation: 0.7
-  jitter: 1
+  scale: 1.8
+  strength: 0.732
+  strengthVariation: 0.712
+  strokeWidth: 1.519
+  widthVariation: 0.139
+  jitter: 0.27

@@ -12,14 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d3637d6d60e87ca4f85d92d1da678ba8, type: 3}
   m_Name: DefaultPathProfile
   m_EditorClassIdentifier: 
-  curveType: 0
-  generationPrecision: 1
-  roadWidth: 5
+  curveType: 1
+  generationPrecision: 4.56
+  roadWidth: 6.09
   crossSection:
     serializedVersion: 2
     m_Curve:
     - serializedVersion: 3
       time: -1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0
       value: 0
       inSlope: 0
       outSlope: 0
@@ -39,7 +48,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  falloffWidth: 2
+  falloffWidth: 0.06
   falloffShape:
     serializedVersion: 2
     m_Curve:
@@ -55,8 +64,8 @@ MonoBehaviour:
     - serializedVersion: 3
       time: 1
       value: 0
-      inSlope: 0
-      outSlope: 0
+      inSlope: 2
+      outSlope: 2
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
@@ -65,8 +74,9 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   snapToTerrain: 0
-  heightOffset: 0.1
-  smoothness: 10
+  heightOffset: 0
+  smoothness: 100
   forceHorizontal: 1
-  crossSectionSegments: 16
-  roadRecipe: {fileID: 0}
+  crossSectionSegments: 27
+  showPreviewMesh: 1
+  roadRecipe: {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}

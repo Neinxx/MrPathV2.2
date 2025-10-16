@@ -1,77 +1,162 @@
-using UnityEditor;
+using System;
 using UnityEngine;
+using UnityEditor;
+
 
 namespace MrPathV2
 {
     /// <summary>
-    /// 封装 PathCreatorEditor 依赖的上下文：服务、处理器、预览管理器与状态。
-    /// 负责初始化与释放，避免 Editor 类过胖。
+    /// 路径编辑器上下文，封装编辑器依赖项并提供统一的访问接口
     /// </summary>
-    public class PathEditorContext
+    public class PathEditorContext : IDisposable
     {
-        public PathCreator Target { get; private set; }
+        private PathCreator _target;
+        private IHeightProvider _heightProvider;
+        private PathPreviewManager _previewManager;
+        private PreviewMaterialManager _materialManager;
+        private TerrainOperationHandler _terrainHandler;
+        private EditorRefreshManager _refreshManager;
+        private MrPathProjectSettings mrPathProjectSettings;
 
-        // 服务
-        public IPreviewGenerator PreviewGenerator { get; private set; }
-        public IHeightProvider HeightProvider { get; private set; }
-        public PreviewMaterialManager MaterialManager { get; private set; }
-
-        // 处理器
-        public PathInputHandler InputHandler { get; private set; }
-        public TerrainOperationHandler TerrainHandler { get; private set; }
-
-        // 预览
-        public PathPreviewManager PreviewManager { get; private set; }
-
-        // 场景交互状态
+        // 编辑器状态
         public int HoveredPointIdx { get; set; } = -1;
         public int HoveredSegmentIdx { get; set; } = -1;
-        public bool IsDraggingHandle { get; set; }
+        public bool IsDraggingHandle { get; set; } = false;
 
-        // 地形操作状态（统一）
-        // 当前正在执行的操作标识，用于 UI 高亮与禁用逻辑。
-        // 由 TerrainOperationHandler 在执行期间设置/清除。
-        public string CurrentOperationId { get; set; }
+        // 公共属性
+        public PathCreator Target => _target;
+        public IHeightProvider HeightProvider => _heightProvider;
+        public PathPreviewManager PreviewManager => _previewManager;
+        public PreviewMaterialManager MaterialManager => _materialManager;
+        public TerrainOperationHandler TerrainHandler => _terrainHandler;
 
-        public void Initialize(PathCreator creator)
+        // --- 新增属性/方法以满足编译器错误 ---
+        /// <summary>
+        /// 当前正在执行的地形操作ID（由 TerrainOperationsPanel 进行设置/查询）
+        /// </summary>
+        public string CurrentOperationId { get; set; } = null;
+
+        /// <summary>
+        /// 预览网格生成器，供外部（如 TerrainOperationsPanel）读取预览网格信息
+        /// </summary>
+        public IPreviewGenerator PreviewGenerator => _previewManager?.Generator;
+
+        /// <summary>
+        /// 输入事件处理器
+        /// </summary>
+        public PathInputHandler InputHandler { get; private set; }
+
+        public PathEditorContext(PathCreator target)
         {
-            Target = creator;
-            if (Target == null) return;
-
-            var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
-            var advancedSettings = projectSettings.advancedSettings;
-            var appearanceSettings = projectSettings.appearanceDefaults;
-
-            PreviewGenerator = (advancedSettings?.previewGeneratorFactory != null) ? advancedSettings.previewGeneratorFactory.Create() : new PreviewMeshControllerAdapter(new PreviewMeshController());
-            HeightProvider = (advancedSettings?.heightProviderFactory != null) ? advancedSettings.heightProviderFactory.Create() : new TerrainHeightProviderAdapter(new TerrainHeightProvider());
-            MaterialManager = (advancedSettings?.previewMaterialManagerFactory != null) ? advancedSettings.previewMaterialManagerFactory.Create() : new PreviewMaterialManager();
-
-            InputHandler = new PathInputHandler();
-            TerrainHandler = new TerrainOperationHandler(HeightProvider);
-
-            Material splatMaterialTemplate = appearanceSettings?.previewMaterialTemplate;
-            PreviewManager = new PathPreviewManager(PreviewGenerator, MaterialManager, splatMaterialTemplate);
+            _target = target ?? throw new ArgumentNullException(nameof(target));
+            _refreshManager = new EditorRefreshManager();
+            InitializeDependencies();
         }
 
-        public void Dispose()
-        {
-            PreviewManager?.Dispose();
-            HeightProvider?.Dispose();
-            MaterialManager?.Dispose();
-            TerrainHandler?.Dispose();
+        /// <summary>
+        /// 兼容旧代码：保留带参数的重载，但内部已不再需要额外参数。
+        /// </summary>
+        public void Initialize(PathCreator target) { /* 参数已无实际用途，保留以兼容旧接口 */ }
 
-            CurrentOperationId = null;
+        private void InitializeDependencies()
+        {
+            try
+            {
+                // 先获取项目设置，供后续依赖初始化使用
+                mrPathProjectSettings = MrPathProjectSettings.GetOrCreateSettings();
+
+                // 初始化高度提供器
+                _heightProvider = new TerrainHeightProvider();
+
+                // 初始化材质管理器
+                _materialManager = new PreviewMaterialManager();
+
+                // 初始化预览管理器
+                var generator = new DefaultPreviewGenerator();
+                _previewManager = new PathPreviewManager(generator, _materialManager,
+                mrPathProjectSettings.appearanceDefaults?.previewMaterialTemplate,
+                mrPathProjectSettings.appearanceDefaults != null ? mrPathProjectSettings.appearanceDefaults.previewAlpha : 0.5f);
+
+                // 初始化地形操作处理器
+                _terrainHandler = new TerrainOperationHandler(_heightProvider);
+
+                // 初始化输入处理器
+                InputHandler = new PathInputHandler();
+
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to initialize PathEditorContext dependencies: {ex.Message}");
+                Dispose();
+                throw;
+            }
         }
 
-        public void MarkDirty()
+        /// <summary>
+        /// 请求刷新预览，使用防抖动机制
+        /// </summary>
+        public void RequestPreviewRefresh(bool forceImmediate = false)
         {
-            PreviewManager?.MarkDirty();
-            SceneView.RepaintAll();
+            if (_previewManager == null) return;
+
+            _refreshManager.RequestRefresh("preview_refresh", () =>
+            {
+                try
+                {
+                    _previewManager.Update(_target,_heightProvider);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Preview refresh failed: {ex.Message}");
+                }
+            }, forceImmediate);
         }
 
-        public bool IsPathValid()
+        /// <summary>
+        /// 请求刷新场景视图
+        /// </summary>
+        public void RequestSceneViewRefresh(bool forceImmediate = false)
+        {
+            _refreshManager.RequestRefresh("scene_view_refresh", () =>
+            {
+                SceneView.RepaintAll();
+            }, forceImmediate);
+        }
+
+        /// <summary>
+        /// 请求刷新Inspector
+        /// </summary>
+        public void RequestInspectorRefresh(bool forceImmediate = false)
+        {
+            _refreshManager.RequestRefresh("inspector_refresh", () =>
+            {
+                if (_target != null)
+                {
+                    EditorUtility.SetDirty(_target);
+                }
+            }, forceImmediate);
+        }
+
+        public bool CanGeneratePreview()
         {
             return Target != null && Target.profile != null && Target.pathData.KnotCount >= 2;
+        }
+
+        /// <summary>
+        /// 判断 PathCreator 当前状态是否合法，供外部快速查询。
+        /// </summary>
+        public bool IsPathValid()
+        {
+            return Target != null && Target.IsValidState();
+        }
+
+        /// <summary>
+        /// 标记预览为脏，并请求刷新。
+        /// </summary>
+        public void MarkDirty()
+        {
+            _previewManager?.MarkDirty();
+            RequestPreviewRefresh();
         }
 
         public PathEditorHandles.HandleDrawContext CreateHandleContext()
@@ -84,6 +169,7 @@ namespace MrPathV2
                 isDragging = IsDraggingHandle,
                 hoveredPointIndex = HoveredPointIdx,
                 hoveredSegmentIndex = HoveredSegmentIdx,
+                lineRenderer = PreviewManager?.GetSharedLineRenderer() 
             };
         }
 
@@ -92,6 +178,26 @@ namespace MrPathV2
             HoveredPointIdx = context.hoveredPointIndex;
             HoveredSegmentIdx = context.hoveredSegmentIndex;
             IsDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
+        }
+
+        public void Dispose()
+        {
+            // 取消所有待执行的刷新操作
+            _refreshManager?.ClearAllPendingRefreshes();
+
+            // 释放各个组件
+            PreviewManager?.Dispose();
+            HeightProvider?.Dispose();
+            MaterialManager?.Dispose();
+            TerrainHandler?.Dispose();
+            _refreshManager?.Dispose();
+
+            // 清空引用
+            _previewManager = null;
+            _heightProvider = null;
+            _materialManager = null;
+            _terrainHandler = null;
+            _refreshManager = null;
         }
     }
 }

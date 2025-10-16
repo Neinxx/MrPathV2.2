@@ -8,21 +8,11 @@ namespace MrPathV2
     /// </summary>
     public class MrPathAdvancedSettings : ScriptableObject
     {
-        [Header("依赖工厂设置 (Dependency Injection)")]
-        [Tooltip("用于创建预览生成器(IPreviewGenerator)的工厂")]
-        public PreviewGeneratorFactory previewGeneratorFactory;
+        [Header("策略设置 (Strategy Settings)")]
+        [Tooltip("默认路径策略，用于新创建的路径")]
+        public PathStrategy defaultStrategy;
 
-        [Tooltip("用于创建高度提供者(IHeightProvider)的工厂")]
-        public HeightProviderFactory heightProviderFactory;
-
-        [Tooltip("用于创建预览材质管理器(PreviewMaterialManager)的工厂")]
-        public PreviewMaterialManagerFactory previewMaterialManagerFactory;
-
-        [Header("策略映射覆盖 (Strategy Overrides)")]
-        [Tooltip("覆盖 Bezier 曲线的策略资产（可为空则使用注册表）")]
-        public PathStrategy bezierStrategy;
-
-        [Tooltip("覆盖 Catmull-Rom 曲线的策略资产（可为空则使用注册表）")]
-        public PathStrategy catmullRomStrategy;
+        [Tooltip("所有可用的路径策略列表")]
+        public PathStrategy[] availableStrategies;
     }
 }

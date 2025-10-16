@@ -1,24 +1,28 @@
 // TerrainHeightProvider.cs (智能懒汉版)
+using System;
 using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
+using MrPathV2.Memory; // NEW: access UnifiedMemory and MemoryOwner
 namespace MrPathV2
 {
     public class TerrainHeightProvider : IHeightProvider
     {
-        private class TerrainCache
+        private struct TerrainCache : IDisposable
         {
             public Terrain terrain;
             public TerrainData data;
             public Rect bounds;
-            public NativeArray<float> heights;
+            // REPLACED: NativeArray<float> heights;
+            public MemoryOwner<NativeArray<float>> heightsOwner; // 持有包装器以便安全释放
+            public NativeArray<float> Heights => heightsOwner.Collection; // 便捷访问器
             public int resolution;
             public Vector3 position;
             public Vector3 size;
 
             public void Dispose()
             {
-                if (heights.IsCreated) heights.Dispose();
+                heightsOwner?.Dispose(); // 统一释放
             }
         }
 
@@ -27,11 +31,11 @@ namespace MrPathV2
 
         private readonly List<TerrainCache> m_TerrainCaches = new List<TerrainCache>();
         private bool m_IsInitialized = false;
-        private bool m_IsDirty = true; // 初始状态为“脏”，强制在第一次使用时构建缓存
+        private bool m_IsDirty = true; // 初始状态为"脏"，强制在第一次使用时构建缓存
 
         public TerrainHeightProvider()
         {
-            // 构造函数现在什么都不做，把构建操作延迟
+            // 不再使用对象池
         }
 
         /// <summary>
@@ -86,7 +90,8 @@ namespace MrPathV2
                 var size = data.size;
 
                 var heights2D = data.GetHeights(0, 0, data.heightmapResolution, data.heightmapResolution);
-                var heightsNative = new NativeArray<float>(heights2D.Length, Allocator.Persistent);
+                var owner = UnifiedMemory.Instance.RentNativeArray<float>(heights2D.Length, Allocator.Persistent);
+                var heightsNative = owner.Collection;
 
                 for (int y = 0; y < data.heightmapResolution; y++)
                 {
@@ -101,10 +106,11 @@ namespace MrPathV2
                     terrain = terrain,
                     data = data,
                     bounds = new Rect(position.x, position.z, size.x, size.z),
-                    heights = heightsNative,
+                    heightsOwner = owner,
                     resolution = data.heightmapResolution,
                     position = position,
-                    size = size
+                    size = size,
+
                 });
 
                 // 订阅地形数据的高度变更事件，任何高度改动均标记缓存为脏
@@ -128,17 +134,17 @@ namespace MrPathV2
             EnsureCacheIsUpToDate(); // 在访问前，确保缓存是新鲜的
             if (!m_IsInitialized) return worldPos.y;
 
-            TerrainCache cache = FindCacheForPosition(worldPos);
+            TerrainCache? cache = FindCacheForPosition(worldPos);
             if (cache == null) return worldPos.y;
 
-            float normX = Mathf.Clamp01((worldPos.x - cache.position.x) / cache.size.x);
-            float normZ = Mathf.Clamp01((worldPos.z - cache.position.z) / cache.size.z);
+            float normX = Mathf.Clamp01((worldPos.x - cache.Value.position.x) / cache.Value.size.x);
+            float normZ = Mathf.Clamp01((worldPos.z - cache.Value.position.z) / cache.Value.size.z);
 
-            int hX = Mathf.FloorToInt(normX * (cache.resolution - 1));
-            int hY = Mathf.FloorToInt(normZ * (cache.resolution - 1));
+            int hX = Mathf.FloorToInt(normX * (cache.Value.resolution - 1));
+            int hY = Mathf.FloorToInt(normZ * (cache.Value.resolution - 1));
 
-            float h = cache.heights[hY * cache.resolution + hX];
-            return h * cache.size.y + cache.position.y;
+            float h = cache.Value.Heights[hY * cache.Value.resolution + hX];
+            return h * cache.Value.size.y + cache.Value.position.y;
         }
 
         public Vector3 GetNormal(Vector3 worldPos)
@@ -146,16 +152,16 @@ namespace MrPathV2
             EnsureCacheIsUpToDate(); // 在访问前，确保缓存是新鲜的
             if (!m_IsInitialized) return Vector3.up;
 
-            TerrainCache cache = FindCacheForPosition(worldPos);
+            TerrainCache? cache = FindCacheForPosition(worldPos);
             if (cache == null) return Vector3.up;
 
-            float normX = (worldPos.x - cache.position.x) / cache.size.x;
-            float normZ = (worldPos.z - cache.position.z) / cache.size.z;
+            float normX = (worldPos.x - cache.Value.position.x) / cache.Value.size.x;
+            float normZ = (worldPos.z - cache.Value.position.z) / cache.Value.size.z;
 
-            return cache.data.GetInterpolatedNormal(normX, normZ);
+            return cache.Value.data.GetInterpolatedNormal(normX, normZ);
         }
 
-        private TerrainCache FindCacheForPosition(Vector3 worldPos)
+        private TerrainCache? FindCacheForPosition(Vector3 worldPos)
         {
             foreach (var cache in m_TerrainCaches)
             {
@@ -172,6 +178,7 @@ namespace MrPathV2
             UnsubscribeAllTerrainData();
             foreach (var cache in m_TerrainCaches) cache.Dispose();
             m_TerrainCaches.Clear();
+            // 不再需要释放arrayPool
         }
 
         // 事件与订阅管理

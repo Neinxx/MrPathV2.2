@@ -19,6 +19,7 @@ namespace MrPathV2
         [WriteOnly] public NativeArray<float3> vertices;
         [WriteOnly] public NativeArray<float2> uvs;
         [ReadOnly] public int segments;
+        [ReadOnly] public float2 tiling;
 
         public void Execute(int index)
         {
@@ -39,7 +40,11 @@ namespace MrPathV2
 
             // 高性能预览：移除截面竖向抬升，保持网格平整
             vertices[index] = spinePoint + offset;
-            uvs[index] = new float2(t, (float)i / math.max(1, (spine.Length - 1)));
+
+            // 应用平铺信息到UV
+            float u = t * tiling.x;
+            float v = ((float)i / math.max(1, (spine.Length - 1))) * tiling.y;
+            uvs[index] = new float2(u, v);
         }
     }
 
@@ -90,6 +95,7 @@ namespace MrPathV2
         [ReadOnly] public PathJobsUtility.SpineData spine;
         [ReadOnly] public int segments;
         [ReadOnly] public RecipeData recipe;
+        [ReadOnly] public float4 baseColor;
 
         [WriteOnly] public NativeArray<float4> colors; // RGBA 权重
 
@@ -131,7 +137,7 @@ namespace MrPathV2
                 r = 1f; g = 0f; b = 0f; a = 0f; // 保底：红通道显示
             }
 
-            colors[index] = new float4(r, g, b, a);
+            colors[index] = new float4(r, g, b, a) * baseColor;
         }
     }
 }

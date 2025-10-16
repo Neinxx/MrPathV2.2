@@ -157,9 +157,6 @@ namespace MrPathV2
                 entryProp.FindPropertyRelative("strategy").objectReferenceValue = strat;
             }
 
-            SetEntry(CurveType.Bezier, settings.bezierStrategy);
-            SetEntry(CurveType.CatmullRom, settings.catmullRomStrategy);
-
             rso.ApplyModifiedProperties();
         }
     }

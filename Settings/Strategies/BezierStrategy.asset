@@ -15,10 +15,10 @@ MonoBehaviour:
   drawingStyle:
     curveColor: {r: 1, g: 1, b: 1, a: 1}
     curveHoverColor: {r: 0, g: 1, b: 1, a: 1}
-    curveThickness: 4.5
+    curveThickness: 4.06
     knotStyle:
       fillColor: {r: 1, g: 1, b: 1, a: 1}
-      borderColor: {r: 0, g: 0, b: 0, a: 1}
+      borderColor: {r: 1, g: 1, b: 1, a: 1}
       size: 0.1
     tangentStyle:
       fillColor: {r: 1, g: 1, b: 1, a: 1}

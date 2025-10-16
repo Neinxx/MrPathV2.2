@@ -1,4 +1,4 @@
-Shader "Hidden/MrPath/TruncationPlane"
+Shader "MrPath/TruncationPlaneURP"
 {
     Properties
     {
@@ -23,7 +23,7 @@ Shader "Hidden/MrPath/TruncationPlane"
     }
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "PreviewType" = "Plane" }
+        Tags { "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" "PreviewType" = "Plane" }
         LOD 100
 
         Pass
@@ -33,81 +33,102 @@ Shader "Hidden/MrPath/TruncationPlane"
             Cull Off
             Blend One Zero
 
-            CGPROGRAM
+            HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #include "UnityCG.cginc"
+            
+            // 引入URP核心库
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            sampler2D _MainTex;
-            sampler2D _MaskTex0, _MaskTex1, _MaskTex2, _MaskTex3;
+            // 纹理和采样器声明（URP方式）
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+            
+            TEXTURE2D(_MaskTex0);
+            SAMPLER(sampler_MaskTex0);
+            TEXTURE2D(_MaskTex1);
+            SAMPLER(sampler_MaskTex1);
+            TEXTURE2D(_MaskTex2);
+            SAMPLER(sampler_MaskTex2);
+            TEXTURE2D(_MaskTex3);
+            SAMPLER(sampler_MaskTex3);
+
+            // 材质属性
+            CBUFFER_START(UnityPerMaterial)
             float _Opacity0, _Opacity1, _Opacity2, _Opacity3;
             float _BlendMode0, _BlendMode1, _BlendMode2, _BlendMode3;
             float _LayerCount;
             float _Normalize;
+            CBUFFER_END
 
-            struct appdata {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f {
-                float4 pos : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            v2f vert (appdata v)
+            struct Attributes
             {
-                v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv; // 0..1 across rect
-                return o;
+                float4 positionOS   : POSITION;
+                float2 uv           : TEXCOORD0;
+            };
+
+            struct Varyings
+            {
+                float4 positionHCS  : SV_POSITION;
+                float2 uv           : TEXCOORD0;
+            };
+
+            Varyings vert (Attributes input)
+            {
+                Varyings output;
+                // 将对象空间位置转换到齐次裁剪空间
+                output.positionHCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = input.uv; // 0..1 across rect
+                return output;
             }
 
             float Blend(float baseValue, float layerValue, int blendModeOrdinal)
             {
                 // BlendMode: Normal=0, Multiply=1, Add=2, Overlay=3, Screen=4, Lerp=5, Additive=6
-                if (blendModeOrdinal == 1) return baseValue * layerValue; // Multiply
-                if (blendModeOrdinal == 2) return saturate(baseValue + layerValue); // Add
-                if (blendModeOrdinal == 3) // Overlay
+                switch(blendModeOrdinal)
                 {
-                    return baseValue < 0.5 ? (2.0 * baseValue * layerValue) : (1.0 - 2.0 * (1.0 - baseValue) * (1.0 - layerValue));
+                    case 1: return baseValue * layerValue; // Multiply
+                    case 2: return saturate(baseValue + layerValue); // Add
+                    case 3: // Overlay
+                        return baseValue < 0.5 ? (2.0 * baseValue * layerValue) : 
+                                               (1.0 - 2.0 * (1.0 - baseValue) * (1.0 - layerValue));
+                    case 4: return 1.0 - (1.0 - baseValue) * (1.0 - layerValue); // Screen
+                    case 5: return lerp(baseValue, layerValue, saturate(layerValue)); // Lerp
+                    case 6: return saturate(baseValue + layerValue); // Additive
+                    default: return layerValue; // Normal
                 }
-                if (blendModeOrdinal == 4) return 1.0 - (1.0 - baseValue) * (1.0 - layerValue); // Screen
-                if (blendModeOrdinal == 5) return lerp(baseValue, layerValue, saturate(layerValue)); // Lerp
-                if (blendModeOrdinal == 6) return saturate(baseValue + layerValue); // Additive
-                return layerValue; // Normal
             }
 
-            float SampleMask(sampler2D tex, float u, float opacity)
+            float SampleMask(TEXTURE2D(tex), SAMPLER(samplerTex), float u, float opacity)
             {
-                float v = tex2D(tex, float2(u, 0.5)).r;
+                float v = SAMPLE_TEXTURE2D(tex, samplerTex, float2(u, 0.5)).r;
                 return saturate(v * opacity);
             }
 
-            fixed4 frag (v2f i) : SV_Target
+            half4 frag (Varyings input) : SV_Target
             {
-                float u = saturate(i.uv.x);
+                float u = saturate(input.uv.x);
                 int count = (int)_LayerCount;
-                float r=0,g=0,b=0,a=0;
+                float r = 0, g = 0, b = 0, a = 0;
 
                 if (count > 0)
                 {
-                    float v0 = SampleMask(_MaskTex0, u, _Opacity0);
+                    float v0 = SampleMask(_MaskTex0, sampler_MaskTex0, u, _Opacity0);
                     r = Blend(r, v0, (int)_BlendMode0);
                 }
                 if (count > 1)
                 {
-                    float v1 = SampleMask(_MaskTex1, u, _Opacity1);
+                    float v1 = SampleMask(_MaskTex1, sampler_MaskTex1, u, _Opacity1);
                     g = Blend(g, v1, (int)_BlendMode1);
                 }
                 if (count > 2)
                 {
-                    float v2 = SampleMask(_MaskTex2, u, _Opacity2);
+                    float v2 = SampleMask(_MaskTex2, sampler_MaskTex2, u, _Opacity2);
                     b = Blend(b, v2, (int)_BlendMode2);
                 }
                 if (count > 3)
                 {
-                    float v3 = SampleMask(_MaskTex3, u, _Opacity3);
+                    float v3 = SampleMask(_MaskTex3, sampler_MaskTex3, u, _Opacity3);
                     a = Blend(a, v3, (int)_BlendMode3);
                 }
 
@@ -117,13 +138,17 @@ Shader "Hidden/MrPath/TruncationPlane"
                     if (sum > 1e-6)
                     {
                         float inv = 1.0 / sum;
-                        r *= inv; g *= inv; b *= inv; a *= inv;
+                        r *= inv; 
+                        g *= inv; 
+                        b *= inv; 
+                        a *= inv;
                     }
                 }
 
-                return fixed4(r, g, b, a);
+                return half4(r, g, b, a);
             }
-            ENDCG
+            ENDHLSL
         }
     }
+    FallBack "Hidden/Universal Render Pipeline/FallbackError"
 }

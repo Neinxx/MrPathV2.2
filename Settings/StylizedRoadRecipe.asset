@@ -13,20 +13,116 @@ MonoBehaviour:
   m_Name: StylizedRoadRecipe
   m_EditorClassIdentifier: 
   blendLayers:
-  - terrainLayer: {fileID: 8574412962073106934, guid: 8ebab97ea0aadcd45a9e02f16b5c2dc8,
+  - enabled: 1
+    name: Layer 2
+    blendMode: 0
+    opacity: 1
+    terrainLayer: {fileID: 8574412962073106934, guid: 7677cf2da7893a440a6a4524c7c4b209,
       type: 2}
+    mask: {fileID: 11400000, guid: bf061d6b127fe2844aeb9d9ffa139b1e, type: 2}
     blendMask:
-      maskType: 0
-      noiseScale: 0
-      noiseStrength: 0
+      maskType: 1
+      noiseScale: 10
+      noiseStrength: 1
       gradient:
         serializedVersion: 2
-        m_Curve: []
-        m_PreInfinity: 0
-        m_PostInfinity: 0
-        m_RotationOrder: 0
+        m_Curve:
+        - serializedVersion: 3
+          time: -1
+          value: 1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 4
       customTexture: {fileID: 0}
-    mask: {fileID: 11400000, guid: 1108512867169b8488f3ee35a0993e43, type: 2}
+    isExpanded: 1
+  - enabled: 1
+    name: Layer 1
     blendMode: 0
-    opacity: 0.591
-    enabled: 0
+    opacity: 1
+    terrainLayer: {fileID: 8574412962073106934, guid: e725dc993fc73334087a57b2fcc4f57f,
+      type: 2}
+    mask: {fileID: 11400000, guid: 04711c7dab3e38a4a8153de63b497c07, type: 2}
+    blendMask:
+      maskType: 1
+      noiseScale: 10
+      noiseStrength: 1
+      gradient:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: -1
+          value: 1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 4
+      customTexture: {fileID: 0}
+    isExpanded: 1
+  - enabled: 1
+    name: Layer 2
+    blendMode: 0
+    opacity: 1
+    terrainLayer: {fileID: 8574412962073106934, guid: f8e17e887c0efe24c9ed8e81701c990b,
+      type: 2}
+    mask: {fileID: 11400000, guid: 86f6cd0f92c81a44bab62abd620d4b3a, type: 2}
+    blendMask:
+      maskType: 1
+      noiseScale: 10
+      noiseStrength: 1
+      gradient:
+        serializedVersion: 2
+        m_Curve:
+        - serializedVersion: 3
+          time: -1
+          value: 1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        - serializedVersion: 3
+          time: 1
+          value: 1
+          inSlope: 0
+          outSlope: 0
+          tangentMode: 0
+          weightedMode: 0
+          inWeight: 0
+          outWeight: 0
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 4
+      customTexture: {fileID: 0}
+    isExpanded: 1
+  width: 14.47
+  falloff: 0.55

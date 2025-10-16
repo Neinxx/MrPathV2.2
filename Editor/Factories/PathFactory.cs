@@ -1,119 +1,86 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Factories/PathFactory.cs
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 namespace MrPathV2
 {
+    /// <summary>
+    /// 路径创建工厂，负责创建配置完整的路径对象
+    /// </summary>
     public static class PathFactory
     {
-        [MenuItem("GameObject/MrPath/Create Default Path", false, 10)]
+        [MenuItem("GameObject/MrPathV2/Create Path", false, 10)]
         public static void CreateDefaultPath()
         {
-            // 现在从新的配置系统获取设置
-            if (!ValidateSettings(out var creationDefaults, out var appearanceDefaults, out string errorMsg))
+            // 获取项目设置
+            var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
+            if (projectSettings == null)
             {
-                Debug.LogError($"创建路径失败：{errorMsg}");
+                Debug.LogError("[PathFactory] 无法获取项目设置，路径创建失败");
                 return;
             }
 
-            GameObject pathObject = CreatePathGameObject(creationDefaults);
-            PathCreator pathCreator = pathObject.AddComponent<PathCreator>();
+            // 获取创建默认设置
+            var creationDefaults = projectSettings.creationDefaults;
+            var appearanceDefaults = projectSettings.appearanceDefaults;
 
-            InitializePathCreator(pathCreator, appearanceDefaults);
+            // 确定对象名称
+            string objectName = creationDefaults?.defaultObjectName ?? "New MrPath";
+            float defaultLength = creationDefaults?.defaultLineLength ?? 10f;
 
-            PlacePathInScene(pathObject);
-            CreateDefaultPathSegments(pathCreator, creationDefaults);
-            FinalizePathCreation(pathObject);
-        }
+            // 创建游戏对象并注册撤销
+            var go = new GameObject(objectName);
+            Undo.RegisterCreatedObjectUndo(go, "Create Path");
 
-        private static bool ValidateSettings(out MrPathCreationDefaults creationDefaults, out MrPathAppearanceDefaults appearanceDefaults, out string errorMessage)
-        {
-            var settings = MrPathProjectSettings.GetOrCreateSettings();
-            creationDefaults = settings.creationDefaults;
-            appearanceDefaults = settings.appearanceDefaults;
+            // 添加PathCreator组件
+            var creator = go.AddComponent<PathCreator>();
 
-            if (creationDefaults == null || appearanceDefaults == null)
+            // 初始化PathData并添加默认的两个节点
+            creator.pathData = new PathData();
+            
+            // 添加起始节点和结束节点，形成一条直线
+            Vector3 startPos = Vector3.zero;
+            Vector3 endPos = Vector3.forward * defaultLength;
+            
+            creator.pathData.AddKnot(startPos, Vector3.zero, Vector3.zero);
+            creator.pathData.AddKnot(endPos, Vector3.zero, Vector3.zero);
+
+            // 分配默认配置文件
+            if (appearanceDefaults?.defaultPathProfile != null)
             {
-                errorMessage = "核心配置资产丢失，请通过 Project Settings -> MrPath 修复。";
-                return false;
+                creator.profile = appearanceDefaults.defaultPathProfile;
             }
-            if (appearanceDefaults.defaultPathProfile == null)
+            else
             {
-                errorMessage = "默认路径配置文件(PathProfile)未设置，请在 'MrPath_AppearanceDefaults' 资产中配置。";
-                return false;
+                Debug.LogWarning("[PathFactory] 未找到默认路径配置文件，请在项目设置中配置");
             }
-            errorMessage = string.Empty;
-            return true;
-        }
 
-        private static GameObject CreatePathGameObject(MrPathCreationDefaults settings)
-        {
-            string objectName = string.IsNullOrEmpty(settings.defaultObjectName) ? "New Path" : settings.defaultObjectName;
-            return new GameObject(objectName);
-        }
-
-        private static void InitializePathCreator(PathCreator creator, MrPathAppearanceDefaults settings)
-        {
-            // 赋其“魂” (Profile)
-            creator.profile = settings.defaultPathProfile;
-        }
-
-        private static void CreateDefaultPathSegments(PathCreator creator, MrPathCreationDefaults settings)
-        {
-            Vector3 lineDirection = GetDefaultLineDirection();
-            Vector3 centerPos = creator.transform.position;
-            float halfLength = Mathf.Max(0, settings.defaultLineLength) / 2f;
-            Vector3 startPoint = centerPos - lineDirection * halfLength;
-            Vector3 endPoint = centerPos + lineDirection * halfLength;
-
-            var creationCommands = new List<PathChangeCommand>
+            // 将对象放置在场景视图中心（如果有场景视图的话）
+            if (SceneView.lastActiveSceneView != null)
             {
-                new ClearPointsCommand(),
-                new AddPointCommand(startPoint),
-                new AddPointCommand(endPoint)
-            };
-            var batchCommand = new BatchCommand(creationCommands);
-            creator.ExecuteCommand(batchCommand);
-        }
-
-        // --- 以下辅助方法无需修改 ---
-        private static void PlacePathInScene(GameObject pathObject)
-        {
-            SceneView sceneView = SceneView.lastActiveSceneView;
-            if (sceneView == null)
-            {
-                pathObject.transform.position = Vector3.zero;
-                return;
+                var sceneView = SceneView.lastActiveSceneView;
+                Vector3 spawnPos = sceneView.pivot;
+                
+                // 如果有地形，尝试将路径放置在地形表面
+                var terrain = Terrain.activeTerrain;
+                if (terrain != null)
+                {
+                    float terrainHeight = terrain.SampleHeight(spawnPos);
+                    spawnPos.y = terrainHeight;
+                }
+                
+                go.transform.position = spawnPos;
             }
-            Vector3 spawnPos = GetSceneViewFocusPosition(sceneView);
-            if (Physics.Raycast(sceneView.camera.transform.position, spawnPos - sceneView.camera.transform.position, out RaycastHit hit, 2000f))
+
+            // 选中新创建的对象
+            Selection.activeGameObject = go;
+            
+            // 确保场景视图聚焦到新对象
+            if (SceneView.lastActiveSceneView != null)
             {
-                spawnPos = hit.point;
+                SceneView.lastActiveSceneView.FrameSelected();
             }
-            pathObject.transform.position = spawnPos;
-        }
 
-        private static void FinalizePathCreation(GameObject pathObject)
-        {
-            Undo.RegisterCreatedObjectUndo(pathObject, $"Create {pathObject.name}");
-            Selection.activeGameObject = pathObject;
-            EditorGUIUtility.PingObject(pathObject);
-        }
-
-        private static Vector3 GetSceneViewFocusPosition(SceneView sceneView)
-        {
-            return sceneView.pivot.sqrMagnitude > 0.01f
-                ? sceneView.pivot
-                : sceneView.camera.transform.position + sceneView.camera.transform.forward * 10f;
-        }
-
-        private static Vector3 GetDefaultLineDirection()
-        {
-            SceneView sceneView = SceneView.lastActiveSceneView;
-            return sceneView != null
-                ? sceneView.camera.transform.right
-                : Vector3.right;
+            Debug.Log($"[PathFactory] 成功创建路径: {objectName}");
         }
     }
 }

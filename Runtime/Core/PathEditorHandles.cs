@@ -32,6 +32,7 @@ public static class PathEditorHandles
         public int hoveredPointIndex; // 扁平化索引
         public int hoveredSegmentIndex;
         public float hoveredPathT;
+        public PreviewLineRenderer lineRenderer; // 线条渲染器
     }
 
     #endregion
@@ -70,6 +71,9 @@ public static class PathEditorHandles
     {
         if (context.isDragging) return;
 
+        // 先重置点悬停状态，防止上一帧遗留
+        context.hoveredPointIndex = -1;
+
         // 将“哪个点被悬停”的复杂判断，完全交给法则自己去处理
         strategy.UpdatePointHover(ref context);
 
@@ -93,24 +97,28 @@ public static class PathEditorHandles
         context.hoveredSegmentIndex = -1;
         context.hoveredPathT = -1;
 
-        // 采用细分采样进行线段悬停检测
+        // 采用细分采样进行屏幕空间点距检测，以提升各种视角下的命中率
         // 与 CatmullRomStrategy 中的绘制分辨率保持一致或略高，保证交互顺滑
-        const int resolution = 40;
+        const int resolution = 60;
+        const float pickThreshold = 12f; // 屏幕像素，值越大越容易选中
+        float pickThresholdSqr = pickThreshold * pickThreshold;
+
+        Event currentEvent = Event.current;
+        if (currentEvent == null) return;
+        Vector2 mousePos = currentEvent.mousePosition;
+
         for (int seg = 0; seg < creator.NumSegments; seg++)
         {
             for (int j = 0; j < resolution; j++)
             {
-                float t0 = seg + (float)j / resolution;
-                float t1 = seg + (float)(j + 1) / resolution;
-                Vector3 p0 = creator.GetPointAt(t0);
-                Vector3 p1 = creator.GetPointAt(t1);
+                float t = seg + (float)j / resolution;
+                Vector3 worldPoint = creator.GetPointAt(t);
+                Vector2 guiPoint = HandleUtility.WorldToGUIPoint(worldPoint);
 
-                // 使用 Unity 内置的拾取距离进行命中判定
-                if (HandleUtility.DistanceToLine(p0, p1) == 0)
+                if ((guiPoint - mousePos).sqrMagnitude < pickThresholdSqr)
                 {
                     context.hoveredSegmentIndex = seg;
-                    // 以小段的中点近似悬停的 t 值，足够满足插入点与坐标提示需求
-                    context.hoveredPathT = seg + (j + 0.5f) / resolution;
+                    context.hoveredPathT = t;
                     return;
                 }
             }

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using MrPathV2.Extensions;
 
 namespace MrPathV2
 {
@@ -25,28 +26,30 @@ namespace MrPathV2
         [ReadOnly] public NativeArray<int2> gradientKeySlices;  // 每层对应的 keys 片段范围
         public int Length { get; private set; }
 
-        public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, Allocator allocator)
+        public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, Allocator allocator)
         {
-            var blends = recipe?.blendLayers;
-            Length = blends != null ? blends.Count : 0;
-            terrainLayerIndices = new NativeArray<int>(Length, allocator);
-            blendModes = new NativeArray<int>(Length, allocator);
-            opacities = new NativeArray<float>(Length, allocator);
+            var blends = recipe?.blendLayers?.ToArray() ?? System.Array.Empty<BlendLayer>();
+            Length = blends.Length;
+            terrainLayerIndices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int>(Length, allocator);
+            blendModes = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int>(Length, allocator);
+            opacities = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(Length, allocator);
             stripResolution = 128; // 统一采样分辨率（足够平滑且计算开销低）
-            strips = new NativeArray<float>(math.max(1, stripResolution) * math.max(1, Length), allocator);
-            stripSlices = new NativeArray<int2>(Length, allocator);
-            gradientKeySlices = new NativeArray<int2>(Length, allocator);
+            strips = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(math.max(1, stripResolution) * math.max(1, Length), allocator);
+            stripSlices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
+            gradientKeySlices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
 
             int totalKeyframes = 0;
             if (blends != null)
             {
                 foreach (var b in blends)
                 {
-                    var keys = b?.blendMask?.gradient?.keys;
-                    if (keys != null) totalKeyframes += keys.Length;
+                    var gradAsset = b?.mask as GradientMask;
+                    var keys = gradAsset != null ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>())
+                                                 : (b?.blendMask?.gradient?.keys ?? System.Array.Empty<Keyframe>());
+                    totalKeyframes += keys.Length;
                 }
             }
-            gradientKeys = new NativeArray<Keyframe>(totalKeyframes, allocator);
+            gradientKeys = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<Keyframe>(math.max(1, totalKeyframes), allocator);
 
             int keyOffset = 0;
             int stripOffset = 0;
@@ -78,7 +81,7 @@ namespace MrPathV2
                     var brush = b?.mask; // 新资产引用
                     if (brush != null)
                     {
-                        v = Mathf.Clamp01(brush.Evaluate(pos));
+                        v = Mathf.Clamp01(b.mask.Evaluate(pos, roadWorldWidth));
                     }
                     else
                     {
@@ -124,6 +127,9 @@ namespace MrPathV2
             }
         }
 
+        // 验证数据是否已创建
+        public bool IsCreated => terrainLayerIndices.IsCreated;
+
         public void Dispose()
         {
             if (terrainLayerIndices.IsCreated) terrainLayerIndices.Dispose();
@@ -133,6 +139,29 @@ namespace MrPathV2
             if (stripSlices.IsCreated) stripSlices.Dispose();
             if (gradientKeys.IsCreated) gradientKeys.Dispose();
             if (gradientKeySlices.IsCreated) gradientKeySlices.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// RecipeJobsUtility 静态工具类
+    /// </summary>
+    public static class RecipeJobsUtility
+    {
+        /// <summary>
+        /// 烘焙 StylizedRoadRecipe 为 Job 友好的数据结构
+        /// </summary>
+        public static RecipeData BakeRecipe(StylizedRoadRecipe recipe, Allocator allocator, float roadWorldWidth = -1)
+        {
+            if (roadWorldWidth < 0) roadWorldWidth = 10f; // 默认宽度
+            return new RecipeData(recipe, null, roadWorldWidth, allocator);
+        }
+
+        /// <summary>
+        /// 创建默认的 RecipeData
+        /// </summary>
+        public static RecipeData CreateDefaultRecipe(Allocator allocator)
+        {
+            return new RecipeData(null, null, 10f, allocator);
         }
     }
 }

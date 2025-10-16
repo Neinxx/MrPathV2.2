@@ -26,7 +26,7 @@ namespace MrPathV2
         [Tooltip("笔触位置的随机抖动程度。0表示笔触均匀排列。")]
         [Range(0, 1)] public float jitter = 1.0f;
 
-        public override float Evaluate(float horizontalPosition)
+        public override float Evaluate(float horizontalPosition,float worldWidth)
         {
             float p = horizontalPosition * Mathf.Max(0.0001f, scale);
             

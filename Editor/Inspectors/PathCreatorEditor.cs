@@ -1,5 +1,6 @@
 // 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Inspectors/PathCreatorEditor.cs
 using UnityEditor;
+using UnityEditor.EditorTools;
 using UnityEngine;
 
 namespace MrPathV2
@@ -36,6 +37,10 @@ namespace MrPathV2
         private const float TOOLTIP_WIDTH = 200f;
         private const float TOOLTIP_HEIGHT = 22f;
 
+        private Vector3 _lastPosition;
+        private Quaternion _lastRotation;
+        private Vector3 _lastScale;
+
         #endregion
 
         #region 生命周期
@@ -59,7 +64,7 @@ namespace MrPathV2
             }
 
             // 初始化上下文与面板
-            _ctx = new PathEditorContext();
+            _ctx = new PathEditorContext(_targetCreator);
             _ctx.Initialize(_targetCreator);
             _terrainPanel = new TerrainOperationsPanel(_ctx);
 
@@ -67,7 +72,12 @@ namespace MrPathV2
             Undo.undoRedoPerformed += OnUndoRedo;
             _targetCreator.PathModified += OnPathModified;
 
+            StylizedRoadRecipeEditor.OnRecipeModified += OnRecipeChanged;
+
             MarkPathAsDirty(); // 首次启用时强制刷新
+            _lastPosition = _targetCreator.transform.position;
+            _lastRotation = _targetCreator.transform.rotation;
+            _lastScale    = _targetCreator.transform.localScale;
         }
 
         private void OnDisable()
@@ -89,7 +99,10 @@ namespace MrPathV2
             {
                 _targetCreator.PathModified -= OnPathModified;
             }
+            StylizedRoadRecipeEditor.OnRecipeModified -= OnRecipeChanged;
         }
+
+       
 
         #endregion
 
@@ -104,9 +117,9 @@ namespace MrPathV2
             // [优化] 总是先调用 Update，最后调用 ApplyModifiedProperties，这是标准做法。
             serializedObject.Update();
             // [策略] 和平共存：添加UI提示
-            if (Tools.current != Tool.Move && Tools.current != Tool.None) // 简化了判断条件
+            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
             {
-                EditorGUILayout.HelpBox("另一个场景工具当前处于激活状态。\n请在场景左上角工具栏选择“移动工具 (W)”来编辑路径。", MessageType.Info);
+                EditorGUILayout.HelpBox("当前未激活 MrPath PathCreator 工具，也未选择移动工具。\n请在场景左上角工具栏点击 Animator 图标按钮，或使用移动工具进入查看模式。", MessageType.Info);
             }
 
             DrawCoreProperties();
@@ -128,14 +141,10 @@ namespace MrPathV2
         private void OnSceneGUI()
         {
             // [策略] 和平共存：如果当前有其他自定义工具处于激活状态，则本工具不进行绘制。
-            if (Tools.current != Tool.Move &&
-                Tools.current != Tool.Rotate &&
-                Tools.current != Tool.Scale &&
-                Tools.current != Tool.Rect &&
-                Tools.current != Tool.Transform &&
-                Tools.current != Tool.None) // Tool.None 意味着没有工具被激活，应该允许绘制
+            // 若当前不是自定义 PathCreator 工具，则不绘制句柄
+            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
             {
-                return; // 退出，不绘制任何 Handles
+                return;
             }
             _targetCreator = target as PathCreator;
             if (_targetCreator == null) return;
@@ -146,12 +155,26 @@ namespace MrPathV2
             }
             _ctx.PreviewManager.SetActive(true);
 
-            _ctx.PreviewManager.RefreshIfDirty(_targetCreator, _ctx.HeightProvider);
-
             // [优化] 将 Event.current 缓存到局部变量，轻微提升可读性和性能。
             Event currentEvent = Event.current;
 
             var context = _ctx.CreateHandleContext();
+
+            // 根据当前曲线策略决定是否需要清理共享 LineRenderer 中的特定线条，避免残留控制线又不影响其它曲线段
+            if (context.lineRenderer != null)
+            {
+                var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType);
+                if (currentStrategy is BezierStrategy)
+                {
+                    // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
+                    context.lineRenderer.Clear(PreviewLineRenderer.LineType.PathCurve);
+                }
+                else
+                {
+                    // 如果当前不是贝塞尔曲线策略，则清除上一帧可能遗留的贝塞尔控制线
+                    context.lineRenderer.Clear(PreviewLineRenderer.LineType.ControlLine);
+                }
+            }
 
             // [优化] 使用 EditorGUI.EndChangeCheck 来检测句柄是否被拖动，仅在发生变化时重绘。
             EditorGUI.BeginChangeCheck();
@@ -165,6 +188,8 @@ namespace MrPathV2
             _ctx.UpdateHoverState(context);
             _ctx.InputHandler.HandleInputEvents(currentEvent, _targetCreator, context.hoveredPathT, context.hoveredPointIndex);
 
+            _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
+
             _terrainPanel?.Draw();
 
             DrawCoordinateTooltip(_targetCreator, context);
@@ -172,12 +197,22 @@ namespace MrPathV2
             // [性能优化] 关键改动：移除 SceneView.RepaintAll()。
             // RepaintAll() 会强制重绘所有场景视图，非常耗费性能。
             // Unity 的事件系统（如鼠标移动、点击）会自动触发重绘。
-            // 如果需要手动触发，也应使用更精确的 HandleUtility.Repaint()。
-            // 由于 HandleInputEvents 和 PathEditorHandles 内部的交互已经能触发重绘，这里通常不需要手动调用。
+            // 只在必要时进行重绘，避免过度重绘导致的闪烁
             if (currentEvent.type == EventType.MouseMove || currentEvent.type == EventType.MouseDrag)
             {
+                // 仅在鼠标交互时才重绘，减少不必要的重绘
                 HandleUtility.Repaint();
+            }
 
+            // 检测 Transform 变化，若有则刷新
+            if (_targetCreator.transform.position != _lastPosition ||
+                _targetCreator.transform.rotation != _lastRotation ||
+                _targetCreator.transform.localScale != _lastScale)
+            {
+                _lastPosition = _targetCreator.transform.position;
+                _lastRotation = _targetCreator.transform.rotation;
+                _lastScale    = _targetCreator.transform.localScale;
+                MarkPathAsDirty();
             }
         }
 
@@ -243,6 +278,14 @@ namespace MrPathV2
 
         private void OnPathModified(PathChangeCommand command) => MarkPathAsDirty();
         private void OnUndoRedo() => MarkPathAsDirty();
+
+        private void OnRecipeChanged(StylizedRoadRecipe recipe)
+        {
+            if (_targetCreator != null && _targetCreator.profile != null && _targetCreator.profile.roadRecipe == recipe)
+            {
+                MarkPathAsDirty();
+            }
+        }
 
         public void MarkPathAsDirty()
         {
@@ -317,3 +360,5 @@ namespace MrPathV2
         #endregion
     }
 }
+
+           

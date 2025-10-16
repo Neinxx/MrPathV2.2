@@ -37,29 +37,6 @@ namespace MrPathV2
         public Texture2D customTexture;
     }
 
-    [Serializable]
-    public class BlendLayer
-    {
-        public string name = "New Layer";
-        [Tooltip("关联的地形图层资产")]
-   
-        public TerrainLayer terrainLayer;
-        [Tooltip("控制该纹理在路径上的分布范围 (旧字段，逐步废弃)")]
-        public BlendMask blendMask = new();
-
-        [Tooltip("笔刷: 控制绘制形状、范围和强度的可复用遮罩资产")]
-        public BlendMaskBase mask; 
-
-        [Header("图层混合 (Layer Blending)")]
-        [Tooltip("该图层对下方图层的混合模式（类似 Photoshop）")]
-        public BlendMode blendMode = BlendMode.Normal;
-        [Tooltip("该图层整体不透明度（0~1）")]
-        [Range(0f, 1f)] public float opacity = 1f;
-        [Tooltip("是否启用该图层参与复合预览与导出")]
-        public bool enabled = true;
-
-        [HideInInspector] public bool isExpanded = true;
-    }
 
     [Serializable]
     public class LayerBlendRecipe

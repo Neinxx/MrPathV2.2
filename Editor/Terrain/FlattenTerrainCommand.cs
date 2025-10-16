@@ -16,9 +16,10 @@ namespace MrPathV2
 
         protected override async Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spine, CancellationToken token)
         {
-            var handles = new NativeList<JobHandle>(Allocator.Temp);
+            var handles = new NativeList<JobHandle>(Allocator.TempJob);
             var workItems = new List<(Terrain terrain, float[,] h, NativeArray<float> hn, NativeArray<float> ohn)>();
 
+            // 直接分配NativeArray，不再使用对象池
             var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
             var profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
             RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
@@ -42,8 +43,8 @@ namespace MrPathV2
                     Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
                     var td = terrain.terrainData;
                     var h2D = td.GetHeights(0, 0, td.heightmapResolution, td.heightmapResolution);
-                    var hn = new NativeArray<float>(h2D.Length, Allocator.TempJob);
-                    var ohn = new NativeArray<float>(h2D.Length, Allocator.TempJob);
+                    var hn = new NativeArray<float>(h2D.Length, Allocator.Persistent);
+                    var ohn = new NativeArray<float>(h2D.Length, Allocator.Persistent);
                     Copy2DTo1D(h2D, hn, td.heightmapResolution);
                     Copy2DTo1D(h2D, ohn, td.heightmapResolution);
 

@@ -114,18 +114,18 @@ namespace MrPathV2
 
             // 从预览生成器读取预览网格包围盒（世界坐标），传递到命令以用于作业粗剔除
             var previewMesh = _ctx.PreviewGenerator?.PreviewMesh;
+           
             if (previewMesh != null)
+                 previewMesh = _ctx.PreviewGenerator?.PreviewMesh;
+            var b = previewMesh.bounds;
+            if (b.size.x > 0 && b.size.z > 0)
             {
-                previewMesh.RecalculateBounds();
-                var b = previewMesh.bounds;
-                if (b.size.x > 0 && b.size.z > 0)
-                {
-                    var boundsXZ = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
-                    cmd.SetPreviewBoundsXZ(boundsXZ);
-                }
+                var boundsXZ = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
+                cmd.SetPreviewBoundsXZ(boundsXZ);
             }
-            string opId = !string.IsNullOrEmpty(op.operationId) ? op.operationId : (op.displayName ?? op.name);
-            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => _ctx.CurrentOperationId = b ? opId : null);
+             string opId = !string.IsNullOrEmpty(op.operationId) ? op.operationId : (op.displayName ?? op.name);
+        _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => _ctx.CurrentOperationId = b? opId : null);
         }
+       
     }
 }
