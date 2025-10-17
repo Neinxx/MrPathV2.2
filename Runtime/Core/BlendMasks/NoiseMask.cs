@@ -15,8 +15,10 @@ namespace MrPathV2
 
            
             float inputY = seed + offset.y;
-            float noise = (Mathf.PerlinNoise(horizontalPosition * Mathf.Max(0.0001f, scale) * inputX, inputY * 0.5f) - 0.5f) * 2f;
-            return Mathf.Clamp01(noise * strength);
+            // 修复：直接使用 inputX 和 scale，避免双重缩放
+            float noise = (Mathf.PerlinNoise(inputX * Mathf.Max(0.0001f, scale), inputY * 0.5f) - 0.5f) * 2f;
+            float rawValue = Mathf.Clamp01(noise * strength);
+            return ApplySmoothing(rawValue);
 
         }
     }

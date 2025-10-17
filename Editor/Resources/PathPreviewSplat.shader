@@ -118,6 +118,13 @@ Shader "MrPath/PathPreviewSplat"
                 half4 col2 = SAMPLE_TEXTURE2D(_Layer2_Texture, sampler_Layer2_Texture, uv2) * _Layer2_Color;
                 half4 col3 = SAMPLE_TEXTURE2D(_Layer3_Texture, sampler_Layer3_Texture, uv3) * _Layer3_Color;
 
+                // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
+                // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
+                col0.rgb *= mask.r; // 直接使用遮罩值作为剔除系数
+                col1.rgb *= mask.g;
+                col2.rgb *= mask.b;
+                col3.rgb *= mask.a;
+
                 // 使用 LUT 权重混合，而非顶点色
                 half4 finalColor = col0 * mask.r + col1 * mask.g + col2 * mask.b + col3 * mask.a;
                 finalColor.a = saturate(_PreviewAlpha);

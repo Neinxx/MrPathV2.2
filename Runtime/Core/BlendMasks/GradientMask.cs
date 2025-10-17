@@ -6,9 +6,11 @@ namespace MrPathV2
     public class GradientMask : BlendMaskBase
     {
         public AnimationCurve gradient = AnimationCurve.Linear(-1, 1, 1, 1);
-        public override float Evaluate(float horizontalPosition,float worldWidth)
+        
+        public override float Evaluate(float horizontalPosition, float worldWidth)
         {
-            return gradient != null ? gradient.Evaluate(horizontalPosition) : 1f;
+            float rawValue = gradient != null ? gradient.Evaluate(horizontalPosition) : 1f;
+            return ApplySmoothing(Mathf.Clamp01(rawValue));
         }
     }
 }

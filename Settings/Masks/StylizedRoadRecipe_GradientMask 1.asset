@@ -12,26 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a170167bff96cff4783bf136b840dda5, type: 3}
   m_Name: StylizedRoadRecipe_GradientMask 1
   m_EditorClassIdentifier: 
+  smooth: 0
   gradient:
     serializedVersion: 2
     m_Curve:
     - serializedVersion: 3
-      time: 0.29322815
-      value: 0.0513916
-      inSlope: 23.185398
-      outSlope: 23.185398
+      time: 0
+      value: 0
+      inSlope: 1
+      outSlope: 1
       tangentMode: 34
       weightedMode: 0
       inWeight: 0
-      outWeight: 0.33333334
+      outWeight: 0
     - serializedVersion: 3
-      time: 0.3317871
-      value: 0.9453964
-      inSlope: 23.185398
-      outSlope: 23.185398
+      time: 1
+      value: 1
+      inSlope: 1
+      outSlope: 1
       tangentMode: 34
       weightedMode: 0
-      inWeight: 0.33333334
+      inWeight: 0
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2

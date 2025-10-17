@@ -12,15 +12,16 @@ namespace MrPathV2
     public class StylizedRoadRecipe : ScriptableObject
     {
         [Title("混合图层 (Passes)")]
-        [InfoBox("此配方通过层叠混合来定义道路的最终材质。每个图层由一个地形层(颜色)和一个遮罩(形状)组成，它们自下而上进行混合。")]
-        [ListDrawerSettings(
-            DraggableItems = true,          // 允许拖拽排序
-            ShowFoldout = true,             // 显示每个列表项的折叠箭头
-            ShowItemCount = true,           // 显示列表项数量
-            DefaultExpandedState = true,                // 默认展开整个列表
-            CustomAddFunction = "AddNewLayer" // 指定一个自定义函数来处理“添加”按钮的点击事件
-        )]
-        public List<BlendLayer> blendLayers = new List<BlendLayer>();
+    [InfoBox("此配方通过层叠混合来定义道路的最终材质。每个图层由一个地形层(颜色)和一个遮罩(形状)组成，它们自下而上进行混合。\n\n✨ 支持无限层数：系统会自动处理多Control贴图分配和内存优化。")]
+    [ListDrawerSettings(
+        DraggableItems = true,          // 允许拖拽排序
+        ShowFoldout = true,             // 显示每个列表项的折叠箭头
+        ShowItemCount = true,           // 显示列表项数量
+        DefaultExpandedState = true,    // 默认展开整个列表
+        CustomAddFunction = "AddNewLayer", // 指定一个自定义函数来处理"添加"按钮的点击事件
+        NumberOfItemsPerPage = 10       // 分页显示，避免大量层时UI卡顿
+    )]
+    public List<BlendLayer> blendLayers = new List<BlendLayer>();
 
         /// <summary>
         /// 当点击 "+" 按钮时，Odin 会调用这个函数。

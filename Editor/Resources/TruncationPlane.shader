@@ -9,7 +9,7 @@ Shader "MrPath/TruncationPlaneURP"
         _MaskTex3("MaskTex3", 2D) = "white" {}
 
         _Opacity0("Opacity0", Float) = 1
-        _Opacity1("Opacity1", Float) = 1
+        _Opacity1("Opacity1", Float) = 1 
         _Opacity2("Opacity2", Float) = 1
         _Opacity3("Opacity3", Float) = 1
 
@@ -55,10 +55,16 @@ Shader "MrPath/TruncationPlaneURP"
 
             // 材质属性
             CBUFFER_START(UnityPerMaterial)
-            float _Opacity0, _Opacity1, _Opacity2, _Opacity3;
-            float _BlendMode0, _BlendMode1, _BlendMode2, _BlendMode3;
-            float _LayerCount;
-            float _Normalize;
+                float _Opacity0;
+                float _Opacity1;
+                float _Opacity2;
+                float _Opacity3;
+                float _BlendMode0;
+                float _BlendMode1;
+                float _BlendMode2;
+                float _BlendMode3;
+                float _LayerCount;
+                float _Normalize;
             CBUFFER_END
 
             struct Attributes
@@ -101,8 +107,14 @@ Shader "MrPath/TruncationPlaneURP"
 
             float SampleMask(TEXTURE2D(tex), SAMPLER(samplerTex), float u, float opacity)
             {
-                float v = SAMPLE_TEXTURE2D(tex, samplerTex, float2(u, 0.5)).r;
-                return saturate(v * opacity);
+                float4 texSample = SAMPLE_TEXTURE2D(tex, samplerTex, float2(u, 0.5));
+                float maskValue = texSample.r;
+                
+                // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
+                // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
+                // 直接使用遮罩值，不需要额外的剔除计算
+                
+                return saturate(maskValue * opacity);
             }
 
             half4 frag (Varyings input) : SV_Target

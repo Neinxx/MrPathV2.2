@@ -26,6 +26,10 @@ namespace MrPathV2
         // --- 内嵌编辑器 ---
         private Editor _profileEmbeddedEditor;
         private bool _profileLocalExpanded = true;
+        
+        // --- StylizedRoadRecipe 内嵌编辑器 ---
+        private Editor _recipeEmbeddedEditor;
+        private bool _recipeLocalExpanded = true;
 
         // --- 新的上下文与面板 ---
         private PathEditorContext _ctx;
@@ -61,6 +65,12 @@ namespace MrPathV2
             if (_targetCreator.profile != null)
             {
                 InitProfileEmbeddedEditor(_targetCreator.profile);
+                
+                // 初始化 StylizedRoadRecipe 引用
+                if (_targetCreator.profile.roadRecipe != null)
+                {
+                    InitRecipeEmbeddedEditor(_targetCreator.profile.roadRecipe);
+                }
             }
 
             // 初始化上下文与面板
@@ -88,6 +98,12 @@ namespace MrPathV2
             {
                 DestroyImmediate(_profileEmbeddedEditor);
                 _profileEmbeddedEditor = null;
+            }
+            
+            if (_recipeEmbeddedEditor != null)
+            {
+                DestroyImmediate(_recipeEmbeddedEditor);
+                _recipeEmbeddedEditor = null;
             }
 
             _ctx?.Dispose();
@@ -129,6 +145,13 @@ namespace MrPathV2
             if (_profileProperty.objectReferenceValue != null)
             {
                 DrawEmbeddedProfileUI();
+                
+                // 如果 Profile 中有 StylizedRoadRecipe，则显示它
+                var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
+                if (currentProfile != null && currentProfile.roadRecipe != null)
+                {
+                    DrawEmbeddedRecipeUI();
+                }
             }
             else
             {
@@ -140,20 +163,26 @@ namespace MrPathV2
 
         private void OnSceneGUI()
         {
-            // [策略] 和平共存：如果当前有其他自定义工具处于激活状态，则本工具不进行绘制。
-            // 若当前不是自定义 PathCreator 工具，则不绘制句柄
-            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
-            {
-                return;
-            }
             _targetCreator = target as PathCreator;
             if (_targetCreator == null) return;
-            if (_ctx == null || !_ctx.IsPathValid())
+            
+            // 确保预览始终激活（即使选中了Recipe等其他对象）
+            if (_ctx != null && _ctx.IsPathValid())
+            {
+                _ctx.PreviewManager.SetActive(true);
+            }
+            else
             {
                 _ctx?.PreviewManager?.SetActive(false);
                 return;
             }
-            _ctx.PreviewManager.SetActive(true);
+
+            // [策略] 和平共存：如果当前有其他自定义工具处于激活状态，则本工具不进行句柄绘制。
+            // 但预览仍然保持激活状态
+            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
+            {
+                return;
+            }
 
             // [优化] 将 Event.current 缓存到局部变量，轻微提升可读性和性能。
             Event currentEvent = Event.current;
@@ -213,6 +242,46 @@ namespace MrPathV2
                 _lastRotation = _targetCreator.transform.rotation;
                 _lastScale    = _targetCreator.transform.localScale;
                 MarkPathAsDirty();
+            }
+        }
+
+        private void DrawEmbeddedRecipeUI()
+        {
+            var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
+            if (currentProfile == null || currentProfile.roadRecipe == null) return;
+
+            // [优化] 检查内嵌编辑器的目标对象是否与当前 Recipe 一致。
+            if (_recipeEmbeddedEditor == null || _recipeEmbeddedEditor.target != currentProfile.roadRecipe)
+            {
+                InitRecipeEmbeddedEditor(currentProfile.roadRecipe);
+            }
+
+            if (_recipeEmbeddedEditor == null) return;
+
+            using (new EditorGUILayout.VerticalScope("Box"))
+            {
+                _recipeLocalExpanded = EditorGUILayout.Foldout(_recipeLocalExpanded, "道路风格配方 (Stylized Road Recipe)", true, EditorStyles.foldoutHeader);
+                if (_recipeLocalExpanded)
+                {
+                    EditorGUI.indentLevel++;
+
+                    // [优化] 对内嵌编辑器的修改也使用 BeginChangeCheck/EndChangeCheck
+                    EditorGUI.BeginChangeCheck();
+
+                    _recipeEmbeddedEditor.OnInspectorGUI();
+
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        // 如果 Recipe 被修改，通知 targetCreator 并手动触发 Recipe 修改事件
+                        _targetCreator?.NotifyProfileModified();
+                        
+                        // 手动触发 StylizedRoadRecipeEditor 的 OnRecipeModified 事件
+                        // 这确保了嵌入式编辑器中的修改也能被正确处理
+                        StylizedRoadRecipeEditor.TriggerRecipeModified(currentProfile.roadRecipe);
+                    }
+
+                    EditorGUI.indentLevel--;
+                }
             }
         }
 
@@ -283,6 +352,8 @@ namespace MrPathV2
         {
             if (_targetCreator != null && _targetCreator.profile != null && _targetCreator.profile.roadRecipe == recipe)
             {
+                // 标记材质为脏，确保实时更新Scene视图中的预览效果
+                _ctx?.PreviewManager?.MarkMaterialsDirty();
                 MarkPathAsDirty();
             }
         }
@@ -301,6 +372,15 @@ namespace MrPathV2
                 DestroyImmediate(_profileEmbeddedEditor);
             }
             _profileEmbeddedEditor = CreateEditor(profile);
+        }
+        
+        private void InitRecipeEmbeddedEditor(StylizedRoadRecipe recipe)
+        {
+            if (_recipeEmbeddedEditor != null)
+            {
+                DestroyImmediate(_recipeEmbeddedEditor);
+            }
+            _recipeEmbeddedEditor = CreateEditor(recipe);
         }
 
         private void CreateDefaultProfile()

@@ -8,7 +8,7 @@ namespace MrPathV2
 
     /// <summary>
     /// Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current profile/template.
-    /// Supports both PathPreviewSplat and StylizedRoadPreview shaders.
+    /// Supports both PathPreviewSplat and StylizedRoadBlend shaders.
     /// </summary>
     public sealed class PreviewMaterialManager : IDisposable
     {
@@ -74,16 +74,43 @@ namespace MrPathV2
         private void ApplySplat(PathProfile profile, float alpha)
         {
             var recipe = profile.roadRecipe;
-            for (var i = 0; i < 4; i++)
+            int layerCount = recipe?.blendLayers?.Count ?? 0;
+            
+            // 检测是否使用多层着色器
+            bool isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
+            int maxLayers = isMultiLayerShader ? 16 : 4;
+            
+            // 设置所有层（最多16层），确保与StylizedRoadRecipe配方一致
+            for (var i = 0; i < maxLayers; i++)
             {
                 TerrainLayer layer = null;
+                float layerOpacity = 0f;
+                BlendMode blendMode = BlendMode.Normal;
+                
                 if (recipe?.blendLayers != null && i < recipe.blendLayers.Count)
-                    layer = recipe.blendLayers[i]?.terrainLayer;
+                {
+                    var blendLayer = recipe.blendLayers[i];
+                    if (blendLayer != null && blendLayer.enabled)
+                    {
+                        layer = blendLayer.terrainLayer;
+                        layerOpacity = blendLayer.opacity;
+                        blendMode = blendLayer.blendMode;
+                    }
+                }
+                
                 SetLayer(i, layer, profile.roadWidth);
+                
+                // 设置每层的不透明度和混合模式
+                _instance.SetFloat($"_Layer{i}_Opacity", layerOpacity);
+                _instance.SetFloat($"_Layer{i}_BlendMode", (float)blendMode);
             }
+
+            // 设置层数
+            _instance.SetInt("_LayerCount", layerCount);
 
             float master = profile.roadRecipe?.masterOpacity ?? 1f;
             _instance.SetFloat("_PreviewAlpha", Mathf.Clamp01(alpha * master));
+            _instance.SetFloat("_MasterOpacity", master);
             _instance.SetFloat("_EdgeFadeStart", 0.7f);
             _instance.SetFloat("_EdgeFadeEnd", 1f);
 
@@ -97,13 +124,19 @@ namespace MrPathV2
             }
             _instance.SetFloat("_AcrossScale", acrossScale);
 
+            // 如果是多层着色器，设置控制纹理
+            if (isMultiLayerShader)
+            {
+                SetupControlTextures(profile);
+            }
+
             // Generate and bind LUT so shader can sample accurate weights
             SetupMaskLUT(profile);
         }
 
         /// <summary>
         /// Generates or updates the 1-px height RGBA LUT that stores the per-layer mask weights
-        /// (up to 4 layers). This mimics the CPU preview and job logic so that the GPU preview
+        /// (up to 4 layers for legacy shader, unlimited for multi-layer shader). This mimics the CPU preview and job logic so that the GPU preview
         /// matches what will be painted onto terrain.
         /// </summary>
         private void SetupMaskLUT(PathProfile profile)
@@ -115,11 +148,15 @@ namespace MrPathV2
                 return;
             }
 
-            // Gather layer infos (maximum of 4 layers for preview shader)
-            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new List<PreviewPipelineUtility.PreviewLayerInfo>(4);
+            // 检测是否使用多层着色器
+            bool isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
+            int maxLayers = isMultiLayerShader ? recipe.blendLayers.Count : 4;
+
+            // Gather layer infos
+            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new List<PreviewPipelineUtility.PreviewLayerInfo>(maxLayers);
             float worldWidth = Mathf.Max(0.1f, profile.roadWidth);
 
-            for (int i = 0; i < recipe.blendLayers.Count && layerInfos.Count < 4; i++)
+            for (int i = 0; i < recipe.blendLayers.Count && layerInfos.Count < maxLayers; i++)
             {
                 var blendLayer = recipe.blendLayers[i];
                 if (blendLayer == null || !blendLayer.enabled) continue;
@@ -138,7 +175,7 @@ namespace MrPathV2
                     Color.white,
                     Mathf.Clamp01(blendLayer.opacity * profile.roadRecipe.masterOpacity),
                     blendLayer.blendMode,
-                    blendLayer.mask);
+                    blendLayer.GetActiveMask());
 
                 layerInfos.Add(info);
             }
@@ -152,6 +189,80 @@ namespace MrPathV2
 
             _maskLUT = PreviewPipelineUtility.BuildMaskLUT(_maskLUT, layerInfos, worldWidth);
             _instance.SetTexture("_MaskLUT", _maskLUT);
+        }
+
+        /// <summary>
+        /// 为多层着色器设置控制纹理（模拟Unity地形的Control贴图）
+        /// </summary>
+        private void SetupControlTextures(PathProfile profile)
+        {
+            var recipe = profile.roadRecipe;
+            if (recipe?.blendLayers == null)
+            {
+                // 设置默认控制纹理
+                _instance.SetTexture("_Control0", Texture2D.redTexture);
+                _instance.SetTexture("_Control1", Texture2D.blackTexture);
+                _instance.SetTexture("_Control2", Texture2D.blackTexture);
+                _instance.SetTexture("_Control3", Texture2D.blackTexture);
+                return;
+            }
+
+            // 创建临时控制纹理来模拟地形权重
+            // 这里简化处理，实际应该根据路径的UV坐标和混合遮罩生成权重
+            var control0 = CreateControlTexture(recipe.blendLayers, 0, 4);
+            var control1 = CreateControlTexture(recipe.blendLayers, 4, 8);
+            var control2 = CreateControlTexture(recipe.blendLayers, 8, 12);
+            var control3 = CreateControlTexture(recipe.blendLayers, 12, 16);
+
+            _instance.SetTexture("_Control0", control0 ?? Texture2D.redTexture);
+            _instance.SetTexture("_Control1", control1 ?? Texture2D.blackTexture);
+            _instance.SetTexture("_Control2", control2 ?? Texture2D.blackTexture);
+            _instance.SetTexture("_Control3", control3 ?? Texture2D.blackTexture);
+        }
+
+        /// <summary>
+        /// 创建控制纹理，每个RGBA通道对应一层
+        /// </summary>
+        private Texture2D CreateControlTexture(System.Collections.Generic.List<BlendLayer> layers, int startIndex, int endIndex)
+        {
+            bool hasAnyLayer = false;
+            for (int i = startIndex; i < endIndex && i < layers.Count; i++)
+            {
+                if (layers[i] != null && layers[i].enabled && layers[i].terrainLayer?.diffuseTexture != null)
+                {
+                    hasAnyLayer = true;
+                    break;
+                }
+            }
+
+            if (!hasAnyLayer) return null;
+
+            // 创建简单的1x1控制纹理
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            Color color = Color.black;
+
+            // 设置每个通道的权重（简化处理，实际应该基于遮罩计算）
+            for (int i = startIndex; i < endIndex && i < layers.Count; i++)
+            {
+                var layer = layers[i];
+                if (layer != null && layer.enabled && layer.terrainLayer?.diffuseTexture != null)
+                {
+                    float weight = layer.opacity;
+                    int channel = i - startIndex;
+                    switch (channel)
+                    {
+                        case 0: color.r = weight; break;
+                        case 1: color.g = weight; break;
+                        case 2: color.b = weight; break;
+                        case 3: color.a = weight; break;
+                    }
+                }
+            }
+
+            tex.SetPixel(0, 0, color);
+            tex.Apply();
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            return tex;
         }
 
         private void ApplyStylized(PathProfile profile)
@@ -203,8 +314,8 @@ namespace MrPathV2
         {
             if (shader == null) return ShaderFlavor.Unknown;
             var name = shader.name;
-            return name.Contains("StylizedRoadPreview") ? ShaderFlavor.Stylized :
-                   name.Contains("PathPreviewSplat") ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
+            return name.Contains("StylizedRoadBlend") ? ShaderFlavor.Stylized :
+                   (name.Contains("PathPreviewSplat") || name.Contains("PathPreviewSplatMulti")) ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
         }
 
         private static int CalculateHash(PathProfile profile, Material template, float alpha)

@@ -46,7 +46,8 @@ namespace MrPathV2
             {
                 foreach (var b in blends)
                 {
-                    var gradAsset = b?.mask as GradientMask;
+                    var activeMask = b?.GetActiveMask();
+                    var gradAsset = activeMask as GradientMask;
                     var keys = gradAsset != null ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>())
                                                  : (b?.blendMask?.gradient?.keys ?? System.Array.Empty<Keyframe>());
                     totalKeyframes += keys.Length;
@@ -67,7 +68,8 @@ namespace MrPathV2
                 opacities[i] = Mathf.Clamp01(b != null ? b.opacity * recipe.masterOpacity : recipe.masterOpacity);
 
                 // 兼容：若使用 GradientMask 资产则读取其曲线关键帧，否则读取旧字段
-                var gradAsset = b?.mask as GradientMask;
+                var activeMask = b?.GetActiveMask();
+                var gradAsset = activeMask as GradientMask;
                 var keys = gradAsset != null ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>())
                                              : (b?.blendMask?.gradient?.keys ?? System.Array.Empty<Keyframe>());
                 for (int k = 0; k < keys.Length; k++) gradientKeys[keyOffset + k] = keys[k];
@@ -81,10 +83,10 @@ namespace MrPathV2
                     float t = s / (float)(stripResolution - 1);    // 0..1
                     float pos = Mathf.Lerp(-1f, 1f, t);             // -1..1（横向位置）
                     float v = 1f;
-                    var brush = b?.mask; // 新资产引用
-                    if (brush != null)
+                    var activeBrush = b?.GetActiveMask(); // 新资产引用
+                    if (activeBrush != null)
                     {
-                        v = Mathf.Clamp01(b.mask.Evaluate(pos, roadWorldWidth));
+                        v = Mathf.Clamp01(activeBrush.Evaluate(pos, roadWorldWidth));
                     }
                     else
                     {

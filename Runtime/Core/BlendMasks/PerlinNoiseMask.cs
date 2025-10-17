@@ -15,7 +15,8 @@ namespace MrPathV2
             float inputY = seed + offset.y;
             float noiseValue = Mathf.PerlinNoise(inputX, inputY);
             
-            return noiseValue * strength;
+            float rawValue = noiseValue * strength;
+            return ApplySmoothing(Mathf.Clamp01(rawValue));
         }
     }
 }

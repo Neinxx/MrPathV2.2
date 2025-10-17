@@ -68,7 +68,7 @@ namespace MrPathV2
                 }
             }
 
-            return Mathf.Clamp01(finalValue);
+            return ApplySmoothing(Mathf.Clamp01(finalValue));
         }
 
         // 一个简单的伪随机哈希函数，加一个'salt'参数可以从同一个输入得到不同的随机结果

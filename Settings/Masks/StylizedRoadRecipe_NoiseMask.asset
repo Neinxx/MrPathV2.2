@@ -12,8 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
   m_Name: StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
+  smooth: 0
   strength: 1
-  tiling: {x: 6.63, y: 6.79}
-  offset: {x: 2.77, y: 13.31}
-  seed: 54.31
-  scale: 0.4
+  tiling: {x: 1.97, y: 9.54}
+  offset: {x: 0, y: 0}
+  seed: 57.55
+  scale: 54.64

@@ -41,34 +41,23 @@ namespace MrPathV2
 
                     if (ok)
                     {
-                        if (layers.Count >= 4)
+                        Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
+                        // 寻找空位，优先填补前面的空槽
+                        int insertIndex = -1;
+                        for (int si = 0; si < layers.Count; si++)
                         {
-                            EditorUtility.DisplayDialog(
-                                "超过图层上限",
-                                "地形已包含 4 个及以上图层，继续添加会生成额外的 SplatAlpha 贴图并导致性能下降。\n\n"+
-                                "请先移除多余图层或合并后再试。",
-                                "知道了");
+                            if (layers[si] == null) { insertIndex = si; break; }
+                        }
+                        if (insertIndex >= 0)
+                        {
+                            layers[insertIndex] = tl;
                         }
                         else
                         {
-                            Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
-                            // 寻找前 4 个槽位内的空位，优先填补
-                            int insertIndex = -1;
-                            for (int si = 0; si < 4 && si < layers.Count; si++)
-                            {
-                                if (layers[si] == null) { insertIndex = si; break; }
-                            }
-                            if (insertIndex >= 0)
-                            {
-                                layers[insertIndex] = tl;
-                            }
-                            else
-                            {
-                                layers.Add(tl);
-                            }
-                            td.terrainLayers = layers.ToArray();
-                            result[tl] = insertIndex >= 0 ? insertIndex : layers.Count - 1;
+                            layers.Add(tl);
                         }
+                        td.terrainLayers = layers.ToArray();
+                        result[tl] = insertIndex >= 0 ? insertIndex : layers.Count - 1;
                     }
                 }
             }

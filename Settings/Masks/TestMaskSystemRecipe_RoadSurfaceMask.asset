@@ -9,74 +9,60 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d3637d6d60e87ca4f85d92d1da678ba8, type: 3}
-  m_Name: DefaultPathProfile
+  m_Script: {fileID: 11500000, guid: 2f3a43335d8749146bf6df0474950a25, type: 3}
+  m_Name: TestMaskSystemRecipe_RoadSurfaceMask
   m_EditorClassIdentifier: 
-  curveType: 1
-  generationPrecision: 0.1
-  roadWidth: 1
-  crossSection:
+  smooth: 0.716
+  surfaceWidthRatio: 0.562
+  surfaceStrength: 0.904
+  edgeTransition: 0.183
+  centerOffset: -0.19
+  surfaceProfile:
     serializedVersion: 2
     m_Curve:
     - serializedVersion: 3
-      time: -1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
       time: 0
       value: 0
-      inSlope: 0
-      outSlope: 0
+      inSlope: 2
+      outSlope: 2
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
       outWeight: 0
     - serializedVersion: 3
       time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  falloffWidth: 0
-  falloffShape:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
       value: 1
       inSlope: 0
       outSlope: 0
-      tangentMode: 34
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 34
+      tangentMode: 0
       weightedMode: 0
       inWeight: 0
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  snapToTerrain: 1
-  heightOffset: 0
-  smoothness: 100
-  forceHorizontal: 1
-  crossSectionSegments: 3
-  showPreviewMesh: 1
-  roadRecipe: {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}
+  falloffType: 0
+  customFalloffCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4

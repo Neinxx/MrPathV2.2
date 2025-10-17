@@ -17,6 +17,14 @@ namespace MrPathV2
     {
         public static event Action<StylizedRoadRecipe> OnRecipeModified;
 
+        /// <summary>
+        /// 手动触发Recipe修改事件，用于嵌入式编辑器
+        /// </summary>
+        public static void TriggerRecipeModified(StylizedRoadRecipe recipe)
+        {
+            OnRecipeModified?.Invoke(recipe);
+        }
+
 
         private StylizedRoadRecipe _recipe;
         private int _lastRecipeHash;
@@ -48,10 +56,10 @@ namespace MrPathV2
             // --- 预览材质初始化（静态共享）---
             if (_previewShader == null)
             {
-                _previewShader = Shader.Find("MrPathV2/StylizedRoadPreview");
+                _previewShader = Shader.Find("MrPathV2/StylizedRoadBlend");
                 if (_previewShader == null && !_missingShaderLogged)
                 {
-                    Debug.LogError("MrPath: 预览 Shader 'MrPathV2/StylizedRoadPreview' 未找到！请确认文件存在。");
+                    Debug.LogError("MrPath: 预览 Shader 'MrPathV2/StylizedRoadBlend' 未找到！请确认文件存在。");
                     _missingShaderLogged = true;
                 }
             }
@@ -85,9 +93,16 @@ namespace MrPathV2
             GUILayout.FlexibleSpace();
 
             SirenixEditorGUI.BeginBox();
-            DrawPreview();
+            
+            // 移除Inspector预览面板，用户现在可以在Scene视图中实时看到效果
+            EditorGUILayout.HelpBox("道路预览已移至Scene视图，调节参数可实时查看效果。", MessageType.Info);
+            
             EditorGUILayout.Space();
             DrawMaskCreator();
+            
+            // 添加性能分析面板
+            MultiLayerPerformanceManager.DrawPerformanceInfo(_recipe);
+            
             SirenixEditorGUI.EndBox();
 
             CheckForChanges();
@@ -113,9 +128,27 @@ namespace MrPathV2
         {
             EditorGUILayout.LabelField("最终效果预览", EditorStyles.boldLabel);
 
-            // GPU 预览不再需要模式切换工具栏
-            // 直接计算并绘制 GPU 预览结果
-            Rect previewRect = GUILayoutUtility.GetRect(0, 180, GUILayout.ExpandWidth(true));
+            // 显示层数信息和性能提示
+            int layerCount = _recipe?.blendLayers?.Count ?? 0;
+            int activeLayerCount = _recipe?.blendLayers?.Count(l => l.enabled && l.mask != null && l.terrainLayer != null) ?? 0;
+            
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField($"总层数: {layerCount} | 活跃层数: {activeLayerCount}", EditorStyles.miniLabel);
+                
+                if (activeLayerCount > 16)
+                {
+                    EditorGUILayout.LabelField("⚠️ 大量层数可能影响性能", EditorStyles.miniLabel);
+                }
+                else if (activeLayerCount > 4)
+                {
+                    EditorGUILayout.LabelField("✨ 多层预览模式", EditorStyles.miniLabel);
+                }
+            }
+
+            // GPU 预览：水平显示完整道路横截面
+            // 使用更低的高度以适应4:1的宽高比
+            Rect previewRect = GUILayoutUtility.GetRect(0, 120, GUILayout.ExpandWidth(true));
 
             if (_lastRecipeHash == -1) UpdatePreviewTexture();
 
@@ -124,13 +157,16 @@ namespace MrPathV2
                 GUI.DrawTexture(previewRect, _previewRT, ScaleMode.StretchToFill, false);
             }
 
-            float centerY = previewRect.y + previewRect.height * 0.5f;
+            // 绘制中心线（垂直线，表示道路中心）
+            float centerX = previewRect.x + previewRect.width * 0.5f;
             if (_showCenterLine)
             {
-                EditorGUI.DrawRect(new Rect(previewRect.x, centerY - 0.5f, previewRect.width, 1f), new Color(1, 1, 1, 0.5f));
+                EditorGUI.DrawRect(new Rect(centerX - 0.5f, previewRect.y, 1f, previewRect.height), new Color(1, 1, 1, 0.7f));
             }
 
-            const string helpText = "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。";
+            string helpText = activeLayerCount > 4 
+                ? "基于地形贴图和遮罩混合的最终道路效果预览 (多层GPU加速)。水平显示完整道路横截面，中心线表示道路中心。"
+                : "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。水平显示完整道路横截面，中心线表示道路中心。";
             EditorGUILayout.HelpBox(helpText, MessageType.None);
         }
 
@@ -145,10 +181,12 @@ namespace MrPathV2
 
         private void GenerateCombinedPreviewGPU(StylizedRoadRecipe recipe)
         {
-            if (_previewRT == null || _previewRT.width != 512 || _previewRT.height != 256)
+            // 修改预览尺寸：使用更宽的比例以显示完整道路横截面（水平方向）
+            // 640x160 提供4:1的宽高比，更适合显示道路横截面
+            if (_previewRT == null || _previewRT.width != 640 || _previewRT.height != 160)
             {
                 if (_previewRT != null) _previewRT.Release();
-                _previewRT = new RenderTexture(512, 256, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Default);
+                _previewRT = new RenderTexture(640, 160, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Default);
                 _previewRT.Create();
             }
 
@@ -176,6 +214,10 @@ namespace MrPathV2
                 var layer = activeLayers[i];
                 // 使用 PreviewPipelineUtility 统一计算 tiling 并生成 LUT
                 Vector2 tiling = PreviewPipelineUtility.CalcLayerTiling(previewWorldWidth, layer.terrainLayer);
+                
+                // 使用新的mask系统获取活动遮罩
+                var activeMask = layer.GetActiveMask();
+                
                 var pli = new PreviewPipelineUtility.PreviewLayerInfo(
                     layer.terrainLayer.diffuseTexture as Texture2D ?? Texture2D.whiteTexture,
                     tiling,
@@ -183,7 +225,7 @@ namespace MrPathV2
                     Color.white,
                     Mathf.Clamp01(layer.opacity * recipe.masterOpacity),
                     layer.blendMode,
-                    layer.mask);
+                    activeMask);
                 // Build single-layer LUT (only R channel used)
                 Texture2D maskLUT = PreviewPipelineUtility.BuildMaskLUT(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
                  _previewMaterial.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
@@ -205,11 +247,12 @@ namespace MrPathV2
                  }
             }
 
-            // ... 结尾部分不变 ...
+            // 将最终结果复制到预览 RT，并释放临时资源
             Graphics.Blit(activeLayers.Count % 2 != 0 ? rt2 : rt1, _previewRT);
             RenderTexture.ReleaseTemporary(rt1);
             RenderTexture.ReleaseTemporary(rt2);
         }
+
 
         // 根据配方（Recipe）的实际道路宽度，动态计算预览所使用的世界宽度。
         private static float GetPreviewWorldWidth(StylizedRoadRecipe recipe)
@@ -230,7 +273,7 @@ namespace MrPathV2
             var pixels = new Color[256];
             for (int i = 0; i < 256; i++)
             {
-                float pos = Mathf.Lerp(-1f, 1f, i / 255f);
+                float pos = Mathf.Lerp(-1f, 1f, i / (256f - 1f));
 
                 // 【修改】将 PREVIEW_WORLD_WIDTH 传递给 Evaluate 方法
 
@@ -266,9 +309,13 @@ namespace MrPathV2
                     hash = hash * 23 + layer.blendMode.GetHashCode();
                     hash = hash * 23 + (layer.terrainLayer != null ? layer.terrainLayer.GetInstanceID() : 0);
 
-                    if (layer.mask != null)
+                    // 使用新的mask系统计算hash
+                    hash = hash * 23 + layer.maskType.GetHashCode();
+                    
+                    var activeMask = layer.GetActiveMask();
+                    if (activeMask != null)
                     {
-                        hash = hash * 23 + JsonUtility.ToJson(layer.mask).GetHashCode();
+                        hash = hash * 23 + JsonUtility.ToJson(activeMask).GetHashCode();
                     }
                 }
                 return hash;
@@ -277,18 +324,81 @@ namespace MrPathV2
 
         private void DrawMaskCreator()
         {
+            EditorGUILayout.LabelField("快速创建遮罩", EditorStyles.boldLabel);
+            
             using (new EditorGUILayout.HorizontalScope())
             {
+                // 创建路肩遮罩按钮
+                if (GUILayout.Button("创建路肩遮罩", GUILayout.Width(120)))
+                {
+                    CreateSpecificMaskAsset(typeof(ShoulderMask), "路肩遮罩");
+                }
+                
+                // 创建路面遮罩按钮
+                if (GUILayout.Button("创建路面遮罩", GUILayout.Width(120)))
+                {
+                    CreateSpecificMaskAsset(typeof(RoadSurfaceMask), "路面遮罩");
+                }
+            }
+            
+            EditorGUILayout.Space(5);
+            
+            // 通用遮罩创建器（保留原有功能）
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("通用遮罩:", GUILayout.Width(80));
+                
                 if (_maskTypes.Length > 0)
                 {
                     int currentIndex = Array.IndexOf(_maskTypes, _selectedMaskType);
-                    var typeNames = _maskTypes.Select(t => t.Name).ToArray();
-                    int newIndex = EditorGUILayout.Popup(new GUIContent("遮罩列表"), currentIndex, typeNames);
+                    var typeNames = _maskTypes.Select(t => GetMaskTypeDisplayName(t)).ToArray();
+                    int newIndex = EditorGUILayout.Popup(currentIndex, typeNames);
                     if (newIndex != currentIndex) _selectedMaskType = _maskTypes[newIndex];
                 }
-                if (GUILayout.Button("创建遮罩", GUILayout.Width(100))) { CreateMaskAsset(); }
+                
+                if (GUILayout.Button("创建", GUILayout.Width(60)))
+                {
+                    CreateMaskAsset();
+                }
             }
         }
+        private void CreateSpecificMaskAsset(Type maskType, string displayName)
+        {
+            if (maskType == null || !maskType.IsSubclassOf(typeof(BlendMaskBase)))
+            {
+                Debug.LogError($"无效的遮罩类型: {maskType?.Name}");
+                return;
+            }
+
+            var newMask = CreateInstance(maskType);
+            string recipePath = AssetDatabase.GetAssetPath(_recipe);
+            string folder = Path.GetDirectoryName(recipePath) ?? "Assets";
+            string masksFolder = Path.Combine(folder, "Masks");
+            
+            if (!AssetDatabase.IsValidFolder(masksFolder))
+            {
+                AssetDatabase.CreateFolder(folder, "Masks");
+            }
+            
+            string assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{maskType.Name}.asset").Replace("\\", "/");
+            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+            
+            AssetDatabase.CreateAsset(newMask, uniquePath);
+            AssetDatabase.SaveAssets();
+            EditorGUIUtility.PingObject(newMask);
+            
+            Debug.Log($"MrPath: 已创建新的{displayName}资产: {uniquePath}");
+        }
+
+        private string GetMaskTypeDisplayName(Type maskType)
+        {
+            if (maskType == typeof(ShoulderMask)) return "路肩遮罩";
+            if (maskType == typeof(RoadSurfaceMask)) return "路面遮罩";
+            if (maskType == typeof(GradientMask)) return "渐变遮罩";
+            if (maskType == typeof(NoiseMask)) return "噪声遮罩";
+            return maskType.Name;
+        }
+
         private void CreateMaskAsset()
         {
             if (_selectedMaskType == null) { Debug.LogError("没有可用的遮罩类型！"); return; }
@@ -302,7 +412,7 @@ namespace MrPathV2
             AssetDatabase.CreateAsset(newMask, uniquePath);
             AssetDatabase.SaveAssets();
             EditorGUIUtility.PingObject(newMask);
-            Debug.Log($"MrPath: 已在 {uniquePath} 创建新的 {_selectedMaskType.Name} 资产。");
+            Debug.Log($"MrPath: 已在 {uniquePath} 创建新的 {GetMaskTypeDisplayName(_selectedMaskType)} 资产。");
         }
         private static Type[] FindAvailableMaskTypes()
         {
