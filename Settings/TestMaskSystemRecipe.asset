@@ -20,7 +20,7 @@ MonoBehaviour:
     maskType: 1
     terrainLayer: {fileID: 8574412962073106934, guid: 0e4def59c7f9ce347b931b252ade3ddd,
       type: 2}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 6ca6bf0cd5468fb4d8613def9216e6b3, type: 2}
     shoulderMask: {fileID: 11400000, guid: 0f555721fae2659479dc3ebdd30556e5, type: 2}
     roadSurfaceMask: {fileID: 11400000, guid: 784406834b8d6bf419f4963a24d88ad2, type: 2}
     blendMask:
@@ -60,7 +60,7 @@ MonoBehaviour:
     maskType: 2
     terrainLayer: {fileID: 8574412962073106934, guid: 34ed5cabe3db34c40b016c362f19fd22,
       type: 2}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: e57f4bf6c9fb53146bac5151309617dc, type: 2}
     shoulderMask: {fileID: 0}
     roadSurfaceMask: {fileID: 11400000, guid: 23456789012345678901234567890123, type: 2}
     blendMask:

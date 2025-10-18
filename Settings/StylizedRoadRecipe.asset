@@ -18,7 +18,7 @@ MonoBehaviour:
     blendMode: 0
     opacity: 1
     maskType: 0
-    terrainLayer: {fileID: 8574412962073106934, guid: 170a0757bf7371a498767dc89fcb5f91,
+    terrainLayer: {fileID: 8574412962073106934, guid: 6c25c761803014cf68f02047997b8c01,
       type: 2}
     mask: {fileID: 11400000, guid: 08b1e42c5bdcd324881b02c2b7ed8e27, type: 2}
     shoulderMask: {fileID: 11400000, guid: d6821facdc785d64bb6923bb7fe7dbc4, type: 2}
@@ -55,4 +55,4 @@ MonoBehaviour:
     isExpanded: 1
   width: 1
   falloff: 0.07
-  masterOpacity: 1
+  masterOpacity: 0.916

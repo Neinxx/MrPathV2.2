@@ -15,8 +15,8 @@ namespace MrPathV2
     public class PathCreatorEditor : Editor
     {
         #region 字段
-
-        private PathCreator _targetCreator;
+    
+        private PathCreator _targetCreator;  
 
         // --- 序列化属性缓存 ---
         // [优化] 缓存 SerializedProperty 以避免在 OnInspectorGUI 中重复查找，提升性能。
@@ -82,7 +82,8 @@ namespace MrPathV2
             Undo.undoRedoPerformed += OnUndoRedo;
             _targetCreator.PathModified += OnPathModified;
 
-            StylizedRoadRecipeEditor.OnRecipeModified += OnRecipeChanged;
+            StylizedRoadRecipe.OnRecipeChanged += OnRecipeChanged;
+             StylizedRoadRecipeEditor.OnRecipeModified += OnRecipeChanged;
 
             MarkPathAsDirty(); // 首次启用时强制刷新
             _lastPosition = _targetCreator.transform.position;
@@ -115,6 +116,7 @@ namespace MrPathV2
             {
                 _targetCreator.PathModified -= OnPathModified;
             }
+            StylizedRoadRecipe.OnRecipeChanged -= OnRecipeChanged;
             StylizedRoadRecipeEditor.OnRecipeModified -= OnRecipeChanged;
         }
 
@@ -205,6 +207,16 @@ namespace MrPathV2
                 }
             }
 
+            // --- 始终更新预览（即使未激活自定义工具），保证场景中可见 ---
+            _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
+            _terrainPanel?.Draw();
+
+            // [策略] 和平共存：如果当前有其他自定义工具处于激活状态，则跳过句柄绘制（但预览已绘制）。
+            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
+            {
+                return;
+            }
+
             // [优化] 使用 EditorGUI.EndChangeCheck 来检测句柄是否被拖动，仅在发生变化时重绘。
             EditorGUI.BeginChangeCheck();
             PathEditorHandles.Draw(ref context);
@@ -217,11 +229,7 @@ namespace MrPathV2
             _ctx.UpdateHoverState(context);
             _ctx.InputHandler.HandleInputEvents(currentEvent, _targetCreator, context.hoveredPathT, context.hoveredPointIndex);
 
-            _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
-
-            _terrainPanel?.Draw();
-
-            DrawCoordinateTooltip(_targetCreator, context);
+          //  DrawCoordinateTooltip(_targetCreator, context);
 
             // [性能优化] 关键改动：移除 SceneView.RepaintAll()。
             // RepaintAll() 会强制重绘所有场景视图，非常耗费性能。

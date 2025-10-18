@@ -21,3 +21,5 @@ MonoBehaviour:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
   roadRecipes:
   - {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}
+  - {fileID: 11400000, guid: 007b8d386dbdc8d418747afd98d9d448, type: 2}
+  - {fileID: 11400000, guid: 1bbc561646e23e343879dc11c083dc99, type: 2}

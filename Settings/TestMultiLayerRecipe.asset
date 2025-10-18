@@ -17,8 +17,11 @@ MonoBehaviour:
     name: Test Layer 1
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 8f320760eeee336429ba6b85faf39c1a, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -53,8 +56,11 @@ MonoBehaviour:
     name: Test Layer 2
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: ad5fb5f28382c7a40a7de4f5f1936255, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -89,8 +95,11 @@ MonoBehaviour:
     name: Test Layer 3
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: cd7a4418ac4928f43ba97d0b1cdeae7d, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -125,8 +134,11 @@ MonoBehaviour:
     name: Test Layer 4
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 61bc6da8076d2ae4a9a7dfa6f1b1a133, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -161,8 +173,11 @@ MonoBehaviour:
     name: Test Layer 5
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 1c913179891302544a8fcf01b883babf, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -197,8 +212,11 @@ MonoBehaviour:
     name: Test Layer 6
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 25053d65aec0c5d4f91afb631f95b3a2, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -233,8 +251,11 @@ MonoBehaviour:
     name: Test Layer 7
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: a5ee4291c5be6c449ac644afcf900098, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10
@@ -269,8 +290,11 @@ MonoBehaviour:
     name: Test Layer 8
     blendMode: 0
     opacity: 0.8
+    maskType: 0
     terrainLayer: {fileID: 0}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 940c5a77138776a4685c8fcbba6bbbcc, type: 2}
+    shoulderMask: {fileID: 0}
+    roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1
       noiseScale: 10

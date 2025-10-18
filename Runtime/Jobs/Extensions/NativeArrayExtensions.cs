@@ -18,7 +18,7 @@ namespace MrPathV2.Extensions
         /// <param name="allocator">分配器类型</param>
         /// <param name="options">初始化选项</param>
         /// <returns>创建的NativeArray</returns>
-        public static NativeArray<T> CreateTracked<T>(int length, Allocator allocator, 
+        public static NativeArray<T> CreateTracked<T>(int length, Allocator allocator,
             NativeArrayOptions options = NativeArrayOptions.ClearMemory) where T : struct
         {
             NativeArray<T> array;
@@ -32,11 +32,11 @@ namespace MrPathV2.Extensions
             {
                 array = new NativeArray<T>(length, allocator, options);
             }
-            
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             MemoryTracker.TrackAllocation(array, allocator);
 #endif
-            
+
             return array;
         }
 
@@ -51,11 +51,19 @@ namespace MrPathV2.Extensions
 
             try
             {
-                #if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 MemoryTracker.TrackDeallocation(array);
-                #endif
-                
-                array.Dispose();
+#endif
+
+                try
+                {
+                    array.Dispose();
+                }
+
+                catch (Exception disposeEx) when (disposeEx is InvalidOperationException || disposeEx is ObjectDisposedException)
+                {
+                    // 已被外部释放或已处于无效状态，忽略重复释放错误
+                }
             }
             catch (Exception ex)
             {
@@ -74,10 +82,10 @@ namespace MrPathV2.Extensions
 
             try
             {
-                #if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 MemoryTracker.TrackDeallocation(list);
-                #endif
-                
+#endif
+
                 list.Dispose();
             }
             catch (Exception ex)
@@ -174,17 +182,17 @@ namespace MrPathV2.Extensions
         /// <param name="allocator">分配器类型</param>
         /// <param name="preserveData">是否保留原数据</param>
         /// <returns>新的调整大小后的数组</returns>
-        public static NativeArray<T> Resize<T>(this NativeArray<T> array, int newLength, 
+        public static NativeArray<T> Resize<T>(this NativeArray<T> array, int newLength,
             Allocator allocator, bool preserveData = true) where T : struct
         {
             var newArray = CreateTracked<T>(newLength, allocator);
-            
+
             if (preserveData && array.IsValid())
             {
                 int copyLength = Mathf.Min(array.Length, newLength);
                 array.SafeCopyTo(newArray, 0, 0, copyLength);
             }
-            
+
             return newArray;
         }
 
@@ -240,7 +248,7 @@ namespace MrPathV2.Extensions
         {
             if (!array.IsValid() || index < 0 || index >= array.Length)
                 return defaultValue;
-            
+
             return array[index];
         }
 
@@ -256,7 +264,7 @@ namespace MrPathV2.Extensions
         {
             if (!array.IsValid() || index < 0 || index >= array.Length)
                 return false;
-            
+
             array[index] = value;
             return true;
         }

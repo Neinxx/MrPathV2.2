@@ -1,11 +1,10 @@
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace MrPathV2
 {
     public abstract class BlendMaskBase : ScriptableObject
     {
-        [BoxGroup("遮罩设置")]
+        [Header("Mask Settings")]
         [Range(0f, 1f)]
         [Tooltip("遮罩边缘的平滑度。0=硬边缘，1=最大平滑")]
         public float smooth = 0.1f;

@@ -136,10 +136,8 @@ namespace MrPathV2
 
             public void Dispose()
             {
-                vertices.SafeDispose();
-                uvs.SafeDispose();
-                colors.SafeDispose();
-                indices.SafeDispose();
+                // 顶点、UV、颜色、索引 NativeArray 均由 NativeCollectionManager 统一释放，
+                // 此处无需再次显式调用 SafeDispose()，以免发生二次释放错误。
                 spine.Dispose();
                 profile.Dispose();
                 recipe.Dispose();

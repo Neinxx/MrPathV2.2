@@ -18,7 +18,32 @@ namespace MrPathV2
         public EditorRefreshManager()
         {
             EditorApplication.update += ProcessPendingRefreshes;
+
+#if UNITY_EDITOR
+            // 在编辑器退出 / 重新加载脚本时自动清理，避免在终结器中捕获未释放情况。
+            if (!_registeredForDisposeEvents)
+            {
+                AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+                EditorApplication.quitting += OnEditorQuitting;
+                _registeredForDisposeEvents = true;
+            }
+#endif
         }
+
+#if UNITY_EDITOR
+        // 标记是否已注册事件，防止重复注册
+        private static bool _registeredForDisposeEvents = false;
+
+        private void OnBeforeAssemblyReload()
+        {
+            Dispose();
+        }
+
+        private void OnEditorQuitting()
+        {
+            Dispose();
+        }
+#endif
 
         /// <summary>
         /// 请求刷新操作，带有防抖动机制
@@ -32,7 +57,7 @@ namespace MrPathV2
                 return;
 
             float currentTime = (float)EditorApplication.timeSinceStartup;
-            
+
             if (forceImmediate)
             {
                 // 立即执行并更新时间戳
@@ -160,6 +185,14 @@ namespace MrPathV2
             if (!_disposed)
             {
                 EditorApplication.update -= ProcessPendingRefreshes;
+#if UNITY_EDITOR
+                if (_registeredForDisposeEvents)
+                {
+                    AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+                    EditorApplication.quitting -= OnEditorQuitting;
+                    _registeredForDisposeEvents = false;
+                }
+#endif
                 _pendingRefreshActions.Clear();
                 _lastRefreshTimes.Clear();
                 _disposed = true;
@@ -182,7 +215,7 @@ namespace MrPathV2
     public static class EditorRefresh
     {
         private static EditorRefreshManager _instance;
-        
+
         public static EditorRefreshManager Instance
         {
             get

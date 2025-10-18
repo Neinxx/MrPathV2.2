@@ -1,28 +1,22 @@
 
 
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace MrPathV2
 {
     public abstract class ProceduralMaskBase : BlendMaskBase
     {
-        [BoxGroup("Noise Settings")]
+        [Header("Noise Settings")]
         [Range(0, 1)]
         public float strength = 1.0f;
 
-        [BoxGroup("Noise Settings")]
-        [SuffixLabel("meters")] 
-        [LabelText("World Size")]  
-        [MinValue(0.1)]
-       
-        public Vector2 tiling = new Vector2(2, 2); 
+        [Tooltip("World size in meters (min 0.1)")]
+        [Min(0.1f)]
+        public Vector2 tiling = new Vector2(2, 2);
 
-        [BoxGroup("Noise Settings")]
         public Vector2 offset = Vector2.zero;
 
-        [BoxGroup("Noise Settings")]
-        [Tooltip("一个随机种子，用于在其他参数相同时，也能获得不同的噪声形状")]
+        [Tooltip("Random seed to vary noise shape even with identical parameters")]
         public float seed = 0.0f;
 
         

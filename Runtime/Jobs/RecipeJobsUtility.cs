@@ -131,30 +131,31 @@ namespace MrPathV2
                 stripOffset += stripResolution;
             }
             // 生成 LUT：256长度，每像素RGBA存4层(已混合并归一化)
-            for(int p=0;p<256;p++)
+            for (int p = 0; p < 256; p++)
             {
                 float normalizedDist = p / 255f; // 0..1 center=0 edges=1
-                 float r=0,g=0,b=0,a=0;
-                for(int li=0;li<math.min(4,Length);li++)
+                float r = 0, g = 0, b = 0, a = 0;
+                for (int li = 0; li < math.min(4, Length); li++)
                 {
                     // 计算遮罩值（已包含不透明度）
                     int sliceStart = stripSlices[li].x;
                     int res = stripResolution;
                     float fIdx = normalizedDist * (res - 1);
-                    int ia=(int)math.floor(fIdx);
-                    ia = math.clamp(ia,0,res-1);
-                    int ib=math.min(ia+1,res-1);
-                    float w=fIdx-ia;
-                    float va=strips[sliceStart+ia];
-                    float vb=strips[sliceStart+ib];
-                    float v=math.lerp(va,vb,w);
+                    int ia = (int)math.floor(fIdx);
+                    ia = math.clamp(ia, 0, res - 1);
+                    int ib = math.min(ia + 1, res - 1);
+                    float w = fIdx - ia;
+                    float va = strips[sliceStart + ia];
+                    float vb = strips[sliceStart + ib];
+                    float v = math.lerp(va, vb, w);
                     // Blend
                     int mode = blendModes[li];
-                    switch(li){
-                        case 0: r = TerrainJobsUtility.Blend(r,v,mode); break;
-                        case 1: g = TerrainJobsUtility.Blend(g,v,mode); break;
-                        case 2: b = TerrainJobsUtility.Blend(b,v,mode); break;
-                        case 3: a = TerrainJobsUtility.Blend(a,v,mode); break;
+                    switch (li)
+                    {
+                        case 0: r = TerrainJobsUtility.Blend(r, v, mode); break;
+                        case 1: g = TerrainJobsUtility.Blend(g, v, mode); break;
+                        case 2: b = TerrainJobsUtility.Blend(b, v, mode); break;
+                        case 3: a = TerrainJobsUtility.Blend(a, v, mode); break;
                     }
                 }
                 // 不再对权重做归一化，保留原始不透明度，后续使用阶段再统一归一化/Clamp
@@ -162,8 +163,13 @@ namespace MrPathV2
                 g = math.clamp(g, 0f, 1f);
                 b = math.clamp(b, 0f, 1f);
                 a = math.clamp(a, 0f, 1f);
-                maskLUT256[p]=new float4(r,g,b,a);
+                maskLUT256[p] = new float4(r, g, b, a);
             }
+
+            // ------ 统一长度，避免后续 Job 越界访问 ------
+            // 由于部分数组可能根据 Length=0 而大小为0，需保证 Length 不超过各数组最小长度
+            int minLen = math.min(Length, math.min(blendModes.Length, math.min(opacities.Length, stripSlices.Length)));
+            Length = minLen;
         }
 
         // 验证数据是否已创建

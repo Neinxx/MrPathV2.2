@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace MrPathV2
@@ -11,17 +10,9 @@ namespace MrPathV2
     [CreateAssetMenu(fileName = "StylizedRoadRecipe", menuName = "MrPath/Stylized Road Recipe")]
     public class StylizedRoadRecipe : ScriptableObject
     {
-        [Title("混合图层 (Passes)")]
-    [InfoBox("此配方通过层叠混合来定义道路的最终材质。每个图层由一个地形层(颜色)和一个遮罩(形状)组成，它们自下而上进行混合。\n\n✨ 支持无限层数：系统会自动处理多Control贴图分配和内存优化。")]
-    [ListDrawerSettings(
-        DraggableItems = true,          // 允许拖拽排序
-        ShowFoldout = true,             // 显示每个列表项的折叠箭头
-        ShowItemCount = true,           // 显示列表项数量
-        DefaultExpandedState = true,    // 默认展开整个列表
-        CustomAddFunction = "AddNewLayer", // 指定一个自定义函数来处理"添加"按钮的点击事件
-        NumberOfItemsPerPage = 10       // 分页显示，避免大量层时UI卡顿
-    )]
-    public List<BlendLayer> blendLayers = new List<BlendLayer>();
+        [Header("混合图层 (Passes)")]
+        [Tooltip("此配方通过层叠混合来定义道路的最终材质。每个图层由一个地形层(颜色)和一个遮罩(形状)组成，它们自下而上进行混合。\n\n支持无限层数：系统会自动处理多Control贴图分配和内存优化。")] 
+        public List<BlendLayer> blendLayers = new List<BlendLayer>();
 
         /// <summary>
         /// 当点击 "+" 按钮时，Odin 会调用这个函数。
@@ -47,5 +38,28 @@ namespace MrPathV2
         [Tooltip("配方整体透明度 (0-1)，用于统一控制所有图层的不透明度。")]
         [Range(0f,1f)]
         public float masterOpacity = 1f;
+
+        // 版本号：每次数据发生变化时自增，用于外部检测变更并作增量刷新
+        [SerializeField, HideInInspector]
+        private int _version = 0;
+        public int Version => _version;
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// 当 Recipe 内容在编辑器中发生修改时触发。运行时自动剔除。
+        /// 使用 <see cref="UnityEditor.EditorApplication.update"/> 订阅方需在编辑器模式下监听。
+        /// </summary>
+        public static event System.Action<StylizedRoadRecipe> OnRecipeChanged;
+#endif
+
+        private void OnValidate()
+        {
+            // Unity 会在 Inspector 变更或加载时调用此函数。
+            // 我们在编辑器模式下递增版本号并广播变更事件。
+            _version++;
+#if UNITY_EDITOR
+            OnRecipeChanged?.Invoke(this);
+#endif
+        }
     }
 }

@@ -1,5 +1,4 @@
 using UnityEngine;
-using Sirenix.OdinInspector;
 
 namespace MrPathV2
 {
@@ -10,30 +9,26 @@ namespace MrPathV2
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Shoulder Mask")]
     public class ShoulderMask : BlendMaskBase
     {
-        [BoxGroup("路肩设置")]
+        [Header("路肩设置")]
         [Tooltip("路肩宽度占道路总宽度的比例 (0-0.5)")]
         [Range(0f, 0.5f)]
         public float shoulderWidthRatio = 0.15f;
-        
-        [BoxGroup("路肩设置")]
+
         [Tooltip("路肩强度：控制路肩区域的遮罩强度")]
         [Range(0f, 1f)]
         public float shoulderStrength = 1f;
-        
-        [BoxGroup("路肩设置")]
+
         [Tooltip("边缘衰减：控制路肩向内衰减的距离比例")]
         [Range(0f, 0.3f)]
         public float edgeFalloff = 0.05f;
-        
-        [BoxGroup("路肩设置")]
+
         [Tooltip("是否启用左侧路肩")]
         public bool enableLeftShoulder = true;
-        
-        [BoxGroup("路肩设置")]
+
         [Tooltip("是否启用右侧路肩")]
         public bool enableRightShoulder = true;
-        
-        [BoxGroup("高级设置")]
+
+        [Header("高级设置")]
         [Tooltip("路肩形状曲线：控制路肩区域内的强度分布")]
         public AnimationCurve shoulderProfile = AnimationCurve.EaseInOut(0f, 1f, 1f, 1f);
 

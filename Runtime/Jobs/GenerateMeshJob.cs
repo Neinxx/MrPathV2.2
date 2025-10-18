@@ -101,20 +101,41 @@ namespace MrPathV2
 
         public void Execute(int index)
         {
-            if (spine.Length < 2 || segments < 2) return;
+            if (spine.Length < 2 || segments < 2)
+            {
+                return;
+            }
             int i = index / segments;
             int j = index % segments;
-            if (i < 0 || i >= spine.Length) return;
+            if (i < 0 || i >= spine.Length)
+            {
+                return;
+            }
+
+            // 如果 Recipe 数据未初始化或无任何图层，直接写入 baseColor 并返回，避免潜在的空引用/越界
+            if (recipe.Length == 0 ||
+                !recipe.blendModes.IsCreated ||
+                !recipe.opacities.IsCreated ||
+                !recipe.stripSlices.IsCreated ||
+                !recipe.strips.IsCreated)
+            {
+                colors[index] = baseColor;
+                return;
+            }
 
             float t = j / (float)(segments - 1);         // 0..1 左->右
-             float signedT = t * 2f - 1f;                  // -1..1 中心为0
-             float normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
+            float signedT = t * 2f - 1f;                  // -1..1 中心为0
+            float normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
 
             // 只取前4层作为预览（RGBA），其余层忽略
+            int layerCount = math.min(4, math.min(recipe.Length, math.min(recipe.blendModes.Length, math.min(recipe.opacities.Length, recipe.stripSlices.Length))));
             float r = 0f, g = 0f, b = 0f, a = 0f;
-            int layerCount = math.min(4, recipe.Length);
             for (int k = 0; k < layerCount; k++)
             {
+                // 再次确保各数组索引安全
+                if (k >= recipe.blendModes.Length || k >= recipe.opacities.Length || k >= recipe.stripSlices.Length)
+                    continue;
+
                 float layerMask;
                 if (recipe.maskLUT256.IsCreated)
                 {

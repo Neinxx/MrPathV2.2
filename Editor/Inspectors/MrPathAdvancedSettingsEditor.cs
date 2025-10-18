@@ -157,6 +157,29 @@ namespace MrPathV2
                 entryProp.FindPropertyRelative("strategy").objectReferenceValue = strat;
             }
 
+            // 根据当前设置中的策略覆盖，更新或添加注册表条目
+            // 1) 默认策略
+            if (settings.defaultStrategy != null)
+            {
+                if (settings.defaultStrategy is BezierStrategy)
+                    SetEntry(CurveType.Bezier, settings.defaultStrategy);
+                else if (settings.defaultStrategy is CatmullRomStrategy)
+                    SetEntry(CurveType.CatmullRom, settings.defaultStrategy);
+            }
+
+            // 2) 额外可用策略数组
+            if (settings.availableStrategies != null)
+            {
+                foreach (var strat in settings.availableStrategies)
+                {
+                    if (strat == null) continue;
+                    if (strat is BezierStrategy)
+                        SetEntry(CurveType.Bezier, strat);
+                    else if (strat is CatmullRomStrategy)
+                        SetEntry(CurveType.CatmullRom, strat);
+                }
+            }
+
             rso.ApplyModifiedProperties();
         }
     }

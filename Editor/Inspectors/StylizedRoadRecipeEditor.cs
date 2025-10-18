@@ -2,18 +2,18 @@
 
 using UnityEditor;
 using UnityEngine;
-using Sirenix.OdinInspector.Editor;
-using Sirenix.Utilities.Editor;
+
 using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using MrPathV2.EditorAdapters;
 
 
 namespace MrPathV2
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
-    public class StylizedRoadRecipeEditor : OdinEditor
+    public class StylizedRoadRecipeEditor : Editor
     {
         public static event Action<StylizedRoadRecipe> OnRecipeModified;
 
@@ -45,9 +45,9 @@ namespace MrPathV2
         private Type _selectedMaskType;
         private static readonly Type[] _maskTypes = FindAvailableMaskTypes();
 
-        protected override void OnEnable()
+        private void OnEnable()
         {
-            base.OnEnable();
+
             _recipe = target as StylizedRoadRecipe;
             if (_maskTypes.Length > 0)
                 _selectedMaskType = _maskTypes[0];
@@ -70,40 +70,59 @@ namespace MrPathV2
             }
 
             _previewMaterial = _sharedPreviewMaterial; // 使用共享实例，避免重复创建/销毁
-
-            this.Tree.OnPropertyValueChanged += (prop, path) => OnRecipeModified?.Invoke(_recipe);
+            TerrainPreviewAdapter.PreviewUpdated += OnTerrainPreviewUpdated;
         }
 
-        protected override void OnDisable()
+        private void OnDisable()
         {
-            base.OnDisable();
-            if (_previewRT != null) _previewRT.Release();
+            TerrainPreviewAdapter.PreviewUpdated -= OnTerrainPreviewUpdated;
+        }
 
+        private void OnTerrainPreviewUpdated(RenderTexture rt)
+        {
+            _previewRT = rt;
+            Repaint();
+        }
 
-            // 不再销毁 _previewMaterial，因为它是静态共享实例
-            foreach (var lut in _maskLUTCache.Values) DestroyImmediate(lut);
-            _maskLUTCache.Clear();
-
-
+        private void SyncTerrainPreviewAdapter()
+        {
+            var terrain = Terrain.activeTerrain;
+            PathProfile profile = null;
+        
+            // 从当前选中的 PathCreator 获取 Profile
+            if (Selection.activeGameObject != null)
+            {
+                var pc = Selection.activeGameObject.GetComponent<PathCreator>();
+                if (pc != null && pc.profile != null)
+                {
+                    profile = pc.profile;
+                }
+            }
+        
+            TerrainPreviewAdapter.SetContext(terrain, profile, _recipe);
         }
 
         public override void OnInspectorGUI()
         {
             base.OnInspectorGUI();
+        
+            // 同步 TerrainPreviewAdapter 上下文，确保实时预览
+            SyncTerrainPreviewAdapter();
+        
             GUILayout.FlexibleSpace();
 
-            SirenixEditorGUI.BeginBox();
-            
+            EditorGUILayout.BeginVertical("box");
+
             // 移除Inspector预览面板，用户现在可以在Scene视图中实时看到效果
             EditorGUILayout.HelpBox("道路预览已移至Scene视图，调节参数可实时查看效果。", MessageType.Info);
-            
+
             EditorGUILayout.Space();
             DrawMaskCreator();
-            
+
             // 添加性能分析面板
             MultiLayerPerformanceManager.DrawPerformanceInfo(_recipe);
-            
-            SirenixEditorGUI.EndBox();
+
+            EditorGUILayout.EndVertical();
 
             CheckForChanges();
         }
@@ -131,11 +150,11 @@ namespace MrPathV2
             // 显示层数信息和性能提示
             int layerCount = _recipe?.blendLayers?.Count ?? 0;
             int activeLayerCount = _recipe?.blendLayers?.Count(l => l.enabled && l.mask != null && l.terrainLayer != null) ?? 0;
-            
+
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField($"总层数: {layerCount} | 活跃层数: {activeLayerCount}", EditorStyles.miniLabel);
-                
+
                 if (activeLayerCount > 16)
                 {
                     EditorGUILayout.LabelField("⚠️ 大量层数可能影响性能", EditorStyles.miniLabel);
@@ -164,10 +183,20 @@ namespace MrPathV2
                 EditorGUI.DrawRect(new Rect(centerX - 0.5f, previewRect.y, 1f, previewRect.height), new Color(1, 1, 1, 0.7f));
             }
 
-            string helpText = activeLayerCount > 4 
+            string helpText = activeLayerCount > 4
                 ? "基于地形贴图和遮罩混合的最终道路效果预览 (多层GPU加速)。水平显示完整道路横截面，中心线表示道路中心。"
                 : "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。水平显示完整道路横截面，中心线表示道路中心。";
             EditorGUILayout.HelpBox(helpText, MessageType.None);
+
+            // Apply button
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("应用到选中地形", GUILayout.Width(160)))
+                {
+                    ApplyPreviewToTerrain();
+                }
+            }
         }
 
         #region Preview Generation
@@ -185,7 +214,15 @@ namespace MrPathV2
             // 640x160 提供4:1的宽高比，更适合显示道路横截面
             if (_previewRT == null || _previewRT.width != 640 || _previewRT.height != 160)
             {
-                if (_previewRT != null) _previewRT.Release();
+                if (_previewRT != null)
+                {
+                    // 确保在释放前不是当前激活的 RenderTexture，避免 Unity 报错
+                    if (RenderTexture.active == _previewRT)
+                    {
+                        RenderTexture.active = null;
+                    }
+                    _previewRT.Release();
+                }
                 _previewRT = new RenderTexture(640, 160, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Default);
                 _previewRT.Create();
             }
@@ -214,10 +251,10 @@ namespace MrPathV2
                 var layer = activeLayers[i];
                 // 使用 PreviewPipelineUtility 统一计算 tiling 并生成 LUT
                 Vector2 tiling = PreviewPipelineUtility.CalcLayerTiling(previewWorldWidth, layer.terrainLayer);
-                
+
                 // 使用新的mask系统获取活动遮罩
                 var activeMask = layer.GetActiveMask();
-                
+
                 var pli = new PreviewPipelineUtility.PreviewLayerInfo(
                     layer.terrainLayer.diffuseTexture as Texture2D ?? Texture2D.whiteTexture,
                     tiling,
@@ -228,23 +265,23 @@ namespace MrPathV2
                     activeMask);
                 // Build single-layer LUT (only R channel used)
                 Texture2D maskLUT = PreviewPipelineUtility.BuildMaskLUT(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
-                 _previewMaterial.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
-                 _previewMaterial.SetColor("_LayerTint", Color.white);
-                 _previewMaterial.SetFloat("_LayerOpacity", pli.opacity);
-                 _previewMaterial.SetFloat("_BlendMode", (float)pli.blendMode);
-                 _previewMaterial.SetTexture("_LayerTex", pli.texture);
-                 _previewMaterial.SetTexture("_MaskLUT", maskLUT);
+                _previewMaterial.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
+                _previewMaterial.SetColor("_LayerTint", Color.white);
+                _previewMaterial.SetFloat("_LayerOpacity", pli.opacity);
+                _previewMaterial.SetFloat("_BlendMode", (float)pli.blendMode);
+                _previewMaterial.SetTexture("_LayerTex", pli.texture);
+                _previewMaterial.SetTexture("_MaskLUT", maskLUT);
 
-                 if (i % 2 == 0)
-                 {
-                     _previewMaterial.SetTexture("_PreviousResultTex", rt1);
-                     Graphics.Blit(rt1, rt2, _previewMaterial);
-                 }
-                 else
-                 {
-                     _previewMaterial.SetTexture("_PreviousResultTex", rt2);
-                     Graphics.Blit(rt2, rt1, _previewMaterial);
-                 }
+                if (i % 2 == 0)
+                {
+                    _previewMaterial.SetTexture("_PreviousResultTex", rt1);
+                    Graphics.Blit(rt1, rt2, _previewMaterial);
+                }
+                else
+                {
+                    _previewMaterial.SetTexture("_PreviousResultTex", rt2);
+                    Graphics.Blit(rt2, rt1, _previewMaterial);
+                }
             }
 
             // 将最终结果复制到预览 RT，并释放临时资源
@@ -292,7 +329,7 @@ namespace MrPathV2
         /// </summary>
         // (removed GenerateChannelsPreviewCPU method as GPU replaces it)
 
-        
+
         private int ComputeRecipeHash(StylizedRoadRecipe r)
         {
             unchecked
@@ -311,7 +348,7 @@ namespace MrPathV2
 
                     // 使用新的mask系统计算hash
                     hash = hash * 23 + layer.maskType.GetHashCode();
-                    
+
                     var activeMask = layer.GetActiveMask();
                     if (activeMask != null)
                     {
@@ -325,7 +362,7 @@ namespace MrPathV2
         private void DrawMaskCreator()
         {
             EditorGUILayout.LabelField("快速创建遮罩", EditorStyles.boldLabel);
-            
+
             using (new EditorGUILayout.HorizontalScope())
             {
                 // 创建路肩遮罩按钮
@@ -333,21 +370,21 @@ namespace MrPathV2
                 {
                     CreateSpecificMaskAsset(typeof(ShoulderMask), "路肩遮罩");
                 }
-                
+
                 // 创建路面遮罩按钮
                 if (GUILayout.Button("创建路面遮罩", GUILayout.Width(120)))
                 {
                     CreateSpecificMaskAsset(typeof(RoadSurfaceMask), "路面遮罩");
                 }
             }
-            
+
             EditorGUILayout.Space(5);
-            
+
             // 通用遮罩创建器（保留原有功能）
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField("通用遮罩:", GUILayout.Width(80));
-                
+
                 if (_maskTypes.Length > 0)
                 {
                     int currentIndex = Array.IndexOf(_maskTypes, _selectedMaskType);
@@ -355,7 +392,7 @@ namespace MrPathV2
                     int newIndex = EditorGUILayout.Popup(currentIndex, typeNames);
                     if (newIndex != currentIndex) _selectedMaskType = _maskTypes[newIndex];
                 }
-                
+
                 if (GUILayout.Button("创建", GUILayout.Width(60)))
                 {
                     CreateMaskAsset();
@@ -374,19 +411,19 @@ namespace MrPathV2
             string recipePath = AssetDatabase.GetAssetPath(_recipe);
             string folder = Path.GetDirectoryName(recipePath) ?? "Assets";
             string masksFolder = Path.Combine(folder, "Masks");
-            
+
             if (!AssetDatabase.IsValidFolder(masksFolder))
             {
                 AssetDatabase.CreateFolder(folder, "Masks");
             }
-            
+
             string assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{maskType.Name}.asset").Replace("\\", "/");
             string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
-            
+
             AssetDatabase.CreateAsset(newMask, uniquePath);
             AssetDatabase.SaveAssets();
             EditorGUIUtility.PingObject(newMask);
-            
+
             Debug.Log($"MrPath: 已创建新的{displayName}资产: {uniquePath}");
         }
 
@@ -432,5 +469,76 @@ namespace MrPathV2
             }
         }
         #endregion
+
+        // ---------------------- Terrain Apply ----------------------
+        private void ApplyPreviewToTerrain()
+        {
+            // 获取当前选中的 Terrain
+            var terrain = UnityEditor.Selection.activeGameObject ? UnityEditor.Selection.activeGameObject.GetComponent<Terrain>() : null;
+            if (terrain == null)
+            {
+                EditorUtility.DisplayDialog("应用失败", "请先在场景中选择一个 Terrain 对象。", "好的");
+                return;
+            }
+
+#if UNITY_2020_1_OR_NEWER
+            // 引入 UnityEditor.TerrainTools
+            try
+            {
+                var td = terrain.terrainData;
+                if (td == null) return;
+
+                // 生成与 Terrain 分辨率匹配的预览 RT
+                var previewRT = MrPathV2.RoadPreviewRenderPipeline.GeneratePreviewRT(null, td, null, _recipe);
+
+                // 通过反射使用 TerrainPaintUtility
+                var tpuType = Type.GetType("UnityEditor.TerrainTools.TerrainPaintUtility, Unity.TerrainTools.Editor");
+                var pcType = Type.GetType("UnityEditor.TerrainTools.PaintContext, Unity.TerrainTools.Editor");
+                if (tpuType == null || pcType == null)
+                {
+                    Debug.LogError("[MrPath] 未找到 TerrainTools API，无法写入地形贴图。请在 Package Manager 中安装 Terrain Tools。");
+                    return;
+                }
+
+                // 创建 PaintContext
+                var beginMethod = tpuType.GetMethod("BeginPaintTexture", new[] { typeof(Terrain), typeof(RectInt), typeof(bool), typeof(int) });
+                var endMethod = tpuType.GetMethod("EndPaintTexture", new[] { pcType, typeof(string) });
+                if (beginMethod == null || endMethod == null)
+                {
+                    Debug.LogError("[MrPath] BeginPaintTexture / EndPaintTexture 反射失败。");
+                    return;
+                }
+
+                // 计算写入区域（整张 splatmap）
+                var rect = new RectInt(0, 0, td.alphamapResolution, td.alphamapResolution);
+                int targetTextureIndex = 0; // 仅写入第一张控制图（R 通道）示例
+                var pc = beginMethod.Invoke(null, new object[] { terrain, rect, false, targetTextureIndex });
+
+                if (pc == null) return;
+
+                // 设置 Graphics.Blit 参数
+                var pcDestField = pcType.GetField("destinationRenderTexture", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                var destRT = pcDestField?.GetValue(pc) as RenderTexture;
+                if (destRT == null)
+                {
+                    Debug.LogError("[MrPath] PaintContext destination RT 获取失败。");
+                    return;
+                }
+
+                Graphics.Blit(previewRT, destRT);
+
+                // 提交
+                endMethod.Invoke(null, new object[] { pc, "MrPath Preview Apply" });
+
+                Debug.Log("[MrPath] 道路预览已写入 Terrain splatmap。");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[MrPath] 写入 Terrain 贴图时发生异常：" + e);
+            }
+#else
+            Debug.LogWarning("[MrPath] 需要 Unity 2020.1+ 才能使用 TerrainTools PaintContext 功能。");
+#endif
+        }
     }
 }

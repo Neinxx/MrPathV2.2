@@ -29,7 +29,26 @@ namespace MrPathV2.Memory
         #region Singleton
         private static UnifiedMemoryManager _instance;
         public static UnifiedMemoryManager Instance => _instance ??= new UnifiedMemoryManager();
-        private UnifiedMemoryManager() { }
+        private UnifiedMemoryManager() {
+            // 注册退出/域重载事件，确保Dispose被调用，避免触发终结器警告
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.quitting += OnQuitting;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+#endif
+            Application.quitting += OnQuitting;
+        }
+
+        private void OnQuitting()
+        {
+            Dispose();
+        }
+#if UNITY_EDITOR
+        private void OnBeforeAssemblyReload()
+        {
+            Dispose();
+        }
+#endif
+
         #endregion
 
         private readonly List<IDisposable> _tracked = new List<IDisposable>(256);
@@ -82,10 +101,9 @@ namespace MrPathV2.Memory
                     array.Dispose();
                 }
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                // 访问 IsCreated 或 Dispose 可能在数组已被释放后抛出异常
-                Debug.LogWarning($"UnifiedMemoryManager: NativeArray already deallocated. {ex.Message}");
+                // 已被外部释放，静默处理避免重复警告
             }
             finally
             {
