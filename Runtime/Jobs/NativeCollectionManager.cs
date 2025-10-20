@@ -8,6 +8,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
     /// <summary>
     /// Native Collection内存管理器，提供统一的内存分配、跟踪和释放机制
     /// </summary>
+    /// <summary>
+    /// [Deprecated] 统一的 Native Collection 管理器。
+    /// 请使用 UnifiedMemory.Instance 或 JobResourceManager 进行新的 Native 容器分配与跟踪。
+    /// 该类仍然保留以保证旧代码兼容，但已不再推荐使用，将在未来版本中移除。
+    /// </summary>
+    [Obsolete("NativeCollectionManager is deprecated. Use UnifiedMemory.Instance or JobResourceManager instead.")]
     public class NativeCollectionManager : IDisposable
     {
         private readonly List<object> _trackedCollections = new();
@@ -213,6 +219,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
     /// <summary>
     /// Native Collection管理器的静态访问点
     /// </summary>
+    [Obsolete("NativeCollections is deprecated. Use UnifiedMemory.Instance instead.")]
     public static class NativeCollections
     {
         private static NativeCollectionManager _instance;

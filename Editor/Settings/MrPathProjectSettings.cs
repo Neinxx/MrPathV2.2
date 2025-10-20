@@ -13,9 +13,10 @@ namespace __temp.MrPathV2._2.Editor.Settings
     /// </summary>
     public class MrPathProjectSettings : ScriptableObject
     {
-        // 定义了主设置文件的唯一、标准路径
-        // note: constant left for compatibility but not used in creation
+        // 定义了主设置文件的唯一、标准路径（保留作向后兼容的最终兜底）
         private const string KSettingsPath = "Assets/MrPathV2.2/Settings/MrPath_ProjectSettings.asset";
+        // 文件名常量；文件夹通过 GetSettingsRootFolder() 动态决定
+        private const string KSettingsFileName = "MrPath_ProjectSettings.asset";
 
         // --- 子配置资产的引用 ---
         [Tooltip("新路径创建时的默认值配置")] public MrPathCreationDefaults creationDefaults;
@@ -58,14 +59,27 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
         private static MrPathProjectSettings LoadExistingSettings()
         {
-            // 标签优先
+            // 1) 通过标签查找
             var guids = AssetDatabase.FindAssets("l:MrPathCoreAsset t:MrPathProjectSettings");
-            if (guids is not { Length: > 0 })
-                return AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(KSettingsPath);
-            var path = AssetDatabase.GUIDToAssetPath(guids[0]);
-            return AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(path);
+            if (guids is { Length: > 1 })
+            {
+                Debug.LogWarning($"[MrPath] 检测到多个 MrPathProjectSettings 资产({guids.Length})，将优先使用首个：" +
+                                 AssetDatabase.GUIDToAssetPath(guids[0]));
+            }
 
-            // 回退常量
+            if (guids is { Length: > 0 })
+            {
+                var firstPath = AssetDatabase.GUIDToAssetPath(guids[0]);
+                return AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(firstPath);
+            }
+
+            // 2) 尝试根据默认动态路径加载（兼容旧项目或未打标签的情况）
+            var fallbackPath = Path.Combine(GetSettingsRootFolder(), KSettingsFileName).Replace("\\", "/");
+            var settings = AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(fallbackPath);
+            if (settings != null) return settings;
+
+            // 3) 最后回退到旧常量路径（历史兼容）
+            return AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(KSettingsPath);
         }
 
         /// <summary>

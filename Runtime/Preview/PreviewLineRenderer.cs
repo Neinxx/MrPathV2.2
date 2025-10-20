@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using __temp.MrPathV2._2.Runtime.Core;
 using __temp.MrPathV2._2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -175,7 +177,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         /// <summary>
         /// 添加多段连续线条（如曲线）
         /// </summary>
-        public void AddPolyLine(Vector3[] points, LineType type, LineStyle? customStyle = null, int priority = 0)
+        private void AddPolyLine(Vector3[] points, LineType type, LineStyle? customStyle = null, int priority = 0)
         {
             if (points == null || points.Length < 2) return;
             
@@ -275,7 +277,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         /// <summary>
         /// 获取默认样式
         /// </summary>
-        public LineStyle GetDefaultStyle(LineType type)
+        private LineStyle GetDefaultStyle(LineType type)
         {
             return _defaultStyles.TryGetValue(type, out var style) ? style : LineStyle.Default;
         }
@@ -286,25 +288,25 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
         private void UpdateBatches()
         {
-            // 清空批次
-            foreach (var batch in _batchedLines.Values)
+            using (ProfilingMarkers.PreviewLineRenderer_Update.Auto())
             {
-                batch.Clear();
-            }
-            
-            // 按类型分组并排序
-            foreach (var line in _lineSegments)
-            {
-                if (ShouldRenderLine(line))
+                // 清空批次
+                foreach (var batch in _batchedLines.Values)
+                {
+                    batch.Clear();
+                }
+                
+                // 按类型分组并排序
+                foreach (var line in _lineSegments.Where(ShouldRenderLine))
                 {
                     _batchedLines[line.Type].Add(line);
                 }
-            }
-            
-            // 按优先级排序每个批次
-            foreach (var batch in _batchedLines.Values)
-            {
-                batch.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+                
+                // 按优先级排序每个批次
+                foreach (var batch in _batchedLines.Values)
+                {
+                    batch.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+                }
             }
         }
 
@@ -411,12 +413,12 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
             
             // 添加最后一个点
-            points.Add(controlPoints[controlPoints.Length - 2]);
+            points.Add(controlPoints[^2]);
             
             return points.ToArray();
         }
 
-        private Vector3 CalculateCatmullRomPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        private static Vector3 CalculateCatmullRomPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
         {
             var tt = t * t;
             var ttt = tt * t;

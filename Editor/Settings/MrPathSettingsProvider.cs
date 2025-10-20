@@ -16,7 +16,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
     /// <summary>
     /// 为 MrPath 工具提供一个清爽、导航式的项目设置界面。
     /// </summary>
-    class MrPathSettingsProvider : SettingsProvider
+    internal class MrPathSettingsProvider : SettingsProvider
     {
         private SerializedObject _settings;
 

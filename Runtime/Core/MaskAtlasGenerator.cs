@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Profiling;
+using __temp.MrPathV2._2.Runtime.Core;
 
 namespace __temp.MrPathV2._2.Runtime.Core
 {
@@ -22,55 +24,58 @@ namespace __temp.MrPathV2._2.Runtime.Core
         public static Texture2D BuildMaskAtlas(Texture2D reuse, IList<PreviewPipelineUtility.PreviewLayerInfo> layers,
             float worldWidth, float pathLength = 100f, int baseResolution = 256)
         {
-            if (layers == null || layers.Count == 0)
+            using (ProfilingMarkers.MaskAtlasGenerator_Build.Auto())
             {
-                // Provide 1x1 white texture as fallback
-                if (reuse == null || reuse.width != 1 || reuse.height != 1 || reuse.format != TextureFormat.R8)
+                if (layers == null || layers.Count == 0)
+                {
+                    // Provide 1x1 white texture as fallback
+                    if (reuse == null || reuse.width != 1 || reuse.height != 1 || reuse.format != TextureFormat.R8)
+                    {
+                        if (reuse != null) Object.DestroyImmediate(reuse);
+                        reuse = new Texture2D(1, 1, TextureFormat.R8, false, true) { wrapMode = TextureWrapMode.Clamp };
+                    }
+                    reuse.SetPixel(0, 0, Color.white);
+                    reuse.Apply(false, false);
+                    return reuse;
+                }
+
+                int layerCount = layers.Count;
+                int width = Mathf.Clamp(baseResolution, 16, 1024); // clamp for safety
+                int height = layerCount;
+
+                bool needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
+                if (needCreate)
                 {
                     if (reuse != null) Object.DestroyImmediate(reuse);
-                    reuse = new Texture2D(1, 1, TextureFormat.R8, false, true) { wrapMode = TextureWrapMode.Clamp };
+                    reuse = new Texture2D(width, height, TextureFormat.R8, false, true)
+                    {
+                        wrapMode = TextureWrapMode.Clamp,
+                        filterMode = FilterMode.Bilinear,
+                        name = "MrPath_MaskAtlas"
+                    };
                 }
-                reuse.SetPixel(0, 0, Color.white);
+
+                Color32[] pixels = new Color32[width * height];
+
+                for (int li = 0; li < layerCount; li++)
+                {
+                    var layer = layers[li];
+                    if (layer.opacity <= 0f) continue;
+
+                    for (int x = 0; x < width; x++)
+                    {
+                        float pos = Mathf.Lerp(-1f, 1f, x / (float)(width - 1));
+                        float v = PreviewPipelineUtility.EvaluateMask(pos, worldWidth, pathLength, layer.mask) * layer.opacity;
+                        v = Mathf.Clamp01(v);
+                        byte b = (byte)Mathf.RoundToInt(v * 255f);
+                        pixels[li * width + x] = new Color32(b, 0, 0, 255);
+                    }
+                }
+
+                reuse.SetPixels32(pixels);
                 reuse.Apply(false, false);
                 return reuse;
             }
-
-            int layerCount = layers.Count;
-            int width = Mathf.Clamp(baseResolution, 16, 1024); // clamp for safety
-            int height = layerCount;
-
-            bool needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
-            if (needCreate)
-            {
-                if (reuse != null) Object.DestroyImmediate(reuse);
-                reuse = new Texture2D(width, height, TextureFormat.R8, false, true)
-                {
-                    wrapMode = TextureWrapMode.Clamp,
-                    filterMode = FilterMode.Bilinear,
-                    name = "MrPath_MaskAtlas"
-                };
-            }
-
-            Color32[] pixels = new Color32[width * height];
-
-            for (int li = 0; li < layerCount; li++)
-            {
-                var layer = layers[li];
-                if (layer.opacity <= 0f) continue;
-
-                for (int x = 0; x < width; x++)
-                {
-                    float pos = Mathf.Lerp(-1f, 1f, x / (float)(width - 1));
-                    float v = PreviewPipelineUtility.EvaluateMask(pos, worldWidth, pathLength, layer.mask) * layer.opacity;
-                    v = Mathf.Clamp01(v);
-                    byte b = (byte)Mathf.RoundToInt(v * 255f);
-                    pixels[li * width + x] = new Color32(b, 0, 0, 255);
-                }
-            }
-
-            reuse.SetPixels32(pixels);
-            reuse.Apply(false, false);
-            return reuse;
         }
     }
 }

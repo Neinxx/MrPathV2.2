@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using __temp.MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace __temp.MrPathV2._2.Runtime.Core
 {
@@ -14,27 +15,30 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
         public static PathSpine SamplePath(PathCreator creator, IHeightProvider heightProvider)
         {
-            if (creator == null || creator.profile == null) return new PathSpine();
-
-            // 1. 生成理想的、平滑的局部空间脊线
-            PathSpine localSpine = GenerateIdealSpine(creator, creator.profile.generationPrecision);
-            if (localSpine.VertexCount < 2) return new PathSpine();
-
-            // 2. 根据配置决定是否进行地形吸附
-            PathSpine worldSpine;
-            if (creator.profile.snapToTerrain && heightProvider != null)
+            using (ProfilingMarkers.PathSampler_SamplePath.Auto())
             {
-                // 【核心重构】调用全新的地形吸附算法
-                worldSpine = DrapeSpineOnTerrain(localSpine, creator.transform, heightProvider, creator.profile);
-            }
-            else
-            {
-                // 如果不吸附，则简单转换到世界空间
-                worldSpine = TransformSpineToWorld(localSpine, creator.transform);
-            }
+                if (creator == null || creator.profile == null) return new PathSpine();
 
-            // 3. 清理并最终确定脊线数据
-            return PurifySpine(worldSpine);
+                // 1. 生成理想的、平滑的局部空间脊线
+                PathSpine localSpine = GenerateIdealSpine(creator, creator.profile.generationPrecision);
+                if (localSpine.VertexCount < 2) return new PathSpine();
+
+                // 2. 根据配置决定是否进行地形吸附
+                PathSpine worldSpine;
+                if (creator.profile.snapToTerrain && heightProvider != null)
+                {
+                    // 【核心重构】调用全新的地形吸附算法
+                    worldSpine = DrapeSpineOnTerrain(localSpine, creator.transform, heightProvider, creator.profile);
+                }
+                else
+                {
+                    // 如果不吸附，则简单转换到世界空间
+                    worldSpine = TransformSpineToWorld(localSpine, creator.transform);
+                }
+
+                // 3. 清理并最终确定脊线数据
+                return PurifySpine(worldSpine);
+            }
         }
 
         /// <summary>
@@ -42,82 +46,85 @@ namespace __temp.MrPathV2._2.Runtime.Core
         /// </summary>
         private static PathSpine DrapeSpineOnTerrain(PathSpine localSpine, Transform owner, IHeightProvider heightProvider, PathProfile profile)
         {
-            int pointCount = localSpine.VertexCount;
-            var worldPoints = new Vector3[pointCount];
-            var terrainHeights = new float[pointCount];
-            float pathAverageHeight = 0;
-            float terrainAverageHeight = 0;
-
-            // --- 步骤 0: 转换到世界空间并采样地形 ---
-            for (int i = 0; i < pointCount; i++)
+            using (ProfilingMarkers.PathSampler_DrapeSpineOnTerrain.Auto())
             {
-                worldPoints[i] = owner.TransformPoint(localSpine.points[i]);
-                terrainHeights[i] = heightProvider.GetHeight(worldPoints[i]);
-                pathAverageHeight += worldPoints[i].y;
-                terrainAverageHeight += terrainHeights[i];
-            }
-            pathAverageHeight /= pointCount;
-            terrainAverageHeight /= pointCount;
+                int pointCount = localSpine.VertexCount;
+                var worldPoints = new Vector3[pointCount];
+                var terrainHeights = new float[pointCount];
+                float pathAverageHeight = 0;
+                float terrainAverageHeight = 0;
 
-            // --- 步骤 1: 整体高度对齐 ---
-            float elevationDifference = terrainAverageHeight - pathAverageHeight;
-            for (int i = 0; i < pointCount; i++)
-            {
-                worldPoints[i].y += elevationDifference;
-            }
-
-            // --- 步骤 2: 向上悬挂 (Upward Drape) ---
-            for (int i = 0; i < pointCount; i++)
-            {
-                if (worldPoints[i].y < terrainHeights[i])
-                {
-                    worldPoints[i].y = terrainHeights[i];
-                }
-            }
-
-            // --- 步骤 3: 迭代松弛平滑 (Iterative Relaxation) ---
-            if (profile.smoothness > 0)
-            {
-                // 我们使用一个临时数组来存储每次迭代的结果，避免原地修改导致错误
-                var smoothedHeights = new float[pointCount];
-
-                for (int iter = 0; iter < profile.smoothness; iter++)
-                {
-                    for (int i = 0; i < pointCount; i++)
-                    {
-                        // 将每个点的高度设置为其邻居的平均高度
-                        if (i > 0 && i < pointCount - 1)
-                        {
-                            smoothedHeights[i] = (worldPoints[i - 1].y + worldPoints[i + 1].y) / 2f;
-                        }
-                        else
-                        {
-                            smoothedHeights[i] = worldPoints[i].y; // 保持端点不变
-                        }
-                    }
-
-                    // 将平滑后的结果应用回 worldPoints，但要确保不穿地
-                    for (int i = 0; i < pointCount; i++)
-                    {
-                        worldPoints[i].y = Mathf.Max(smoothedHeights[i], terrainHeights[i]);
-                    }
-                }
-            }
-
-            // --- 步骤 4: 应用最终的高度偏移 ---
-            if (Mathf.Abs(profile.heightOffset) > 0.001f)
-            {
+                // --- 步骤 0: 转换到世界空间并采样地形 ---
                 for (int i = 0; i < pointCount; i++)
                 {
-                    worldPoints[i].y += profile.heightOffset;
+                    worldPoints[i] = owner.TransformPoint(localSpine.points[i]);
+                    terrainHeights[i] = heightProvider.GetHeight(worldPoints[i]);
+                    pathAverageHeight += worldPoints[i].y;
+                    terrainAverageHeight += terrainHeights[i];
                 }
+                pathAverageHeight /= pointCount;
+                terrainAverageHeight /= pointCount;
+
+                // --- 步骤 1: 整体高度对齐 ---
+                float elevationDifference = terrainAverageHeight - pathAverageHeight;
+                for (int i = 0; i < pointCount; i++)
+                {
+                    worldPoints[i].y += elevationDifference;
+                }
+
+                // --- 步骤 2: 向上悬挂 (Upward Drape) ---
+                for (int i = 0; i < pointCount; i++)
+                {
+                    if (worldPoints[i].y < terrainHeights[i])
+                    {
+                        worldPoints[i].y = terrainHeights[i];
+                    }
+                }
+
+                // --- 步骤 3: 迭代松弛平滑 (Iterative Relaxation) ---
+                if (profile.smoothness > 0)
+                {
+                    // 我们使用一个临时数组来存储每次迭代的结果，避免原地修改导致错误
+                    var smoothedHeights = new float[pointCount];
+
+                    for (int iter = 0; iter < profile.smoothness; iter++)
+                    {
+                        for (int i = 0; i < pointCount; i++)
+                        {
+                            // 将每个点的高度设置为其邻居的平均高度
+                            if (i > 0 && i < pointCount - 1)
+                            {
+                                smoothedHeights[i] = (worldPoints[i - 1].y + worldPoints[i + 1].y) / 2f;
+                            }
+                            else
+                            {
+                                smoothedHeights[i] = worldPoints[i].y; // 保持端点不变
+                            }
+                        }
+
+                        // 将平滑后的结果应用回 worldPoints，但要确保不穿地
+                        for (int i = 0; i < pointCount; i++)
+                        {
+                            worldPoints[i].y = Mathf.Max(smoothedHeights[i], terrainHeights[i]);
+                        }
+                    }
+                }
+
+                // --- 步骤 4: 应用最终的高度偏移 ---
+                if (Mathf.Abs(profile.heightOffset) > 0.001f)
+                {
+                    for (int i = 0; i < pointCount; i++)
+                    {
+                        worldPoints[i].y += profile.heightOffset;
+                    }
+                }
+
+                // --- 最后: 重新计算切线和法线 ---
+                var worldTangents = RecalculateTangentsFromPoints(worldPoints);
+                var worldNormals = GetSurfaceNormals(worldPoints, heightProvider);
+
+                return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.timestamps);
             }
-
-            // --- 最后: 重新计算切线和法线 ---
-            var worldTangents = RecalculateTangentsFromPoints(worldPoints);
-            var worldNormals = GetSurfaceNormals(worldPoints, heightProvider);
-
-            return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.timestamps);
         }
 
 

@@ -147,7 +147,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
         }
 
-        private readonly NativeCollectionManager _memMgr = new NativeCollectionManager();
+        // NativeCollectionManager 已弃用。当前类中的数据由 UnifiedMemory 与 NativeArrayExtensions 自动管理。
+        // 保留占位以防后续需要显式资源管理器。
+        // private readonly JobResourceManager _resourceMgr = new JobResourceManager();
         private JobData? _jobData;
         private JobHandle _combinedHandle;
 
@@ -265,7 +267,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             DisposeJob();
             DisposeJob();
             DisposeJob();
-            _memMgr.Dispose();
+            // _memMgr no longer used after deprecation of NativeCollectionManager
             DisposeJob();
         }
     }
