@@ -33,7 +33,7 @@ namespace MrPathV2
 
         // --- 新的上下文与面板 ---
         private PathEditorContext _ctx;
-        private TerrainOperationsPanel _terrainPanel;
+      //  private TerrainOperationsPanel _terrainPanel;
 
         // [新增] 为场景UI中的常量值定义，避免魔法数字。
         private const float TOOLTIP_OFFSET_X = 12f;
@@ -76,7 +76,7 @@ namespace MrPathV2
             // 初始化上下文与面板
             _ctx = new PathEditorContext(_targetCreator);
             _ctx.Initialize(_targetCreator);
-            _terrainPanel = new TerrainOperationsPanel(_ctx);
+           // _terrainPanel = new TerrainOperationsPanel(_ctx);
 
             // 订阅事件
             Undo.undoRedoPerformed += OnUndoRedo;
@@ -108,7 +108,7 @@ namespace MrPathV2
 
             _ctx?.Dispose();
             _ctx = null;
-            _terrainPanel = null;
+           // _terrainPanel = null;
 
             Undo.undoRedoPerformed -= OnUndoRedo;
             if (_targetCreator != null)
@@ -219,7 +219,7 @@ namespace MrPathV2
 
             _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
 
-            _terrainPanel?.Draw();
+           // _terrainPanel?.Draw();
 
             //  DrawCoordinateTooltip(_targetCreator, context);
 
