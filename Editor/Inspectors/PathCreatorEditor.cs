@@ -26,7 +26,7 @@ namespace MrPathV2
         // --- 内嵌编辑器 ---
         private Editor _profileEmbeddedEditor;
         private bool _profileLocalExpanded = true;
-        
+
         // --- StylizedRoadRecipe 内嵌编辑器 ---
         private Editor _recipeEmbeddedEditor;
         private bool _recipeLocalExpanded = true;
@@ -65,7 +65,7 @@ namespace MrPathV2
             if (_targetCreator.profile != null)
             {
                 InitProfileEmbeddedEditor(_targetCreator.profile);
-                
+
                 // 初始化 StylizedRoadRecipe 引用
                 if (_targetCreator.profile.roadRecipe != null)
                 {
@@ -87,7 +87,7 @@ namespace MrPathV2
             MarkPathAsDirty(); // 首次启用时强制刷新
             _lastPosition = _targetCreator.transform.position;
             _lastRotation = _targetCreator.transform.rotation;
-            _lastScale    = _targetCreator.transform.localScale;
+            _lastScale = _targetCreator.transform.localScale;
         }
 
         private void OnDisable()
@@ -99,7 +99,7 @@ namespace MrPathV2
                 DestroyImmediate(_profileEmbeddedEditor);
                 _profileEmbeddedEditor = null;
             }
-            
+
             if (_recipeEmbeddedEditor != null)
             {
                 DestroyImmediate(_recipeEmbeddedEditor);
@@ -118,7 +118,7 @@ namespace MrPathV2
             StylizedRoadRecipeEditor.OnRecipeModified -= OnRecipeChanged;
         }
 
-       
+
 
         #endregion
 
@@ -145,7 +145,7 @@ namespace MrPathV2
             if (_profileProperty.objectReferenceValue != null)
             {
                 DrawEmbeddedProfileUI();
-                
+
                 // 如果 Profile 中有 StylizedRoadRecipe，则显示它
                 var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
                 if (currentProfile != null && currentProfile.roadRecipe != null)
@@ -165,7 +165,7 @@ namespace MrPathV2
         {
             _targetCreator = target as PathCreator;
             if (_targetCreator == null) return;
-            
+
             // 确保预览始终激活（即使选中了Recipe等其他对象）
             if (_ctx != null && _ctx.IsPathValid())
             {
@@ -221,7 +221,7 @@ namespace MrPathV2
 
             _terrainPanel?.Draw();
 
-            DrawCoordinateTooltip(_targetCreator, context);
+            //  DrawCoordinateTooltip(_targetCreator, context);
 
             // [性能优化] 关键改动：移除 SceneView.RepaintAll()。
             // RepaintAll() 会强制重绘所有场景视图，非常耗费性能。
@@ -240,7 +240,7 @@ namespace MrPathV2
             {
                 _lastPosition = _targetCreator.transform.position;
                 _lastRotation = _targetCreator.transform.rotation;
-                _lastScale    = _targetCreator.transform.localScale;
+                _lastScale = _targetCreator.transform.localScale;
                 MarkPathAsDirty();
             }
         }
@@ -274,7 +274,7 @@ namespace MrPathV2
                     {
                         // 如果 Recipe 被修改，通知 targetCreator 并手动触发 Recipe 修改事件
                         _targetCreator?.NotifyProfileModified();
-                        
+
                         // 手动触发 StylizedRoadRecipeEditor 的 OnRecipeModified 事件
                         // 这确保了嵌入式编辑器中的修改也能被正确处理
                         StylizedRoadRecipeEditor.TriggerRecipeModified(currentProfile.roadRecipe);
@@ -373,7 +373,7 @@ namespace MrPathV2
             }
             _profileEmbeddedEditor = CreateEditor(profile);
         }
-        
+
         private void InitRecipeEmbeddedEditor(StylizedRoadRecipe recipe)
         {
             if (_recipeEmbeddedEditor != null)
@@ -441,4 +441,3 @@ namespace MrPathV2
     }
 }
 
-           
