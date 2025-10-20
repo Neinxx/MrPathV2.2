@@ -2,6 +2,8 @@ Shader "MrPath/PathPreviewSplatMulti"
 {
     Properties
     {
+        _MaskAtlas ("Mask Atlas", 2D) = "white" {}
+        _AtlasInvHeight ("Atlas Inv Height", Float) = 1.0
         [Header(Render State)]
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8 // Default to Always (8). Use LEqual (4) for normal depth.
         [Space]
@@ -358,32 +360,49 @@ Shader "MrPath/PathPreviewSplatMulti"
                     // BUG FIX: The weight now correctly comes from the 'mask' calculated above,
                     // not from an unrelated splatmap function.
                     float weight = weights[i];
-
-                    if (weight > 1e-4)
-                    {
-                        float2 layerTiling = GetLayerTiling(i);
-                        float2 layerUV = input.uv * layerTiling;
-                        half4 layerColor = SampleLayerTexture(i, layerUV);
-                        
-                        // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
-                        // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
-                        layerColor.rgb *= weight; // 直接使用遮罩值作为剔除系数
-                        
-                        float layerOpacity = GetLayerOpacity(i);
-                        float blendMode = GetLayerBlendMode(i);
-                        
-                        // The opacity passed to the blend function combines the layer's
-                        // base opacity with its weight for the current pixel.
-                        float blendOpacity = layerOpacity * weight;
-                        
-                        // Sequentially blend this layer on top of the previous result.
-                        finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
-                    }
-                }
-
-                finalColor.a = saturate(_PreviewAlpha);
-                return finalColor;
-            }
++                // 通过跨道路方向坐标采样 2D Atlas 获取当前图层权重
++                float scaledU = frac(input.uv.x * _AcrossScale);
++                float across = saturate(abs(scaledU * 2.0 - 1.0));
++
++                half4 finalColor = half4(0,0,0,1);
++                int maxLayers = min(_LayerCount, 4);
++                for (int i = 0; i < maxLayers; i++)
++                {
++                    float weight = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_LinearClamp, float2(across, (i+0.5)*_AtlasInvHeight)).r;
++                    // 阈值剔除
++                    weight = saturate((weight - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
+                     
+                     if (weight > 1e-4)
+                     {
+                         float2 layerTiling = GetLayerTiling(i);
+                         float2 layerUV = input.uv * layerTiling;
+                         half4 layerColor = SampleLayerTexture(i, layerUV);
+                         
+                         // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
+                         // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
+                         layerColor.rgb *= weight; // 直接使用遮罩值作为剔除系数
+                         
+                         float layerOpacity = GetLayerOpacity(i);
+                         float blendMode = GetLayerBlendMode(i);
+                         
+                         // The opacity passed to the blend function combines the layer's
+                         // base opacity with its weight for the current pixel.
+                         float blendOpacity = layerOpacity * weight;
+                         
+                         // Sequentially blend this layer on top of the previous result.
+                         finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                     }
+                 }
+-
+-                finalColor.a = saturate(_PreviewAlpha);
+-                return finalColor;
++
++                // 若最终没有任何图层写入，则丢弃
++                if (all(finalColor.rgb == 0)) clip(-1);
++
++                finalColor.a = saturate(_PreviewAlpha);
++                return finalColor;
+             }
             ENDHLSL
         }
     }

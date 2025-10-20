@@ -27,7 +27,7 @@ namespace MrPathV2
         [ReadOnly] public NativeArray<float4> maskLUT256;   // 长度=256，每像素RGBA对应前4层
         public int Length { get; private set; }
 
-        public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, Allocator allocator)
+        public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, float roadWorldLength, Allocator allocator)
         {
             var blends = recipe?.blendLayers?.ToArray() ?? System.Array.Empty<BlendLayer>();
             Length = blends.Length;
@@ -86,7 +86,7 @@ namespace MrPathV2
                     var activeBrush = b?.GetActiveMask(); // 新资产引用
                     if (activeBrush != null)
                     {
-                        v = Mathf.Clamp01(activeBrush.Evaluate(pos, roadWorldWidth));
+                        v = Mathf.Clamp01(activeBrush.Evaluate(pos, roadWorldWidth, roadWorldLength));
                     }
                     else
                     {
@@ -190,10 +190,11 @@ namespace MrPathV2
         /// <summary>
         /// 烘焙 StylizedRoadRecipe 为 Job 友好的数据结构
         /// </summary>
-        public static RecipeData BakeRecipe(StylizedRoadRecipe recipe, Allocator allocator, float roadWorldWidth = -1)
+        public static RecipeData BakeRecipe(StylizedRoadRecipe recipe, Allocator allocator, float roadWorldWidth = -1, float roadWorldLength = -1)
         {
             if (roadWorldWidth < 0) roadWorldWidth = 10f; // 默认宽度
-            return new RecipeData(recipe, null, roadWorldWidth, allocator);
+            if (roadWorldLength < 0) roadWorldLength = 100f; // 默认长度
+            return new RecipeData(recipe, null, roadWorldWidth, roadWorldLength, allocator);
         }
 
         /// <summary>
@@ -201,7 +202,7 @@ namespace MrPathV2
         /// </summary>
         public static RecipeData CreateDefaultRecipe(Allocator allocator)
         {
-            return new RecipeData(null, null, 10f, allocator);
+            return new RecipeData(null, null, 10f, 100f, allocator);
         }
     }
 }

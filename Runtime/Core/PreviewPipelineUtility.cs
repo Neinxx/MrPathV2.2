@@ -48,9 +48,10 @@ namespace MrPathV2
         /// 在 -1..1 范围 pos 采样遮罩值。
         /// 若 mask 为空，返回 1。
         /// </summary>
-        public static float EvaluateMask(float pos, float worldWidth, BlendMaskBase mask)
+        public static float EvaluateMask(float pos, float worldWidth, float pathLength, BlendMaskBase mask)
         {
-            return mask == null ? 1f : Mathf.Clamp01(mask.Evaluate(pos, worldWidth));
+            // 当未指定遮罩时返回 0，表示“无权重”，以便正确落回下层地形图层
+            return mask == null ? 0f : Mathf.Clamp01(mask.Evaluate(pos, worldWidth, pathLength));
         }
 
         /// <summary>
@@ -67,8 +68,9 @@ namespace MrPathV2
         /// <param name="reuse">可重用纹理，若尺寸或格式不符则重新创建。</param>
         /// <param name="layers">最多取前 4 层。</param>
         /// <param name="worldWidth">道路宽度，用于 EvaluateMask。</param>
+        /// <param name="pathLength">道路长度，用于 EvaluateMask。</param>
         /// <returns>生成好的 Texture2D。</returns>
-        public static Texture2D BuildMaskLUT(Texture2D reuse, IList<PreviewLayerInfo> layers, float worldWidth)
+        public static Texture2D BuildMaskLUT(Texture2D reuse, IList<PreviewLayerInfo> layers, float worldWidth, float pathLength = 100f)
         {
             const int RES = 256;
             if (reuse == null || reuse.width != RES || reuse.height != 1 || reuse.format != TextureFormat.RGBA32)
@@ -93,7 +95,7 @@ namespace MrPathV2
                 {
                     var layer = layers[li];
                     if (layer.opacity <= 0f) continue;
-                    float v = EvaluateMask(pos, worldWidth, layer.mask) * layer.opacity;
+                    float v = EvaluateMask(pos, worldWidth, pathLength, layer.mask) * layer.opacity;
                     switch (li)
                     {
                         case 0: r = BlendChannel(r, v, layer.blendMode); break;
@@ -113,5 +115,14 @@ namespace MrPathV2
             reuse.Apply(false, false);
             return reuse;
         }
+        /// <summary>
+        /// 新的 2D Mask Atlas 生成器，内部调用 MaskAtlasGenerator。
+        /// </summary>
+        public static Texture2D BuildMaskAtlas(Texture2D reuse, IList<PreviewLayerInfo> layers, float worldWidth, float pathLength = 100f, int baseResolution = 256)
+        {
+            return MaskAtlasGenerator.BuildMaskAtlas(reuse, layers, worldWidth, pathLength, baseResolution);
+        }
+
+       
     }
 }

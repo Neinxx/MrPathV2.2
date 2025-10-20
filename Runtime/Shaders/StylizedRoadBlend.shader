@@ -4,7 +4,9 @@ Shader "MrPathV2/StylizedRoadBlend"
     {
         _PrevResultTex("Previous Result", 2D) = "black" {}
         _LayerTex("Layer Texture", 2D) = "white" {}
-        _MaskLUT("Mask LUT", 2D) = "white" {}
+        _MaskAtlas("Mask Atlas", 2D) = "white" {}
+        _AtlasInvHeight("Atlas Inv Height", Float) = 1
+        _MaskThreshold("Mask Threshold", Range(0,1)) = 0
         _LayerTiling("Layer Tiling", Vector) = (1, 1, 0, 0)
         _LayerTint("Layer Tint", Color) = (1, 1, 1, 1)
         _LayerOpacity("Layer Opacity", Range(0, 1)) = 1
@@ -53,6 +55,11 @@ Shader "MrPathV2/StylizedRoadBlend"
             {
                 float mask = tex2D(_MaskLUT, float2(IN.uv.x, 0.5)).r;
                 float4 prevResult = tex2D(_PrevResultTex, IN.uv);
+                // 若遮罩为零，直接返回上一结果，避免底层图层渗漏
+                if (mask <= 1e-3)
+                {
+                    return prevResult;
+                }
                 float4 layerColor = tex2D(_LayerTex, IN.uv * _LayerTiling.xy + _LayerTiling.zw) * _LayerTint;
                 
                 // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多

@@ -12,11 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fda4af8960a53e84e850400554f65c05, type: 3}
   m_Name: TestMaskSystemRecipe_ShoulderMask
   m_EditorClassIdentifier: 
-  smooth: 0.922
+  smooth: 1
+  tiling: {x: 2, y: 2}
+  offset: {x: 0, y: 0}
+  overallScale: 0.83
   shoulderWidthRatio: 0
-  shoulderStrength: 0
-  edgeFalloff: 0.214
-  enableLeftShoulder: 1
+  shoulderStrength: 0.709
+  edgeFalloff: 0.107
+  enableLeftShoulder: 0
   enableRightShoulder: 0
   shoulderProfile:
     serializedVersion: 2

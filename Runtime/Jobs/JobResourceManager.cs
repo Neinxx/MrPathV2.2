@@ -52,10 +52,10 @@ namespace MrPathV2
         /// </summary>
         public RecipeData CreateRecipeData(StylizedRoadRecipe recipe, 
             Dictionary<TerrainLayer, int> terrainLayerMap, 
-            float roadWorldWidth, 
+            float roadWorldWidth, float roadWorldLength,
             Allocator allocator = Allocator.Persistent)
         {
-            return CreateResource(() => new RecipeData(recipe, terrainLayerMap, roadWorldWidth, allocator));
+            return CreateResource(() => new RecipeData(recipe, terrainLayerMap, roadWorldWidth, roadWorldLength, allocator));
         }
 
         /// <summary>

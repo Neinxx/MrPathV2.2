@@ -226,10 +226,12 @@ namespace MrPathV2
             // 1. 从 Profile 中获取道路的真实世界宽度
             //    (注意：这里假设宽度属性名为 roadWidth，请根据您的实际 Profile 类进行调整)
             float roadWorldWidth = Creator.profile.roadWidth;
+            // 假设道路长度为脊线的总长度
+            float roadWorldLength = Creator.GetPathLength();
 
             // 2. 将世界宽度传递给 RecipeData 构造函数
             var profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
-            var recipeData = new RecipeData(recipeAsset, layerMap, roadWorldWidth, Allocator.Persistent);
+            var recipeData = new RecipeData(recipeAsset, layerMap, roadWorldWidth, roadWorldLength, Allocator.Persistent);
             // --- 【修改结束】 ---
 
             return new TerrainWorkItem

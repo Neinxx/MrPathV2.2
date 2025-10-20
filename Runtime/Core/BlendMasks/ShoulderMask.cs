@@ -37,7 +37,7 @@ namespace MrPathV2
         [Tooltip("路肩形状曲线：控制路肩区域内的强度分布")]
         public AnimationCurve shoulderProfile = AnimationCurve.EaseInOut(0f, 1f, 1f, 1f);
 
-        public override float Evaluate(float horizontalPosition, float worldWidth)
+        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
         {
             // horizontalPosition: -1(左边界) 到 1(右边界)
             float absPosition = Mathf.Abs(horizontalPosition);

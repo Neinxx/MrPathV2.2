@@ -51,7 +51,7 @@ namespace MrPathV2
             Custom
         }
 
-        public override float Evaluate(float horizontalPosition, float worldWidth)
+        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
         {
             // 应用中心偏移
             float adjustedPosition = horizontalPosition - centerOffset;

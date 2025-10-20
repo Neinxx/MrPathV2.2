@@ -21,6 +21,8 @@ namespace MrPathV2
 
         // Cached combined mask LUT (RGBA channels for up to 4 layers)
         private Texture2D _maskLUT;
+        // Future: cached 2D mask atlas
+        private Texture2D _maskAtlas;
 
         private readonly List<Material> _cachedList = new(1);
 
@@ -131,7 +133,7 @@ namespace MrPathV2
             }
 
             // Generate and bind LUT so shader can sample accurate weights
-            SetupMaskLUT(profile);
+            SetupMaskLUT(profile, 100f); // 使用默认路径长度，实际应该从PathSpine获取
         }
 
         /// <summary>
@@ -139,7 +141,7 @@ namespace MrPathV2
         /// (up to 4 layers for legacy shader, unlimited for multi-layer shader). This mimics the CPU preview and job logic so that the GPU preview
         /// matches what will be painted onto terrain.
         /// </summary>
-        private void SetupMaskLUT(PathProfile profile)
+        private void SetupMaskLUT(PathProfile profile, float pathLength = 100f)
         {
             var recipe = profile.roadRecipe;
             if (recipe == null || recipe.blendLayers == null)
@@ -184,11 +186,26 @@ namespace MrPathV2
             if (layerInfos.Count == 0)
             {
                 _instance.SetTexture("_MaskLUT", Texture2D.whiteTexture);
+                _instance.SetTexture("_MaskAtlas", Texture2D.whiteTexture);
+                _instance.SetFloat("_AtlasInvHeight", 1f);
                 return;
             }
 
-            _maskLUT = PreviewPipelineUtility.BuildMaskLUT(_maskLUT, layerInfos, worldWidth);
+            // ---- 生成 1D LUT（旧兼容） ----
+            _maskLUT = PreviewPipelineUtility.BuildMaskLUT(_maskLUT, layerInfos, worldWidth, pathLength);
             _instance.SetTexture("_MaskLUT", _maskLUT);
+            if (_instance.HasProperty("_MaskLUT"))
+                _instance.SetTexture("_MaskLUT", _maskLUT);
+
+            // ---- 生成 2D Atlas（新实现） ----
+            _maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(_maskAtlas, layerInfos, worldWidth, pathLength);
+            _instance.SetTexture("_MaskAtlas", _maskAtlas);
+
+            if (_instance.HasProperty("_MaskAtlas"))
+            {
+                _instance.SetTexture("_MaskAtlas", _maskAtlas);
+                _instance.SetFloat("_AtlasInvHeight", _maskAtlas != null ? 1f / _maskAtlas.height : 1f);
+            }
         }
 
         /// <summary>
@@ -342,6 +359,11 @@ namespace MrPathV2
             {
                 UnityEngine.Object.DestroyImmediate(_maskLUT);
                 _maskLUT = null;
+            }
+            if (_maskAtlas != null)
+            {
+                UnityEngine.Object.DestroyImmediate(_maskAtlas);
+                _maskAtlas = null;
             }
             _dirty = true;
         }

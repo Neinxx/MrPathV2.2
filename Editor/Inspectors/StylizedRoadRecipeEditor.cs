@@ -227,7 +227,7 @@ namespace MrPathV2
                     layer.blendMode,
                     activeMask);
                 // Build single-layer LUT (only R channel used)
-                Texture2D maskLUT = PreviewPipelineUtility.BuildMaskLUT(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
+                Texture2D maskLUT = PreviewPipelineUtility.BuildMaskLUT(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth, 100f);
                  _previewMaterial.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
                  _previewMaterial.SetColor("_LayerTint", Color.white);
                  _previewMaterial.SetFloat("_LayerOpacity", pli.opacity);
@@ -261,7 +261,7 @@ namespace MrPathV2
             return Mathf.Max(0.1f, recipe.width);   // 避免出现 0 带来的除零错误
         }
 
-        private Texture2D GetOrCreateMaskLUT(BlendMaskBase mask, float previewWorldWidth)
+        private Texture2D GetOrCreateMaskLUT(BlendMaskBase mask, float previewWorldWidth,float previewWorldLength)
         {
             if (_maskLUTCache.TryGetValue(mask, out Texture2D lut))
             {
@@ -277,7 +277,7 @@ namespace MrPathV2
 
                 // 【修改】将 PREVIEW_WORLD_WIDTH 传递给 Evaluate 方法
 
-                float value = mask.Evaluate(pos, previewWorldWidth);
+                float value = mask.Evaluate(pos, previewWorldWidth, previewWorldLength);
 
                 pixels[i] = new Color(value, 0, 0, 0);
             }

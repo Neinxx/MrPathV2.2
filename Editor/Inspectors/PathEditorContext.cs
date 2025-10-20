@@ -154,10 +154,11 @@ namespace MrPathV2
         /// 标记预览为脏，并请求刷新。
         /// </summary>
         public void MarkDirty()
-        {
+    {
             _previewManager?.MarkDirty();
+            _previewManager?.MarkMaterialsDirty(); // Ensure material updates when parameters change
             RequestPreviewRefresh();
-        }
+    }
 
         public PathEditorHandles.HandleDrawContext CreateHandleContext()
         {

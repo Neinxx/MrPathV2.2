@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2f3a43335d8749146bf6df0474950a25, type: 3}
   m_Name: StylizedRoadRecipe_RoadSurfaceMask
   m_EditorClassIdentifier: 
-  smooth: 0.487
-  surfaceWidthRatio: 0.452
+  smooth: 0.682
+  surfaceWidthRatio: 0.588
   surfaceStrength: 0.687
   edgeTransition: 0.157
-  centerOffset: 0.58
+  centerOffset: 0
   surfaceProfile:
     serializedVersion: 2
     m_Curve:
