@@ -23,6 +23,7 @@ Shader "MrPathV2/StylizedRoadBlend"
             #pragma vertex vert
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Assets/__temp/MrPathV2.2/Runtime/Shaders/BlendLayer.hlsl"
 
             struct Attributes
             {

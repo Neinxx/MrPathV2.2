@@ -24,6 +24,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private static readonly int LayerTint = Shader.PropertyToID("_LayerTint");
         private static readonly int LayerOpacity = Shader.PropertyToID("_LayerOpacity");
         private static readonly int Mode = Shader.PropertyToID("_BlendMode");
+        private static readonly int LayerTilingsArr = Shader.PropertyToID("_LayerTilings");
+        private static readonly int LayerOpacitiesArr = Shader.PropertyToID("_LayerOpacities");
+        private static readonly int LayerBlendModesArr = Shader.PropertyToID("_LayerBlendModes");
 
         private enum ShaderFlavor { Splat, Stylized, Unknown }
 
@@ -94,6 +97,11 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             // 检测是否使用多层着色器
             var isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
             var maxLayers = isMultiLayerShader ? 16 : 4;
+
+            // ================= 新增：准备数组以批量推送到着色器 =================
+            Vector4[] tilingsArr = new Vector4[maxLayers];
+            float[] opacitiesArr = new float[maxLayers];
+            float[] blendModesArr = new float[maxLayers];
             
             // 设置所有层（最多16层），确保与StylizedRoadRecipe配方一致
             for (var i = 0; i < maxLayers; i++)
@@ -101,6 +109,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 TerrainLayer layer = null;
                 var layerOpacity = 0f;
                 var blendMode = BlendMode.Normal;
+                var tilingVec = Vector4.one;
                 
                 if (recipe?.blendLayers != null && i < recipe.blendLayers.Count)
                 {
@@ -113,12 +122,30 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     }
                 }
                 
-                SetLayer(i, layer, profile.roadWidth);
+                // 计算tiling（当layer为null时使用1,1,0,0）
+                if (layer?.diffuseTexture != null)
+                {
+                    var t = PreviewPipelineUtility.CalcLayerTiling(profile.roadWidth, layer);
+                    tilingVec = new Vector4(t.x, t.y, 0, 0);
+                }
+                else
+                {
+                    tilingVec = Vector4.one; // 默认
+                }
                 
-                // 设置每层的不透明度和混合模式
-                _instance.SetFloat($"_Layer{i}_Opacity", layerOpacity);
-                _instance.SetFloat($"_Layer{i}_BlendMode", (float)blendMode);
+                // 保存到数组
+                tilingsArr[i] = tilingVec;
+                opacitiesArr[i] = Mathf.Clamp01(layerOpacity);
+                blendModesArr[i] = (float)blendMode;
+
+                // 旧版兼容：仍保留纹理与颜色写入；已删除单独 Opacity/BlendMode 写入，完全依赖数组
+                SetLayer(i, layer, profile.roadWidth);
             }
+
+            // == 推送新数组属性 ==
+            _instance.SetVectorArray(LayerTilingsArr, tilingsArr);
+            _instance.SetFloatArray(LayerOpacitiesArr, opacitiesArr);
+            _instance.SetFloatArray(LayerBlendModesArr, blendModesArr);
 
             // 设置层数
             _instance.SetInt(LayerCount, layerCount);
@@ -217,14 +244,15 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             if (layer?.diffuseTexture != null)
             {
                 _instance.SetTexture($"_Layer{index}_Texture", layer.diffuseTexture);
-                var tiling = LayerTilingUtility.CalcLayerTiling(worldWidth, layer);
-                _instance.SetVector($"_Layer{index}_Tiling", new Vector4(tiling.x, tiling.y, 0, 0));
+                // Removed legacy _Layer{index}_Tiling; tiling is now provided via _LayerTilings array
+                // var tiling = LayerTilingUtility.CalcLayerTiling(worldWidth, layer);
+                // _instance.SetVector($"_Layer{index}_Tiling", new Vector4(tiling.x, tiling.y, 0, 0));
                 _instance.SetColor($"_Layer{index}_Color", Color.white); // 使用白色保持与地形贴图一致
             }
             else
             {
                 _instance.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                _instance.SetVector($"_Layer{index}_Tiling", Vector4.one);
+                // _instance.SetVector($"_Layer{index}_Tiling", Vector4.one);
                 _instance.SetColor($"_Layer{index}_Color", Color.white);
             }
         }

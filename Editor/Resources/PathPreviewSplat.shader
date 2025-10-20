@@ -3,52 +3,69 @@ Shader "MrPath/PathPreviewSplat"
     Properties
     {
         [Header(Render State)]
-        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8 // Default to Always (8). Use LEqual (4) for normal depth.
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8
         [Space]
         _PreviewAlpha("Preview Alpha", Range(0, 1)) = 0.5
-        
+
         [Header(Layers)]
-        _Layer0_Texture("Layer 0 (R)", 2D) = "white" {}
-        _Layer0_Tiling("Layer 0 Tiling", Vector) = (1, 1, 0, 0)
-        _Layer0_Color("Layer 0 Color", Color) = (1, 1, 1, 1)
-        _Layer1_Texture("Layer 1 (G)", 2D) = "white" {}
-        _Layer1_Tiling("Layer 1 Tiling", Vector) = (1, 1, 0, 0)
-        _Layer1_Color("Layer 1 Color", Color) = (1, 1, 1, 1)
-        _Layer2_Texture("Layer 2 (B)", 2D) = "white" {}
-        _Layer2_Tiling("Layer 2 Tiling", Vector) = (1, 1, 0, 0)
-        _Layer2_Color("Layer 2 Color", Color) = (1, 1, 1, 1)
-        _Layer3_Texture("Layer 3 (A)", 2D) = "white" {}
-        _Layer3_Tiling("Layer 3 Tiling", Vector) = (1, 1, 0, 0)
-        _Layer3_Color("Layer 3 Color", Color) = (1, 1, 1, 1)
-        
-        // Mask Atlas storing per-layer weights in vertical slices (RGBA irrelevant)
+        // Define textures 0 - 15. Tiling/Opacity/BlendMode are now provided via arrays
+        _Layer0_Texture("Layer 0", 2D) = "white" {}
+        _Layer0_Color("Layer 0 Color", Color) = (1,1,1,1)
+        _Layer1_Texture("Layer 1", 2D) = "white" {}
+        _Layer1_Color("Layer 1 Color", Color) = (1,1,1,1)
+        _Layer2_Texture("Layer 2", 2D) = "white" {}
+        _Layer2_Color("Layer 2 Color", Color) = (1,1,1,1)
+        _Layer3_Texture("Layer 3", 2D) = "white" {}
+        _Layer3_Color("Layer 3 Color", Color) = (1,1,1,1)
+        _Layer4_Texture("Layer 4", 2D) = "white" {}
+        _Layer4_Color("Layer 4 Color", Color) = (1,1,1,1)
+        _Layer5_Texture("Layer 5", 2D) = "white" {}
+        _Layer5_Color("Layer 5 Color", Color) = (1,1,1,1)
+        _Layer6_Texture("Layer 6", 2D) = "white" {}
+        _Layer6_Color("Layer 6 Color", Color) = (1,1,1,1)
+        _Layer7_Texture("Layer 7", 2D) = "white" {}
+        _Layer7_Color("Layer 7 Color", Color) = (1,1,1,1)
+        _Layer8_Texture("Layer 8", 2D) = "white" {}
+        _Layer8_Color("Layer 8 Color", Color) = (1,1,1,1)
+        _Layer9_Texture("Layer 9", 2D) = "white" {}
+        _Layer9_Color("Layer 9 Color", Color) = (1,1,1,1)
+        _Layer10_Texture("Layer 10", 2D) = "white" {}
+        _Layer10_Color("Layer 10 Color", Color) = (1,1,1,1)
+        _Layer11_Texture("Layer 11", 2D) = "white" {}
+        _Layer11_Color("Layer 11 Color", Color) = (1,1,1,1)
+        _Layer12_Texture("Layer 12", 2D) = "white" {}
+        _Layer12_Color("Layer 12 Color", Color) = (1,1,1,1)
+        _Layer13_Texture("Layer 13", 2D) = "white" {}
+        _Layer13_Color("Layer 13 Color", Color) = (1,1,1,1)
+        _Layer14_Texture("Layer 14", 2D) = "white" {}
+        _Layer14_Color("Layer 14 Color", Color) = (1,1,1,1)
+        _Layer15_Texture("Layer 15", 2D) = "white" {}
+        _Layer15_Color("Layer 15 Color", Color) = (1,1,1,1)
+
+        // Masking
         _MaskAtlas ("Mask Atlas", 2D) = "white" {}
         _AtlasInvHeight ("Atlas Inv Height", Float) = 1
         _MaskThreshold("Mask Threshold", Range(0,1)) = 0
-        // Across Scale: maps repeating UV.x back into 0..1 range
-        _AcrossScale ("Across Scale", Float) = 1
+        _AcrossScale("Across Scale", Float) = 1
+        _LayerCount("Layer Count", Int) = 1
     }
 
     SubShader
     {
-        Tags
-        {
-            "RenderType" = "Transparent"
-            "RenderPipeline" = "UniversalPipeline"
-            "Queue" = "Overlay+100" 
-        }
+        Tags { "RenderType" = "Transparent" "RenderPipeline"="UniversalPipeline" "Queue"="Overlay+100" }
         LOD 100
 
         Pass
         {
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
-            ZTest [_ZTest] // Use the value from our property
+            ZTest [_ZTest]
 
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/__temp/MrPathV2.2/Runtime/Shaders/BlendLayer.hlsl"
 
             struct Attributes
             {
@@ -64,77 +81,108 @@ Shader "MrPath/PathPreviewSplat"
                 float4 positionHCS : SV_POSITION;
             };
 
-            TEXTURE2D(_Layer0_Texture); SAMPLER(sampler_Layer0_Texture); float4 _Layer0_Texture_ST; float2 _Layer0_Tiling; half4 _Layer0_Color;
-            TEXTURE2D(_Layer1_Texture); SAMPLER(sampler_Layer1_Texture); float4 _Layer1_Texture_ST; float2 _Layer1_Tiling; half4 _Layer1_Color;
-            TEXTURE2D(_Layer2_Texture); SAMPLER(sampler_Layer2_Texture); float4 _Layer2_Texture_ST; float2 _Layer2_Tiling; half4 _Layer2_Color;
-            TEXTURE2D(_Layer3_Texture); SAMPLER(sampler_Layer3_Texture); float4 _Layer3_Texture_ST; float2 _Layer3_Tiling; half4 _Layer3_Color;
-             // Mask Atlas
-             TEXTURE2D(_MaskAtlas); SAMPLER(sampler_MaskAtlas);
-             float _AtlasInvHeight;
-             float _MaskThreshold;
-             float _PreviewAlpha;
-             float _AcrossScale;
+            // Texture declarations 0-15 (samplers are shared default repeat)
+            TEXTURE2D(_Layer0_Texture); half4 _Layer0_Color;
+            TEXTURE2D(_Layer1_Texture); half4 _Layer1_Color;
+            TEXTURE2D(_Layer2_Texture); half4 _Layer2_Color;
+            TEXTURE2D(_Layer3_Texture); half4 _Layer3_Color;
+            TEXTURE2D(_Layer4_Texture); half4 _Layer4_Color;
+            TEXTURE2D(_Layer5_Texture); half4 _Layer5_Color;
+            TEXTURE2D(_Layer6_Texture); half4 _Layer6_Color;
+            TEXTURE2D(_Layer7_Texture); half4 _Layer7_Color;
+            TEXTURE2D(_Layer8_Texture); half4 _Layer8_Color;
+            TEXTURE2D(_Layer9_Texture); half4 _Layer9_Color;
+            TEXTURE2D(_Layer10_Texture); half4 _Layer10_Color;
+            TEXTURE2D(_Layer11_Texture); half4 _Layer11_Color;
+            TEXTURE2D(_Layer12_Texture); half4 _Layer12_Color;
+            TEXTURE2D(_Layer13_Texture); half4 _Layer13_Color;
+            TEXTURE2D(_Layer14_Texture); half4 _Layer14_Color;
+            TEXTURE2D(_Layer15_Texture); half4 _Layer15_Color;
+
+            SAMPLER(sampler_LinearRepeat);
+            SAMPLER(sampler_LinearClamp);
+
+            TEXTURE2D(_MaskAtlas);
+            float _AtlasInvHeight;
+            float _MaskThreshold;
+            float _PreviewAlpha;
+            float _AcrossScale;
+            int _LayerCount;
+
+            // Unified arrays pushed from C#
+            CBUFFER_START(UnityPerMaterial)
+                float4 _LayerTilings[16];
+                float  _LayerOpacities[16];
+                float  _LayerBlendModes[16];
+            CBUFFER_END
 
             Varyings vert(Attributes input)
             {
-                Varyings output;
-                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                output.positionHCS = TransformWorldToHClip(positionWS);
-                output.uv = input.uv;
-                output.color = input.color; // 仍保留，避免顶点声明变更
-                return output;
+                Varyings o;
+                o.positionHCS = TransformObjectToHClip(input.positionOS.xyz);
+                o.uv = input.uv;
+                o.color = input.color;
+                return o;
             }
+
+            half4 SampleLayerTexture(int idx, float2 uv)
+            {
+                switch(idx)
+                {
+                    case 0: return SAMPLE_TEXTURE2D(_Layer0_Texture, sampler_LinearRepeat, uv) * _Layer0_Color;
+                    case 1: return SAMPLE_TEXTURE2D(_Layer1_Texture, sampler_LinearRepeat, uv) * _Layer1_Color;
+                    case 2: return SAMPLE_TEXTURE2D(_Layer2_Texture, sampler_LinearRepeat, uv) * _Layer2_Color;
+                    case 3: return SAMPLE_TEXTURE2D(_Layer3_Texture, sampler_LinearRepeat, uv) * _Layer3_Color;
+                    case 4: return SAMPLE_TEXTURE2D(_Layer4_Texture, sampler_LinearRepeat, uv) * _Layer4_Color;
+                    case 5: return SAMPLE_TEXTURE2D(_Layer5_Texture, sampler_LinearRepeat, uv) * _Layer5_Color;
+                    case 6: return SAMPLE_TEXTURE2D(_Layer6_Texture, sampler_LinearRepeat, uv) * _Layer6_Color;
+                    case 7: return SAMPLE_TEXTURE2D(_Layer7_Texture, sampler_LinearRepeat, uv) * _Layer7_Color;
+                    case 8: return SAMPLE_TEXTURE2D(_Layer8_Texture, sampler_LinearRepeat, uv) * _Layer8_Color;
+                    case 9: return SAMPLE_TEXTURE2D(_Layer9_Texture, sampler_LinearRepeat, uv) * _Layer9_Color;
+                    case 10: return SAMPLE_TEXTURE2D(_Layer10_Texture, sampler_LinearRepeat, uv) * _Layer10_Color;
+                    case 11: return SAMPLE_TEXTURE2D(_Layer11_Texture, sampler_LinearRepeat, uv) * _Layer11_Color;
+                    case 12: return SAMPLE_TEXTURE2D(_Layer12_Texture, sampler_LinearRepeat, uv) * _Layer12_Color;
+                    case 13: return SAMPLE_TEXTURE2D(_Layer13_Texture, sampler_LinearRepeat, uv) * _Layer13_Color;
+                    case 14: return SAMPLE_TEXTURE2D(_Layer14_Texture, sampler_LinearRepeat, uv) * _Layer14_Color;
+                    case 15: return SAMPLE_TEXTURE2D(_Layer15_Texture, sampler_LinearRepeat, uv) * _Layer15_Color;
+                    default: return half4(1,1,1,1);
+                }
+            }
+
+            float2 GetLayerTiling(int idx) { return max(_LayerTilings[idx].xy, float2(0.0001,0.0001)); }
+            float  GetLayerOpacity(int idx) { return _LayerOpacities[idx]; }
+            float  GetLayerBlendMode(int idx){ return _LayerBlendModes[idx]; }
+
+            #define BlendLayer(baseColor, layerColor, mode, opacity) ApplyBlend(baseColor, layerColor, mode, opacity)
 
             half4 frag(Varyings input) : SV_Target
             {
-                // Sample per-layer weights from mask atlas slices
                 float scaledU = frac(input.uv.x * _AcrossScale);
                 float across = saturate(abs(scaledU * 2.0 - 1.0));
 
-                half4 mask;
-                mask.r = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (0.5) * _AtlasInvHeight)).r;
-                 mask.g = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (1.5) * _AtlasInvHeight)).r;
-                 mask.b = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (2.5) * _AtlasInvHeight)).r;
-                 mask.a = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (3.5) * _AtlasInvHeight)).r;
+                half4 finalColor = half4(0,0,0,1);
 
-                // Apply threshold
-                mask = saturate((mask - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
-
-                half weightSum = mask.r + mask.g + mask.b + mask.a;
-
-                // 若权重总和接近 0，直接丢弃像素，避免显示为黑色
-                if (weightSum < 1e-4)
+                int maxLayers = min(_LayerCount, 16);
+                for(int i=0;i<maxLayers;i++)
                 {
-                    clip(-1); // 立即剔除
+                    float weight = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_LinearClamp, float2(across, (i + 0.5) * _AtlasInvHeight)).r;
+                    weight = saturate((weight - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
+                    if(weight < 1e-4) continue;
+
+                    float2 tiling = GetLayerTiling(i);
+                    float2 layerUV = input.uv * tiling;
+                    half4 layerColor = SampleLayerTexture(i, layerUV);
+                    layerColor.rgb *= weight;
+
+                    float opacity = GetLayerOpacity(i) * weight;
+                    float mode = GetLayerBlendMode(i);
+                    finalColor = BlendLayer(finalColor, layerColor, mode, opacity);
                 }
 
-                float2 t0 = max(_Layer0_Tiling.xy, float2(0.0001, 0.0001));
-                float2 t1 = max(_Layer1_Tiling.xy, float2(0.0001, 0.0001));
-                float2 t2 = max(_Layer2_Tiling.xy, float2(0.0001, 0.0001));
-                float2 t3 = max(_Layer3_Tiling.xy, float2(0.0001, 0.0001));
+                if(all(finalColor.rgb == 0))
+                    clip(-1);
 
-                // Mesh 已经在生成时应用了 tiling，因此此处不再二次缩放，避免与地形 UV 不一致
-                float2 uv0 = input.uv;
-                float2 uv1 = input.uv;
-                float2 uv2 = input.uv;
-                float2 uv3 = input.uv;
-
-                half4 col0 = SAMPLE_TEXTURE2D(_Layer0_Texture, sampler_Layer0_Texture, uv0) * _Layer0_Color;
-                half4 col1 = SAMPLE_TEXTURE2D(_Layer1_Texture, sampler_Layer1_Texture, uv1) * _Layer1_Color;
-                half4 col2 = SAMPLE_TEXTURE2D(_Layer2_Texture, sampler_Layer2_Texture, uv2) * _Layer2_Color;
-                half4 col3 = SAMPLE_TEXTURE2D(_Layer3_Texture, sampler_Layer3_Texture, uv3) * _Layer3_Color;
-
-                // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
-                // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
-                col0.rgb *= mask.r; // 直接使用遮罩值作为剔除系数
-                col1.rgb *= mask.g;
-                col2.rgb *= mask.b;
-                col3.rgb *= mask.a;
-
-                // 使用 LUT 权重混合，而非顶点色
-                half4 finalColor = col0 * mask.r + col1 * mask.g + col2 * mask.b + col3 * mask.a;
                 finalColor.a = saturate(_PreviewAlpha);
-
                 return finalColor;
             }
             ENDHLSL

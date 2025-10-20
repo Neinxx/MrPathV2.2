@@ -20,7 +20,7 @@ MonoBehaviour:
     maskType: 0
     terrainLayer: {fileID: 8574412962073106934, guid: 7dbce185d2bc6894a96d343055a1a345,
       type: 2}
-    mask: {fileID: 0}
+    mask: {fileID: 11400000, guid: 63a6ae3cf9bff51458e07f7696f4b872, type: 2}
     shoulderMask: {fileID: 0}
     roadSurfaceMask: {fileID: 0}
     blendMask:
