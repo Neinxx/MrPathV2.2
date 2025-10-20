@@ -12,7 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a170167bff96cff4783bf136b840dda5, type: 3}
   m_Name: StylizedRoadRecipe_GradientMask 1
   m_EditorClassIdentifier: 
-  smooth: 0
+  smooth: 0.319
+  tiling: {x: 4.17, y: 2.29}
+  offset: {x: 0, y: 0}
+  overallScale: 1.28
   gradient:
     serializedVersion: 2
     m_Curve:

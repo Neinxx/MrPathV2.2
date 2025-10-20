@@ -36,7 +36,7 @@ namespace MrPathV2
             public float4 baseColor;
             public bool isValid;
 
-            public JobData(PathSpine worldSpine, PathProfile profile, Allocator allocator, NativeCollectionManager memMgr)
+            public JobData(PathSpine worldSpine, PathProfile profile, Allocator allocator)
             {
                 spine = default;
                 this.profile = default;
@@ -82,10 +82,10 @@ namespace MrPathV2
                         return;
                     }
 
-                    vertices = memMgr.CreateNativeArray<float3>(totalVertices, allocator, "MeshVertices");
-                    uvs = memMgr.CreateNativeArray<float2>(totalVertices, allocator, "MeshUVs");
-                    colors = memMgr.CreateNativeArray<float4>(totalVertices, allocator, "MeshColors");
-                    indices = memMgr.CreateNativeArray<int>(totalIndices, allocator, "MeshIndices");
+                    vertices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float3>(totalVertices, allocator);
+                    uvs = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float2>(totalVertices, allocator);
+                    colors = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float4>(totalVertices, allocator);
+                    indices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int>(totalIndices, allocator);
 
                     var recipeSO = profile?.roadRecipe;
                     if (recipeSO != null)
@@ -156,7 +156,7 @@ namespace MrPathV2
         public bool Start(PathSpine spine, PathProfile profile)
         {
             DisposeJob();
-            _jobData = new JobData(spine, profile, Allocator.Persistent, _memMgr);
+            _jobData = new JobData(spine, profile, Allocator.Persistent);
             if (!_jobData.Value.isValid)
             {
                 State = GenerationState.Failed;
@@ -263,7 +263,10 @@ namespace MrPathV2
         public void Dispose()
         {
             DisposeJob();
+            DisposeJob();
+            DisposeJob();
             _memMgr.Dispose();
+            DisposeJob();
         }
     }
 }

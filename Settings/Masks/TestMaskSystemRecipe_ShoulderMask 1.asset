@@ -15,8 +15,8 @@ MonoBehaviour:
   smooth: 1
   tiling: {x: 5.2, y: 3.09}
   offset: {x: 4.2, y: 0}
-  overallScale: 1.52
-  shoulderWidthRatio: 0.448
+  overallScale: 1.43
+  shoulderWidthRatio: 0.304
   shoulderStrength: 0.964
   edgeFalloff: 0.148
   enableLeftShoulder: 0

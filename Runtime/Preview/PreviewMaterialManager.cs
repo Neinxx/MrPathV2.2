@@ -337,13 +337,30 @@ namespace MrPathV2
 
         private static int CalculateHash(PathProfile profile, Material template, float alpha)
         {
+#if UNITY_EDITOR
+            // 在编辑器中，包含 StylizedRoadRecipe 的序列化数据哈希，
+            // 以便在调整 BlendLayers 或 Mask 参数时能正确刷新材质。
+#endif
             unchecked
             {
-                var hash = 17;
+                int hash = 17;
                 hash = hash * 31 + (profile?.GetHashCode() ?? 0);
                 hash = hash * 31 + (template?.GetHashCode() ?? 0);
                 hash = hash * 31 + alpha.GetHashCode();
+
+                // Profile 中的路面配方可能在 Inspector 中发生了修改，
+                // 仅依赖引用哈希不足以检测到内部字段变化，这里通过序列化为 JSON 的方式
+                // 将其所有序列化字段纳入哈希计算，保证任何属性调整都会触发刷新。
+#if UNITY_EDITOR
+                if (profile?.roadRecipe != null)
+                {
+                    string json = UnityEditor.EditorJsonUtility.ToJson(profile.roadRecipe);
+                    hash = hash * 31 + json.GetHashCode();
+                }
+#else
+                // 在运行时只使用引用哈希，避免额外的字符串分配成本
                 hash = hash * 31 + (profile?.roadRecipe?.GetHashCode() ?? 0);
+#endif
                 return hash;
             }
         }

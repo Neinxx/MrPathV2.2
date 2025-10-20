@@ -14,14 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   blendLayers:
   - enabled: 1
-    name: Layer 0
+    name: Layer 1
     blendMode: 0
-    opacity: 0.85
-    maskType: 1
-    terrainLayer: {fileID: 8574412962073106934, guid: 6aeca84bed1dcfe4daf1b2a2781928d1,
+    opacity: 1
+    maskType: 0
+    terrainLayer: {fileID: 8574412962073106934, guid: 78cd50ddae8c1884bbc929e9d2ce0aef,
       type: 2}
-    mask: {fileID: 11400000, guid: bf061d6b127fe2844aeb9d9ffa139b1e, type: 2}
-    shoulderMask: {fileID: 11400000, guid: d6821facdc785d64bb6923bb7fe7dbc4, type: 2}
+    mask: {fileID: 11400000, guid: 86f6cd0f92c81a44bab62abd620d4b3a, type: 2}
+    shoulderMask: {fileID: 0}
     roadSurfaceMask: {fileID: 0}
     blendMask:
       maskType: 1

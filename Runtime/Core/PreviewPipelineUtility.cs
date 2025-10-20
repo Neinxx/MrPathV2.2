@@ -50,8 +50,8 @@ namespace MrPathV2
         /// </summary>
         public static float EvaluateMask(float pos, float worldWidth, float pathLength, BlendMaskBase mask)
         {
-            // 当未指定遮罩时返回 0，表示“无权重”，以便正确落回下层地形图层
-            return mask == null ? 0f : Mathf.Clamp01(mask.Evaluate(pos, worldWidth, pathLength));
+            // 当未指定遮罩时返回 1，表示全权重，将直接使用图层自身的不透明度
+            return mask == null ? 1f : Mathf.Clamp01(mask.Evaluate(pos, worldWidth, pathLength));
         }
 
         /// <summary>
@@ -59,7 +59,8 @@ namespace MrPathV2
         /// </summary>
         public static float BlendChannel(float baseValue, float layerValue, BlendMode mode)
         {
-            return TerrainJobsUtility.Blend(baseValue, layerValue, (int)mode);
+            // 直接采用加权累加并夹取 0..1，忽略混合模式
+            return Mathf.Clamp01(baseValue + layerValue);
         }
 
         /// <summary>

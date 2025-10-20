@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
   m_Name: StylizedRoadRecipe_PerlinNoiseMask
   m_EditorClassIdentifier: 
-  smooth: 0.852
-  tiling: {x: 0.29, y: 1.23}
-  offset: {x: 4.42, y: 0.77}
-  overallScale: 2
-  strength: 0.984
-  seed: 15.35
+  smooth: 0
+  tiling: {x: 2.77, y: 1.23}
+  offset: {x: 2.8, y: 0.77}
+  overallScale: 0.29
+  strength: 0.964
+  seed: 11.4

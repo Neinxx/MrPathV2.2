@@ -283,51 +283,13 @@ namespace MrPathV2
         /// </summary>
         public static float Blend(float baseValue, float layerValue, int blendModeOrdinal)
         {
-            // 验证输入值的有效性
+            // 仅保留图层不透明度混合：简单加权并钳制到 0..1
             if (math.isnan(baseValue) || math.isinf(baseValue)) baseValue = 0f;
             if (math.isnan(layerValue) || math.isinf(layerValue)) layerValue = 0f;
-            
-            // 确保值在合理范围内
-            baseValue = math.saturate(baseValue);
-            layerValue = math.saturate(layerValue);
-            
-            float result;
-            
-            // BlendMode: Normal=0, Multiply=1, Add=2, Overlay=3, Screen=4, Lerp=5, Additive=6
-            switch (blendModeOrdinal)
-            {
-                case 1: // Multiply
-                    result = baseValue * layerValue;
-                    break;
-                case 2: // Add
-                    result = math.saturate(baseValue + layerValue);
-                    break;
-                case 3: // Overlay
-                    result = baseValue < 0.5f ? 
-                        (2f * baseValue * layerValue) : 
-                        (1f - 2f * (1f - baseValue) * (1f - layerValue));
-                    break;
-                case 4: // Screen
-                    result = 1f - (1f - baseValue) * (1f - layerValue);
-                    break;
-                case 5: // Lerp（用 layerValue 作为权重）
-                    result = math.lerp(baseValue, layerValue, math.saturate(layerValue));
-                    break;
-                case 6: // Additive（与 Add 相同并夹取）
-                    result = math.saturate(baseValue + layerValue);
-                    break;
-                default: // Normal：直接覆盖（预合成的遮罩值）
-                    result = layerValue;
-                    break;
-            }
-            
-            // 最终验证结果的有效性
-            if (math.isnan(result) || math.isinf(result))
-            {
-                result = baseValue; // 如果计算结果无效，回退到基础值
-            }
-            
-            return math.saturate(result);
+
+            // 简单叠加并限制最大值
+            float result = math.saturate(baseValue + layerValue);
+            return result;
         }
         
         public static float SampleMaskLUT(NativeArray<float4> lut256, int layerIndex, float normalizedDist)

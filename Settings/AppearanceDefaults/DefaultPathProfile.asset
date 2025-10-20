@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   curveType: 1
   generationPrecision: 0.1
-  roadWidth: 1.67
+  roadWidth: 1.4
   crossSection:
     serializedVersion: 2
     m_Curve:
@@ -75,7 +75,7 @@ MonoBehaviour:
     m_RotationOrder: 4
   snapToTerrain: 1
   heightOffset: 0
-  smoothness: 100
+  smoothness: 95
   forceHorizontal: 1
   crossSectionSegments: 3
   showPreviewMesh: 1

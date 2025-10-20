@@ -6,6 +6,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using UnityEditor;
 using UnityEngine;
+using MrPathV2.Extensions; // 新增：使用 CreateTracked 扩展
 
 namespace MrPathV2
 {
@@ -43,8 +44,8 @@ namespace MrPathV2
                     Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
                     var td = terrain.terrainData;
                     var h2D = td.GetHeights(0, 0, td.heightmapResolution, td.heightmapResolution);
-                    var hn = new NativeArray<float>(h2D.Length, Allocator.Persistent);
-                    var ohn = new NativeArray<float>(h2D.Length, Allocator.Persistent);
+                    var hn = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
+                    var ohn = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
                     Copy2DTo1D(h2D, hn, td.heightmapResolution);
                     Copy2DTo1D(h2D, ohn, td.heightmapResolution);
 
@@ -78,11 +79,11 @@ namespace MrPathV2
             }
             finally
             {
-                if (handles.IsCreated) handles.Dispose();
+                if (handles.IsCreated) handles.SafeDispose();
                 foreach (var item in workItems)
                 {
-                    if (item.hn.IsCreated) item.hn.Dispose();
-                    if (item.ohn.IsCreated) item.ohn.Dispose();
+                    if (item.hn.IsCreated) item.hn.SafeDispose();
+                    if (item.ohn.IsCreated) item.ohn.SafeDispose();
                 }
                 if (spineData.IsCreated) spineData.Dispose();
                 if (profileData.IsCreated) profileData.Dispose();

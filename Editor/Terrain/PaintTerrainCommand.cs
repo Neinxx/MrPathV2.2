@@ -8,6 +8,7 @@ using UnityEngine;
 using System.Threading;
 using Unity.Mathematics;
 using System;
+using MrPathV2.Extensions; // 新增
 
 namespace MrPathV2
 {
@@ -216,8 +217,8 @@ namespace MrPathV2
             
             NativeArray<float> alphamaps1D;
             
-            // 统一使用直接分配，不再区分大小
-            alphamaps1D = new NativeArray<float>(totalSize, Allocator.Persistent);
+            // 使用带跟踪的分配，便于管理回收
+            alphamaps1D = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(totalSize, Allocator.Persistent);
 
             // 高效的数据转换
             ConvertAlphamaps3DTo1D(alphamaps3D, alphamaps1D);
@@ -281,8 +282,9 @@ namespace MrPathV2
             {
                 if (jobHandles.IsCreated)
                 {
-                    jobHandles.Dispose();
-                }
+                
+                                jobHandles.SafeDispose();
+                            }
             }
         }
 
@@ -520,7 +522,7 @@ namespace MrPathV2
             {
                 if (workItem.Alphamaps1D.IsCreated)
                 {
-                    workItem.Alphamaps1D.Dispose();
+                    workItem.Alphamaps1D.SafeDispose();
                 }
             }
 
