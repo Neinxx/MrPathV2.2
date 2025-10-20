@@ -250,6 +250,9 @@ namespace __temp.MrPathV2._2.Runtime.Core
                 // 1. 执行敕令中定义的操作
                 command.Execute(this);
 
+                // 1.5 确保中心点始终位于第一个节点（在顶点数量或位置变化后自动调整）
+                EnsurePivotAtFirstPoint();
+
                 // 2. 将此敕令作为"事件"，广播给所有关心此变化的系统
                 PathModified?.Invoke(command);
             }, "PathCreator.ExecuteCommand", this);

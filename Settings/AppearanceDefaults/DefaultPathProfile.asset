@@ -75,7 +75,7 @@ MonoBehaviour:
     m_RotationOrder: 4
   snapToTerrain: 1
   heightOffset: 0
-  smoothness: 95
+  smoothness: 100
   forceHorizontal: 1
   crossSectionSegments: 3
   showPreviewMesh: 1

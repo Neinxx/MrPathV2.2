@@ -10,7 +10,7 @@ namespace __temp.MrPathV2._2.Runtime.Memory
     /// 表示一个拥有并负责释放底层 NativeCollection 资源的对象。
     /// </summary>
     /// <typeparam name="TCollection">NativeCollection 类型 (NativeArray / NativeList)</typeparam>
-    public interface IMemoryOwner<TCollection> : IDisposable
+    public interface IMemoryOwner<out TCollection> : IDisposable
     {
         /// <summary>
         /// 获取底层 NativeCollection。
@@ -83,10 +83,13 @@ namespace __temp.MrPathV2._2.Runtime.Memory
                     array.Dispose();
                 }
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                // 访问 IsCreated 或 Dispose 可能在数组已被释放后抛出异常
-                Debug.LogWarning($"UnifiedMemoryManager: NativeArray already deallocated. {ex.Message}");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                // 在开发环境下输出详细信息，发布版本静默处理
+                Debug.LogWarning("UnifiedMemoryManager: Attempted to dispose an already-deallocated NativeArray. This is safe but may indicate duplicate Dispose calls.");
+#endif
+                // 发行版中忽略重复释放以减少噪音
             }
             finally
             {
@@ -139,11 +142,9 @@ namespace __temp.MrPathV2._2.Runtime.Memory
 
         ~UnifiedMemoryManager()
         {
-            if (!_disposed)
-            {
-                Debug.LogWarning("UnifiedMemoryManager finalizer detected missing Dispose call.");
-                Dispose();
-            }
+            if (_disposed) return;
+            Debug.LogWarning("UnifiedMemoryManager finalizer detected missing Dispose call.");
+            Dispose();
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
