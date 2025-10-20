@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Core;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// Job资源管理器：统一管理Job相关的NativeArray和其他IDisposable资源
@@ -12,9 +13,9 @@ namespace MrPathV2
     /// </summary>
     public class JobResourceManager : IDisposable
     {
-        private readonly List<IDisposable> _resources = new List<IDisposable>();
-        private readonly List<JobHandle> _jobHandles = new List<JobHandle>();
-        private bool _disposed = false;
+        private readonly List<IDisposable> _resources = new();
+        private readonly List<JobHandle> _jobHandles = new();
+        private bool _disposed;
 
         /// <summary>
         /// 创建并注册一个资源，确保在Dispose时自动释放
@@ -65,7 +66,7 @@ namespace MrPathV2
             where T : struct
         {
             ThrowIfDisposed();
-            var owner = MrPathV2.Memory.UnifiedMemory.Instance.RentNativeArray<T>(length, allocator);
+            var owner = global::__temp.MrPathV2._2.Runtime.Memory.UnifiedMemory.Instance.RentNativeArray<T>(length, allocator);
             _resources.Add(owner); // 跟踪 IMemoryOwner，方便统一释放
             return owner.Collection;
         }
@@ -77,7 +78,7 @@ namespace MrPathV2
             where T : unmanaged
         {
             ThrowIfDisposed();
-            var owner = MrPathV2.Memory.UnifiedMemory.Instance.RentNativeList<T>(initialCapacity, allocator);
+            var owner = global::__temp.MrPathV2._2.Runtime.Memory.UnifiedMemory.Instance.RentNativeList<T>(initialCapacity, allocator);
             _resources.Add(owner);
             return owner.Collection;
         }
@@ -163,13 +164,14 @@ namespace MrPathV2
                 throw new ObjectDisposedException(nameof(JobResourceManager));
         }
 
+/*
         /// <summary>
         /// NativeArray包装器，用于统一的IDisposable管理
         /// </summary>
         private class NativeArrayWrapper<T> : IDisposable where T : struct
         {
             private NativeArray<T> _array;
-            private bool _disposed = false;
+            private bool _disposed;
 
             public NativeArrayWrapper(NativeArray<T> array)
             {
@@ -185,14 +187,16 @@ namespace MrPathV2
                 }
             }
         }
+*/
 
+/*
         /// <summary>
         /// NativeList包装器，用于统一的IDisposable管理
         /// </summary>
         private class NativeListWrapper<T> : IDisposable where T : unmanaged
         {
             private NativeList<T> _list;
-            private bool _disposed = false;
+            private bool _disposed;
 
             public NativeListWrapper(NativeList<T> list)
             {
@@ -208,5 +212,6 @@ namespace MrPathV2
                 }
             }
         }
+*/
     }
 }

@@ -1,16 +1,20 @@
-
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
+using __temp.MrPathV2._2.Runtime.Jobs;
+using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
-using System.Threading;
-using Unity.Mathematics;
-using System;
-using MrPathV2.Extensions; // 新增
 
-namespace MrPathV2
+// 新增
+
+namespace __temp.MrPathV2._2.Editor.Terrain
 {
     /// <summary>
     /// 地形纹理绘制命令 - 优化版
@@ -20,8 +24,8 @@ namespace MrPathV2
     {
         #region 常量定义
 
-        private const int DEFAULT_BATCH_SIZE = 256;
-        private const string OPERATION_NAME = "绘制纹理 (Paint Textures)";
+        private const int DefaultBatchSize = 256;
+        private const string OperationName = "绘制纹理 (Paint Textures)";
 
         #endregion
 
@@ -32,13 +36,13 @@ namespace MrPathV2
         {
         }
 
-        public override string GetCommandName() => OPERATION_NAME;
+        public override string GetCommandName() => OperationName;
 
         #endregion
 
         #region 核心处理方法
 
-        protected override async Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spine, CancellationToken token)
+        protected override async Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token)
         {
             // 使用结构化的资源管理器
             TerrainPaintResourceManager resourceManager = null;
@@ -61,7 +65,7 @@ namespace MrPathV2
                 Debug.Log($"[MrPath] 用户取消了{GetCommandName()}操作");
                 throw;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogError($"[MrPath] {GetCommandName()}执行失败: {ex.Message}");
                 throw;
@@ -133,7 +137,7 @@ namespace MrPathV2
         /// 批量处理地形
         /// </summary>
         private async Task ProcessTerrainsInBatchAsync(TerrainPaintResourceManager resourceManager,
-            List<Terrain> terrains, CancellationToken token)
+            List<UnityEngine.Terrain> terrains, CancellationToken token)
         {
             var validTerrains = new List<TerrainWorkItem>();
 
@@ -165,7 +169,7 @@ namespace MrPathV2
         /// </summary>
         // 在 PaintTerrainCommand.cs 中，替换此方法
 
-        private async Task<TerrainWorkItem> PrepareTerrainWorkItemAsync(Terrain terrain, CancellationToken token)
+        private async Task<TerrainWorkItem> PrepareTerrainWorkItemAsync(UnityEngine.Terrain terrain, CancellationToken token)
         {
             // 在主线程中执行，避免跨线程内存分配问题
             await Task.Yield(); // 让出控制权，但保持在主线程
@@ -175,7 +179,6 @@ namespace MrPathV2
             // 注册撤销操作
             Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
 
-            var td = terrain.terrainData;
             var recipeAsset = Creator.profile.roadRecipe;
 
             // 验证配方
@@ -192,7 +195,7 @@ namespace MrPathV2
         /// <summary>
         /// 为单个地形创建工作项
         /// </summary>
-        private TerrainWorkItem CreateTerrainWorkItem(Terrain terrain, StylizedRoadRecipe recipeAsset)
+        private TerrainWorkItem CreateTerrainWorkItem(UnityEngine.Terrain terrain, StylizedRoadRecipe recipeAsset)
         {
             var td = terrain.terrainData;
             if (td == null)
@@ -214,11 +217,10 @@ namespace MrPathV2
             
             // 检查数组大小，如果超过池限制则使用直接分配
             int totalSize = alphamaps3D.Length;
-            
-            NativeArray<float> alphamaps1D;
-            
-            // 使用带跟踪的分配，便于管理回收
-            alphamaps1D = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(totalSize, Allocator.Persistent);
+
+            var alphamaps1D =
+                // 使用带跟踪的分配，便于管理回收
+                Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float>(totalSize, Allocator.Persistent);
 
             // 高效的数据转换
             ConvertAlphamaps3DTo1D(alphamaps3D, alphamaps1D);
@@ -269,7 +271,7 @@ namespace MrPathV2
                     // 使用行级并行处理而不是像素级处理
                     var handle = job.Schedule(
                         workItem.TerrainData.alphamapResolution, // 按行并行处理
-                        DEFAULT_BATCH_SIZE);
+                        DefaultBatchSize);
 
                     jobHandles.Add(handle);
                 }
@@ -284,7 +286,7 @@ namespace MrPathV2
                 {
                 
                                 jobHandles.SafeDispose();
-                            }
+                }
             }
         }
 
@@ -298,20 +300,20 @@ namespace MrPathV2
             
             return new PaintSplatmapJob
             {
-                spine = resourceManager.SpineData,
-                profile = workItem.ProfileData,
-                recipe = workItem.RecipeData,
-                terrainPos = workItem.Terrain.GetPosition(),
-                terrainSize = workItem.TerrainData.size,
-                alphamapResolution = workItem.TerrainData.alphamapResolution,
-                alphamapLayerCount = workItem.TerrainData.alphamapLayers,
-                alphamaps = workItem.Alphamaps1D,
-                roadContour = resourceManager.RoadContour,
-                contourBounds = resourceManager.ContourBounds,
+                Spine = resourceManager.SpineData,
+                Profile = workItem.ProfileData,
+                Recipe = workItem.RecipeData,
+                TerrainPos = workItem.Terrain.GetPosition(),
+                TerrainSize = workItem.TerrainData.size,
+                AlphamapResolution = workItem.TerrainData.alphamapResolution,
+                AlphamapLayerCount = workItem.TerrainData.alphamapLayers,
+                Alphamaps = workItem.Alphamaps1D,
+                RoadContour = resourceManager.RoadContour,
+                ContourBounds = resourceManager.ContourBounds,
                 // 新增：覆盖区域限制
-                useCoverageLimit = useCoverageLimit,
-                coverageMin = coverageMin,
-                coverageMax = coverageMax
+                UseCoverageLimit = useCoverageLimit,
+                CoverageMin = coverageMin,
+                CoverageMax = coverageMax
             };
         }
 
@@ -464,7 +466,7 @@ namespace MrPathV2
     /// </summary>
     internal class TerrainWorkItem
     {
-        public Terrain Terrain { get; set; }
+        public UnityEngine.Terrain Terrain { get; set; }
         public TerrainData TerrainData { get; set; }
         public float[,,] Alphamaps3D { get; set; }
         public NativeArray<float> Alphamaps1D { get; set; }
@@ -478,7 +480,7 @@ namespace MrPathV2
     /// <summary>
     /// 地形绘制资源管理器，负责统一管理所有Native资源
     /// </summary>
-    internal class TerrainPaintResourceManager : System.IDisposable
+    internal class TerrainPaintResourceManager : IDisposable
     {
         private readonly List<TerrainWorkItem> _workItems = new List<TerrainWorkItem>();
         private readonly List<PathJobsUtility.ProfileData> _profileDataList = new List<PathJobsUtility.ProfileData>();

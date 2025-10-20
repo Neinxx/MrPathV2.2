@@ -1,5 +1,8 @@
+using __temp.MrPathV2._2.Runtime.Interfaces;
+using __temp.MrPathV2._2.Runtime.Providers;
 using UnityEngine;
-namespace MrPathV2
+
+namespace __temp.MrPathV2._2.Editor.Adapters
 {
     /// <summary>
     /// 适配器：将 TerrainHeightProvider 封装为 IHeightProvider。

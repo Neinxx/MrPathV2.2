@@ -1,11 +1,12 @@
 using System;
-using System.Collections;
-using UnityEngine;
-using UnityEditor;
 using System.Linq;
+using __temp.MrPathV2._2.Editor.Inspectors;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Jobs;
+using UnityEditor;
+using UnityEngine;
 
-
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Tests
 {
     /// <summary>
     /// 编辑器刷新系统测试
@@ -157,7 +158,7 @@ namespace MrPathV2
         {
             Debug.Log("测试NativeCollectionManager...");
             
-            using var manager = new MrPathV2.NativeCollectionManager();
+            using var manager = new NativeCollectionManager();
             
             // 测试NativeArray创建和跟踪
             var array = manager.CreateNativeArray<float>(100, Unity.Collections.Allocator.Persistent, "TestArray");

@@ -1,9 +1,11 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
-using System.IO;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Settings
 {
     /// <summary>
     /// MrPath 工具所有配置资产的根引用和导航中心。
@@ -12,81 +14,112 @@ namespace MrPathV2
     public class MrPathProjectSettings : ScriptableObject
     {
         // 定义了主设置文件的唯一、标准路径
-        public const string k_SettingsPath = "Assets/MrPathV2.2/Settings/MrPath_ProjectSettings.asset";
+        // note: constant left for compatibility but not used in creation
+        private const string KSettingsPath = "Assets/MrPathV2.2/Settings/MrPath_ProjectSettings.asset";
 
         // --- 子配置资产的引用 ---
-        [Tooltip("新路径创建时的默认值配置")]
-        public MrPathCreationDefaults creationDefaults;
+        [Tooltip("新路径创建时的默认值配置")] public MrPathCreationDefaults creationDefaults;
 
-        [Tooltip("路径默认外观与预览材质配置")]
-        public MrPathAppearanceDefaults appearanceDefaults;
+        [Tooltip("路径默认外观与预览材质配置")] public MrPathAppearanceDefaults appearanceDefaults;
 
-        [Tooltip("场景视图中UI面板的布局配置")]
-        public MrPathSceneUISettings sceneUISettings;
 
-        [Tooltip("数据驱动的地形操作列表")]
-        public MrPathTerrainOperations terrainOperations;
-
-        [Tooltip("高级开发者设置，如依赖注入工厂和策略覆盖")]
-        public MrPathAdvancedSettings advancedSettings;
+        [Tooltip("数据驱动的地形操作列表")] public MrPathTerrainOperations terrainOperations;
 
         /// <summary>
         /// 获取或创建主设置资产的静态方法。这是全局访问设置的唯一入口。
         /// </summary>
         internal static MrPathProjectSettings GetOrCreateSettings()
         {
-            var settings = AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(k_SettingsPath);
+            // 尝试通过标签或常量路径加载
+            var settings = LoadExistingSettings();
             if (settings == null)
             {
-                // 如果主设置文件不存在，则创建一个新的实例
+                // 创建新实例并放置在工具目录下的 Settings
                 settings = CreateInstance<MrPathProjectSettings>();
+                var folder = GetSettingsRootFolder();
+                Directory.CreateDirectory(folder);
+                var assetPath = Path.Combine(folder, "MrPath_ProjectSettings.asset").Replace("\\", "/");
 
-                // 关键步骤：自动创建并关联所有子配置资产
+                // 自动创建并关联子配置
                 settings.creationDefaults = GetOrCreateSubAsset<MrPathCreationDefaults>("MrPath_CreationDefaults");
-                settings.appearanceDefaults = GetOrCreateSubAsset<MrPathAppearanceDefaults>("MrPath_AppearanceDefaults");
-                settings.sceneUISettings = GetOrCreateSubAsset<MrPathSceneUISettings>("MrPath_SceneUI");
+                settings.appearanceDefaults =
+                    GetOrCreateSubAsset<MrPathAppearanceDefaults>("MrPath_AppearanceDefaults");
                 settings.terrainOperations = GetOrCreateSubAsset<MrPathTerrainOperations>("MrPath_TerrainOperations");
-                settings.advancedSettings = GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
+                GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
 
-                // 确保目标目录存在
-                Directory.CreateDirectory(Path.GetDirectoryName(k_SettingsPath));
-
-                // 在数据库中创建资产并保存
-                AssetDatabase.CreateAsset(settings, k_SettingsPath);
+                AssetDatabase.CreateAsset(settings, assetPath);
                 AssetDatabase.SaveAssets();
             }
+
+            // 添加标签
+            AssetDatabase.SetLabels(settings, new[] { "MrPathCoreAsset" });
             return settings;
         }
 
-        /// <summary>
-        /// 一个通用的辅助方法，用于获取或创建子配置资产。
-        /// </summary>
+        private static MrPathProjectSettings LoadExistingSettings()
+        {
+            // 标签优先
+            var guids = AssetDatabase.FindAssets("l:MrPathCoreAsset t:MrPathProjectSettings");
+            if (guids is not { Length: > 0 })
+                return AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(KSettingsPath);
+            var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            return AssetDatabase.LoadAssetAtPath<MrPathProjectSettings>(path);
 
+            // 回退常量
+        }
+
+        /// <summary>
+        /// 返回工具根目录(含 Assets/)，通过脚本本身位置推断，保证工具移动后仍能正确工作。
+        /// </summary>
+        private static string GetToolRootFolder()
+        {
+            // 先尝试根据已存在的设置资产定位
+            var guids = AssetDatabase.FindAssets("l:MrPathCoreAsset t:MrPathProjectSettings");
+            if (guids != null && guids.Length > 0)
+            {
+                var assetPath =
+                    AssetDatabase.GUIDToAssetPath(guids[0]); // Assets/ToolRoot/Settings/MrPath_ProjectSettings.asset
+                var settingsDir = Path.GetDirectoryName(assetPath); // Assets/ToolRoot/Settings
+                return Path.GetDirectoryName(settingsDir)?.Replace("\\", "/"); // Assets/ToolRoot
+            }
+
+            // 未创建过资产时，根据脚本文件所在目录推断 (Editor/Settings)
+            var scriptGuid = AssetDatabase.FindAssets("MrPathProjectSettings t:Script").FirstOrDefault();
+            if (string.IsNullOrEmpty(scriptGuid)) return Path.GetDirectoryName(Path.GetDirectoryName(KSettingsPath));
+            {
+                var scriptPath =
+                    AssetDatabase.GUIDToAssetPath(scriptGuid); // Assets/.../Editor/Settings/MrPathProjectSettings.cs
+                var settingsDir = Path.GetDirectoryName(scriptPath); // Assets/.../Editor/Settings
+                var editorDir = Path.GetDirectoryName(settingsDir); // Assets/.../Editor
+                var rootDir = Path.GetDirectoryName(editorDir); // Assets/... (tool root)
+                if (rootDir != null) return rootDir.Replace("\\", "/");
+            }
+
+            // 最后回退到常量路径的上一级
+            return Path.GetDirectoryName(Path.GetDirectoryName(KSettingsPath));
+        }
+
+        public static string GetSettingsRootFolder()
+        {
+            return Path.Combine(GetToolRootFolder(), "Settings").Replace("\\", "/");
+        }
 
         private static T GetOrCreateSubAsset<T>(string fileName) where T : ScriptableObject
         {
-            // 直接拼接目标相对路径（相对于 Assets 目录）
-            string relativePath = Path.Combine("MrPathV2.2", "Settings", $"{fileName}.asset");
-            // 转换为 AssetDatabase 要求的格式（以 Assets/ 开头，统一使用 / 斜杠）
-            string fullPath = Path.Combine("Assets", relativePath).Replace("\\", "/");
-        
+            var folder = GetSettingsRootFolder();
+            var fullPath = Path.Combine(folder, $"{fileName}.asset").Replace("\\", "/");
             var asset = AssetDatabase.LoadAssetAtPath<T>(fullPath);
-            if (asset == null)
-            {
-                asset = CreateInstance<T>();
-                // 确保目录存在（自动创建不存在的文件夹）
-                string directoryPath = Path.GetDirectoryName(fullPath);
-                if (!Directory.Exists(directoryPath))
-                {
-                    Directory.CreateDirectory(directoryPath);
-                }
-                AssetDatabase.CreateAsset(asset, fullPath);
-            }
+            if (asset != null) return asset;
+            asset = CreateInstance<T>();
+            Directory.CreateDirectory(folder);
+            AssetDatabase.CreateAsset(asset, fullPath);
+
             return asset;
         }
+
         [Tooltip("路径配置文件集合")] // 添加注释，描述属性用途
         public List<PathProfile> profiles = new List<PathProfile>(); // 初始化为一个空列表
-        [Tooltip("道路配方集合")]
-        public List<StylizedRoadRecipe> roadRecipes = new List<StylizedRoadRecipe>();
+
+        [Tooltip("道路配方集合")] public List<StylizedRoadRecipe> roadRecipes = new List<StylizedRoadRecipe>();
     }
 }

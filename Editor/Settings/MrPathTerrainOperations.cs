@@ -1,7 +1,9 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Settings/MrPathTerrainOperations.cs
+
+
+using __temp.MrPathV2._2.Editor.Operations;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Settings
 {
     /// <summary>
     /// 管理数据驱动的地形操作按钮列表。

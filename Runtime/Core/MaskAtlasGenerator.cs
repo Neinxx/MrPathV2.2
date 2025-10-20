@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// Utility to build a 2D mask atlas where every row contains the 1-D mask lookup for a single blend layer.

@@ -2,13 +2,13 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using MrPathV2.Extensions;
 
-namespace MrPathV2.Examples
+namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
 {
     /// <summary>
     /// 改进的Job实现示例，展示如何使用新的内存管理工具
@@ -20,14 +20,14 @@ namespace MrPathV2.Examples
         [SerializeField] private bool enableMemoryTracking = true;
         [SerializeField] private bool useResourceManager = true;
 
-        private JobResourceManager resourceManager;
-        private SafeJobExecutor jobExecutor;
+        private JobResourceManager _resourceManager;
+        private SafeJobExecutor _jobExecutor;
 
         private void Start()
         {
             // 初始化资源管理器
-            resourceManager = new JobResourceManager();
-            jobExecutor = new SafeJobExecutor();
+            _resourceManager = new JobResourceManager();
+            _jobExecutor = new SafeJobExecutor();
 
             // 开始内存监控
             if (enableMemoryTracking)
@@ -39,8 +39,8 @@ namespace MrPathV2.Examples
         private void OnDestroy()
         {
             // 清理资源
-            resourceManager?.Dispose();
-            jobExecutor?.Dispose();
+            _resourceManager?.Dispose();
+            _jobExecutor?.Dispose();
         }
 
         /// <summary>
@@ -76,8 +76,8 @@ namespace MrPathV2.Examples
         private async Task RunJobWithResourceManager()
         {
             // 创建输入数据
-            var inputData = resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
-            var outputData = resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
+            var inputData = _resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
+            var outputData = _resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
 
             // 初始化输入数据
             for (int i = 0; i < dataSize; i++)
@@ -88,23 +88,23 @@ namespace MrPathV2.Examples
             // 创建并执行Job
             var job = new ProcessDataJob
             {
-                inputData = inputData,
-                outputData = outputData,
-                multiplier = 2.0f
+                InputData = inputData,
+                OutputData = outputData,
+                Multiplier = 2.0f
             };
 
             // 使用SafeJobExecutor执行Job
-            await jobExecutor.ExecuteAsync(job, dataSize, 64);
+            await _jobExecutor.ExecuteAsync(job, dataSize, 64);
             
             Debug.Log($"Job执行成功，处理了 {dataSize} 个元素");
                 
-                // 验证结果
-                float sum = 0;
-                for (int i = 0; i < math.min(10, dataSize); i++)
-                {
-                    sum += outputData[i];
-                }
-                Debug.Log($"前10个结果的平均值: {sum / math.min(10, dataSize):F2}");
+            // 验证结果
+            float sum = 0;
+            for (int i = 0; i < math.min(10, dataSize); i++)
+            {
+                sum += outputData[i];
+            }
+            Debug.Log($"前10个结果的平均值: {sum / math.min(10, dataSize):F2}");
             
             // 资源会在resourceManager.Dispose()时自动清理
         }
@@ -121,8 +121,8 @@ namespace MrPathV2.Examples
             try
             {
                 // 使用扩展方法创建带跟踪的NativeArray
-                inputData = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
-                outputData = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
+                inputData = Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
+                outputData = Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
 
                 // 初始化输入数据
                 for (int i = 0; i < dataSize; i++)
@@ -133,9 +133,9 @@ namespace MrPathV2.Examples
                 // 创建并调度Job
                 var job = new ProcessDataJob
                 {
-                    inputData = inputData,
-                    outputData = outputData,
-                    multiplier = 2.0f
+                    InputData = inputData,
+                    OutputData = outputData,
+                    Multiplier = 2.0f
                 };
 
                 jobHandle = job.Schedule(dataSize, 64);
@@ -180,8 +180,8 @@ namespace MrPathV2.Examples
                 // 创建多个Job
                 for (int i = 0; i < batchSize; i++)
                 {
-                    inputArrays[i] = resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
-                    outputArrays[i] = resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
+                    inputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
+                    outputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
 
                     // 初始化数据
                     for (int j = 0; j < dataSize / batchSize; j++)
@@ -191,14 +191,14 @@ namespace MrPathV2.Examples
 
                     jobs[i] = new ProcessDataJob
                     {
-                        inputData = inputArrays[i],
-                        outputData = outputArrays[i],
-                        multiplier = 1.5f + i * 0.5f
+                        InputData = inputArrays[i],
+                        OutputData = outputArrays[i],
+                        Multiplier = 1.5f + i * 0.5f
                     };
                 }
 
                 // 批量执行Job
-                await jobExecutor.ExecuteBatchAsync(
+                await _jobExecutor.ExecuteBatchAsync(
                     jobs.Select(job => new Func<JobHandle>(() => job.Schedule(dataSize / batchSize, 32))).ToArray()
                 );
 
@@ -229,8 +229,8 @@ namespace MrPathV2.Examples
                     if (stats.ActiveAllocations > 0)
                     {
                         Debug.Log($"内存监控 - 活跃分配: {stats.ActiveAllocations}, " +
-                                 $"当前使用: {FormatBytes(stats.CurrentMemoryUsage)}, " +
-                                 $"峰值: {FormatBytes(stats.PeakMemoryUsage)}");
+                                  $"当前使用: {FormatBytes(stats.CurrentMemoryUsage)}, " +
+                                  $"峰值: {FormatBytes(stats.PeakMemoryUsage)}");
 
                         // 检查潜在泄漏
                         var leaks = MemoryTracker.GetPotentialLeaks(2.0); // 2分钟阈值
@@ -285,52 +285,52 @@ namespace MrPathV2.Examples
     /// </summary>
     public struct ProcessDataJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<float> inputData;
-        [WriteOnly] public NativeArray<float> outputData;
-        [ReadOnly] public float multiplier;
+        [ReadOnly] public NativeArray<float> InputData;
+        [WriteOnly] public NativeArray<float> OutputData;
+        [ReadOnly] public float Multiplier;
 
         public void Execute(int index)
         {
             // 模拟一些计算
-            float value = inputData[index];
-            value = math.sin(value) * multiplier;
+            float value = InputData[index];
+            value = math.sin(value) * Multiplier;
             value = math.sqrt(math.abs(value));
-            outputData[index] = value;
+            OutputData[index] = value;
         }
     }
-}
 
-/// <summary>
-/// 扩展方法：为MonoBehaviour添加取消令牌支持
-/// </summary>
-public static class MonoBehaviourExtensions
-{
-    public static CancellationToken GetCancellationTokenOnDestroy(this MonoBehaviour monoBehaviour)
+    /// <summary>
+    /// 扩展方法：为MonoBehaviour添加取消令牌支持
+    /// </summary>
+    public static class MonoBehaviourExtensions
     {
-        var source = new CancellationTokenSource();
-        
-        // 当GameObject被销毁时取消令牌
-        if (monoBehaviour != null)
+        public static CancellationToken GetCancellationTokenOnDestroy(this MonoBehaviour monoBehaviour)
         {
-            void OnDestroy()
+            var source = new CancellationTokenSource();
+        
+            // 当GameObject被销毁时取消令牌
+            if (monoBehaviour != null)
             {
-                source?.Cancel();
-                source?.Dispose();
+                void OnDestroy()
+                {
+                    source?.Cancel();
+                    source?.Dispose();
+                }
+
+                // 注册销毁事件（这里简化处理，实际项目中可能需要更复杂的生命周期管理）
+                monoBehaviour.StartCoroutine(WaitForDestroy(monoBehaviour.gameObject, OnDestroy));
             }
 
-            // 注册销毁事件（这里简化处理，实际项目中可能需要更复杂的生命周期管理）
-            monoBehaviour.StartCoroutine(WaitForDestroy(monoBehaviour.gameObject, OnDestroy));
+            return source.Token;
         }
 
-        return source.Token;
-    }
-
-    private static System.Collections.IEnumerator WaitForDestroy(GameObject gameObject, System.Action onDestroy)
-    {
-        while (gameObject != null)
+        private static System.Collections.IEnumerator WaitForDestroy(GameObject gameObject, Action onDestroy)
         {
-            yield return null;
+            while (gameObject != null)
+            {
+                yield return null;
+            }
+            onDestroy?.Invoke();
         }
-        onDestroy?.Invoke();
     }
 }

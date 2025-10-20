@@ -1,20 +1,21 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Terrain/TerrainCommandBase.cs (最终统一版)
+
+
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
-using UnityEditor;
-using System;
-using System.Linq;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Terrain
 {
     public abstract class TerrainCommandBase
     {
         protected readonly PathCreator Creator;
         protected readonly IHeightProvider HeightProvider;
         // 可选：来自预览网格的首选 XZ 包围盒 (minX, minZ, maxX, maxZ)
-        public Vector4? PreferredBoundsXZ { get; private set; }
+        protected Vector4? PreferredBoundsXZ { get; private set; }
 
         protected TerrainCommandBase(PathCreator creator, IHeightProvider heightProvider)
         {
@@ -40,7 +41,7 @@ namespace MrPathV2
             }
         }
 
-        protected abstract Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spine, CancellationToken token);
+        protected abstract Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token);
 
         /// <summary>
         /// 设置首选的预览包围盒（XZ 平面），用于作业的粗剔除。
@@ -49,8 +50,8 @@ namespace MrPathV2
         {
             PreferredBoundsXZ = boundsXZ;
         }
-        
-        protected bool Validate(out PathSpine spine, out List<Terrain> affectedTerrains)
+
+        private bool Validate(out PathSpine spine, out List<UnityEngine.Terrain> affectedTerrains)
         {
             spine = default; affectedTerrains = null;
             if (Creator == null || Creator.profile == null || Creator.pathData.KnotCount < 2) { Debug.LogError("路径无效或未配置 Profile。"); return false; }
@@ -60,11 +61,11 @@ namespace MrPathV2
             if (affectedTerrains.Count == 0) { Debug.LogWarning("路径未影响任何活动地形。"); return false; }
             return true;
         }
-        private List<Terrain> FindAffectedTerrains(PathSpine spine)
+        private List<UnityEngine.Terrain> FindAffectedTerrains(PathSpine spine)
         {
             Bounds projectedBounds = GetProjectedSpineBounds(spine);
-            var affectedTerrains = new List<Terrain>();
-            foreach (var terrain in Terrain.activeTerrains)
+            var affectedTerrains = new List<UnityEngine.Terrain>();
+            foreach (var terrain in UnityEngine.Terrain.activeTerrains)
             {
                 if (terrain == null || terrain.terrainData == null) continue;
                 Bounds terrainBounds = new Bounds(terrain.GetPosition() + terrain.terrainData.size / 2f, terrain.terrainData.size);
@@ -103,14 +104,14 @@ namespace MrPathV2
             }
             return new Vector4(minX, minZ, maxX, maxZ);
         }
-        protected Dictionary<TerrainLayer, int> BuildTerrainLayerMap(Terrain terrain)
+        protected Dictionary<TerrainLayer, int> BuildTerrainLayerMap(UnityEngine.Terrain terrain)
         {
             var terrainLayers = terrain.terrainData.terrainLayers;
             var layerToIndexMap = new Dictionary<TerrainLayer, int>();
             for (int i = 0; i < terrainLayers.Length; i++) { if (terrainLayers[i] != null) layerToIndexMap[terrainLayers[i]] = i; }
             return layerToIndexMap;
         }
-        private void StitchTerrains(List<Terrain> terrains)
+        private void StitchTerrains(List<UnityEngine.Terrain> terrains)
         {
             foreach (var t in terrains) t.Flush();
             foreach (var t in terrains) t.SetNeighbors(t.leftNeighbor, t.topNeighbor, t.rightNeighbor, t.bottomNeighbor);

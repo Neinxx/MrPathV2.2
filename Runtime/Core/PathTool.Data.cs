@@ -1,9 +1,8 @@
-
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
 
     #region 枚举定义

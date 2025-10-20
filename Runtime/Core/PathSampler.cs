@@ -1,7 +1,10 @@
 // PathSampler.cs (已修正平滑算法调用)
+
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
-namespace MrPathV2
+
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     public static class PathSampler
     {

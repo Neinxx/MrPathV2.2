@@ -1,24 +1,29 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Terrain/FlattenTerrainCommand.cs (最终统一版)
+
+
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
+using __temp.MrPathV2._2.Runtime.Jobs;
+using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEditor;
-using UnityEngine;
-using MrPathV2.Extensions; // 新增：使用 CreateTracked 扩展
 
-namespace MrPathV2
+// 新增：使用 CreateTracked 扩展
+
+namespace __temp.MrPathV2._2.Editor.Terrain
 {
     public class FlattenTerrainCommand : TerrainCommandBase
     {
         public FlattenTerrainCommand(PathCreator creator, IHeightProvider heightProvider) : base(creator, heightProvider) { }
         public override string GetCommandName() => "压平地形 (Flatten Terrain)";
 
-        protected override async Task ProcessTerrainsAsync(List<Terrain> terrains, PathSpine spine, CancellationToken token)
+        protected override async Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token)
         {
             var handles = new NativeList<JobHandle>(Allocator.TempJob);
-            var workItems = new List<(Terrain terrain, float[,] h, NativeArray<float> hn, NativeArray<float> ohn)>();
+            var workItems = new List<(UnityEngine.Terrain terrain, float[,] h, NativeArray<float> hn, NativeArray<float> ohn)>();
 
             // 直接分配NativeArray，不再使用对象池
             var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
@@ -44,22 +49,22 @@ namespace MrPathV2
                     Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
                     var td = terrain.terrainData;
                     var h2D = td.GetHeights(0, 0, td.heightmapResolution, td.heightmapResolution);
-                    var hn = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
-                    var ohn = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
+                    var hn = Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
+                    var ohn = Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
                     Copy2DTo1D(h2D, hn, td.heightmapResolution);
                     Copy2DTo1D(h2D, ohn, td.heightmapResolution);
 
                     var job = new ModifyHeightsJob
                     {
-                        spine = spineData,
-                        profile = profileData,
-                        terrainPos = terrain.GetPosition(),
-                        terrainSize = td.size,
-                        heightmapResolution = td.heightmapResolution,
-                        heights = hn,
-                        originalHeights = ohn,
-                        roadContour = roadContour,
-                        contourBounds = contourBounds
+                        Spine = spineData,
+                        Profile = profileData,
+                        TerrainPos = terrain.GetPosition(),
+                        TerrainSize = td.size,
+                        HeightmapResolution = td.heightmapResolution,
+                        Heights = hn,
+                        OriginalHeights = ohn,
+                        RoadContour = roadContour,
+                        ContourBounds = contourBounds
                     };
                     var h = job.Schedule(hn.Length, 256);
                     handles.Add(h);

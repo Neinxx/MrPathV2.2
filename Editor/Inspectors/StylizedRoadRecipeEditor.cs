@@ -1,16 +1,16 @@
-// MrPathV2/Editor/Inspectors/StylizedRoadRecipeEditor.cs - Final Corrected Version
-
-using UnityEditor;
-using UnityEngine;
-using Sirenix.OdinInspector.Editor;
-using Sirenix.Utilities.Editor;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
+using __temp.MrPathV2._2.Editor.Performance;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using Sirenix.OdinInspector.Editor;
+using Sirenix.Utilities.Editor;
+using UnityEditor;
+using UnityEngine;
 
-
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
     public class StylizedRoadRecipeEditor : OdinEditor
@@ -38,19 +38,27 @@ namespace MrPathV2
         private static Material _sharedPreviewMaterial;
         private Material _previewMaterial;
         private static bool _missingShaderLogged;
-        private readonly Dictionary<BlendMaskBase, Texture2D> _maskLUTCache = new Dictionary<BlendMaskBase, Texture2D>();
+        // _maskLutCache 已弃用
 
         // CPU 预览逻辑已移除
 
         private Type _selectedMaskType;
-        private static readonly Type[] _maskTypes = FindAvailableMaskTypes();
+        private static readonly Type[] MaskTypes = FindAvailableMaskTypes();
+        private static readonly int LayerTiling = Shader.PropertyToID("_LayerTiling");
+        private static readonly int LayerTint = Shader.PropertyToID("_LayerTint");
+        private static readonly int LayerOpacity = Shader.PropertyToID("_LayerOpacity");
+        private static readonly int Mode = Shader.PropertyToID("_BlendMode");
+        private static readonly int LayerTex = Shader.PropertyToID("_LayerTex");
+        private static readonly int MaskAtlas = Shader.PropertyToID("_MaskAtlas");
+        private static readonly int AtlasInvHeight = Shader.PropertyToID("_AtlasInvHeight");
+        private static readonly int PreviousResultTex = Shader.PropertyToID("_PreviousResultTex");
 
         protected override void OnEnable()
         {
             base.OnEnable();
             _recipe = target as StylizedRoadRecipe;
-            if (_maskTypes.Length > 0)
-                _selectedMaskType = _maskTypes[0];
+            if (MaskTypes.Length > 0)
+                _selectedMaskType = MaskTypes[0];
 
 
             // --- 预览材质初始化（静态共享）---
@@ -71,7 +79,7 @@ namespace MrPathV2
 
             _previewMaterial = _sharedPreviewMaterial; // 使用共享实例，避免重复创建/销毁
 
-            this.Tree.OnPropertyValueChanged += (prop, path) => OnRecipeModified?.Invoke(_recipe);
+            this.Tree.OnPropertyValueChanged += (_, _) => OnRecipeModified?.Invoke(_recipe);
         }
 
         protected override void OnDisable()
@@ -81,8 +89,6 @@ namespace MrPathV2
 
 
             // 不再销毁 _previewMaterial，因为它是静态共享实例
-            foreach (var lut in _maskLUTCache.Values) DestroyImmediate(lut);
-            _maskLUTCache.Clear();
 
 
         }
@@ -116,58 +122,12 @@ namespace MrPathV2
                 _lastRecipeHash = currentHash;
 
                 // 【FIX】Clear the LUT cache to force regeneration of mask textures
-                foreach (var lut in _maskLUTCache.Values) DestroyImmediate(lut);
-                _maskLUTCache.Clear();
+
+                // LUT 缓存已删除，无需额外处理
 
                 UpdatePreviewTexture();
                 OnRecipeModified?.Invoke(_recipe);
             }
-        }
-
-        private void DrawPreview()
-        {
-            EditorGUILayout.LabelField("最终效果预览", EditorStyles.boldLabel);
-
-            // 显示层数信息和性能提示
-            int layerCount = _recipe?.blendLayers?.Count ?? 0;
-            int activeLayerCount = _recipe?.blendLayers?.Count(l => l.enabled && l.mask != null && l.terrainLayer != null) ?? 0;
-            
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField($"总层数: {layerCount} | 活跃层数: {activeLayerCount}", EditorStyles.miniLabel);
-                
-                if (activeLayerCount > 16)
-                {
-                    EditorGUILayout.LabelField("⚠️ 大量层数可能影响性能", EditorStyles.miniLabel);
-                }
-                else if (activeLayerCount > 4)
-                {
-                    EditorGUILayout.LabelField("✨ 多层预览模式", EditorStyles.miniLabel);
-                }
-            }
-
-            // GPU 预览：水平显示完整道路横截面
-            // 使用更低的高度以适应4:1的宽高比
-            Rect previewRect = GUILayoutUtility.GetRect(0, 120, GUILayout.ExpandWidth(true));
-
-            if (_lastRecipeHash == -1) UpdatePreviewTexture();
-
-            if (_previewRT != null)
-            {
-                GUI.DrawTexture(previewRect, _previewRT, ScaleMode.StretchToFill, false);
-            }
-
-            // 绘制中心线（垂直线，表示道路中心）
-            float centerX = previewRect.x + previewRect.width * 0.5f;
-            if (_showCenterLine)
-            {
-                EditorGUI.DrawRect(new Rect(centerX - 0.5f, previewRect.y, 1f, previewRect.height), new Color(1, 1, 1, 0.7f));
-            }
-
-            string helpText = activeLayerCount > 4 
-                ? "基于地形贴图和遮罩混合的最终道路效果预览 (多层GPU加速)。水平显示完整道路横截面，中心线表示道路中心。"
-                : "基于地形贴图和遮罩混合的最终道路效果预览 (GPU 加速)。水平显示完整道路横截面，中心线表示道路中心。";
-            EditorGUILayout.HelpBox(helpText, MessageType.None);
         }
 
         #region Preview Generation
@@ -219,32 +179,38 @@ namespace MrPathV2
                 var activeMask = layer.GetActiveMask();
                 
                 var pli = new PreviewPipelineUtility.PreviewLayerInfo(
-                    layer.terrainLayer.diffuseTexture as Texture2D ?? Texture2D.whiteTexture,
+                    layer.terrainLayer.diffuseTexture ?? Texture2D.whiteTexture,
                     tiling,
                     Vector2.zero,
                     Color.white,
                     Mathf.Clamp01(layer.opacity * recipe.masterOpacity),
                     layer.blendMode,
                     activeMask);
-                // Build single-layer LUT (only R channel used)
-                Texture2D maskLUT = PreviewPipelineUtility.BuildMaskLUT(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth, 100f);
-                 _previewMaterial.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
-                 _previewMaterial.SetColor("_LayerTint", Color.white);
-                 _previewMaterial.SetFloat("_LayerOpacity", pli.opacity);
-                 _previewMaterial.SetFloat("_BlendMode", (float)pli.blendMode);
-                 _previewMaterial.SetTexture("_LayerTex", pli.texture);
-                 _previewMaterial.SetTexture("_MaskLUT", maskLUT);
+                // Build single-layer Mask Atlas and configure material
+                Texture2D maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
 
-                 if (i % 2 == 0)
-                 {
-                     _previewMaterial.SetTexture("_PreviousResultTex", rt1);
-                     Graphics.Blit(rt1, rt2, _previewMaterial);
-                 }
-                 else
-                 {
-                     _previewMaterial.SetTexture("_PreviousResultTex", rt2);
-                     Graphics.Blit(rt2, rt1, _previewMaterial);
-                 }
+                _previewMaterial.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
+                _previewMaterial.SetColor(LayerTint, Color.white);
+                _previewMaterial.SetFloat(LayerOpacity, pli.opacity);
+                _previewMaterial.SetFloat(Mode, (float)pli.blendMode);
+                _previewMaterial.SetTexture(LayerTex, pli.texture);
+
+                if (_previewMaterial.HasProperty(MaskAtlas))
+                {
+                    _previewMaterial.SetTexture(MaskAtlas, maskAtlas);
+                    _previewMaterial.SetFloat(AtlasInvHeight, 1f); // single row atlas
+                }
+
+                if (i % 2 == 0)
+                {
+                    _previewMaterial.SetTexture(PreviousResultTex, rt1);
+                    Graphics.Blit(rt1, rt2, _previewMaterial);
+                }
+                else
+                {
+                    _previewMaterial.SetTexture(PreviousResultTex, rt2);
+                    Graphics.Blit(rt2, rt1, _previewMaterial);
+                }
             }
 
             // 将最终结果复制到预览 RT，并释放临时资源
@@ -257,34 +223,8 @@ namespace MrPathV2
         // 根据配方（Recipe）的实际道路宽度，动态计算预览所使用的世界宽度。
         private static float GetPreviewWorldWidth(StylizedRoadRecipe recipe)
         {
-            if (recipe == null) return 10f;          // 合理的默认值，避免 Null 引发异常
+            if (!recipe) return 10f;          // 合理地默认值，避免 Null 引发异常
             return Mathf.Max(0.1f, recipe.width);   // 避免出现 0 带来的除零错误
-        }
-
-        private Texture2D GetOrCreateMaskLUT(BlendMaskBase mask, float previewWorldWidth,float previewWorldLength)
-        {
-            if (_maskLUTCache.TryGetValue(mask, out Texture2D lut))
-            {
-                return lut;
-            }
-
-            lut = new Texture2D(256, 1, TextureFormat.RFloat, false);
-            lut.wrapMode = TextureWrapMode.Clamp;
-            var pixels = new Color[256];
-            for (int i = 0; i < 256; i++)
-            {
-                float pos = Mathf.Lerp(-1f, 1f, i / (256f - 1f));
-
-                // 【修改】将 PREVIEW_WORLD_WIDTH 传递给 Evaluate 方法
-
-                float value = mask.Evaluate(pos, previewWorldWidth, previewWorldLength);
-
-                pixels[i] = new Color(value, 0, 0, 0);
-            }
-            lut.SetPixels(pixels);
-            lut.Apply(false);
-            _maskLUTCache[mask] = lut;
-            return lut;
         }
 
         /// <summary>
@@ -348,12 +288,12 @@ namespace MrPathV2
             {
                 EditorGUILayout.LabelField("通用遮罩:", GUILayout.Width(80));
                 
-                if (_maskTypes.Length > 0)
+                if (MaskTypes.Length > 0)
                 {
-                    int currentIndex = Array.IndexOf(_maskTypes, _selectedMaskType);
-                    var typeNames = _maskTypes.Select(t => GetMaskTypeDisplayName(t)).ToArray();
+                    int currentIndex = Array.IndexOf(MaskTypes, _selectedMaskType);
+                    var typeNames = MaskTypes.Select(GetMaskTypeDisplayName).ToArray();
                     int newIndex = EditorGUILayout.Popup(currentIndex, typeNames);
-                    if (newIndex != currentIndex) _selectedMaskType = _maskTypes[newIndex];
+                    if (newIndex != currentIndex) _selectedMaskType = MaskTypes[newIndex];
                 }
                 
                 if (GUILayout.Button("创建", GUILayout.Width(60)))
@@ -421,16 +361,7 @@ namespace MrPathV2
                 .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
                 .ToArray();
         }
-        private float Blend(float baseValue, float layerValue, BlendMode mode)
-        {
-            switch (mode)
-            {
-                case BlendMode.Normal: return layerValue;
-                case BlendMode.Add: return Mathf.Clamp01(baseValue + layerValue);
-                case BlendMode.Multiply: return baseValue * layerValue;
-                default: return layerValue;
-            }
-        }
+
         #endregion
     }
 }

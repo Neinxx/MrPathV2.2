@@ -1,9 +1,16 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Inspectors/PathCreatorEditor.cs
+
+
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Preview;
+using __temp.MrPathV2._2.Runtime.Settings;
+using __temp.MrPathV2._2.Runtime.Strategies;
 using UnityEditor;
 using UnityEditor.EditorTools;
+// alias UnityEditor.Tools to avoid namespace conflict
+using UnityEditorTools = UnityEditor.Tools;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     /// <summary>
     /// [最终整合版] PathCreator 的自定义编辑器。
@@ -12,7 +19,7 @@ namespace MrPathV2
     /// [优化版] 遵循 Unity 最佳实践，提升性能与可维护性。
     /// </summary>
     [CustomEditor(typeof(PathCreator))]
-    public class PathCreatorEditor : Editor
+    public class PathCreatorEditor : UnityEditor.Editor
     {
         #region 字段
 
@@ -24,11 +31,11 @@ namespace MrPathV2
         private SerializedProperty _pathDataProperty;
 
         // --- 内嵌编辑器 ---
-        private Editor _profileEmbeddedEditor;
+        private UnityEditor.Editor _profileEmbeddedEditor;
         private bool _profileLocalExpanded = true;
 
         // --- StylizedRoadRecipe 内嵌编辑器 ---
-        private Editor _recipeEmbeddedEditor;
+        private UnityEditor.Editor _recipeEmbeddedEditor;
         private bool _recipeLocalExpanded = true;
 
         // --- 新的上下文与面板 ---
@@ -36,10 +43,10 @@ namespace MrPathV2
       //  private TerrainOperationsPanel _terrainPanel;
 
         // [新增] 为场景UI中的常量值定义，避免魔法数字。
-        private const float TOOLTIP_OFFSET_X = 12f;
-        private const float TOOLTIP_OFFSET_Y = 12f;
-        private const float TOOLTIP_WIDTH = 200f;
-        private const float TOOLTIP_HEIGHT = 22f;
+        // private const float TooltipOffsetX = 12f;
+        // private const float TooltipOffsetY = 12f;
+        // private const float TooltipWidth = 200f;
+        // private const float TooltipHeight = 22f;
 
         private Vector3 _lastPosition;
         private Quaternion _lastRotation;
@@ -127,16 +134,14 @@ namespace MrPathV2
         public override void OnInspectorGUI()
         {
             _targetCreator = target as PathCreator;
-            if (_targetCreator == null) return;
+            if (!_targetCreator) return;
 
 
             // [优化] 总是先调用 Update，最后调用 ApplyModifiedProperties，这是标准做法。
             serializedObject.Update();
             // [策略] 和平共存：添加UI提示
-            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
-            {
+            if (ToolManager.activeToolType != typeof(Tools.PathCreatorTool) && UnityEditorTools.current != Tool.Move)
                 EditorGUILayout.HelpBox("当前未激活 MrPath PathCreator 工具，也未选择移动工具。\n请在场景左上角工具栏点击 Animator 图标按钮，或使用移动工具进入查看模式。", MessageType.Info);
-            }
 
             DrawCoreProperties();
 
@@ -179,13 +184,13 @@ namespace MrPathV2
 
             // [策略] 和平共存：如果当前有其他自定义工具处于激活状态，则本工具不进行句柄绘制。
             // 但预览仍然保持激活状态
-            if (ToolManager.activeToolType != typeof(MrPathV2.EditorTools.PathCreatorTool) && Tools.current != Tool.Move)
+            if (ToolManager.activeToolType != typeof(Tools.PathCreatorTool) && UnityEditorTools.current != Tool.Move)
             {
                 return;
             }
 
             // [优化] 将 Event.current 缓存到局部变量，轻微提升可读性和性能。
-            Event currentEvent = Event.current;
+            var currentEvent = Event.current;
 
             var context = _ctx.CreateHandleContext();
 
@@ -193,16 +198,11 @@ namespace MrPathV2
             if (context.lineRenderer != null)
             {
                 var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType);
-                if (currentStrategy is BezierStrategy)
-                {
-                    // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
-                    context.lineRenderer.Clear(PreviewLineRenderer.LineType.PathCurve);
-                }
-                else
-                {
+                // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
+                context.lineRenderer.Clear(currentStrategy is BezierStrategy
+                    ? PreviewLineRenderer.LineType.PathCurve
                     // 如果当前不是贝塞尔曲线策略，则清除上一帧可能遗留的贝塞尔控制线
-                    context.lineRenderer.Clear(PreviewLineRenderer.LineType.ControlLine);
-                }
+                    : PreviewLineRenderer.LineType.ControlLine);
             }
 
             // [优化] 使用 EditorGUI.EndChangeCheck 来检测句柄是否被拖动，仅在发生变化时重绘。
@@ -358,7 +358,7 @@ namespace MrPathV2
             }
         }
 
-        public void MarkPathAsDirty()
+        private void MarkPathAsDirty()
         {
             _ctx?.MarkDirty();
         }
@@ -411,6 +411,7 @@ namespace MrPathV2
             EditorGUIUtility.PingObject(newProfile);
         }
 
+/*
         private void DrawCoordinateTooltip(PathCreator creator, PathEditorHandles.HandleDrawContext context)
         {
             if (creator != null && context.hoveredPathT > -1)
@@ -421,16 +422,17 @@ namespace MrPathV2
 
                 // [优化] 使用预定义的常量，避免魔法数字。
                 Rect rect = new Rect(
-                    screen.x + TOOLTIP_OFFSET_X,
-                    screen.y + TOOLTIP_OFFSET_Y,
-                    TOOLTIP_WIDTH,
-                    TOOLTIP_HEIGHT
+                    screen.x + TooltipOffsetX,
+                    screen.y + TooltipOffsetY,
+                    TooltipWidth,
+                    TooltipHeight
                 );
 
                 GUI.Label(rect, $"Pos: {worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2}", EditorStyles.helpBox);
                 Handles.EndGUI();
             }
         }
+*/
 
         // [移除] 下方旧方法不再需要，其功能已整合或被替代。
         // private void DrawApplyToTerrainUI() { ... }

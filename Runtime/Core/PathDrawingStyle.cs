@@ -1,6 +1,8 @@
 // PathDrawingStyle.cs
+
 using UnityEngine;
-namespace MrPathV2
+
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 【第一步：铸造风骨】

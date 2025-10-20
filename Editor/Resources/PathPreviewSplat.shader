@@ -21,9 +21,11 @@ Shader "MrPath/PathPreviewSplat"
         _Layer3_Tiling("Layer 3 Tiling", Vector) = (1, 1, 0, 0)
         _Layer3_Color("Layer 3 Color", Color) = (1, 1, 1, 1)
         
-        // 新增：条带 LUT 纹理（RGBA 通道分别存储每层权重, 横向分辨率固定 256）
-        _MaskLUT ("Mask LUT (RGBA weights)", 2D) = "white" {}
-        // 新增：横向 UV 缩放，用于将重复的 UV.x 映射回 0..1 区间
+        // Mask Atlas storing per-layer weights in vertical slices (RGBA irrelevant)
+        _MaskAtlas ("Mask Atlas", 2D) = "white" {}
+        _AtlasInvHeight ("Atlas Inv Height", Float) = 1
+        _MaskThreshold("Mask Threshold", Range(0,1)) = 0
+        // Across Scale: maps repeating UV.x back into 0..1 range
         _AcrossScale ("Across Scale", Float) = 1
     }
 
@@ -66,10 +68,12 @@ Shader "MrPath/PathPreviewSplat"
             TEXTURE2D(_Layer1_Texture); SAMPLER(sampler_Layer1_Texture); float4 _Layer1_Texture_ST; float2 _Layer1_Tiling; half4 _Layer1_Color;
             TEXTURE2D(_Layer2_Texture); SAMPLER(sampler_Layer2_Texture); float4 _Layer2_Texture_ST; float2 _Layer2_Tiling; half4 _Layer2_Color;
             TEXTURE2D(_Layer3_Texture); SAMPLER(sampler_Layer3_Texture); float4 _Layer3_Texture_ST; float2 _Layer3_Tiling; half4 _Layer3_Color;
-            // 新增：条带 LUT
-            TEXTURE2D(_MaskLUT); SAMPLER(sampler_MaskLUT);
-            float _PreviewAlpha;
-            float _AcrossScale;
+             // Mask Atlas
+             TEXTURE2D(_MaskAtlas); SAMPLER(sampler_MaskAtlas);
+             float _AtlasInvHeight;
+             float _MaskThreshold;
+             float _PreviewAlpha;
+             float _AcrossScale;
 
             Varyings vert(Attributes input)
             {
@@ -83,18 +87,20 @@ Shader "MrPath/PathPreviewSplat"
 
             half4 frag(Varyings input) : SV_Target
             {
-                // 采样条带 LUT：中心0 边缘1 (基于横向UV)
-                // 首先根据 _AcrossScale 将任意平铺后的 UV.x 映射回 0..1 区间
+                // Sample per-layer weights from mask atlas slices
                 float scaledU = frac(input.uv.x * _AcrossScale);
                 float across = saturate(abs(scaledU * 2.0 - 1.0));
-                 half4 mask = SAMPLE_TEXTURE2D(_MaskLUT, sampler_MaskLUT, float2(across, 0.5));
-                     // 如果未提供 LUT（全 0 或全 1 情况下不可靠），回退到顶点色权重
-                     half weightSum = mask.r + mask.g + mask.b + mask.a;
-                     if (weightSum < 1e-4)
-                     {
-                         mask = input.color;
-                         weightSum = mask.r + mask.g + mask.b + mask.a;
-                     }
+
+                half4 mask;
+                mask.r = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (0.5) * _AtlasInvHeight)).r;
+                 mask.g = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (1.5) * _AtlasInvHeight)).r;
+                 mask.b = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (2.5) * _AtlasInvHeight)).r;
+                 mask.a = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_MaskAtlas, float2(across, (3.5) * _AtlasInvHeight)).r;
+
+                // Apply threshold
+                mask = saturate((mask - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
+
+                half weightSum = mask.r + mask.g + mask.b + mask.a;
 
                 // 若权重总和接近 0，直接丢弃像素，避免显示为黑色
                 if (weightSum < 1e-4)

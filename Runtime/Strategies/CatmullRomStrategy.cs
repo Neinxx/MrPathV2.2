@@ -1,9 +1,9 @@
-using UnityEngine;
-#if UNITY_EDITOR
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Preview;
 using UnityEditor;
-#endif
+using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Strategies
 {
     /// <summary>
     /// Defines the mathematical and editor behavior for a Catmull-Rom spline path.
@@ -135,7 +135,7 @@ namespace MrPathV2
             {
                 if (shouldDispose)
                 {
-                    lineRenderer?.Dispose();
+                    lineRenderer.Dispose();
                 }
             }
         }

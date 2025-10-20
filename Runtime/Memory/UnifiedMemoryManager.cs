@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Jobs;
 using Unity.Collections;
 using UnityEngine;
 
-namespace MrPathV2.Memory
+namespace __temp.MrPathV2._2.Runtime.Memory
 {
     /// <summary>
     /// 表示一个拥有并负责释放底层 NativeCollection 资源的对象。

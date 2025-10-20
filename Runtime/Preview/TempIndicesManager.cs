@@ -1,8 +1,8 @@
 using System;
+using __temp.MrPathV2._2.Runtime.Memory;
 using Unity.Collections;
-using MrPathV2.Memory;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Preview
 {
     /// <summary>
     /// 临时索引数组管理器，专门处理异步网格操作中的 NativeArray 生命周期
@@ -52,7 +52,7 @@ namespace MrPathV2
             if (count > dest.Length || count > sourceIndices.Length)
                 throw new ArgumentOutOfRangeException(nameof(count), "索引数量超出数组范围");
 
-            for (int i = 0; i < count; i++)
+            for (var i = 0; i < count; i++)
             {
                 dest[i] = (ushort)sourceIndices[i];
             }

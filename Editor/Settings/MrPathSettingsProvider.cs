@@ -1,13 +1,17 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Settings/MrPathSettingsProvider.cs
-using UnityEditor;
-using UnityEngine;
+
+
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Collections.Generic;
-using MrPathV2; // 添加正确的命名空间
+using __temp.MrPathV2._2.Editor.Operations;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using UnityEditor;
+using UnityEngine;
 
-namespace MrPathV2
+// 添加正确地命名空间
+
+namespace __temp.MrPathV2._2.Editor.Settings
 {
     /// <summary>
     /// 为 MrPath 工具提供一个清爽、导航式的项目设置界面。
@@ -16,7 +20,7 @@ namespace MrPathV2
     {
         private SerializedObject _settings;
 
-        public MrPathSettingsProvider(string path, SettingsScope scopes)
+        private MrPathSettingsProvider(string path, SettingsScope scopes)
             : base(path, scopes) { }
 
         public override void OnActivate(string searchContext, UnityEngine.UIElements.VisualElement rootElement)
@@ -36,12 +40,11 @@ namespace MrPathV2
             // 绘制每个子配置的链接
             DrawSettingsLink("creationDefaults", "创建默认值", typeof(MrPathCreationDefaults));
             DrawSettingsLink("appearanceDefaults", "外观默认值", typeof(MrPathAppearanceDefaults));
-            DrawSettingsLink("sceneUISettings", "场景 UI", typeof(MrPathSceneUISettings));
             DrawSettingsLink("terrainOperations", "地形操作", typeof(MrPathTerrainOperations));
             DrawSettingsLink("advancedSettings", "高级设置", typeof(MrPathAdvancedSettings));
 
             // 绘制列表: 道路配方
-            SerializedProperty roadRecipesProp = _settings.FindProperty("roadRecipes");
+            var roadRecipesProp = _settings.FindProperty("roadRecipes");
             EditorGUILayout.PropertyField(roadRecipesProp, new GUIContent("道路配方列表"), true);
 
             _settings.ApplyModifiedProperties();
@@ -65,27 +68,17 @@ namespace MrPathV2
         /// </summary>
         private string GetSettingsPath()
         {
-            // 动态查找 MrPathV2.2 文件夹的路径
-            string mrPathFolder = AssetDatabase.FindAssets("MrPathV2.2").Select(AssetDatabase.GUIDToAssetPath)
-                .FirstOrDefault(path => path.EndsWith("MrPathV2.2"));
-
-            if (string.IsNullOrEmpty(mrPathFolder))
-            {
-                Debug.LogError("未找到 MrPathV2.2 文件夹！");
-                return null;
-            }
-
-            // 拼接 Settings 文件夹路径
-            return Path.Combine(mrPathFolder, "Settings").Replace("\\", "/");
+            // 统一通过 MrPathProjectSettings 提供的辅助方法获取路径，避免重复扫描 AssetDatabase
+            return MrPathProjectSettings.GetSettingsRootFolder();
         }
 
-        private void DrawSettingsLink(string propertyName, string label, System.Type assetType)
+        private void DrawSettingsLink(string propertyName, string mLabel, System.Type assetType)
         {
-            SerializedProperty prop = _settings.FindProperty(propertyName);
+            var prop = _settings.FindProperty(propertyName);
             EditorGUILayout.BeginHorizontal();
 
             // 绘制对象字段
-            EditorGUILayout.PropertyField(prop, new GUIContent(label));
+            EditorGUILayout.PropertyField(prop, new GUIContent(mLabel));
 
             var asset = prop.objectReferenceValue;
 
@@ -104,11 +97,11 @@ namespace MrPathV2
                 if (asset == null)
                 {
                     // 如果资产为空，则自动创建并赋值
-                    string settingsPath = GetSettingsPath();
-                    if (string.IsNullOrEmpty(settingsPath)) return;
+                    var mSettingsPath = GetSettingsPath();
+                    if (string.IsNullOrEmpty(mSettingsPath)) return;
 
-                    string subAssetName = $"MrPath_{assetType.Name.Replace("MrPath", "").Replace("Settings", "")}";
-                    string path = Path.Combine(settingsPath, $"{subAssetName}.asset").Replace("\\", "/");
+                    var subAssetName = $"MrPath_{assetType.Name.Replace("MrPath", "").Replace("Settings", "")}";
+                    var path = Path.Combine(mSettingsPath, $"{subAssetName}.asset").Replace("\\", "/");
                     var newAsset = ScriptableObject.CreateInstance(assetType);
                     AssetDatabase.CreateAsset(newAsset, path);
                     AssetDatabase.SaveAssets();
@@ -144,11 +137,11 @@ namespace MrPathV2
             var terrainOpsProp = _settings.FindProperty("terrainOperations");
             if (terrainOpsProp.objectReferenceValue != null)
             {
-                var opsSO = new SerializedObject(terrainOpsProp.objectReferenceValue);
-                var opsArrayProp = opsSO.FindProperty("operations");
+                var opsSo = new SerializedObject(terrainOpsProp.objectReferenceValue);
+                var opsArrayProp = opsSo.FindProperty("operations");
                 var foundOps = FindAssetsByType<PathTerrainOperation>($"t:{nameof(PathTerrainOperation)}");
                 UpdateSerializedArray(opsArrayProp, foundOps.OrderBy(op => op.order).ToList());
-                opsSO.ApplyModifiedProperties();
+                opsSo.ApplyModifiedProperties();
                 Debug.Log($"MrPath: 扫描完成，已找到并填充 {foundOps.Count} 个地形操作。");
             }
             else
@@ -175,8 +168,8 @@ namespace MrPathV2
         {
             var guids = AssetDatabase.FindAssets(filter);
             return guids
-                .Select(guid => AssetDatabase.GUIDToAssetPath(guid))
-                .Select(path => AssetDatabase.LoadAssetAtPath<T>(path))
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<T>)
                 .Where(asset => asset != null)
                 .ToList();
         }
@@ -187,7 +180,7 @@ namespace MrPathV2
         private void UpdateSerializedArray<T>(SerializedProperty arrayProp, List<T> items) where T : Object
         {
             arrayProp.ClearArray();
-            for (int i = 0; i < items.Count; ++i)
+            for (var i = 0; i < items.Count; ++i)
             {
                 arrayProp.InsertArrayElementAtIndex(i);
                 arrayProp.GetArrayElementAtIndex(i).objectReferenceValue = items[i];
@@ -203,21 +196,21 @@ namespace MrPathV2
             var recipesProp = _settings.FindProperty("roadRecipes");
             if (recipesProp == null) return;
 
-            string settingsPath = GetSettingsPath();
-            if (string.IsNullOrEmpty(settingsPath)) return;
+            var mSettingsPath = GetSettingsPath();
+            if (string.IsNullOrEmpty(mSettingsPath)) return;
 
-            string masksFolder = Path.Combine(settingsPath, "BlendMasks").Replace("\\", "/");
+            var masksFolder = Path.Combine(mSettingsPath, "BlendMasks").Replace("\\", "/");
             EnsureFolderExists(masksFolder);
 
-            int createdCount = 0;
-            for (int i = 0; i < recipesProp.arraySize; ++i)
+            var createdCount = 0;
+            for (var i = 0; i < recipesProp.arraySize; ++i)
             {
                 var recipeObj = recipesProp.GetArrayElementAtIndex(i).objectReferenceValue as StylizedRoadRecipe;
                 if (recipeObj == null) continue;
 
-                SerializedObject recipeSO = new SerializedObject(recipeObj);
-                var layersProp = recipeSO.FindProperty("blendLayers");
-                for (int l = 0; l < layersProp.arraySize; ++l)
+                var recipeSo = new SerializedObject(recipeObj);
+                var layersProp = recipeSo.FindProperty("blendLayers");
+                for (var l = 0; l < layersProp.arraySize; ++l)
                 {
                     var layerProp = layersProp.GetArrayElementAtIndex(l);
                     var maskProp = layerProp.FindPropertyRelative("mask");
@@ -225,13 +218,13 @@ namespace MrPathV2
                     {
                         // 创建 NoiseMask 资产
                         var newMask = ScriptableObject.CreateInstance<NoiseMask>();
-                        string assetPath = Path.Combine(masksFolder, $"NoiseMask_{recipeObj.name}_{l}.asset").Replace("\\", "/");
+                        var assetPath = Path.Combine(masksFolder, $"NoiseMask_{recipeObj.name}_{l}.asset").Replace("\\", "/");
                         AssetDatabase.CreateAsset(newMask, assetPath);
                         maskProp.objectReferenceValue = newMask;
                         createdCount++;
                     }
                 }
-                recipeSO.ApplyModifiedProperties();
+                recipeSo.ApplyModifiedProperties();
             }
             if (createdCount > 0)
             {
@@ -247,8 +240,8 @@ namespace MrPathV2
         private void EnsureFolderExists(string folderPath)
         {
             if (AssetDatabase.IsValidFolder(folderPath)) return;
-            string parent = Path.GetDirectoryName(folderPath);
-            string newFolderName = Path.GetFileName(folderPath);
+            var parent = Path.GetDirectoryName(folderPath);
+            var newFolderName = Path.GetFileName(folderPath);
             if (!AssetDatabase.IsValidFolder(parent))
             {
                 EnsureFolderExists(parent);

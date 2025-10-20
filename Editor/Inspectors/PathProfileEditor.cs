@@ -1,41 +1,42 @@
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.AnimatedValues;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(PathProfile))]
-    public class PathProfileEditor : Editor
+    public class PathProfileEditor : UnityEditor.Editor
     {
         // Static inner class for styles and content caching (Professional Practice)
         private static class Styles
         {
-            public static readonly GUIStyle sectionHeaderStyle;
-            public static readonly GUIContent coreSettingsHeader = new("核心设置 (Core Settings)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent crossSectionHeader = new("道路剖面 (Cross Section)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent terrainSnappingHeader = new("地形吸附 (Terrain Snapping)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent meshGenerationHeader = new("网格生成 (Mesh Generation)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent previewHeader = new("渲染预览 (Preview)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent layersHeader = new("自定义渲染图层 (Custom Layers)", EditorGUIUtility.IconContent("settings").image);
+            public static readonly GUIStyle SectionHeaderStyle;
+            public static readonly GUIContent CoreSettingsHeader = new("核心设置 (Core Settings)", EditorGUIUtility.IconContent("settings").image);
+            public static readonly GUIContent CrossSectionHeader = new("道路剖面 (Cross Section)", EditorGUIUtility.IconContent("settings").image);
+            public static readonly GUIContent TerrainSnappingHeader = new("地形吸附 (Terrain Snapping)", EditorGUIUtility.IconContent("settings").image);
+            public static readonly GUIContent MeshGenerationHeader = new("网格生成 (Mesh Generation)", EditorGUIUtility.IconContent("settings").image);
+            public static readonly GUIContent PreviewHeader = new("渲染预览 (Preview)", EditorGUIUtility.IconContent("settings").image);
+            public static readonly GUIContent LayersHeader = new("自定义渲染图层 (Custom Layers)", EditorGUIUtility.IconContent("settings").image);
 
-            public static readonly GUIContent curveType = new("曲线类型", "路径插值使用的曲线算法。");
-            public static readonly GUIContent generationPrecision = new("生成精度", "数值越小，曲线越平滑，但计算成本越高。");
-            public static readonly GUIContent roadWidth = new("道路宽度", "道路主体的总宽度。");
-            public static readonly GUIContent crossSectionCurve = new("剖面曲线", "定义道路横截面的形状。X轴[-1, 1]代表从左到右，Y轴代表相对高度。");
-            public static readonly GUIContent falloffWidth = new("边缘宽度", "道路边缘与地形融合的过渡带宽度。");
-            public static readonly GUIContent falloffShape = new("边缘形状", "定义边缘过渡的形状。X轴[0, 1]从道路边缘到末端，Y轴[0, 1]代表混合权重。");
-            public static readonly GUIContent snapToTerrain = new("启用地形吸附", "使路径点自动贴合下方地形。");
-            public static readonly GUIContent heightOffset = new("高度偏移", "路径在地形上方的高度。");
-            public static readonly GUIContent smoothness = new("平滑强度", "对吸附后的路径高度进行平滑处理的迭代次数。");
-            public static readonly GUIContent forceHorizontal = new("强制水平", "使道路横截面始终保持水平，不受路径坡度影响。");
-            public static readonly GUIContent crossSectionSegments = new("横截面分段", "预览网格在宽度上的分段数，越高越精细。");
-            public static readonly GUIContent showPreviewMesh = new("显示预览网格", "在场景视图中实时显示生成的道路网格。");
-            public static readonly GUIContent roadRecipe = new("风格化道路配方", "定义道路纹理、材质和风格的资产。");
+            public static readonly GUIContent CurveType = new("曲线类型", "路径插值使用的曲线算法。");
+            public static readonly GUIContent GenerationPrecision = new("生成精度", "数值越小，曲线越平滑，但计算成本越高。");
+            public static readonly GUIContent RoadWidth = new("道路宽度", "道路主体的总宽度。");
+            public static readonly GUIContent CrossSectionCurve = new("剖面曲线", "定义道路横截面的形状。X轴[-1, 1]代表从左到右，Y轴代表相对高度。");
+            public static readonly GUIContent FalloffWidth = new("边缘宽度", "道路边缘与地形融合的过渡带宽度。");
+            public static readonly GUIContent FalloffShape = new("边缘形状", "定义边缘过渡的形状。X轴[0, 1]从道路边缘到末端，Y轴[0, 1]代表混合权重。");
+            public static readonly GUIContent SnapToTerrain = new("启用地形吸附", "使路径点自动贴合下方地形。");
+            public static readonly GUIContent HeightOffset = new("高度偏移", "路径在地形上方的高度。");
+            public static readonly GUIContent Smoothness = new("平滑强度", "对吸附后的路径高度进行平滑处理的迭代次数。");
+            public static readonly GUIContent ForceHorizontal = new("强制水平", "使道路横截面始终保持水平，不受路径坡度影响。");
+            public static readonly GUIContent CrossSectionSegments = new("横截面分段", "预览网格在宽度上的分段数，越高越精细。");
+            public static readonly GUIContent ShowPreviewMesh = new("显示预览网格", "在场景视图中实时显示生成的道路网格。");
+            public static readonly GUIContent RoadRecipe = new("风格化道路配方", "定义道路纹理、材质和风格的资产。");
 
             static Styles()
             {
-                sectionHeaderStyle = new GUIStyle(EditorStyles.helpBox)
+                SectionHeaderStyle = new GUIStyle(EditorStyles.helpBox)
                 {
                     padding = new RectOffset(10, 10, 4, 4),
                     margin = new RectOffset(0, 0, 8, 0),
@@ -109,36 +110,36 @@ namespace MrPathV2
 
         private void DrawSectionHeader(GUIContent label)
         {
-            EditorGUILayout.LabelField(label, Styles.sectionHeaderStyle);
+            EditorGUILayout.LabelField(label, Styles.SectionHeaderStyle);
         }
 
         private void DrawCoreSettings()
         {
-            DrawSectionHeader(Styles.coreSettingsHeader);
-            EditorGUILayout.PropertyField(_curveType, Styles.curveType);
-            EditorGUILayout.PropertyField(_generationPrecision, Styles.generationPrecision);
-            EditorGUILayout.PropertyField(_roadWidth, Styles.roadWidth);
+            DrawSectionHeader(Styles.CoreSettingsHeader);
+            EditorGUILayout.PropertyField(_curveType, Styles.CurveType);
+            EditorGUILayout.PropertyField(_generationPrecision, Styles.GenerationPrecision);
+            EditorGUILayout.PropertyField(_roadWidth, Styles.RoadWidth);
         }
 
         private void DrawCrossSectionSettings()
         {
-            DrawSectionHeader(Styles.crossSectionHeader);
-            EditorGUILayout.PropertyField(_crossSection, Styles.crossSectionCurve);
-            EditorGUILayout.PropertyField(_falloffWidth, Styles.falloffWidth);
-            EditorGUILayout.PropertyField(_falloffShape, Styles.falloffShape);
+            DrawSectionHeader(Styles.CrossSectionHeader);
+            EditorGUILayout.PropertyField(_crossSection, Styles.CrossSectionCurve);
+            EditorGUILayout.PropertyField(_falloffWidth, Styles.FalloffWidth);
+            EditorGUILayout.PropertyField(_falloffShape, Styles.FalloffShape);
         }
 
         private void DrawTerrainSnappingSettings()
         {
-            DrawSectionHeader(Styles.terrainSnappingHeader);
-            EditorGUILayout.PropertyField(_snapToTerrain, Styles.snapToTerrain);
+            DrawSectionHeader(Styles.TerrainSnappingHeader);
+            EditorGUILayout.PropertyField(_snapToTerrain, Styles.SnapToTerrain);
 
 
             if (EditorGUILayout.BeginFadeGroup(_snapToTerrainFade.faded))
             {
                 EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(_heightOffset, Styles.heightOffset);
-                EditorGUILayout.PropertyField(_smoothness, Styles.smoothness);
+                EditorGUILayout.PropertyField(_heightOffset, Styles.HeightOffset);
+                EditorGUILayout.PropertyField(_smoothness, Styles.Smoothness);
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFadeGroup();
@@ -146,16 +147,16 @@ namespace MrPathV2
 
         private void DrawMeshGenerationSettings()
         {
-            DrawSectionHeader(Styles.meshGenerationHeader);
-            EditorGUILayout.PropertyField(_forceHorizontal, Styles.forceHorizontal);
-            EditorGUILayout.PropertyField(_crossSectionSegments, Styles.crossSectionSegments);
+            DrawSectionHeader(Styles.MeshGenerationHeader);
+            EditorGUILayout.PropertyField(_forceHorizontal, Styles.ForceHorizontal);
+            EditorGUILayout.PropertyField(_crossSectionSegments, Styles.CrossSectionSegments);
         }
 
         private void DrawPreviewSettings()
         {
-            DrawSectionHeader(Styles.previewHeader);
-            EditorGUILayout.PropertyField(_showPreviewMesh, Styles.showPreviewMesh);
-            EditorGUILayout.PropertyField(_roadRecipe, Styles.roadRecipe);
+            DrawSectionHeader(Styles.PreviewHeader);
+            EditorGUILayout.PropertyField(_showPreviewMesh, Styles.ShowPreviewMesh);
+            EditorGUILayout.PropertyField(_roadRecipe, Styles.RoadRecipe);
 
             // Provide helpful guidance to the user
             if (_roadRecipe.objectReferenceValue == null)
@@ -168,7 +169,7 @@ namespace MrPathV2
         {
             if (_layers == null) return;
 
-            DrawSectionHeader(Styles.layersHeader);
+            DrawSectionHeader(Styles.LayersHeader);
             _layerList.DoLayoutList();
         }
 
@@ -179,7 +180,7 @@ namespace MrPathV2
             _layerList = new ReorderableList(serializedObject, _layers, true, true, true, true)
             {
                 drawHeaderCallback = rect => EditorGUI.LabelField(rect, "路径渲染图层 (Path Render Layers)"),
-                drawElementCallback = (rect, index, isActive, isFocused) =>
+                drawElementCallback = (rect, index, _, _) =>
                 {
                     var element = _layers.GetArrayElementAtIndex(index);
                     rect.y += 2;

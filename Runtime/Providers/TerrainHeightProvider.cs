@@ -1,42 +1,42 @@
 // TerrainHeightProvider.cs (智能懒汉版)
+
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using __temp.MrPathV2._2.Runtime.Interfaces;
+using __temp.MrPathV2._2.Runtime.Memory;
 using Unity.Collections;
 using UnityEngine;
-using MrPathV2.Memory; // NEW: access UnifiedMemory and MemoryOwner
-namespace MrPathV2
+
+// NEW: access UnifiedMemory and MemoryOwner
+namespace __temp.MrPathV2._2.Runtime.Providers
 {
     public class TerrainHeightProvider : IHeightProvider
     {
         private struct TerrainCache : IDisposable
         {
-            public Terrain terrain;
-            public TerrainData data;
-            public Rect bounds;
+            public Terrain Terrain;
+            public TerrainData Data;
+            public Rect Bounds;
             // REPLACED: NativeArray<float> heights;
-            public MemoryOwner<NativeArray<float>> heightsOwner; // 持有包装器以便安全释放
-            public NativeArray<float> Heights => heightsOwner.Collection; // 便捷访问器
-            public int resolution;
-            public Vector3 position;
-            public Vector3 size;
+            public MemoryOwner<NativeArray<float>> HeightsOwner; // 持有包装器以便安全释放
+            public NativeArray<float> Heights => HeightsOwner.Collection; // 便捷访问器
+            public int Resolution;
+            public Vector3 Position;
+            public Vector3 Size;
 
             public void Dispose()
             {
-                heightsOwner?.Dispose(); // 统一释放
+                HeightsOwner?.Dispose(); // 统一释放
             }
         }
 
         // 订阅过的 TerrainData 集合，用于在释放或重建缓存时解绑事件
-        private readonly HashSet<TerrainData> m_SubscribedTerrainData = new HashSet<TerrainData>();
+        private readonly HashSet<TerrainData> _mSubscribedTerrainData = new HashSet<TerrainData>();
 
-        private readonly List<TerrainCache> m_TerrainCaches = new List<TerrainCache>();
-        private bool m_IsInitialized = false;
-        private bool m_IsDirty = true; // 初始状态为"脏"，强制在第一次使用时构建缓存
-
-        public TerrainHeightProvider()
-        {
-            // 不再使用对象池
-        }
+        private readonly List<TerrainCache> _mTerrainCaches = new List<TerrainCache>();
+        private bool _mIsInitialized;
+        private bool _mIsDirty = true; // 初始状态为"脏"，强制在第一次使用时构建缓存
 
         /// <summary>
         /// 【核心】在需要时才构建或重建缓存
@@ -45,21 +45,21 @@ namespace MrPathV2
         {
             // 检测地形集合变化（新增/删除/替换），必要时自动使缓存失效
             var activeTerrains = Terrain.activeTerrains;
-            if (!m_IsDirty)
+            if (!_mIsDirty)
             {
                 bool terrainSetChanged = false;
                 if (activeTerrains == null || activeTerrains.Length == 0)
                 {
-                    terrainSetChanged = m_TerrainCaches.Count > 0;
+                    terrainSetChanged = _mTerrainCaches.Count > 0;
                 }
                 else
                 {
-                    if (activeTerrains.Length != m_TerrainCaches.Count) terrainSetChanged = true;
+                    if (activeTerrains.Length != _mTerrainCaches.Count) terrainSetChanged = true;
                     else
                     {
                         for (int i = 0; i < activeTerrains.Length; i++)
                         {
-                            if (activeTerrains[i].terrainData != m_TerrainCaches[i].data)
+                            if (activeTerrains[i].terrainData != _mTerrainCaches[i].Data)
                             {
                                 terrainSetChanged = true;
                                 break;
@@ -68,18 +68,18 @@ namespace MrPathV2
                     }
                 }
                 if (!terrainSetChanged) return; // 数据新鲜且集合未变
-                m_IsDirty = true; // 集合发生变化，强制重建
+                _mIsDirty = true; // 集合发生变化，强制重建
             }
 
             // 清理旧的缓存
             UnsubscribeAllTerrainData();
-            foreach (var cache in m_TerrainCaches) cache.Dispose();
-            m_TerrainCaches.Clear();
+            foreach (var cache in _mTerrainCaches) cache.Dispose();
+            _mTerrainCaches.Clear();
 
             if (activeTerrains == null || activeTerrains.Length == 0)
             {
-                m_IsInitialized = false;
-                m_IsDirty = false; // 清理完毕，标记为“干净”
+                _mIsInitialized = false;
+                _mIsDirty = false; // 清理完毕，标记为“干净”
                 return;
             }
 
@@ -101,15 +101,15 @@ namespace MrPathV2
                     }
                 }
 
-                m_TerrainCaches.Add(new TerrainCache
+                _mTerrainCaches.Add(new TerrainCache
                 {
-                    terrain = terrain,
-                    data = data,
-                    bounds = new Rect(position.x, position.z, size.x, size.z),
-                    heightsOwner = owner,
-                    resolution = data.heightmapResolution,
-                    position = position,
-                    size = size,
+                    Terrain = terrain,
+                    Data = data,
+                    Bounds = new Rect(position.x, position.z, size.x, size.z),
+                    HeightsOwner = owner,
+                    Resolution = data.heightmapResolution,
+                    Position = position,
+                    Size = size,
 
                 });
 
@@ -117,8 +117,8 @@ namespace MrPathV2
                 SubscribeTerrainData(data);
             }
 
-            m_IsInitialized = true;
-            m_IsDirty = false; // 重建完毕，标记为“干净”
+            _mIsInitialized = true;
+            _mIsDirty = false; // 重建完毕，标记为“干净”
         }
 
         /// <summary>
@@ -126,46 +126,46 @@ namespace MrPathV2
         /// </summary>
         public void MarkAsDirty()
         {
-            m_IsDirty = true;
+            _mIsDirty = true;
         }
 
         public float GetHeight(Vector3 worldPos)
         {
             EnsureCacheIsUpToDate(); // 在访问前，确保缓存是新鲜的
-            if (!m_IsInitialized) return worldPos.y;
+            if (!_mIsInitialized) return worldPos.y;
 
             TerrainCache? cache = FindCacheForPosition(worldPos);
             if (cache == null) return worldPos.y;
 
-            float normX = Mathf.Clamp01((worldPos.x - cache.Value.position.x) / cache.Value.size.x);
-            float normZ = Mathf.Clamp01((worldPos.z - cache.Value.position.z) / cache.Value.size.z);
+            float normX = Mathf.Clamp01((worldPos.x - cache.Value.Position.x) / cache.Value.Size.x);
+            float normZ = Mathf.Clamp01((worldPos.z - cache.Value.Position.z) / cache.Value.Size.z);
 
-            int hX = Mathf.FloorToInt(normX * (cache.Value.resolution - 1));
-            int hY = Mathf.FloorToInt(normZ * (cache.Value.resolution - 1));
+            int hX = Mathf.FloorToInt(normX * (cache.Value.Resolution - 1));
+            int hY = Mathf.FloorToInt(normZ * (cache.Value.Resolution - 1));
 
-            float h = cache.Value.Heights[hY * cache.Value.resolution + hX];
-            return h * cache.Value.size.y + cache.Value.position.y;
+            float h = cache.Value.Heights[hY * cache.Value.Resolution + hX];
+            return h * cache.Value.Size.y + cache.Value.Position.y;
         }
 
         public Vector3 GetNormal(Vector3 worldPos)
         {
             EnsureCacheIsUpToDate(); // 在访问前，确保缓存是新鲜的
-            if (!m_IsInitialized) return Vector3.up;
+            if (!_mIsInitialized) return Vector3.up;
 
             TerrainCache? cache = FindCacheForPosition(worldPos);
             if (cache == null) return Vector3.up;
 
-            float normX = (worldPos.x - cache.Value.position.x) / cache.Value.size.x;
-            float normZ = (worldPos.z - cache.Value.position.z) / cache.Value.size.z;
+            float normX = (worldPos.x - cache.Value.Position.x) / cache.Value.Size.x;
+            float normZ = (worldPos.z - cache.Value.Position.z) / cache.Value.Size.z;
 
-            return cache.Value.data.GetInterpolatedNormal(normX, normZ);
+            return cache.Value.Data.GetInterpolatedNormal(normX, normZ);
         }
 
         private TerrainCache? FindCacheForPosition(Vector3 worldPos)
         {
-            foreach (var cache in m_TerrainCaches)
+            foreach (var cache in _mTerrainCaches)
             {
-                if (cache.bounds.Contains(new Vector2(worldPos.x, worldPos.z)))
+                if (cache.Bounds.Contains(new Vector2(worldPos.x, worldPos.z)))
                 {
                     return cache;
                 }
@@ -176,36 +176,26 @@ namespace MrPathV2
         public void Dispose()
         {
             UnsubscribeAllTerrainData();
-            foreach (var cache in m_TerrainCaches) cache.Dispose();
-            m_TerrainCaches.Clear();
+            foreach (var cache in _mTerrainCaches) cache.Dispose();
+            _mTerrainCaches.Clear();
             // 不再需要释放arrayPool
         }
 
         // 事件与订阅管理
         private void SubscribeTerrainData(TerrainData data)
         {
-            if (data == null || m_SubscribedTerrainData.Contains(data)) return;
+            if (!data || !_mSubscribedTerrainData.Add(data)) return;
             // 某些旧版 Unity 不包含 TerrainData.heightmapChanged 事件，使用条件编译兼容
-
-            m_SubscribedTerrainData.Add(data);
         }
 
         private void UnsubscribeAllTerrainData()
         {
-            if (m_SubscribedTerrainData.Count == 0) return;
-            foreach (var data in m_SubscribedTerrainData)
+            if (_mSubscribedTerrainData.Count == 0) return;
+            foreach (var unused in _mSubscribedTerrainData.Where(data => !data))
             {
-                if (data == null) continue;
-                // 条件编译以兼容不支持该事件的旧版 Unity
-
+                continue;
             }
-            m_SubscribedTerrainData.Clear();
-        }
-
-        private void OnHeightmapChanged(Terrain terrain, RectInt heightRegion, bool synched)
-        {
-            // 地形高度发生变更，标记缓存为脏，下一次访问时重建
-            m_IsDirty = true;
+            _mSubscribedTerrainData.Clear();
         }
     }
 }

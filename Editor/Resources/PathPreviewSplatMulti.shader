@@ -111,8 +111,8 @@ Shader "MrPath/PathPreviewSplatMulti"
         _Layer15_Color("Layer 15 Color", Color) = (1, 1, 1, 1)
         
         [Header(Path Masking)]
-        _MaskLUT ("Mask LUT (RGBA weights)", 2D) = "white" {}
         _AcrossScale ("Across Scale", Float) = 1
+        _MaskThreshold ("Mask Threshold", Range(0,1)) = 0
     }
 
     SubShader
@@ -179,12 +179,13 @@ Shader "MrPath/PathPreviewSplatMulti"
             TEXTURE2D(_Layer14_Texture); float4 _Layer14_Tiling; half4 _Layer14_Color; float _Layer14_Opacity; float _Layer14_BlendMode;
             TEXTURE2D(_Layer15_Texture); float4 _Layer15_Tiling; half4 _Layer15_Color; float _Layer15_Opacity; float _Layer15_BlendMode;
             
-            // LUT and other properties
-            TEXTURE2D(_MaskLUT);
+            // Mask atlas and other properties
+            TEXTURE2D(_MaskAtlas);
+            float _AtlasInvHeight;
+            float _MaskThreshold;
             float _PreviewAlpha;
             float _AcrossScale;
-            int _LayerCount; 
-
+            int _LayerCount;
             Varyings vert(Attributes input)
             {
                 Varyings output;
@@ -326,85 +327,45 @@ Shader "MrPath/PathPreviewSplatMulti"
             
             half4 frag(Varyings input) : SV_Target
             {
-                // Sample the stripe LUT based on the cross-path UV coordinate
-                // This provides up to 4 weights for blending layers.
-                float scaledU = frac(input.uv.x * _AcrossScale);
-                float across = saturate(abs(scaledU * 2.0 - 1.0));
-                half4 mask = SAMPLE_TEXTURE2D(_MaskLUT, sampler_LinearClamp, float2(across, 0.5));
-                
-                // If the LUT is not providing weights (e.g., it's black), 
-                // fall back to using the mesh's vertex colors as weights.
-                half weightSum = dot(mask, half4(1,1,1,1));
-                if (weightSum < 1e-4)
-                {
-                    mask = input.color;
-                    weightSum = dot(mask, half4(1,1,1,1));
-                }
-
-                // If there are no weights at all, discard the pixel completely.
-                if (weightSum < 1e-4)
-                {
-                    clip(-1);
-                }
-
-                half4 finalColor = half4(0, 0, 0, 1); // Start with an opaque black base
-                
-                // Create an array for easy access to mask weights.
-                half weights[4] = { mask.r, mask.g, mask.b, mask.a };
-                
-                // This shader uses the LUT/VertexColor mask, which provides 4 weights.
-                // Therefore, we only process up to the first 4 layers.
-                int maxLayers = min(_LayerCount, 4);
-                for (int i = 0; i < maxLayers; i++)
-                {
-                    // BUG FIX: The weight now correctly comes from the 'mask' calculated above,
-                    // not from an unrelated splatmap function.
-                    float weight = weights[i];
-+                // 通过跨道路方向坐标采样 2D Atlas 获取当前图层权重
-+                float scaledU = frac(input.uv.x * _AcrossScale);
-+                float across = saturate(abs(scaledU * 2.0 - 1.0));
-+
-+                half4 finalColor = half4(0,0,0,1);
-+                int maxLayers = min(_LayerCount, 4);
-+                for (int i = 0; i < maxLayers; i++)
-+                {
-+                    float weight = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_LinearClamp, float2(across, (i+0.5)*_AtlasInvHeight)).r;
-+                    // 阈值剔除
-+                    weight = saturate((weight - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
-                     
-                     if (weight > 1e-4)
-                     {
-                         float2 layerTiling = GetLayerTiling(i);
-                         float2 layerUV = input.uv * layerTiling;
-                         half4 layerColor = SampleLayerTexture(i, layerUV);
-                         
-                         // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
-                         // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
-                         layerColor.rgb *= weight; // 直接使用遮罩值作为剔除系数
-                         
-                         float layerOpacity = GetLayerOpacity(i);
-                         float blendMode = GetLayerBlendMode(i);
-                         
-                         // The opacity passed to the blend function combines the layer's
-                         // base opacity with its weight for the current pixel.
-                         float blendOpacity = layerOpacity * weight;
-                         
-                         // Sequentially blend this layer on top of the previous result.
-                         finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
-                     }
-                 }
--
--                finalColor.a = saturate(_PreviewAlpha);
--                return finalColor;
-+
-+                // 若最终没有任何图层写入，则丢弃
-+                if (all(finalColor.rgb == 0)) clip(-1);
-+
-+                finalColor.a = saturate(_PreviewAlpha);
-+                return finalColor;
+            // Calculate across-road coordinate in [0,1]
+            float scaledU = frac(input.uv.x * _AcrossScale);
+            float across = saturate(abs(scaledU * 2.0 - 1.0));
+        
+            half4 finalColor = half4(0, 0, 0, 1);
+        
+            int maxLayers = min(_LayerCount, 4);
+            for (int i = 0; i < maxLayers; i++)
+            {
+                // Sample weight from 2D mask atlas; each layer is stored as a horizontal slice
+                float weight = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_LinearClamp, float2(across, (i + 0.5) * _AtlasInvHeight)).r;
+                // Apply threshold
+                weight = saturate((weight - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
+        
+                if (weight < 1e-4)
+                    continue;
+        
+                float2 layerTiling = GetLayerTiling(i);
+                float2 layerUV = input.uv * layerTiling;
+                half4 layerColor = SampleLayerTexture(i, layerUV);
+        
+                // Apply weight as alpha to layer color
+                layerColor.rgb *= weight;
+        
+                float layerOpacity = GetLayerOpacity(i);
+                float blendMode = GetLayerBlendMode(i);
+                float blendOpacity = layerOpacity * weight;
+        
+                finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+            }
+        
+            if (all(finalColor.rgb == 0))
+                clip(-1);
+        
+            finalColor.a = saturate(_PreviewAlpha);
+            return finalColor;
              }
-            ENDHLSL
-        }
+             ENDHLSL
+         }
     }
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
 }

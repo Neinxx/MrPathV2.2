@@ -1,11 +1,14 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Terrain/TerrainOperationHandler.cs (最终统一版)
+
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEngine;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
 using UnityEditor;
+using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Terrain
 {
     /// <summary>
     /// 地形操作处理器：统一管理地形命令的执行、进度显示、错误处理和取消操作。
@@ -112,10 +115,7 @@ namespace MrPathV2
             }
             
             // 保持向后兼容
-            if (_cts != null && !_cts.IsCancellationRequested)
-            {
-                _cts.Cancel();
-            }
+            if (_cts != null && !_cts.IsCancellationRequested) _cts.Cancel();
         }
 
         /// <summary>

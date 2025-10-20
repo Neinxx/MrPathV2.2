@@ -1,9 +1,7 @@
-
 using Unity.Collections;
 using Unity.Mathematics;
-using MrPathV2.Extensions;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     public static class RoadContourGenerator
     {
@@ -11,7 +9,7 @@ namespace MrPathV2
         {
             if (spine.VertexCount < 2 || profile == null)
             {
-                contour = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float2>(0, allocator);
+                contour = global::__temp.MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float2>(0, allocator);
                 bounds = float4.zero;
                 return;
             }
@@ -56,7 +54,7 @@ namespace MrPathV2
             rightPoints.Dispose();
 
             // 创建一个新的 NativeArray 来复制数据，而不是直接使用 AsArray()
-            contour = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float2>(contourList.Length, allocator);
+            contour = global::__temp.MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float2>(contourList.Length, allocator);
             for (int i = 0; i < contourList.Length; i++)
             {
                 contour[i] = contourList[i];

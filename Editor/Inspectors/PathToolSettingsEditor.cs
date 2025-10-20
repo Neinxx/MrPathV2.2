@@ -1,10 +1,11 @@
+using __temp.MrPathV2._2.Editor.Settings;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathSettingsProvider))]
-    public class PathToolSettingsEditor : Editor
+    public class PathToolSettingsEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {

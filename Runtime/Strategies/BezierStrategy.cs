@@ -1,10 +1,9 @@
-
-using UnityEngine;
-#if UNITY_EDITOR
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Preview;
 using UnityEditor;
-#endif
+using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Strategies
 {
     /// <summary>
     /// 【最终圆满版 • 千变万化之法】
@@ -43,10 +42,10 @@ namespace MrPathV2
 
             // --- 贝塞尔曲线公式 (保持不变) ---
             float u = 1 - localT;
-            float t_sq = localT * localT;
-            float u_sq = u * u;
+            float tSq = localT * localT;
+            float uSq = u * u;
 
-            Vector3 point = (u_sq * u * p0) + (3 * u_sq * localT * p1) + (3 * u * t_sq * p2) + (t_sq * localT * p3);
+            Vector3 point = (uSq * u * p0) + (3 * uSq * localT * p1) + (3 * u * tSq * p2) + (tSq * localT * p3);
 
             // --- 最终返回：纯粹的本地坐标 ---
             return point;
@@ -165,8 +164,8 @@ namespace MrPathV2
         private void DrawControlLines(ref PathEditorHandles.HandleDrawContext context)
         {
             var creator = context.creator;
-            PreviewLineRenderer lineRenderer = null;
-            bool shouldDispose = false;
+            PreviewLineRenderer lineRenderer;
+            bool shouldDispose;
             
             if (context.lineRenderer != null)
             {
@@ -221,7 +220,7 @@ namespace MrPathV2
             finally
             {
                 // 如果是临时创建的lineRenderer，需要释放资源
-                if (shouldDispose && lineRenderer != null)
+                if (shouldDispose)
                 {
                     lineRenderer.Dispose();
                 }

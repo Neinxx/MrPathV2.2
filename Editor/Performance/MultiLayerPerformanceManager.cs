@@ -1,30 +1,31 @@
 using System.Collections.Generic;
-using UnityEngine;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
+using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Performance
 {
     /// <summary>
     /// 多层性能管理器：监控和优化大量层时的内存使用和渲染性能
     /// </summary>
     public static class MultiLayerPerformanceManager
     {
-        private static readonly Dictionary<int, PerformanceMetrics> _performanceCache = new Dictionary<int, PerformanceMetrics>();
-        private const int MAX_RECOMMENDED_LAYERS = 16;
-        private const int WARNING_LAYER_COUNT = 32;
+        private static readonly Dictionary<int, PerformanceMetrics> PerformanceCache = new();
+        private const int MaxRecommendedLayers = 16;
+        private const int WarningLayerCount = 32;
         
         public struct PerformanceMetrics
         {
-            public int layerCount;
-            public long memoryUsage;
-            public float renderTime;
-            public int controlTextureCount;
+            public int LayerCount;
+            public long MemoryUsage;
+            public float RenderTime;
+            public int ControlTextureCount;
         }
         
         /// <summary>
         /// 评估配方的性能影响
         /// </summary>
-        public static PerformanceMetrics EvaluateRecipePerformance(StylizedRoadRecipe recipe)
+        private static PerformanceMetrics EvaluateRecipePerformance(StylizedRoadRecipe recipe)
         {
             if (recipe == null) return default;
             
@@ -37,10 +38,10 @@ namespace MrPathV2
             
             var metrics = new PerformanceMetrics
             {
-                layerCount = activeLayerCount,
-                controlTextureCount = Mathf.CeilToInt(activeLayerCount / 4f),
-                memoryUsage = EstimateMemoryUsage(activeLayerCount),
-                renderTime = EstimateRenderTime(activeLayerCount)
+                LayerCount = activeLayerCount,
+                ControlTextureCount = Mathf.CeilToInt(activeLayerCount / 4f),
+                MemoryUsage = EstimateMemoryUsage(activeLayerCount),
+                RenderTime = EstimateRenderTime(activeLayerCount)
             };
             
             return metrics;
@@ -76,13 +77,13 @@ namespace MrPathV2
         /// <summary>
         /// 获取性能建议
         /// </summary>
-        public static string GetPerformanceRecommendation(PerformanceMetrics metrics)
+        private static string GetPerformanceRecommendation(PerformanceMetrics metrics)
         {
-            if (metrics.layerCount <= 4)
+            if (metrics.LayerCount <= 4)
                 return "✅ 性能良好：使用标准4层模式";
-            else if (metrics.layerCount <= MAX_RECOMMENDED_LAYERS)
+            else if (metrics.LayerCount <= MaxRecommendedLayers)
                 return "⚡ 多层模式：性能良好，建议在移动设备上测试";
-            else if (metrics.layerCount <= WARNING_LAYER_COUNT)
+            else if (metrics.LayerCount <= WarningLayerCount)
                 return "⚠️ 大量层数：建议优化或合并部分层以提升性能";
             else
                 return "🔥 极大层数：强烈建议重新设计配方以避免性能问题";
@@ -100,14 +101,14 @@ namespace MrPathV2
             
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.LabelField($"活跃层数: {metrics.layerCount}");
-                EditorGUILayout.LabelField($"Control贴图数: {metrics.controlTextureCount}");
-                EditorGUILayout.LabelField($"估算内存: {FormatBytes(metrics.memoryUsage)}");
-                EditorGUILayout.LabelField($"估算渲染时间: {metrics.renderTime:F1}ms");
+                EditorGUILayout.LabelField($"活跃层数: {metrics.LayerCount}");
+                EditorGUILayout.LabelField($"Control贴图数: {metrics.ControlTextureCount}");
+                EditorGUILayout.LabelField($"估算内存: {FormatBytes(metrics.MemoryUsage)}");
+                EditorGUILayout.LabelField($"估算渲染时间: {metrics.RenderTime:F1}ms");
                 
                 string recommendation = GetPerformanceRecommendation(metrics);
-                MessageType messageType = metrics.layerCount > WARNING_LAYER_COUNT ? MessageType.Error :
-                                        metrics.layerCount > MAX_RECOMMENDED_LAYERS ? MessageType.Warning :
+                MessageType messageType = metrics.LayerCount > WarningLayerCount ? MessageType.Error :
+                                        metrics.LayerCount > MaxRecommendedLayers ? MessageType.Warning :
                                         MessageType.Info;
                 
                 EditorGUILayout.HelpBox(recommendation, messageType);
@@ -130,7 +131,7 @@ namespace MrPathV2
         /// </summary>
         public static void ClearCache()
         {
-            _performanceCache.Clear();
+            PerformanceCache.Clear();
         }
     }
 }

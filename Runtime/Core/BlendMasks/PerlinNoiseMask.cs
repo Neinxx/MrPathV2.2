@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 {
     [CreateAssetMenu(fileName = "New Perlin Noise Mask", menuName = "MrPathV2/Masks/Perlin Noise Mask")]
     public class PerlinNoiseMask : ProceduralMaskBase

@@ -1,19 +1,19 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 using UnityEditor;
+using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     /// <summary>
-    /// 编辑器刷新管理器，提供更鲁棒的刷新机制
+    /// 编辑器刷新管理器，提供更鲁棒地刷新机制
     /// </summary>
     public class EditorRefreshManager : IDisposable
     {
         private readonly Dictionary<string, float> _lastRefreshTimes = new Dictionary<string, float>();
         private readonly Dictionary<string, Action> _pendingRefreshActions = new Dictionary<string, Action>();
         private readonly float _minRefreshInterval = 0.1f; // 最小刷新间隔100ms
-        private bool _disposed = false;
+        private bool _disposed;
 
         public EditorRefreshManager()
         {
@@ -187,10 +187,7 @@ namespace MrPathV2
         {
             get
             {
-                if (_instance == null)
-                {
-                    _instance = new EditorRefreshManager();
-                }
+                _instance ??= new EditorRefreshManager();
                 return _instance;
             }
         }

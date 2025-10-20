@@ -18,9 +18,9 @@ MonoBehaviour:
     blendMode: 0
     opacity: 1
     maskType: 0
-    terrainLayer: {fileID: 8574412962073106934, guid: 78cd50ddae8c1884bbc929e9d2ce0aef,
+    terrainLayer: {fileID: 8574412962073106934, guid: 59b39a3fa1adf8146a53186b73cf2f93,
       type: 2}
-    mask: {fileID: 11400000, guid: 86f6cd0f92c81a44bab62abd620d4b3a, type: 2}
+    mask: {fileID: 0}
     shoulderMask: {fileID: 0}
     roadSurfaceMask: {fileID: 0}
     blendMask:

@@ -1,10 +1,12 @@
+using __temp.MrPathV2._2.Editor.Settings;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathAppearanceDefaults))]
-    public class MrPathAppearanceDefaultsEditor : Editor
+    public class MrPathAppearanceDefaultsEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {
@@ -56,17 +58,7 @@ namespace MrPathV2
 
         private string GetSettingsPath()
         {
-            string[] guids = AssetDatabase.FindAssets("MrPathV2.2");
-            foreach (string guid in guids)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (path.EndsWith("MrPathV2.2"))
-                {
-                    return path + "/Settings";
-                }
-            }
-            Debug.LogError("未找到 MrPathV2.2 文件夹路径！");
-            return "Assets/MrPathV2.2/Settings"; // 回退到默认路径
+            return MrPathProjectSettings.GetSettingsRootFolder();
         }
 
         /// <summary>

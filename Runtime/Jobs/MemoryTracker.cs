@@ -5,7 +5,7 @@ using System.Threading;
 using Unity.Collections;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// 内存跟踪器：监控NativeArray分配和释放，检测内存泄漏
@@ -13,15 +13,14 @@ namespace MrPathV2
     /// </summary>
     public static class MemoryTracker
     {
-        private static readonly ConcurrentDictionary<IntPtr, AllocationInfo> s_ActiveAllocations = 
-            new ConcurrentDictionary<IntPtr, AllocationInfo>();
+        private static readonly ConcurrentDictionary<IntPtr, AllocationInfo> SActiveAllocations = new();
         
-        private static long s_TotalAllocations = 0;
-        private static long s_TotalDeallocations = 0;
-        private static long s_TotalBytesAllocated = 0;
-        private static long s_TotalBytesFreed = 0;
-        private static long s_PeakActiveAllocations = 0;
-        private static long s_PeakMemoryUsage = 0;
+        private static long _sTotalAllocations;
+        private static long _sTotalDeallocations;
+        private static long _sTotalBytesAllocated;
+        private static long _sTotalBytesFreed;
+        private static long _sPeakActiveAllocations;
+        private static long _sPeakMemoryUsage;
 
         /// <summary>
         /// 分配信息结构
@@ -59,21 +58,21 @@ namespace MrPathV2
             };
 
             var ptr = Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafePtr(array);
-            s_ActiveAllocations.TryAdd(new System.IntPtr(ptr), info);
+            SActiveAllocations.TryAdd(new IntPtr(ptr), info);
 
             // 更新统计信息
-            Interlocked.Increment(ref s_TotalAllocations);
-            Interlocked.Add(ref s_TotalBytesAllocated, info.TotalBytes);
+            Interlocked.Increment(ref _sTotalAllocations);
+            Interlocked.Add(ref _sTotalBytesAllocated, info.TotalBytes);
 
             // 更新峰值统计
-            var currentActive = s_ActiveAllocations.Count;
+            var currentActive = SActiveAllocations.Count;
             var currentMemory = GetCurrentMemoryUsage();
             
-            if (currentActive > s_PeakActiveAllocations)
-                Interlocked.Exchange(ref s_PeakActiveAllocations, currentActive);
+            if (currentActive > _sPeakActiveAllocations)
+                Interlocked.Exchange(ref _sPeakActiveAllocations, currentActive);
                 
-            if (currentMemory > s_PeakMemoryUsage)
-                Interlocked.Exchange(ref s_PeakMemoryUsage, currentMemory);
+            if (currentMemory > _sPeakMemoryUsage)
+                Interlocked.Exchange(ref _sPeakMemoryUsage, currentMemory);
         }
 
         /// <summary>
@@ -86,10 +85,10 @@ namespace MrPathV2
             if (!array.IsCreated) return;
 
             var ptr = Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafePtr(array);
-            if (s_ActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
+            if (SActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
             {
-                Interlocked.Increment(ref s_TotalDeallocations);
-                Interlocked.Add(ref s_TotalBytesFreed, info.TotalBytes);
+                Interlocked.Increment(ref _sTotalDeallocations);
+                Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
             }
         }
 
@@ -114,10 +113,10 @@ namespace MrPathV2
             };
 
             var ptr = Unity.Collections.LowLevel.Unsafe.NativeListUnsafeUtility.GetUnsafePtr(list);
-            s_ActiveAllocations.TryAdd((IntPtr)ptr, info);
+            SActiveAllocations.TryAdd((IntPtr)ptr, info);
 
-            Interlocked.Increment(ref s_TotalAllocations);
-            Interlocked.Add(ref s_TotalBytesAllocated, info.TotalBytes);
+            Interlocked.Increment(ref _sTotalAllocations);
+            Interlocked.Add(ref _sTotalBytesAllocated, info.TotalBytes);
         }
 
         /// <summary>
@@ -130,17 +129,17 @@ namespace MrPathV2
             if (!list.IsCreated) return;
 
             var ptr = Unity.Collections.LowLevel.Unsafe.NativeListUnsafeUtility.GetUnsafePtr(list);
-            if (s_ActiveAllocations.TryRemove((IntPtr)ptr, out var info))
+            if (SActiveAllocations.TryRemove((IntPtr)ptr, out var info))
             {
-                Interlocked.Increment(ref s_TotalDeallocations);
-                Interlocked.Add(ref s_TotalBytesFreed, info.TotalBytes);
+                Interlocked.Increment(ref _sTotalDeallocations);
+                Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
             }
         }
 
         /// <summary>
         /// 获取当前活跃分配数量
         /// </summary>
-        public static int ActiveAllocationCount => s_ActiveAllocations.Count;
+        public static int ActiveAllocationCount => SActiveAllocations.Count;
 
         /// <summary>
         /// 获取当前内存使用量（字节）
@@ -148,7 +147,7 @@ namespace MrPathV2
         public static long GetCurrentMemoryUsage()
         {
             long totalBytes = 0;
-            foreach (var kvp in s_ActiveAllocations)
+            foreach (var kvp in SActiveAllocations)
             {
                 totalBytes += kvp.Value.TotalBytes;
             }
@@ -162,15 +161,15 @@ namespace MrPathV2
         {
             return new MemoryStats
             {
-                ActiveAllocations = s_ActiveAllocations.Count,
-                TotalAllocations = s_TotalAllocations,
-                TotalDeallocations = s_TotalDeallocations,
+                ActiveAllocations = SActiveAllocations.Count,
+                TotalAllocations = _sTotalAllocations,
+                TotalDeallocations = _sTotalDeallocations,
                 CurrentMemoryUsage = GetCurrentMemoryUsage(),
-                TotalBytesAllocated = s_TotalBytesAllocated,
-                TotalBytesFreed = s_TotalBytesFreed,
-                PeakActiveAllocations = s_PeakActiveAllocations,
-                PeakMemoryUsage = s_PeakMemoryUsage,
-                PotentialLeaks = s_TotalAllocations - s_TotalDeallocations
+                TotalBytesAllocated = _sTotalBytesAllocated,
+                TotalBytesFreed = _sTotalBytesFreed,
+                PeakActiveAllocations = _sPeakActiveAllocations,
+                PeakMemoryUsage = _sPeakMemoryUsage,
+                PotentialLeaks = _sTotalAllocations - _sTotalDeallocations
             };
         }
 
@@ -181,7 +180,7 @@ namespace MrPathV2
         {
             var stats = new Dictionary<Allocator, AllocatorStats>();
             
-            foreach (var kvp in s_ActiveAllocations)
+            foreach (var kvp in SActiveAllocations)
             {
                 var allocator = kvp.Value.AllocatorType;
                 if (!stats.ContainsKey(allocator))
@@ -208,7 +207,7 @@ namespace MrPathV2
             var leaks = new List<LeakInfo>();
             var threshold = DateTime.Now.AddMinutes(-thresholdMinutes);
             
-            foreach (var kvp in s_ActiveAllocations)
+            foreach (var kvp in SActiveAllocations)
             {
                 var info = kvp.Value;
                 if (info.AllocationTime < threshold)
@@ -280,13 +279,13 @@ namespace MrPathV2
         /// </summary>
         public static void ResetStats()
         {
-            s_ActiveAllocations.Clear();
-            s_TotalAllocations = 0;
-            s_TotalDeallocations = 0;
-            s_TotalBytesAllocated = 0;
-            s_TotalBytesFreed = 0;
-            s_PeakActiveAllocations = 0;
-            s_PeakMemoryUsage = 0;
+            SActiveAllocations.Clear();
+            _sTotalAllocations = 0;
+            _sTotalDeallocations = 0;
+            _sTotalBytesAllocated = 0;
+            _sTotalBytesFreed = 0;
+            _sPeakActiveAllocations = 0;
+            _sPeakMemoryUsage = 0;
         }
 
         /// <summary>

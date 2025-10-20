@@ -1,10 +1,13 @@
-using UnityEngine;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks; // 保留以兼容可能的 Task 用法（若不需要可后续移除）
+using __temp.MrPathV2._2.Runtime.Core;
+using UnityEngine;
+using UnityEngine.Serialization;
 
-namespace MrPathV2
+// 保留以兼容可能的 Task 用法（若不需要可后续移除）
+
+namespace __temp.MrPathV2._2.Runtime.Settings
 {
     /// <summary>
     /// 路径策略注册中心：负责管理CurveType与PathStrategy的映射关系
@@ -14,7 +17,7 @@ namespace MrPathV2
     public class PathStrategyRegistry : ScriptableObject
     {
         private static PathStrategyRegistry _instance;
-        private static bool _initializationAttempted = false;
+        private static bool _initializationAttempted;
 
         /// <summary>
         /// 全局唯一实例
@@ -42,7 +45,7 @@ namespace MrPathV2
 
             public bool Equals(StrategyEntry other)
             {
-                return type == other.type && Equals(strategy, other.strategy);
+                return type == other.type && strategy == other.strategy;
             }
 
             public override bool Equals(object obj)
@@ -61,9 +64,10 @@ namespace MrPathV2
             public bool IsValid => strategy != null;
         }
 
+        [FormerlySerializedAs("_strategyEntries")]
         [Header("策略映射配置")]
         [Tooltip("曲线类型与策略的映射列表")]
-        [SerializeField] private List<StrategyEntry> _strategyEntries = new List<StrategyEntry>();
+        [SerializeField] private List<StrategyEntry> strategyEntries = new List<StrategyEntry>();
 
         // 缓存策略映射，提高查询性能
         private Dictionary<CurveType, PathStrategy> _strategyCache;
@@ -110,22 +114,6 @@ namespace MrPathV2
         }
 
         /// <summary>
-        /// 创建默认策略实例并初始化样式
-        /// </summary>
-        private T CreateDefaultStrategy<T>() where T : PathStrategy
-        {
-            return ErrorHandler.SafeExecute(() =>
-            {
-                var strategy = ScriptableObject.CreateInstance<T>();
-                if (strategy != null)
-                {
-                    EnsureDefaultStyle(strategy);
-                }
-                return strategy;
-            }, null, "PathStrategyRegistry.CreateDefaultStrategy");
-        }
-
-        /// <summary>
         /// 初始化策略缓存
         /// </summary>
         private void InitializeCache()
@@ -134,17 +122,17 @@ namespace MrPathV2
             {
                 _strategyCache = new Dictionary<CurveType, PathStrategy>();
 
-                if (_strategyEntries == null)
+                if (strategyEntries == null)
                 {
                     ErrorHandler.LogWarning("Strategy entries list is null, initializing empty list.", "PathStrategyRegistry");
-                    _strategyEntries = new List<StrategyEntry>();
+                    strategyEntries = new List<StrategyEntry>();
                     return;
                 }
 
                 var duplicateTypes = new HashSet<CurveType>();
                 var processedTypes = new HashSet<CurveType>();
 
-                foreach (var entry in _strategyEntries)
+                foreach (var entry in strategyEntries)
                 {
                     if (!entry.IsValid)
                     {
@@ -283,7 +271,7 @@ namespace MrPathV2
                     size = 0.10f
                 };
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogError($"[PathStrategyRegistry] Exception while ensuring default style for strategy '{strategy.name}': {ex.Message}");
             }
@@ -320,14 +308,14 @@ namespace MrPathV2
         {
             return ErrorHandler.SafeExecute(() =>
             {
-                if (_strategyEntries == null || _strategyEntries.Count == 0)
+                if (strategyEntries == null || strategyEntries.Count == 0)
                 {
                     ErrorHandler.LogWarning("No strategy entries configured.", "PathStrategyRegistry");
                     return false;
                 }
 
                 bool isValid = true;
-                var allCurveTypes = System.Enum.GetValues(typeof(CurveType)).Cast<CurveType>();
+                var allCurveTypes = Enum.GetValues(typeof(CurveType)).Cast<CurveType>();
 
                 foreach (var curveType in allCurveTypes)
                 {

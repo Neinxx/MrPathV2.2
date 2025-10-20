@@ -2,11 +2,12 @@
 // 创建一个场景视图工具栏按钮，用于编辑 PathCreator。
 // 当选中 PathCreator 时，会自动激活该工具。
 #if UNITY_EDITOR
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 
-namespace MrPathV2.EditorTools
+namespace __temp.MrPathV2._2.Editor.Tools
 {
     [EditorTool("Path Creator Tool", typeof(PathCreator))]
     public class PathCreatorTool : EditorTool
@@ -17,11 +18,7 @@ namespace MrPathV2.EditorTools
         {
             get
             {
-                if (_iconContent == null)
-                {
-                    // 使用 Unity 内置的 Animator 图标
-                    _iconContent = EditorGUIUtility.IconContent("Animator Icon", "Path Creator Tool");
-                }
+                _iconContent ??= EditorGUIUtility.IconContent("Animator Icon", "Path Creator Tool");
                 return _iconContent;
             }
         }

@@ -1,8 +1,7 @@
-
 using System;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "NewPathProfile", menuName = "MrPath/Path Profile")]
     public class PathProfile : ScriptableObject

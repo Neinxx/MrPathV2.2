@@ -1,7 +1,8 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Settings/MrPathCreationDefaults.cs
+
+
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Settings
 {
     /// <summary>
     /// 专门负责新路径创建时的所有默认值。

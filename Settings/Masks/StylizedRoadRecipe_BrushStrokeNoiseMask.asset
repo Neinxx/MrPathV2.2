@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: StylizedRoadRecipe_BrushStrokeNoiseMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 4.46, y: 3.45}
+  tiling: {x: 6.11, y: 3.45}
   offset: {x: 0, y: 0}
-  overallScale: 1.5
-  scale: 1.03
-  strength: 0.644
-  strengthVariation: 0.602
+  overallScale: 1.08
+  scale: 2.41
+  strength: 0.528
+  strengthVariation: 0.97
   strokeWidth: 0.77
   widthVariation: 0.473
   jitter: 0.787

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Sirenix.OdinInspector;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 美术定义的风格化道路配方：可自由组合项目中的 TerrainLayer，并通过 BlendMask 控制横向分布。

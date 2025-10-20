@@ -1,8 +1,8 @@
+using __temp.MrPathV2._2.Runtime.Memory;
 using NUnit.Framework;
 using Unity.Collections;
-using MrPathV2.Memory;
 
-namespace MrPathV2.Tests
+namespace __temp.MrPathV2._2.Editor.Tests
 {
     /// <summary>
     /// 单元测试：验证 UnifiedMemoryManager 的分配、释放与集中清理逻辑。
@@ -17,7 +17,6 @@ namespace MrPathV2.Tests
             Assert.IsTrue(owner.Collection.IsCreated, "分配后的 NativeArray 应该已创建");
 
             // 在 Dispose 之前记录长度用于后续断言
-            int lengthBeforeDispose = owner.Collection.Length;
 
             owner.Dispose();
             Assert.IsFalse(owner.Collection.IsCreated, "调用 Dispose 后 NativeArray 应被释放");

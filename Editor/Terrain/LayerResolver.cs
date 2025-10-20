@@ -1,8 +1,9 @@
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Terrain
 {
     /// <summary>
     /// 解析 StylizedRoadRecipe 中的 TerrainLayer，并与目标 Terrain 进行比对。
@@ -10,7 +11,7 @@ namespace MrPathV2
     /// </summary>
     public static class LayerResolver
     {
-        public static Dictionary<TerrainLayer, int> Resolve(Terrain terrain, StylizedRoadRecipe recipe)
+        public static Dictionary<TerrainLayer, int> Resolve(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
         {
             var result = new Dictionary<TerrainLayer, int>();
             if (terrain == null || terrain.terrainData == null || recipe == null) return result;
@@ -22,14 +23,14 @@ namespace MrPathV2
             for (int i = 0; i < layers.Count; i++)
             {
                 var l = layers[i];
-                if (l != null && !result.ContainsKey(l)) result[l] = i;
+                if (l) result.TryAdd(l, i);
             }
 
             // 按配方逐一检查，缺失则询问是否添加到地形
             foreach (var blend in recipe.blendLayers)
             {
                 var tl = blend?.terrainLayer;
-                if (tl == null) continue;
+                if (!tl) continue;
 
                 if (!result.ContainsKey(tl))
                 {

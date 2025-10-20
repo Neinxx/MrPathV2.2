@@ -1,11 +1,9 @@
 using System;
-using Unity.Collections;
-using Unity.Jobs;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
-using Unity.Mathematics;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Preview
 {
     /// <summary>
     /// 基于 <see cref="RoadPreviewMeshGenerator"/> 的轻量级预览网格控制器。
@@ -16,13 +14,11 @@ namespace MrPathV2
     /// </summary>
     public sealed class GeneratorPreviewMeshController : IDisposable
     {
-        private readonly PreviewMaterialManager _materialManager;
         private readonly RoadPreviewMeshGenerator _meshGenerator;
         private readonly TempIndicesManager _tempIndicesManager;
 
-        public GeneratorPreviewMeshController(PreviewMaterialManager materialManager)
+        public GeneratorPreviewMeshController()
         {
-            _materialManager = materialManager ?? throw new ArgumentNullException(nameof(materialManager));
             _meshGenerator = new RoadPreviewMeshGenerator();
             _tempIndicesManager = new TempIndicesManager();
 
@@ -39,7 +35,7 @@ namespace MrPathV2
             Failed
         }
 
-        public MeshGenerationState State { get; private set; } = MeshGenerationState.Idle;
+        private MeshGenerationState State { get; set; } = MeshGenerationState.Idle;
 
         /// <summary>
         /// 公开 Mesh 供外部渲染
@@ -66,7 +62,7 @@ namespace MrPathV2
             State = MeshGenerationState.Generating;
         }
 
-        private bool _meshApplied = false;
+        private bool _meshApplied;
         public bool TryFinalizeMesh()
         {
             // 如果之前已成功应用网格，直接返回 true
@@ -130,14 +126,14 @@ namespace MrPathV2
             {
                 PreviewMesh.Clear(false);
 
-                int vertexCount = vertices.Length;
-                int indexCount = indices.Length;
+                var vertexCount = vertices.Length;
+                var indexCount = indices.Length;
                 var indexFormat = vertexCount > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
                 PreviewMesh.indexFormat = indexFormat;
 
-                var layout = new VertexAttributeDescriptor[]
+                var layout = new[]
                 {
-                    new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, stream: 0),
+                    new VertexAttributeDescriptor(VertexAttribute.Position),
                     new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2, stream: 1),
                     new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4, stream: 2)
                 };
@@ -161,12 +157,11 @@ namespace MrPathV2
                 }
 
                 PreviewMesh.subMeshCount = 1;
-                var subDesc = new SubMeshDescriptor(0, indexCount, MeshTopology.Triangles) { vertexCount = vertexCount };
+                var subDesc = new SubMeshDescriptor(0, indexCount) { vertexCount = vertexCount };
                 PreviewMesh.SetSubMesh(0, subDesc, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
 
                 PreviewMesh.RecalculateBounds();
-                var b = PreviewMesh.bounds;
-             //   Debug.Log($"[GeneratorPreviewMeshController] Mesh bounds computed center={b.center}, size={b.size}, vertexCount={vertexCount}, firstVertex={vertices[0]}");
+                //   Debug.Log($"[GeneratorPreviewMeshController] Mesh bounds computed center={b.center}, size={b.size}, vertexCount={vertexCount}, firstVertex={vertices[0]}");
                 PreviewMesh.UploadMeshData(false);
 
                 // 完成后重置状态

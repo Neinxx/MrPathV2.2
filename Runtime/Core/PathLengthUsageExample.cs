@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 演示如何使用PathCreator.GetPathLength()方法的示例脚本

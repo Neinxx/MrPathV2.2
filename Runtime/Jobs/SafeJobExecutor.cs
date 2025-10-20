@@ -5,9 +5,8 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
-using UnityEngine.Profiling;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// 安全的Job执行器：提供异常安全的Job调度和内存管理
@@ -16,11 +15,11 @@ namespace MrPathV2
     public class SafeJobExecutor : IDisposable
     {
         // 性能监控标记
-        private static readonly ProfilerMarker s_JobScheduleMarker = new ProfilerMarker("SafeJobExecutor.Schedule");
-        private static readonly ProfilerMarker s_JobCompleteMarker = new ProfilerMarker("SafeJobExecutor.Complete");
-        private static readonly ProfilerMarker s_JobWaitMarker = new ProfilerMarker("SafeJobExecutor.Wait");
+        private static readonly ProfilerMarker SJobScheduleMarker = new("SafeJobExecutor.Schedule");
+        private static readonly ProfilerMarker SJobCompleteMarker = new("SafeJobExecutor.Complete");
+        private static readonly ProfilerMarker SJobWaitMarker = new("SafeJobExecutor.Wait");
 
-        private bool _disposed = false;
+        private bool _disposed;
 
         /// <summary>
         /// 安全执行单个IJobParallelFor
@@ -38,7 +37,7 @@ namespace MrPathV2
             
             try
             {
-                using (s_JobScheduleMarker.Auto())
+                using (SJobScheduleMarker.Auto())
                 {
                     handle = job.Schedule(arrayLength, batchSize);
                 }
@@ -75,7 +74,7 @@ namespace MrPathV2
             
             try
             {
-                using (s_JobScheduleMarker.Auto())
+                using (SJobScheduleMarker.Auto())
                 {
                     handle = job.Schedule();
                 }
@@ -112,7 +111,7 @@ namespace MrPathV2
             try
             {
                 // 调度所有Job
-                using (s_JobScheduleMarker.Auto())
+                using (SJobScheduleMarker.Auto())
                 {
                     for (int i = 0; i < jobSchedulers.Length; i++)
                     {
@@ -187,7 +186,7 @@ namespace MrPathV2
         /// <returns>异步任务</returns>
         private static async Task WaitForJobCompletionAsync(JobHandle jobHandle, CancellationToken cancellationToken)
         {
-            using (s_JobWaitMarker.Auto())
+            using (SJobWaitMarker.Auto())
             {
                 while (!jobHandle.IsCompleted)
                 {
@@ -195,7 +194,7 @@ namespace MrPathV2
                     await Task.Yield();
                 }
 
-                using (s_JobCompleteMarker.Auto())
+                using (SJobCompleteMarker.Auto())
                 {
                     jobHandle.Complete();
                 }
@@ -232,19 +231,19 @@ namespace MrPathV2
             public float TotalExecutionTimeMs;
         }
 
-        private static JobExecutionStats s_Stats = new JobExecutionStats();
+        private static JobExecutionStats _sStats;
 
         /// <summary>
         /// 获取Job执行统计信息
         /// </summary>
-        public static JobExecutionStats GetExecutionStats() => s_Stats;
+        public static JobExecutionStats GetExecutionStats() => _sStats;
 
         /// <summary>
         /// 重置统计信息
         /// </summary>
         public static void ResetStats()
         {
-            s_Stats = new JobExecutionStats();
+            _sStats = new JobExecutionStats();
         }
 
         /// <summary>

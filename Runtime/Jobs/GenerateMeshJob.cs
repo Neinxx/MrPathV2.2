@@ -1,10 +1,11 @@
 // 文件路径: Runtime/Jobs/GenerateMeshJob.cs (并行固定容量版)
+
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// 并行生成顶点与UV（固定容量，避免 Add 扩容）。
@@ -13,38 +14,38 @@ namespace MrPathV2
     [BurstCompile]
     public struct GenerateVerticesJob : IJobParallelFor
     {
-        [ReadOnly] public PathJobsUtility.SpineData spine;
-        [ReadOnly] public PathJobsUtility.ProfileData profile;
+        [ReadOnly] public PathJobsUtility.SpineData Spine;
+        [ReadOnly] public PathJobsUtility.ProfileData Profile;
 
-        [WriteOnly] public NativeArray<float3> vertices;
-        [WriteOnly] public NativeArray<float2> uvs;
-        [ReadOnly] public int segments;
-        [ReadOnly] public float2 tiling;
+        [WriteOnly] public NativeArray<float3> Vertices;
+        [WriteOnly] public NativeArray<float2> Uvs;
+        [ReadOnly] public int Segments;
+        [ReadOnly] public float2 Tiling;
 
         public void Execute(int index)
         {
-            if (spine.Length < 2 || segments < 2) return;
-            int i = index / segments;
-            int j = index % segments;
-            if (i < 0 || i >= spine.Length) return;
+            if (Spine.Length < 2 || Segments < 2) return;
+            int i = index / Segments;
+            int j = index % Segments;
+            if (i < 0 || i >= Spine.Length) return;
 
-            float3 spinePoint = spine.points[i];
-            float3 tangent = spine.tangents[i];
-            float3 normal = spine.normals[i];
-            float3 upVector = profile.forceHorizontal ? new float3(0, 1, 0) : normal;
+            float3 spinePoint = Spine.Points[i];
+            float3 tangent = Spine.Tangents[i];
+            float3 normal = Spine.Normals[i];
+            float3 upVector = Profile.ForceHorizontal ? new float3(0, 1, 0) : normal;
             float3 right = math.normalize(math.cross(upVector, tangent));
 
-            float t = j / (float)(segments - 1);
+            float t = j / (float)(Segments - 1);
             float signedT = t * 2f - 1f;
-            float3 offset = right * (signedT * profile.roadWidth * 0.5f);
+            float3 offset = right * (signedT * Profile.RoadWidth * 0.5f);
 
             // 高性能预览：移除截面竖向抬升，保持网格平整
-            vertices[index] = spinePoint + offset;
+            Vertices[index] = spinePoint + offset;
 
             // 应用平铺信息到UV
-            float u = t * tiling.x;
-            float v = ((float)i / math.max(1, (spine.Length - 1))) * tiling.y;
-            uvs[index] = new float2(u, v);
+            float u = t * Tiling.x;
+            float v = ((float)i / math.max(1, (Spine.Length - 1))) * Tiling.y;
+            Uvs[index] = new float2(u, v);
         }
     }
 
@@ -58,31 +59,31 @@ namespace MrPathV2
     {
         // 写入每个四边形的6个索引，不与job迭代索引一一对应，因此需解除并行写入限制
         [NativeDisableParallelForRestriction]
-        [WriteOnly] public NativeArray<int> indices;
-        [ReadOnly] public int segments;
-        [ReadOnly] public int spineLength;
+        [WriteOnly] public NativeArray<int> Indices;
+        [ReadOnly] public int Segments;
+        [ReadOnly] public int SpineLength;
 
         public void Execute(int quadIndex)
         {
-            if (spineLength < 2 || segments < 2) return;
-            int quadsPerRow = segments - 1;
-            int i = quadIndex / quadsPerRow;
-            int j = quadIndex % quadsPerRow;
-            if (i < 0 || i >= spineLength - 1) return;
+            if (SpineLength < 2 || Segments < 2) return;
+            var quadsPerRow = Segments - 1;
+            var i = quadIndex / quadsPerRow;
+            var j = quadIndex % quadsPerRow;
+            if (i < 0 || i >= SpineLength - 1) return;
 
-            int baseIndex = i * segments;
-            int v0 = baseIndex + j;
-            int v1 = baseIndex + j + 1;
-            int v2 = baseIndex + segments + j;
-            int v3 = baseIndex + segments + j + 1;
+            var baseIndex = i * Segments;
+            var v0 = baseIndex + j;
+            var v1 = baseIndex + j + 1;
+            var v2 = baseIndex + Segments + j;
+            var v3 = baseIndex + Segments + j + 1;
 
-            int outBase = quadIndex * 6;
-            indices[outBase + 0] = v0;
-            indices[outBase + 1] = v2;
-            indices[outBase + 2] = v1;
-            indices[outBase + 3] = v1;
-            indices[outBase + 4] = v2;
-            indices[outBase + 5] = v3;
+            var outBase = quadIndex * 6;
+            Indices[outBase + 0] = v0;
+            Indices[outBase + 1] = v2;
+            Indices[outBase + 2] = v1;
+            Indices[outBase + 3] = v1;
+            Indices[outBase + 4] = v2;
+            Indices[outBase + 5] = v3;
         }
     }
 
@@ -92,39 +93,40 @@ namespace MrPathV2
     [BurstCompile]
     public struct GenerateVertexColorsJob : IJobParallelFor
     {
-        [ReadOnly] public PathJobsUtility.SpineData spine;
-        [ReadOnly] public int segments;
-        [ReadOnly] public RecipeData recipe;
-        [ReadOnly] public float4 baseColor;
+        [ReadOnly] public PathJobsUtility.SpineData Spine;
+        [ReadOnly] public int Segments;
+        [ReadOnly] public RecipeData Recipe;
+        [ReadOnly] public float4 BaseColor;
 
-        [WriteOnly] public NativeArray<float4> colors; // RGBA 权重
+        [WriteOnly] public NativeArray<float4> Colors; // RGBA 权重
 
         public void Execute(int index)
         {
-            if (spine.Length < 2 || segments < 2) return;
-            int i = index / segments;
-            int j = index % segments;
-            if (i < 0 || i >= spine.Length) return;
+            if (Spine.Length < 2 || Segments < 2) return;
+            var i = index / Segments;
+            var j = index % Segments;
+            if (i < 0 || i >= Spine.Length) return;
 
-            float t = j / (float)(segments - 1);         // 0..1 左->右
-             float signedT = t * 2f - 1f;                  // -1..1 中心为0
-             float normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
+            var t = j / (float)(Segments - 1);         // 0..1 左->右
+            var signedT = t * 2f - 1f;                  // -1..1 中心为0
+            var normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
 
             // 只取前4层作为预览（RGBA），其余层忽略
             float r = 0f, g = 0f, b = 0f, a = 0f;
-            int layerCount = math.min(4, recipe.Length);
-            for (int k = 0; k < layerCount; k++)
+            var layerCount = math.min(4, Recipe.Length);
+            for (var k = 0; k < layerCount; k++)
             {
                 float layerMask;
-                if (recipe.maskLUT256.IsCreated)
+                if (Recipe.MaskAtlas.IsCreated)
                 {
-                    layerMask = TerrainJobsUtility.SampleMaskLUT(recipe.maskLUT256, k, normalizedDist);
+                    layerMask = TerrainJobsUtility.SampleMaskAtlas(Recipe.MaskAtlas, Recipe.AtlasWidth, k, normalizedDist);
                 }
+
                 else
                 {
-                    layerMask = TerrainJobsUtility.EvaluateStrip(recipe.strips, recipe.stripSlices[k], recipe.stripResolution, normalizedDist) * recipe.opacities[k];
+                    layerMask = TerrainJobsUtility.EvaluateStrip(Recipe.Strips, Recipe.StripSlices[k], Recipe.StripResolution, normalizedDist) * Recipe.Opacities[k];
                 }
-                int blendMode = recipe.blendModes[k];
+                var blendMode = Recipe.BlendModes[k];
                 switch (k)
                 {
                     case 0: r = TerrainJobsUtility.Blend(r, layerMask, blendMode); break;
@@ -135,7 +137,7 @@ namespace MrPathV2
             }
 
             // 不再在顶点阶段归一化，保持 LUT 的原始不透明度信息
-            colors[index] = new float4(r, g, b, a) * baseColor;
+            Colors[index] = new float4(r, g, b, a) * BaseColor;
         }
     }
 }

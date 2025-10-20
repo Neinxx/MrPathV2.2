@@ -1,10 +1,8 @@
 // PathStrategy.cs
-using UnityEngine;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
-namespace MrPathV2
+using UnityEngine;
+
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 【最终圆满版 • 法则基石】

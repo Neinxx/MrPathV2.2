@@ -1,10 +1,13 @@
 // MrPathV2/BlendLayer.cs
 
 using System;
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using Sirenix.OdinInspector;
 using UnityEngine;
-using Sirenix.OdinInspector; // 引入 Odin Inspector 命名空间
 
-namespace MrPathV2
+// 引入 Odin Inspector 命名空间
+
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     [Serializable]
     public class BlendLayer

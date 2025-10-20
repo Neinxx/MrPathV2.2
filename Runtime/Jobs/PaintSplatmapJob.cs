@@ -1,10 +1,10 @@
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using System.Runtime.CompilerServices;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// 高性能地形纹理绘制作业 - 优化版
@@ -16,20 +16,20 @@ namespace MrPathV2
     {
         #region 只读数据
 
-        [ReadOnly] public PathJobsUtility.SpineData spine;
-        [ReadOnly] public PathJobsUtility.ProfileData profile;
-        [ReadOnly] public RecipeData recipe;
-        [ReadOnly] public float3 terrainPos;
-        [ReadOnly] public float3 terrainSize;
-        [ReadOnly] public int alphamapResolution;
-        [ReadOnly] public int alphamapLayerCount;
-        [ReadOnly] public NativeArray<float2> roadContour;
-        [ReadOnly] public float4 contourBounds;
+        [ReadOnly] public PathJobsUtility.SpineData Spine;
+        [ReadOnly] public PathJobsUtility.ProfileData Profile;
+        [ReadOnly] public RecipeData Recipe;
+        [ReadOnly] public float3 TerrainPos;
+        [ReadOnly] public float3 TerrainSize;
+        [ReadOnly] public int AlphamapResolution;
+        [ReadOnly] public int AlphamapLayerCount;
+        [ReadOnly] public NativeArray<float2> RoadContour;
+        [ReadOnly] public float4 ContourBounds;
         
         // 新增：覆盖区域限制
-        [ReadOnly] public bool useCoverageLimit;
-        [ReadOnly] public int2 coverageMin; // 像素坐标范围最小值 (x, y)
-        [ReadOnly] public int2 coverageMax; // 像素坐标范围最大值 (x, y)
+        [ReadOnly] public bool UseCoverageLimit;
+        [ReadOnly] public int2 CoverageMin; // 像素坐标范围最小值 (x, y)
+        [ReadOnly] public int2 CoverageMax; // 像素坐标范围最大值 (x, y)
 
         #endregion
 
@@ -40,15 +40,14 @@ namespace MrPathV2
         /// 长度 = alphamapResolution * alphamapResolution * alphamapLayerCount
         /// </summary>
         [NativeDisableParallelForRestriction]
-        public NativeArray<float> alphamaps;
+        public NativeArray<float> Alphamaps;
 
         #endregion
 
         #region 常量定义
 
-        private const float EPSILON = 1e-6f;
-        private const float SAFE_DIVISION_EPSILON = 1e-8f;
-        private const float NORMALIZATION_THRESHOLD = 1e-5f;
+        private const float Epsilon = 1e-6f;
+        private const float NormalizationThreshold = 1e-5f;
 
         #endregion
 
@@ -61,17 +60,17 @@ namespace MrPathV2
         public void Execute(int y)
         {
             // 覆盖区域剔除：检查Y坐标是否在范围内
-            if (useCoverageLimit && (y < coverageMin.y || y > coverageMax.y))
+            if (UseCoverageLimit && (y < CoverageMin.y || y > CoverageMax.y))
                 return;
 
             // 快速轮廓剔除检查
             if (!IsRowInContourBounds(y)) return;
 
             // 处理该行的所有像素
-            for (int x = 0; x < alphamapResolution; x++)
+            for (int x = 0; x < AlphamapResolution; x++)
             {
                 // 覆盖区域剔除：检查X坐标是否在范围内
-                if (useCoverageLimit && (x < coverageMin.x || x > coverageMax.x))
+                if (UseCoverageLimit && (x < CoverageMin.x || x > CoverageMax.x))
                     continue;
 
                 ProcessPixel(x, y);
@@ -88,11 +87,11 @@ namespace MrPathV2
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool IsRowInContourBounds(int y)
         {
-            float invResolution = 1f / (alphamapResolution - 1);
-            float worldZ = terrainPos.z + y * invResolution * terrainSize.z;
+            float invResolution = 1f / (AlphamapResolution - 1);
+            float worldZ = TerrainPos.z + y * invResolution * TerrainSize.z;
             
             // 检查是否在轮廓边界内
-            return worldZ >= contourBounds.y && worldZ <= contourBounds.w;
+            return worldZ >= ContourBounds.y && worldZ <= ContourBounds.w;
         }
 
         /// <summary>
@@ -101,7 +100,7 @@ namespace MrPathV2
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ProcessPixel(int x, int y)
         {
-            int index = y * alphamapResolution + x;
+            int index = y * AlphamapResolution + x;
             
             // 快速轮廓裁剪检查
             if (!IsPixelInRoadContour(x, y, out float2 worldPos2D))
@@ -122,15 +121,16 @@ namespace MrPathV2
         private bool IsPixelInRoadContour(int x, int y, out float2 worldPos2D)
         {
             // 计算世界坐标（优化：避免重复计算）
-            float invResolution = 1f / (alphamapResolution - 1);
+            float invResolution = 1f / (AlphamapResolution - 1);
             worldPos2D = new float2(
-                terrainPos.x + x * invResolution * terrainSize.x,
-                terrainPos.z + y * invResolution * terrainSize.z
+                TerrainPos.x + x * invResolution * TerrainSize.x,
+                TerrainPos.z + y * invResolution * TerrainSize.z
             );
 
-            return TerrainJobsUtility.IsPointInContour(worldPos2D, contourBounds, roadContour);
+            return TerrainJobsUtility.IsPointInContour(worldPos2D, ContourBounds, RoadContour);
         }
 
+/*
         /// <summary>
         /// 快速检查像素是否在道路轮廓内（兼容旧版本）
         /// </summary>
@@ -138,11 +138,12 @@ namespace MrPathV2
         private bool IsPixelInRoadContour(int index, out float2 worldPos2D)
         {
             // 计算世界坐标（优化：避免重复计算）
-            int x = index % alphamapResolution;
-            int y = index / alphamapResolution;
+            int x = index % AlphamapResolution;
+            int y = index / AlphamapResolution;
             
             return IsPixelInRoadContour(x, y, out worldPos2D);
         }
+*/
 
         /// <summary>
         /// 计算点到脊线的标准化距离
@@ -157,18 +158,18 @@ namespace MrPathV2
             int closestSegmentIndex = -1;
             float tClosest = 0f;
 
-            int spineSegmentCount = spine.points.Length - 1;
+            int spineSegmentCount = Spine.Points.Length - 1;
             for (int i = 0; i < spineSegmentCount; i++)
             {
-                float2 segmentStart = spine.points[i].xz;
-                float2 segmentEnd = spine.points[i + 1].xz;
+                float2 segmentStart = Spine.Points[i].xz;
+                float2 segmentEnd = Spine.Points[i + 1].xz;
                 
                 // 计算投影参数
                 float2 segmentVector = segmentEnd - segmentStart;
                 float2 pointVector = worldPos2D - segmentStart;
                 
                 float segmentLengthSq = math.dot(segmentVector, segmentVector);
-                if (segmentLengthSq < EPSILON) continue;
+                if (segmentLengthSq < Epsilon) continue;
                 
                 float t = math.saturate(math.dot(pointVector, segmentVector) / segmentLengthSq);
                 float2 closestPoint = segmentStart + t * segmentVector;
@@ -186,18 +187,18 @@ namespace MrPathV2
                 return false;
 
             // 计算脊线上的插值点和方向向量
-            float3 spinePoint = math.lerp(spine.points[closestSegmentIndex], spine.points[closestSegmentIndex + 1], tClosest);
-            float3 spineNormal = math.normalize(math.lerp(spine.normals[closestSegmentIndex], spine.normals[closestSegmentIndex + 1], tClosest));
-            float3 spineTangent = math.normalize(math.lerp(spine.tangents[closestSegmentIndex], spine.tangents[closestSegmentIndex + 1], tClosest));
+            float3 spinePoint = math.lerp(Spine.Points[closestSegmentIndex], Spine.Points[closestSegmentIndex + 1], tClosest);
+            float3 spineNormal = math.normalize(math.lerp(Spine.Normals[closestSegmentIndex], Spine.Normals[closestSegmentIndex + 1], tClosest));
+            float3 spineTangent = math.normalize(math.lerp(Spine.Tangents[closestSegmentIndex], Spine.Tangents[closestSegmentIndex + 1], tClosest));
             
             // 计算右向量
             float3 rightVector = math.normalize(math.cross(
-                profile.forceHorizontal ? new float3(0, 1, 0) : spineNormal, 
+                Profile.ForceHorizontal ? new float3(0, 1, 0) : spineNormal, 
                 spineTangent
             ));
 
             // 计算标准化距离（对称，确保道路两侧一致性）
-            float halfRoadWidth = profile.roadWidth * 0.5f;
+            float halfRoadWidth = Profile.RoadWidth * 0.5f;
             float2 offsetVector = new float2(worldPos2D.x - spinePoint.x, worldPos2D.y - spinePoint.z);
             float signedDistance = math.dot(offsetVector, rightVector.xz);
             
@@ -211,26 +212,26 @@ namespace MrPathV2
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ApplyTextureBlending(int pixelIndex, float normalizedDist)
         {
-            int baseAlphaIndex = pixelIndex * alphamapLayerCount;
+            int baseAlphaIndex = pixelIndex * AlphamapLayerCount;
             
             // 边界检查
-            if (baseAlphaIndex < 0 || baseAlphaIndex + alphamapLayerCount > alphamaps.Length)
+            if (baseAlphaIndex < 0 || baseAlphaIndex + AlphamapLayerCount > Alphamaps.Length)
                 return;
 
             // 先清零该像素全部图层权重，避免与原地形混合导致显色过淡
-            for(int l=0;l<alphamapLayerCount;l++)
+            for(int l=0;l<AlphamapLayerCount;l++)
             {
-                alphamaps[baseAlphaIndex + l] = 0f;
+                Alphamaps[baseAlphaIndex + l] = 0f;
             }
 
             // 应用配方层混合
             bool anyLayerPainted = false;
             int firstValidSplatIndex = -1;
             
-            for (int layerIndex = 0; layerIndex < recipe.Length; layerIndex++)
+            for (int layerIndex = 0; layerIndex < Recipe.Length; layerIndex++)
             {
-                int splatIndex = recipe.terrainLayerIndices[layerIndex];
-                if (splatIndex < 0 || splatIndex >= alphamapLayerCount) 
+                int splatIndex = Recipe.TerrainLayerIndices[layerIndex];
+                if (splatIndex < 0 || splatIndex >= AlphamapLayerCount) 
                     continue;
                 
                 if (firstValidSplatIndex == -1)
@@ -238,35 +239,34 @@ namespace MrPathV2
 
                 // 计算遮罩值
                 float maskValue;
-                if (recipe.maskLUT256.IsCreated)
+                if (Recipe.MaskAtlas.IsCreated)
                 {
-                    maskValue = TerrainJobsUtility.SampleMaskLUT(recipe.maskLUT256, layerIndex, normalizedDist);
+                    maskValue = TerrainJobsUtility.SampleMaskAtlas(Recipe.MaskAtlas, Recipe.AtlasWidth, layerIndex, normalizedDist);
                 }
                 else
                 {
-                    // 当 LUT 不可用时退化为 Strip 采样（已包含不透明度）
                     maskValue = TerrainJobsUtility.EvaluateStrip(
-                        recipe.strips,
-                        recipe.stripSlices[layerIndex],
-                        recipe.stripResolution,
+                        Recipe.Strips,
+                        Recipe.StripSlices[layerIndex],
+                        Recipe.StripResolution,
                         normalizedDist);
                 }
 
-                if (maskValue > EPSILON)
+                if (maskValue > Epsilon)
                     anyLayerPainted = true;
 
                 // 应用混合模式
                 int alphaMapIndex = baseAlphaIndex + splatIndex;
-                float currentValue = alphamaps[alphaMapIndex];
-                float blendedValue = TerrainJobsUtility.Blend(currentValue, maskValue, recipe.blendModes[layerIndex]);
+                float currentValue = Alphamaps[alphaMapIndex];
+                float blendedValue = TerrainJobsUtility.Blend(currentValue, maskValue, Recipe.BlendModes[layerIndex]);
                 
-                alphamaps[alphaMapIndex] = blendedValue;
+                Alphamaps[alphaMapIndex] = blendedValue;
             }
 
             // 保底处理：如果所有层权重为0，设置首个有效层为1
             if (!anyLayerPainted && firstValidSplatIndex >= 0)
             {
-                alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
+                Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
             }
 
             // 归一化处理
@@ -283,27 +283,27 @@ namespace MrPathV2
             // 避免单图层被强行拉升到 1 失去遮罩梯度。
             int paintedCount = 0;
             float totalWeight = 0f;
-            for (int i = 0; i < alphamapLayerCount; i++)
+            for (int i = 0; i < AlphamapLayerCount; i++)
             {
-                float v = alphamaps[baseAlphaIndex + i];
+                float v = Alphamaps[baseAlphaIndex + i];
                 totalWeight += v;
                 if (v > 1e-4f) paintedCount++;
             }
 
-            if (paintedCount > 1 && totalWeight > NORMALIZATION_THRESHOLD)
+            if (paintedCount > 1 && totalWeight > NormalizationThreshold)
             {
                 float invTotalWeight = 1f / totalWeight;
-                for (int i = 0; i < alphamapLayerCount; i++)
+                for (int i = 0; i < AlphamapLayerCount; i++)
                 {
-                    alphamaps[baseAlphaIndex + i] *= invTotalWeight;
+                    Alphamaps[baseAlphaIndex + i] *= invTotalWeight;
                 }
             }
             else if (paintedCount == 0 && firstValidSplatIndex >= 0)
             {
                 // 如果未命中任何图层，设置首个有效层为1
-                for (int i = 0; i < alphamapLayerCount; i++)
+                for (int i = 0; i < AlphamapLayerCount; i++)
                 {
-                    alphamaps[baseAlphaIndex + i] = (i == firstValidSplatIndex) ? 1f : 0f;
+                    Alphamaps[baseAlphaIndex + i] = (i == firstValidSplatIndex) ? 1f : 0f;
                 }
             }
         }

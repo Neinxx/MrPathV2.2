@@ -1,7 +1,7 @@
 using Unity.Collections;
 using Unity.Mathematics;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// Terrain 作业的通用辅助函数：曲线评估与轮廓点检测。
@@ -292,30 +292,39 @@ namespace MrPathV2
             return result;
         }
         
-        public static float SampleMaskLUT(NativeArray<float4> lut256, int layerIndex, float normalizedDist)
+        /// <summary>
+        /// 在 Job 中从 2D MaskAtlas 采样遮罩值。
+        /// atlas: 按行存储，每行对应一层，长度 = atlasWidth * atlasHeight。
+        /// layerIndex: 要采样的层索引 (0-based)。
+        /// normalizedDist: 0..1，横向归一化距离（0=道路中心，1=边缘）。
+        /// </summary>
+        public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int layerIndex, float normalizedDist)
         {
-            // 验证数组与输入
-            if (!lut256.IsCreated || lut256.Length == 0)
+            if (!atlas.IsCreated || atlas.Length == 0 || atlasWidth <= 0)
                 return 0f;
-            if (layerIndex < 0 || layerIndex > 3)
-                return 0f;
+        
             if (math.isnan(normalizedDist) || math.isinf(normalizedDist))
                 normalizedDist = 0f;
-
-            int resolution = lut256.Length; // 预期256
-            int maxIdx = resolution - 1;
-            float fIdx = math.saturate(normalizedDist) * maxIdx;
-            int idxA = (int)math.floor(fIdx);
-            int idxB = math.min(idxA + 1, maxIdx);
-            float w = fIdx - idxA;
-
-            float4 a = lut256[idxA];
-            float4 b = lut256[idxB];
-            float va = layerIndex == 0 ? a.x : layerIndex == 1 ? a.y : layerIndex == 2 ? a.z : a.w;
-            float vb = layerIndex == 0 ? b.x : layerIndex == 1 ? b.y : layerIndex == 2 ? b.z : b.w;
-            if (math.isnan(va) || math.isinf(va)) va = 0f;
-            if (math.isnan(vb) || math.isinf(vb)) vb = 0f;
-            return math.lerp(va, vb, w);
+        
+            int atlasHeight = atlas.Length / atlasWidth;
+            if (layerIndex < 0 || layerIndex >= atlasHeight)
+                return 0f;
+        
+            int maxX = atlasWidth - 1;
+            float fX = math.saturate(normalizedDist) * maxX;
+            int xA = (int)math.floor(fX);
+            int xB = math.min(xA + 1, maxX);
+            float w = fX - xA;
+        
+            int rowOffset = layerIndex * atlasWidth;
+            float vA = atlas[rowOffset + xA];
+            float vB = atlas[rowOffset + xB];
+        
+            if (math.isnan(vA) || math.isinf(vA)) vA = 0f;
+            if (math.isnan(vB) || math.isinf(vB)) vB = 0f;
+        
+            return math.lerp(vA, vB, w);
         }
+
     }
 }

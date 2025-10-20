@@ -1,6 +1,8 @@
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Preview
 {
     /// <summary>
     /// 默认预览生成器实现，直接使用PreviewMeshController作为底层实现
@@ -11,12 +13,12 @@ namespace MrPathV2
 
         public DefaultPreviewGenerator()
         {
-            _controller = new GeneratorPreviewMeshController(new PreviewMaterialManager());
+            _controller = new GeneratorPreviewMeshController();
         }
 
         public DefaultPreviewGenerator(PreviewMaterialManager materialManager)
         {
-            _controller = new GeneratorPreviewMeshController(materialManager);
+            _controller = new GeneratorPreviewMeshController();
         }
 
         /// <summary>

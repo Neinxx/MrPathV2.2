@@ -1,75 +1,94 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Inspectors/MrPathAdvancedSettingsEditor.cs
+
+using System.IO;
+using __temp.MrPathV2._2.Editor.Settings;
+using __temp.MrPathV2._2.Runtime.Settings;
+using __temp.MrPathV2._2.Runtime.Strategies;
 using UnityEditor;
 using UnityEngine;
-using System.IO;
-using System.Linq;
+using UnityEngine.UIElements;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
-    /// <summary>
-    /// 为 MrPathAdvancedSettings 提供自定义的 Inspector 界面。
     //  将策略管理功能（创建、同步）直接集成到此资产的编辑器中。
-    /// </summary>
+  
     [CustomEditor(typeof(MrPathAdvancedSettings))]
-    public class MrPathAdvancedSettingsEditor : Editor
+    public class MrPathAdvancedSettingsEditor : UnityEditor.Editor
     {
-        public override void OnInspectorGUI()
+        public override VisualElement CreateInspectorGUI()
         {
-            // 首先绘制默认的 Inspector 字段 (工厂、策略覆盖等)
-            base.OnInspectorGUI();
+            var root = new VisualElement();
 
-            EditorGUILayout.Space(10);
-            EditorGUILayout.LabelField("策略管理工具", EditorStyles.boldLabel);
-
-            // 将旧 Provider 中的功能按钮移植到这里
-            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            // 默认属性区域（使用 IMGUI 绘制，避免递归创建导致的 StackOverflow）
+            var defaultInspector = new IMGUIContainer(() =>
             {
-                if (GUILayout.Button("创建默认策略资产"))
-                {
-                    CreateDefaultStrategies();
-                }
+                DrawDefaultInspector();
+            });
+            root.Add(defaultInspector);
 
-                if (GUILayout.Button("打开策略文件夹"))
-                {
-                    string dir = "Assets/__temp/MrPathV2.2/Settings/Strategies";
-                    Directory.CreateDirectory(dir);
-                    EditorUtility.RevealInFinder(dir);
-                }
+            // 分隔
+            root.Add(new VisualElement { style = { height = 10 } });
 
-                if (GUILayout.Button("同步策略到注册表"))
-                {
-                    SyncOverridesToRegistry();
-                    EditorUtility.DisplayDialog("同步完成", "已将当前指定的策略资产同步到 PathStrategyRegistry。", "确定");
+            // 标题
+            root.Add(new Label("策略管理工具")
+            {
+                style = {
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    unityTextAlign = TextAnchor.MiddleLeft,
+                    marginBottom = 4
                 }
-            }
+            });
+
+            // 容器（等同于 IMGUI 的 helpBox）
+            var box = new VisualElement
+            {
+                style =
+                {
+                    borderTopWidth = 1,
+                    borderBottomWidth = 1,
+                    borderLeftWidth = 1,
+                    borderRightWidth = 1,
+                    paddingTop = 4,
+                    paddingBottom = 4,
+                    paddingLeft = 4,
+                    paddingRight = 4,
+                    marginBottom = 6
+                }
+            };
+            root.Add(box);
+
+            // 按钮：创建默认策略
+            var createBtn = new Button(CreateDefaultStrategies) { text = "创建默认策略资产" };
+            box.Add(createBtn);
+
+            // 按钮：打开策略文件夹
+            var openFolderBtn = new Button(() =>
+            {
+                string dir = GetDynamicStrategiesPath();
+                if (string.IsNullOrEmpty(dir)) return;
+                Directory.CreateDirectory(dir);
+                EditorUtility.RevealInFinder(dir);
+            }) { text = "打开策略文件夹" };
+            box.Add(openFolderBtn);
+
+            // 按钮：同步策略
+            var syncBtn = new Button(() =>
+            {
+                SyncOverridesToRegistry();
+                EditorUtility.DisplayDialog("同步完成", "已将当前指定的策略资产同步到 PathStrategyRegistry。", "确定");
+            }) { text = "同步策略到注册表" };
+            box.Add(syncBtn);
+
+            return root;
         }
 
         private string GetDynamicStrategiesPath()
         {
-            string mrPathFolder = AssetDatabase.FindAssets("MrPathV2.2").Select(AssetDatabase.GUIDToAssetPath)
-                .FirstOrDefault(path => path.EndsWith("MrPathV2.2"));
-
-            if (string.IsNullOrEmpty(mrPathFolder))
-            {
-                Debug.LogError("未找到 MrPathV2.2 文件夹！");
-                return null;
-            }
-
-            return Path.Combine(mrPathFolder, "Settings", "Strategies").Replace("\\", "/");
+            return Path.Combine(MrPathProjectSettings.GetSettingsRootFolder(), "Strategies").Replace("\\", "/");
         }
 
         private string GetDynamicResourcesPath()
         {
-            string mrPathFolder = AssetDatabase.FindAssets("MrPathV2.2").Select(AssetDatabase.GUIDToAssetPath)
-                .FirstOrDefault(path => path.EndsWith("MrPathV2.2"));
-
-            if (string.IsNullOrEmpty(mrPathFolder))
-            {
-                Debug.LogError("未找到 MrPathV2.2 文件夹！");
-                return null;
-            }
-
-            return Path.Combine(mrPathFolder, "Settings", "Resources").Replace("\\", "/");
+            return Path.Combine(MrPathProjectSettings.GetSettingsRootFolder(), "Resources").Replace("\\", "/");
         }
 
         private void CreateDefaultStrategies()
@@ -110,53 +129,19 @@ namespace MrPathV2
 
         private void SyncOverridesToRegistry()
         {
-            var settings = (MrPathAdvancedSettings)target;
-
             // 确保注册表资产存在
             string registryPath = Path.Combine(GetDynamicResourcesPath(), "PathStrategyRegistry.asset").Replace("\\", "/");
             var registry = AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(registryPath);
             if (registry == null)
             {
                 registry = CreateInstance<PathStrategyRegistry>();
-                Directory.CreateDirectory(Path.GetDirectoryName(registryPath));
+                Directory.CreateDirectory(Path.GetDirectoryName(registryPath) ?? string.Empty);
                 AssetDatabase.CreateAsset(registry, registryPath);
                 AssetDatabase.SaveAssets();
             }
 
             var rso = new SerializedObject(registry);
-            var entriesProp = rso.FindProperty("_strategyEntries");
-
-            // 封装的更新逻辑
-            void SetEntry(CurveType type, PathStrategy strat)
-            {
-                if (strat == null) return; // 如果未指定覆盖，则不进行操作
-
-                int foundIndex = -1;
-                for (int i = 0; i < entriesProp.arraySize; i++)
-                {
-                    var e = entriesProp.GetArrayElementAtIndex(i);
-                    if ((CurveType)e.FindPropertyRelative("type").enumValueIndex == type)
-                    {
-                        foundIndex = i;
-                        break;
-                    }
-                }
-
-                SerializedProperty entryProp;
-                if (foundIndex >= 0)
-                {
-                    entryProp = entriesProp.GetArrayElementAtIndex(foundIndex);
-                }
-                else
-                {
-                    entriesProp.InsertArrayElementAtIndex(entriesProp.arraySize);
-                    entryProp = entriesProp.GetArrayElementAtIndex(entriesProp.arraySize - 1);
-                }
-
-                entryProp.FindPropertyRelative("type").enumValueIndex = (int)type;
-                entryProp.FindPropertyRelative("strategy").objectReferenceValue = strat;
-            }
-
+            rso.FindProperty("_strategyEntries");
             rso.ApplyModifiedProperties();
         }
     }

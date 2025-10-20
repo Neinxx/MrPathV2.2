@@ -1,45 +1,47 @@
 using System;
-using UnityEngine;
+using __temp.MrPathV2._2.Editor.Input;
+using __temp.MrPathV2._2.Editor.Preview;
+using __temp.MrPathV2._2.Editor.Settings;
+using __temp.MrPathV2._2.Editor.Terrain;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
+using __temp.MrPathV2._2.Runtime.Preview;
+using __temp.MrPathV2._2.Runtime.Providers;
 using UnityEditor;
+using UnityEngine;
 
-
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     /// <summary>
     /// 路径编辑器上下文，封装编辑器依赖项并提供统一的访问接口
     /// </summary>
     public class PathEditorContext : IDisposable
     {
-        private PathCreator _target;
-        private IHeightProvider _heightProvider;
-        private PathPreviewManager _previewManager;
-        private PreviewMaterialManager _materialManager;
-        private TerrainOperationHandler _terrainHandler;
         private EditorRefreshManager _refreshManager;
-        private MrPathProjectSettings mrPathProjectSettings;
+        private MrPathProjectSettings _mrPathProjectSettings;
 
         // 编辑器状态
-        public int HoveredPointIdx { get; set; } = -1;
-        public int HoveredSegmentIdx { get; set; } = -1;
-        public bool IsDraggingHandle { get; set; } = false;
+        private int HoveredPointIdx { get; set; } = -1;
+        private int HoveredSegmentIdx { get; set; } = -1;
+        private bool IsDraggingHandle { get; set; }
 
         // 公共属性
-        public PathCreator Target => _target;
-        public IHeightProvider HeightProvider => _heightProvider;
-        public PathPreviewManager PreviewManager => _previewManager;
-        public PreviewMaterialManager MaterialManager => _materialManager;
-        public TerrainOperationHandler TerrainHandler => _terrainHandler;
+        public PathCreator Target { get; }
+
+        public IHeightProvider HeightProvider { get; private set; }
+
+        public PathPreviewManager PreviewManager { get; private set; }
+
+        private PreviewMaterialManager MaterialManager { get; set; }
+
+        public TerrainOperationHandler TerrainHandler { get; private set; }
 
         // --- 新增属性/方法以满足编译器错误 ---
-        /// <summary>
-        /// 当前正在执行的地形操作ID（由 TerrainOperationsPanel 进行设置/查询）
-        /// </summary>
-        public string CurrentOperationId { get; set; } = null;
 
         /// <summary>
         /// 预览网格生成器，供外部（如 TerrainOperationsPanel）读取预览网格信息
         /// </summary>
-        public IPreviewGenerator PreviewGenerator => _previewManager?.Generator;
+        public IPreviewGenerator PreviewGenerator => PreviewManager?.Generator;
 
         /// <summary>
         /// 输入事件处理器
@@ -48,7 +50,7 @@ namespace MrPathV2
 
         public PathEditorContext(PathCreator target)
         {
-            _target = target ?? throw new ArgumentNullException(nameof(target));
+            Target = target ?? throw new ArgumentNullException(nameof(target));
             _refreshManager = new EditorRefreshManager();
             InitializeDependencies();
         }
@@ -63,22 +65,22 @@ namespace MrPathV2
             try
             {
                 // 先获取项目设置，供后续依赖初始化使用
-                mrPathProjectSettings = MrPathProjectSettings.GetOrCreateSettings();
+                _mrPathProjectSettings = MrPathProjectSettings.GetOrCreateSettings();
 
                 // 初始化高度提供器
-                _heightProvider = new TerrainHeightProvider();
+                HeightProvider = new TerrainHeightProvider();
 
                 // 初始化材质管理器
-                _materialManager = new PreviewMaterialManager();
+                MaterialManager = new PreviewMaterialManager();
 
                 // 初始化预览管理器
                 var generator = new DefaultPreviewGenerator();
-                _previewManager = new PathPreviewManager(generator, _materialManager,
-                mrPathProjectSettings.appearanceDefaults?.previewMaterialTemplate,
-                mrPathProjectSettings.appearanceDefaults != null ? mrPathProjectSettings.appearanceDefaults.previewAlpha : 0.5f);
+                PreviewManager = new PathPreviewManager(generator, MaterialManager,
+                _mrPathProjectSettings.appearanceDefaults?.previewMaterialTemplate,
+                _mrPathProjectSettings.appearanceDefaults != null ? _mrPathProjectSettings.appearanceDefaults.previewAlpha : 0.5f);
 
                 // 初始化地形操作处理器
-                _terrainHandler = new TerrainOperationHandler(_heightProvider);
+                TerrainHandler = new TerrainOperationHandler(HeightProvider);
 
                 // 初始化输入处理器
                 InputHandler = new PathInputHandler();
@@ -95,15 +97,15 @@ namespace MrPathV2
         /// <summary>
         /// 请求刷新预览，使用防抖动机制
         /// </summary>
-        public void RequestPreviewRefresh(bool forceImmediate = false)
+        private void RequestPreviewRefresh(bool forceImmediate = false)
         {
-            if (_previewManager == null) return;
+            if (PreviewManager == null) return;
 
             _refreshManager.RequestRefresh("preview_refresh", () =>
             {
                 try
                 {
-                    _previewManager.Update(_target,_heightProvider);
+                    PreviewManager.Update(Target,HeightProvider);
                 }
                 catch (Exception ex)
                 {
@@ -117,10 +119,7 @@ namespace MrPathV2
         /// </summary>
         public void RequestSceneViewRefresh(bool forceImmediate = false)
         {
-            _refreshManager.RequestRefresh("scene_view_refresh", () =>
-            {
-                SceneView.RepaintAll();
-            }, forceImmediate);
+            _refreshManager.RequestRefresh("scene_view_refresh", SceneView.RepaintAll, forceImmediate);
         }
 
         /// <summary>
@@ -130,9 +129,9 @@ namespace MrPathV2
         {
             _refreshManager.RequestRefresh("inspector_refresh", () =>
             {
-                if (_target != null)
+                if (Target)
                 {
-                    EditorUtility.SetDirty(_target);
+                    EditorUtility.SetDirty(Target);
                 }
             }, forceImmediate);
         }
@@ -147,7 +146,7 @@ namespace MrPathV2
         /// </summary>
         public bool IsPathValid()
         {
-            return Target != null && Target.IsValidState();
+            return Target && Target.IsValidState();
         }
 
         /// <summary>
@@ -155,8 +154,8 @@ namespace MrPathV2
         /// </summary>
         public void MarkDirty()
     {
-            _previewManager?.MarkDirty();
-            _previewManager?.MarkMaterialsDirty(); // Ensure material updates when parameters change
+            PreviewManager?.MarkDirty();
+            PreviewManager?.MarkMaterialsDirty(); // Ensure material updates when parameters change
             RequestPreviewRefresh();
     }
 
@@ -194,10 +193,10 @@ namespace MrPathV2
             _refreshManager?.Dispose();
 
             // 清空引用
-            _previewManager = null;
-            _heightProvider = null;
-            _materialManager = null;
-            _terrainHandler = null;
+            PreviewManager = null;
+            HeightProvider = null;
+            MaterialManager = null;
+            TerrainHandler = null;
             _refreshManager = null;
         }
     }

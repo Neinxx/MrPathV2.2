@@ -1,11 +1,17 @@
 using System;
+using __temp.MrPathV2._2.Editor.Inspectors;
+using __temp.MrPathV2._2.Editor.Operations;
+using __temp.MrPathV2._2.Editor.Settings;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Settings;
 using UnityEditor;
 using UnityEditor.Overlays;
-using UnityEditor.UIElements; // add
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+// add
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Overlays
 {
     /// <summary>
     /// Terrain operations overlay. Replaces the legacy GUILayout window implementation (TerrainOperationsPanel)
@@ -16,7 +22,7 @@ namespace MrPathV2
     [Overlay(
         typeof(SceneView),
         id: "MrPath.TerrainOperationsOverlay",
-        displayName: "MrPath 地形操作"
+        displayName: "地形操作"
     )
     ]
     public class TerrainOperationsOverlay : Overlay
@@ -122,13 +128,6 @@ namespace MrPathV2
             }
         }
 
-        private void OnDestroy()
-        {
-            Selection.selectionChanged -= OnSelectionChanged;
-            _ctx?.Dispose();
-            _ctx = null;
-        }
-
         private void OnSelectionChanged()
         {
             UpdateVisibility();
@@ -195,8 +194,7 @@ namespace MrPathV2
                 }
             }
 
-            string opId = !string.IsNullOrEmpty(op.operationId) ? op.operationId : (op.displayName ?? op.name);
-            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, b => _ctx.CurrentOperationId = b ? opId : null);
+            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, _ => { });
         }
     }
 }

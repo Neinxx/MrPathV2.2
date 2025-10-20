@@ -1,12 +1,16 @@
-using UnityEngine;
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Interfaces;
+using __temp.MrPathV2._2.Runtime.Preview;
 using UnityEditor;
+using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Preview
 {
     /// <summary>Handles sampling, mesh generation and rendering for path previews.</summary>
     public sealed class PathPreviewManager : System.IDisposable
     {
+        private static readonly int PreviewAlpha = Shader.PropertyToID("_PreviewAlpha");
         readonly IPreviewGenerator _generator;
         readonly PreviewMaterialManager _matMgr;
         readonly Material _template;
@@ -115,7 +119,7 @@ namespace MrPathV2
             }
             else
             {
-                Shader.SetGlobalFloat("_PreviewAlpha", _alpha);
+                Shader.SetGlobalFloat(PreviewAlpha, _alpha);
                 Graphics.DrawMesh(_mesh, matrix, _materials[0], 0, cam);
             }
         }

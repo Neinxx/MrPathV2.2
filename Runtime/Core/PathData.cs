@@ -1,7 +1,9 @@
 // PathData.cs
+
 using System.Collections.Generic;
 using UnityEngine;
-namespace MrPathV2
+
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 【第三步：万法归一的容器】

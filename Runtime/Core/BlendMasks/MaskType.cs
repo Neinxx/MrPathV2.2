@@ -1,6 +1,6 @@
 using System;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 {
     /// <summary>
     /// 遮罩类型枚举：定义不同的遮罩应用场景

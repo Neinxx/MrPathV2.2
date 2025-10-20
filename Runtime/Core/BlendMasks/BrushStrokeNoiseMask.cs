@@ -1,7 +1,8 @@
 // 文件路径: MrPathV2/Blend Masks/BrushStrokeNoiseMask.cs
+
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 {
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Brush Stroke Noise")]
     public class BrushStrokeNoiseMask : BlendMaskBase

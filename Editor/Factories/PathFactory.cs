@@ -1,7 +1,9 @@
+using __temp.MrPathV2._2.Editor.Settings;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Factories
 {
     /// <summary>
     /// 路径创建工厂，负责创建配置完整的路径对象
@@ -61,7 +63,7 @@ namespace MrPathV2
                 Vector3 spawnPos = sceneView.pivot;
                 
                 // 如果有地形，尝试将路径放置在地形表面
-                var terrain = Terrain.activeTerrain;
+                var terrain = UnityEngine.Terrain.activeTerrain;
                 if (terrain != null)
                 {
                     float terrainHeight = terrain.SampleHeight(spawnPos);

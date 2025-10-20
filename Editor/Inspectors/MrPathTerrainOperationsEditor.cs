@@ -1,11 +1,13 @@
 using System.Linq;
+using __temp.MrPathV2._2.Editor.Operations;
+using __temp.MrPathV2._2.Editor.Settings;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathTerrainOperations))]
-    public class MrPathTerrainOperationsEditor : Editor
+    public class MrPathTerrainOperationsEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {
@@ -44,7 +46,7 @@ namespace MrPathV2
             // 收集所有 PathTerrainOperation 资产并填充到列表
             // 先尝试通过反射查找所有派生自 PathTerrainOperation 的具体类型（非抽象）
             var concreteTypes = UnityEditor.TypeCache.GetTypesDerivedFrom<PathTerrainOperation>()
-                .Where(t => !t.IsAbstract && t.IsClass).ToList();
+                .Where(t => t is { IsAbstract: false, IsClass: true }).ToList();
             
             // 用于存放最终结果的列表
             var foundOpsList = new System.Collections.Generic.List<PathTerrainOperation>();
@@ -93,17 +95,7 @@ namespace MrPathV2
 
         private string GetSettingsPath()
         {
-            string[] guids = AssetDatabase.FindAssets("MrPathV2.2");
-            foreach (string guid in guids)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (path.EndsWith("MrPathV2.2"))
-                {
-                    return path + "/Settings";
-                }
-            }
-            Debug.LogError("未找到 MrPathV2.2 文件夹路径！");
-            return "Assets/MrPathV2.2/Settings"; // 回退到默认路径
+            return MrPathProjectSettings.GetSettingsRootFolder();
         }
 
         /// <summary>

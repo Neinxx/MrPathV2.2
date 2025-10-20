@@ -1,11 +1,14 @@
 using System;
-using MrPathV2.Extensions;
+using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Jobs;
+using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using NativeArrayExtensions = __temp.MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Preview
 {
     /// <summary>
     /// 负责生成道路预览网格数据的纯 Job 调度器，仅负责数据计算，不涉及 Mesh 对象或渲染。
@@ -24,57 +27,57 @@ namespace MrPathV2
 
         private struct JobData : IDisposable
         {
-            public PathJobsUtility.SpineData spine;
-            public PathJobsUtility.ProfileData profile;
-            public NativeArray<float3> vertices;
-            public NativeArray<float2> uvs;
-            public NativeArray<float4> colors;
-            public NativeArray<int> indices;
-            public int segments;
-            public RecipeData recipe;
-            public float2 tiling;
-            public float4 baseColor;
-            public bool isValid;
+            public PathJobsUtility.SpineData Spine;
+            public PathJobsUtility.ProfileData Profile;
+            public NativeArray<float3> Vertices;
+            public NativeArray<float2> Uvs;
+            public NativeArray<float4> Colors;
+            public NativeArray<int> Indices;
+            public int Segments;
+            public RecipeData Recipe;
+            public float2 Tiling;
+            public float4 BaseColor;
+            public bool IsValid;
 
             public JobData(PathSpine worldSpine, PathProfile profile, Allocator allocator)
             {
-                spine = default;
-                this.profile = default;
-                vertices = default;
-                uvs = default;
-                colors = default;
-                indices = default;
-                recipe = default;
-                tiling = new float2(1, 1);
-                baseColor = new float4(1, 1, 1, 1);
+                Spine = default;
+                this.Profile = default;
+                Vertices = default;
+                Uvs = default;
+                Colors = default;
+                Indices = default;
+                Recipe = default;
+                Tiling = new float2(1, 1);
+                BaseColor = new float4(1, 1, 1, 1);
 
                 // 默认最小分段数，保证基本形态，两侧+中线
-                segments = 2;
+                Segments = 2;
                 if (profile != null)
                 {
                     // 允许用户在 PathProfile 中配置更高分段数，但做安全上限，防止误设导致性能问题
-                    const int MaxSegments = 64;
-                    segments = math.clamp(profile.crossSectionSegments, 2, MaxSegments);
+                    const int maxSegments = 64;
+                    Segments = math.clamp(profile.crossSectionSegments, 2, maxSegments);
                 }
-                isValid = false;
+                IsValid = false;
 
                 if (profile == null || worldSpine.VertexCount < 2)
                     return;
 
                 try
                 {
-                    spine = new PathJobsUtility.SpineData(worldSpine, allocator);
-                    this.profile = new PathJobsUtility.ProfileData(profile, allocator);
-                    if (!spine.IsCreated || spine.Length < 2)
+                    Spine = new PathJobsUtility.SpineData(worldSpine, allocator);
+                    this.Profile = new PathJobsUtility.ProfileData(profile, allocator);
+                    if (!Spine.IsCreated || Spine.Length < 2)
                     {
                         Dispose();
                         return;
                     }
 
-                    int spineLen = spine.Length;
-                    int totalVertices = spineLen * segments;
-                    int totalQuads = (spineLen - 1) * (segments - 1);
-                    int totalIndices = totalQuads * 6;
+                    var spineLen = Spine.Length;
+                    var totalVertices = spineLen * Segments;
+                    var totalQuads = (spineLen - 1) * (Segments - 1);
+                    var totalIndices = totalQuads * 6;
 
                     if (totalVertices <= 0 || totalIndices <= 0)
                     {
@@ -82,27 +85,24 @@ namespace MrPathV2
                         return;
                     }
 
-                    vertices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float3>(totalVertices, allocator);
-                    uvs = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float2>(totalVertices, allocator);
-                    colors = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<float4>(totalVertices, allocator);
-                    indices = MrPathV2.Extensions.NativeArrayExtensions.CreateTracked<int>(totalIndices, allocator);
+                    Vertices = NativeArrayExtensions.CreateTracked<float3>(totalVertices, allocator);
+                    Uvs = NativeArrayExtensions.CreateTracked<float2>(totalVertices, allocator);
+                    Colors = NativeArrayExtensions.CreateTracked<float4>(totalVertices, allocator);
+                    Indices = NativeArrayExtensions.CreateTracked<int>(totalIndices, allocator);
 
-                    var recipeSO = profile?.roadRecipe;
-                    if (recipeSO != null)
-                        recipe = RecipeJobsUtility.BakeRecipe(recipeSO, allocator, -1);
-                    else
-                        recipe = RecipeJobsUtility.CreateDefaultRecipe(allocator);
+                    var recipeSo = profile.roadRecipe;
+                    Recipe = recipeSo ? RecipeJobsUtility.BakeRecipe(recipeSo, allocator) : RecipeJobsUtility.CreateDefaultRecipe(allocator);
 
                     // 计算 UV Tiling，使预览网格与材质保持一致
                     try
                     {
-                        float worldWidth = profile.roadWidth;
-                        float tileSizeX = 1f;
-                        float tileSizeY = 1f;
-                        if (profile.roadRecipe != null && profile.roadRecipe.blendLayers != null && profile.roadRecipe.blendLayers.Count > 0)
+                        var worldWidth = profile.roadWidth;
+                        var tileSizeX = 1f;
+                        var tileSizeY = 1f;
+                        if (profile.roadRecipe && profile.roadRecipe.blendLayers is { Count: > 0 })
                         {
                             var firstLayer = profile.roadRecipe.blendLayers[0];
-                            if (firstLayer != null && firstLayer.terrainLayer != null)
+                            if (firstLayer != null && firstLayer.terrainLayer)
                             {
                                 var ts = firstLayer.terrainLayer.tileSize;
                                 tileSizeX = ts.x != 0 ? ts.x : 1f;
@@ -110,22 +110,22 @@ namespace MrPathV2
                             }
                         }
                         // X 方向：道路宽度对应的纹理重复次数
-                        float tilingX = worldWidth / tileSizeX;
+                        var tilingX = worldWidth / tileSizeX;
 
                         // Y 方向：道路长度对应的纹理重复次数
-                        float pathLength = 0f;
-                        for (int i = 1; i < worldSpine.VertexCount; i++)
+                        var pathLength = 0f;
+                        for (var i = 1; i < worldSpine.VertexCount; i++)
                         {
-                            pathLength += UnityEngine.Vector3.Distance(worldSpine.points[i - 1], worldSpine.points[i]);
+                            pathLength += Vector3.Distance(worldSpine.points[i - 1], worldSpine.points[i]);
                         }
-                        float tilingY = pathLength / tileSizeY;
+                        var tilingY = pathLength / tileSizeY;
                         if (tilingY <= 0f) tilingY = 1f;
                         if (tilingX <= 0f) tilingX = 1f;
-                        tiling = new float2(tilingX, tilingY);
+                        Tiling = new float2(tilingX, tilingY);
                     }
                     catch { /* 安全兜底，保持默认 tiling=(1,1) */ }
 
-                    isValid = true;
+                    IsValid = true;
                 }
                 catch (Exception ex)
                 {
@@ -136,14 +136,14 @@ namespace MrPathV2
 
             public void Dispose()
             {
-                vertices.SafeDispose();
-                uvs.SafeDispose();
-                colors.SafeDispose();
-                indices.SafeDispose();
-                spine.Dispose();
-                profile.Dispose();
-                recipe.Dispose();
-                isValid = false;
+                Vertices.SafeDispose();
+                Uvs.SafeDispose();
+                Colors.SafeDispose();
+                Indices.SafeDispose();
+                Spine.Dispose();
+                Profile.Dispose();
+                Recipe.Dispose();
+                IsValid = false;
             }
         }
 
@@ -157,7 +157,7 @@ namespace MrPathV2
         {
             DisposeJob();
             _jobData = new JobData(spine, profile, Allocator.Persistent);
-            if (!_jobData.Value.isValid)
+            if (!_jobData.Value.IsValid)
             {
                 State = GenerationState.Failed;
                 _jobData.Value.Dispose();
@@ -170,30 +170,30 @@ namespace MrPathV2
                 var jd = _jobData.Value;
                 var vJob = new GenerateVerticesJob
                 {
-                    spine = jd.spine,
-                    profile = jd.profile,
-                    vertices = jd.vertices,
-                    uvs = jd.uvs,
-                    segments = jd.segments,
-                    tiling = jd.tiling
+                    Spine = jd.Spine,
+                    Profile = jd.Profile,
+                    Vertices = jd.Vertices,
+                    Uvs = jd.Uvs,
+                    Segments = jd.Segments,
+                    Tiling = jd.Tiling
                 };
                 var iJob = new GenerateIndicesJob
                 {
-                    indices = jd.indices,
-                    segments = jd.segments,
-                    spineLength = jd.spine.Length
+                    Indices = jd.Indices,
+                    Segments = jd.Segments,
+                    SpineLength = jd.Spine.Length
                 };
                 var cJob = new GenerateVertexColorsJob
                 {
-                    spine = jd.spine,
-                    segments = jd.segments,
-                    recipe = jd.recipe,
-                    colors = jd.colors,
-                    baseColor = jd.baseColor
+                    Spine = jd.Spine,
+                    Segments = jd.Segments,
+                    Recipe = jd.Recipe,
+                    Colors = jd.Colors,
+                    BaseColor = jd.BaseColor
                 };
-                var hV = vJob.Schedule(jd.vertices.Length, 64);
-                var hI = iJob.Schedule(jd.indices.Length / 6, 64);
-                var hC = cJob.Schedule(jd.colors.Length, 64);
+                var hV = vJob.Schedule(jd.Vertices.Length, 64);
+                var hI = iJob.Schedule(jd.Indices.Length / 6, 64);
+                var hC = cJob.Schedule(jd.Colors.Length, 64);
                 _combinedHandle = JobHandle.CombineDependencies(hV, hI, hC);
                 State = GenerationState.Generating;
                 return true;
@@ -241,10 +241,10 @@ namespace MrPathV2
             return State == GenerationState.Ready;
         }
 
-        public NativeArray<float3> Vertices => _jobData?.vertices ?? default;
-        public NativeArray<float2> UVs => _jobData?.uvs ?? default;
-        public NativeArray<float4> Colors => _jobData?.colors ?? default;
-        public NativeArray<int> Indices => _jobData?.indices ?? default;
+        public NativeArray<float3> Vertices => _jobData?.Vertices ?? default;
+        public NativeArray<float2> UVs => _jobData?.Uvs ?? default;
+        public NativeArray<float4> Colors => _jobData?.Colors ?? default;
+        public NativeArray<int> Indices => _jobData?.Indices ?? default;
         public int VertexCount => Vertices.IsCreated ? Vertices.Length : 0;
         public int IndexCount => Indices.IsCreated ? Indices.Length : 0;
 

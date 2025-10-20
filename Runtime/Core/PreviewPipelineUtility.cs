@@ -1,8 +1,8 @@
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
 using UnityEngine;
 
-
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 统一 CPU/GPU/Terrain 三端的混合与采样逻辑，确保所见即所得。
@@ -71,59 +71,10 @@ namespace MrPathV2
         /// <param name="worldWidth">道路宽度，用于 EvaluateMask。</param>
         /// <param name="pathLength">道路长度，用于 EvaluateMask。</param>
         /// <returns>生成好的 Texture2D。</returns>
-        public static Texture2D BuildMaskLUT(Texture2D reuse, IList<PreviewLayerInfo> layers, float worldWidth, float pathLength = 100f)
-        {
-            const int RES = 256;
-            if (reuse == null || reuse.width != RES || reuse.height != 1 || reuse.format != TextureFormat.RGBA32)
-            {
-                if (reuse != null) Object.DestroyImmediate(reuse);
-                reuse = new Texture2D(RES, 1, TextureFormat.RGBA32, false, true)
-                {
-                    wrapMode = TextureWrapMode.Clamp,
-                    name = "MrPath_MaskLUT"
-                };
-            }
-
-            Color[] pixels = new Color[RES];
-            int layerCount = Mathf.Min(4, layers.Count);
-
-            for (int i = 0; i < RES; i++)
-            {
-                float pos = Mathf.Lerp(-1f, 1f, i / (float)(RES - 1));
-                float r = 0, g = 0, b = 0, a = 0;
-
-                for (int li = 0; li < layerCount; li++)
-                {
-                    var layer = layers[li];
-                    if (layer.opacity <= 0f) continue;
-                    float v = EvaluateMask(pos, worldWidth, pathLength, layer.mask) * layer.opacity;
-                    switch (li)
-                    {
-                        case 0: r = BlendChannel(r, v, layer.blendMode); break;
-                        case 1: g = BlendChannel(g, v, layer.blendMode); break;
-                        case 2: b = BlendChannel(b, v, layer.blendMode); break;
-                        case 3: a = BlendChannel(a, v, layer.blendMode); break;
-                    }
-                }
-
-                // 不在 GPU 预览阶段做归一化，保持与 PaintSplatmapJob 一致
-                // 归一化工作应在最终写入地形时统一进行
-
-                pixels[i] = new Color(r, g, b, a);
-            }
-
-            reuse.SetPixels(pixels);
-            reuse.Apply(false, false);
-            return reuse;
-        }
-        /// <summary>
-        /// 新的 2D Mask Atlas 生成器，内部调用 MaskAtlasGenerator。
-        /// </summary>
         public static Texture2D BuildMaskAtlas(Texture2D reuse, IList<PreviewLayerInfo> layers, float worldWidth, float pathLength = 100f, int baseResolution = 256)
         {
             return MaskAtlasGenerator.BuildMaskAtlas(reuse, layers, worldWidth, pathLength, baseResolution);
         }
 
-       
     }
 }

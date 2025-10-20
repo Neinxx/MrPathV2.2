@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Core
 {
     /// <summary>
     /// 统一计算 TerrainLayer 纹理平铺系数的工具。

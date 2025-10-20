@@ -1,25 +1,26 @@
-using UnityEngine;
-using UnityEditor;
-using System.Collections.Generic;
 using System.Linq;
+using __temp.MrPathV2._2.Editor.Terrain;
+using __temp.MrPathV2._2.Runtime.Core;
+using UnityEditor;
+using UnityEngine;
 
-namespace MrPathV2.Tests
+namespace __temp.MrPathV2._2.Editor.Tests
 {
     /// <summary>
     /// 多层WYSIWYG一致性测试
     /// 验证预览材质与最终地形结果的视觉一致性
     /// </summary>
-    public class MultiLayerWYSIWYGTest : EditorWindow
+    public class MultiLayerWysiwygTest : EditorWindow
     {
         [MenuItem("MrPath/Tests/Multi-Layer WYSIWYG Test")]
         public static void ShowWindow()
         {
-            GetWindow<MultiLayerWYSIWYGTest>("多层WYSIWYG测试");
+            GetWindow<MultiLayerWysiwygTest>("多层WYSIWYG测试");
         }
 
         private PathCreator _pathCreator;
         private StylizedRoadRecipe _recipe;
-        private Terrain _testTerrain;
+        private UnityEngine.Terrain _testTerrain;
         private bool _testInProgress;
         private string _testResults = "";
 
@@ -38,7 +39,7 @@ namespace MrPathV2.Tests
             // 测试参数
             _pathCreator = EditorGUILayout.ObjectField("Path Creator", _pathCreator, typeof(PathCreator), true) as PathCreator;
             _recipe = EditorGUILayout.ObjectField("Road Recipe", _recipe, typeof(StylizedRoadRecipe), false) as StylizedRoadRecipe;
-            _testTerrain = EditorGUILayout.ObjectField("Test Terrain", _testTerrain, typeof(Terrain), true) as Terrain;
+            _testTerrain = EditorGUILayout.ObjectField("Test Terrain", _testTerrain, typeof(UnityEngine.Terrain), true) as UnityEngine.Terrain;
 
             EditorGUILayout.Space();
 
@@ -46,7 +47,7 @@ namespace MrPathV2.Tests
             GUI.enabled = !_testInProgress && _pathCreator != null && _recipe != null && _testTerrain != null;
             if (GUILayout.Button("开始WYSIWYG测试"))
             {
-                StartWYSIWYGTest();
+                StartWysiwygTest();
             }
             GUI.enabled = true;
 
@@ -71,7 +72,7 @@ namespace MrPathV2.Tests
             }
         }
 
-        private void StartWYSIWYGTest()
+        private void StartWysiwygTest()
         {
             _testInProgress = true;
             _testResults = "";
@@ -83,8 +84,7 @@ namespace MrPathV2.Tests
                 LogResult($"开始测试 - 配方包含 {layerCount} 层");
 
                 // 检查预览材质支持
-                var previewManager = new PreviewMaterialManager();
-                bool supportsMultiLayer = CheckMultiLayerSupport(previewManager);
+                bool supportsMultiLayer = CheckMultiLayerSupport();
                 LogResult($"预览材质多层支持: {(supportsMultiLayer ? "✓" : "✗")}");
 
                 // 检查地形层数限制
@@ -92,26 +92,19 @@ namespace MrPathV2.Tests
                 LogResult($"地形层数支持: {(terrainSupportsLayers ? "✓" : "✗")}");
 
                 // 验证LayerResolver
-                bool layerResolverOK = TestLayerResolver();
-                LogResult($"LayerResolver无限制: {(layerResolverOK ? "✓" : "✗")}");
+                bool layerResolverOk = TestLayerResolver();
+                LogResult($"LayerResolver无限制: {(layerResolverOk ? "✓" : "✗")}");
 
                 // 验证PaintSplatmapJob
-                bool paintJobOK = TestPaintSplatmapJob();
-                LogResult($"PaintSplatmapJob多层支持: {(paintJobOK ? "✓" : "✗")}");
+                bool paintJobOk = TestPaintSplatmapJob();
+                LogResult($"PaintSplatmapJob多层支持: {(paintJobOk ? "✓" : "✗")}");
 
                 // 总结
-                bool allTestsPassed = supportsMultiLayer && terrainSupportsLayers && layerResolverOK && paintJobOK;
+                bool allTestsPassed = supportsMultiLayer && terrainSupportsLayers && layerResolverOk && paintJobOk;
                 LogResult($"\n=== 测试总结 ===");
                 LogResult($"整体WYSIWYG一致性: {(allTestsPassed ? "✓ 通过" : "✗ 失败")}");
 
-                if (allTestsPassed)
-                {
-                    LogResult("🎉 多层支持已成功实现！预览与最终结果应保持一致。");
-                }
-                else
-                {
-                    LogResult("⚠️ 发现问题，需要进一步调试。");
-                }
+                LogResult(allTestsPassed ? "🎉 多层支持已成功实现！预览与最终结果应保持一致。" : "⚠️ 发现问题，需要进一步调试。");
             }
             catch (System.Exception ex)
             {
@@ -123,7 +116,7 @@ namespace MrPathV2.Tests
             }
         }
 
-        private bool CheckMultiLayerSupport(PreviewMaterialManager previewManager)
+        private bool CheckMultiLayerSupport()
         {
             // 检查是否存在PathPreviewSplatMulti shader
             var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");

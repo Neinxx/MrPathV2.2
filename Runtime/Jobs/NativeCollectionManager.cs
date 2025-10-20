@@ -3,16 +3,16 @@ using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
     /// Native Collection内存管理器，提供统一的内存分配、跟踪和释放机制
     /// </summary>
     public class NativeCollectionManager : IDisposable
     {
-        private readonly List<object> _trackedCollections = new List<object>();
-        private readonly Dictionary<string, int> _allocationStats = new Dictionary<string, int>();
-        private bool _disposed = false;
+        private readonly List<object> _trackedCollections = new();
+        private readonly Dictionary<string, int> _allocationStats = new();
+        private bool _disposed;
 
         /// <summary>
         /// 创建并跟踪一个NativeArray
@@ -26,7 +26,7 @@ namespace MrPathV2
             if (_disposed)
                 throw new ObjectDisposedException(nameof(NativeCollectionManager));
 
-            var owner = MrPathV2.Memory.UnifiedMemory.Instance.RentNativeArray<T>(length, allocator, false, tag);
+            var owner = global::__temp.MrPathV2._2.Runtime.Memory.UnifiedMemory.Instance.RentNativeArray<T>(length, allocator, false, tag);
             var array = owner.Collection;
 
             _trackedCollections.Add(owner); // 跟踪包装器以便统一释放
@@ -47,7 +47,7 @@ namespace MrPathV2
             if (_disposed)
                 throw new ObjectDisposedException(nameof(NativeCollectionManager));
 
-            var owner = MrPathV2.Memory.UnifiedMemory.Instance.RentNativeList<T>(initialCapacity, allocator, tag);
+            var owner = global::__temp.MrPathV2._2.Runtime.Memory.UnifiedMemory.Instance.RentNativeList<T>(initialCapacity, allocator, tag);
             var list = owner.Collection;
 
             _trackedCollections.Add(owner);
@@ -179,7 +179,7 @@ namespace MrPathV2
                 catch (Exception ex)
                 {
                     // 记录详细的异常信息，但继续处理其他集合
-                    Debug.LogError($"Failed to dispose native collection at index {i}: {ex.Message}\nCollection Type: {collection?.GetType()?.Name ?? "Unknown"}\nStackTrace: {ex.StackTrace}");
+                    Debug.LogError($"Failed to dispose native collection at index {i}: {ex.Message}\nCollection Type: {collection.GetType().Name}\nStackTrace: {ex.StackTrace}");
                     
                     // 即使disposal失败，也要从跟踪列表中移除，避免重复尝试
                     _trackedCollections.Remove(collection);
@@ -221,10 +221,7 @@ namespace MrPathV2
         {
             get
             {
-                if (_instance == null)
-                {
-                    _instance = new NativeCollectionManager();
-                }
+                _instance ??= new NativeCollectionManager();
                 return _instance;
             }
         }

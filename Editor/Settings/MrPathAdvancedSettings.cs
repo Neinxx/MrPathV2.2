@@ -1,10 +1,12 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Settings/MrPathAdvancedSettings.cs
+
+
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Settings
 {
     /// <summary>
-    /// 将工厂注入、策略覆盖等不常用但重要的设置隔离存放。
+    /// 将工厂注入、策略覆盖等不常用但重要地设置隔离存放。
     /// </summary>
     public class MrPathAdvancedSettings : ScriptableObject
     {

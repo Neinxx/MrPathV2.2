@@ -1,9 +1,9 @@
-
 using System;
 using System.Collections.Generic;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Runtime.Preview
 {
 
     /// <summary>
@@ -12,6 +12,19 @@ namespace MrPathV2
     /// </summary>
     public sealed class PreviewMaterialManager : IDisposable
     {
+        private static readonly int LayerCount = Shader.PropertyToID("_LayerCount");
+        private static readonly int PreviewAlpha = Shader.PropertyToID("_PreviewAlpha");
+        private static readonly int MasterOpacity = Shader.PropertyToID("_MasterOpacity");
+        private static readonly int EdgeFadeStart = Shader.PropertyToID("_EdgeFadeStart");
+        private static readonly int EdgeFadeEnd = Shader.PropertyToID("_EdgeFadeEnd");
+        private static readonly int MaskAtlas = Shader.PropertyToID("_MaskAtlas");
+        private static readonly int AtlasInvHeight = Shader.PropertyToID("_AtlasInvHeight");
+        private static readonly int LayerTex = Shader.PropertyToID("_LayerTex");
+        private static readonly int LayerTiling = Shader.PropertyToID("_LayerTiling");
+        private static readonly int LayerTint = Shader.PropertyToID("_LayerTint");
+        private static readonly int LayerOpacity = Shader.PropertyToID("_LayerOpacity");
+        private static readonly int Mode = Shader.PropertyToID("_BlendMode");
+
         private enum ShaderFlavor { Splat, Stylized, Unknown }
 
         private Material _instance;
@@ -20,7 +33,7 @@ namespace MrPathV2
         private bool _dirty = true;
 
         // Cached combined mask LUT (RGBA channels for up to 4 layers)
-        private Texture2D _maskLUT;
+        // private Texture2D _maskLUT;
         // Future: cached 2D mask atlas
         private Texture2D _maskAtlas;
 
@@ -76,18 +89,18 @@ namespace MrPathV2
         private void ApplySplat(PathProfile profile, float alpha)
         {
             var recipe = profile.roadRecipe;
-            int layerCount = recipe?.blendLayers?.Count ?? 0;
+            var layerCount = recipe?.blendLayers?.Count ?? 0;
             
             // 检测是否使用多层着色器
-            bool isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
-            int maxLayers = isMultiLayerShader ? 16 : 4;
+            var isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
+            var maxLayers = isMultiLayerShader ? 16 : 4;
             
             // 设置所有层（最多16层），确保与StylizedRoadRecipe配方一致
             for (var i = 0; i < maxLayers; i++)
             {
                 TerrainLayer layer = null;
-                float layerOpacity = 0f;
-                BlendMode blendMode = BlendMode.Normal;
+                var layerOpacity = 0f;
+                var blendMode = BlendMode.Normal;
                 
                 if (recipe?.blendLayers != null && i < recipe.blendLayers.Count)
                 {
@@ -108,202 +121,95 @@ namespace MrPathV2
             }
 
             // 设置层数
-            _instance.SetInt("_LayerCount", layerCount);
+            _instance.SetInt(LayerCount, layerCount);
 
-            float master = profile.roadRecipe?.masterOpacity ?? 1f;
-            _instance.SetFloat("_PreviewAlpha", Mathf.Clamp01(alpha * master));
-            _instance.SetFloat("_MasterOpacity", master);
-            _instance.SetFloat("_EdgeFadeStart", 0.7f);
-            _instance.SetFloat("_EdgeFadeEnd", 1f);
-
-            // Calculate across-scale (1/tilingX) so shader can map uv.x back to 0..1 within road width
-            float acrossScale = 1f;
-            if (recipe?.blendLayers != null && recipe.blendLayers.Count > 0)
-            {
-                Vector2 firstTiling = LayerTilingUtility.CalcLayerTiling(profile.roadWidth, recipe.blendLayers[0]?.terrainLayer);
-                if (!float.IsInfinity(firstTiling.x) && firstTiling.x > 1e-4f)
-                    acrossScale = 1f / firstTiling.x;
-            }
-            _instance.SetFloat("_AcrossScale", acrossScale);
-
-            // 如果是多层着色器，设置控制纹理
-            if (isMultiLayerShader)
-            {
-                SetupControlTextures(profile);
-            }
+            var master = profile.roadRecipe?.masterOpacity ?? 1f;
+            _instance.SetFloat(PreviewAlpha, Mathf.Clamp01(alpha * master));
+            _instance.SetFloat(MasterOpacity, master);
+            _instance.SetFloat(EdgeFadeStart, 0.7f);
+            _instance.SetFloat(EdgeFadeEnd, 1f);
 
             // Generate and bind LUT so shader can sample accurate weights
-            SetupMaskLUT(profile, 100f); // 使用默认路径长度，实际应该从PathSpine获取
+            SetupMaskTextures(profile); // 使用默认路径长度，实际应该从PathSpine获取
         }
 
         /// <summary>
-        /// Generates or updates the 1-px height RGBA LUT that stores the per-layer mask weights
-        /// (up to 4 layers for legacy shader, unlimited for multi-layer shader). This mimics the CPU preview and job logic so that the GPU preview
-        /// matches what will be painted onto terrain.
+        /// Generates or updates the mask atlas texture that stores per-layer mask weights.
+        /// This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
         /// </summary>
-        private void SetupMaskLUT(PathProfile profile, float pathLength = 100f)
+        private void SetupMaskTextures(PathProfile profile, float pathLength = 100f)
         {
             var recipe = profile.roadRecipe;
-            if (recipe == null || recipe.blendLayers == null)
+            if (recipe == null || recipe.blendLayers == null || recipe.blendLayers.Count == 0)
             {
-                _instance.SetTexture("_MaskLUT", Texture2D.whiteTexture);
+                // 无有效图层则绑定白纹理，确保着色器能正常工作
+                if (_instance.HasProperty(MaskAtlas))
+                {
+                    _instance.SetTexture(MaskAtlas, Texture2D.whiteTexture);
+                    _instance.SetFloat(AtlasInvHeight, 1f);
+                }
                 return;
             }
 
-            // 检测是否使用多层着色器
-            bool isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
-            int maxLayers = isMultiLayerShader ? recipe.blendLayers.Count : 4;
+            // 收集层信息（不限制层数）
+            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new(recipe.blendLayers.Count);
+            var worldWidth = Mathf.Max(0.1f, profile.roadWidth);
 
-            // Gather layer infos
-            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new List<PreviewPipelineUtility.PreviewLayerInfo>(maxLayers);
-            float worldWidth = Mathf.Max(0.1f, profile.roadWidth);
-
-            for (int i = 0; i < recipe.blendLayers.Count && layerInfos.Count < maxLayers; i++)
+            foreach (var blendLayer in recipe.blendLayers)
             {
-                var blendLayer = recipe.blendLayers[i];
-                if (blendLayer == null || !blendLayer.enabled) continue;
+                if (blendLayer is not { enabled: true }) continue;
+                var tLayer = blendLayer.terrainLayer;
+                if (tLayer?.diffuseTexture is not { } tex) continue;
 
-                TerrainLayer tLayer = blendLayer.terrainLayer;
-                // 纹理必须存在才能被 GPU 正确采样
-                Texture2D tex = tLayer?.diffuseTexture as Texture2D;
-                if (tex == null) continue;
-
-                Vector2 tiling = PreviewPipelineUtility.CalcLayerTiling(worldWidth, tLayer);
-
+                var tiling = PreviewPipelineUtility.CalcLayerTiling(worldWidth, tLayer);
                 var info = new PreviewPipelineUtility.PreviewLayerInfo(
                     tex,
                     tiling,
                     Vector2.zero,
                     Color.white,
-                    Mathf.Clamp01(blendLayer.opacity * profile.roadRecipe.masterOpacity),
+                    Mathf.Clamp01(blendLayer.opacity * recipe.masterOpacity),
                     blendLayer.blendMode,
                     blendLayer.GetActiveMask());
-
                 layerInfos.Add(info);
             }
 
-            // 如果没有有效层，直接使用白纹理以避免着色器异常
             if (layerInfos.Count == 0)
             {
-                _instance.SetTexture("_MaskLUT", Texture2D.whiteTexture);
-                _instance.SetTexture("_MaskAtlas", Texture2D.whiteTexture);
-                _instance.SetFloat("_AtlasInvHeight", 1f);
+                // Fallback to white texture when nothing to draw
+                _instance.SetTexture(MaskAtlas, Texture2D.whiteTexture);
+                _instance.SetFloat(AtlasInvHeight, 1f);
                 return;
             }
 
-            // ---- 生成 1D LUT（旧兼容） ----
-            _maskLUT = PreviewPipelineUtility.BuildMaskLUT(_maskLUT, layerInfos, worldWidth, pathLength);
-            _instance.SetTexture("_MaskLUT", _maskLUT);
-            if (_instance.HasProperty("_MaskLUT"))
-                _instance.SetTexture("_MaskLUT", _maskLUT);
-
-            // ---- 生成 2D Atlas（新实现） ----
+            // 生成或更新 MaskAtlas
             _maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(_maskAtlas, layerInfos, worldWidth, pathLength);
-            _instance.SetTexture("_MaskAtlas", _maskAtlas);
-
-            if (_instance.HasProperty("_MaskAtlas"))
-            {
-                _instance.SetTexture("_MaskAtlas", _maskAtlas);
-                _instance.SetFloat("_AtlasInvHeight", _maskAtlas != null ? 1f / _maskAtlas.height : 1f);
-            }
-        }
-
-        /// <summary>
-        /// 为多层着色器设置控制纹理（模拟Unity地形的Control贴图）
-        /// </summary>
-        private void SetupControlTextures(PathProfile profile)
-        {
-            var recipe = profile.roadRecipe;
-            if (recipe?.blendLayers == null)
-            {
-                // 设置默认控制纹理
-                _instance.SetTexture("_Control0", Texture2D.redTexture);
-                _instance.SetTexture("_Control1", Texture2D.blackTexture);
-                _instance.SetTexture("_Control2", Texture2D.blackTexture);
-                _instance.SetTexture("_Control3", Texture2D.blackTexture);
-                return;
-            }
-
-            // 创建临时控制纹理来模拟地形权重
-            // 这里简化处理，实际应该根据路径的UV坐标和混合遮罩生成权重
-            var control0 = CreateControlTexture(recipe.blendLayers, 0, 4);
-            var control1 = CreateControlTexture(recipe.blendLayers, 4, 8);
-            var control2 = CreateControlTexture(recipe.blendLayers, 8, 12);
-            var control3 = CreateControlTexture(recipe.blendLayers, 12, 16);
-
-            _instance.SetTexture("_Control0", control0 ?? Texture2D.redTexture);
-            _instance.SetTexture("_Control1", control1 ?? Texture2D.blackTexture);
-            _instance.SetTexture("_Control2", control2 ?? Texture2D.blackTexture);
-            _instance.SetTexture("_Control3", control3 ?? Texture2D.blackTexture);
-        }
-
-        /// <summary>
-        /// 创建控制纹理，每个RGBA通道对应一层
-        /// </summary>
-        private Texture2D CreateControlTexture(System.Collections.Generic.List<BlendLayer> layers, int startIndex, int endIndex)
-        {
-            bool hasAnyLayer = false;
-            for (int i = startIndex; i < endIndex && i < layers.Count; i++)
-            {
-                if (layers[i] != null && layers[i].enabled && layers[i].terrainLayer?.diffuseTexture != null)
-                {
-                    hasAnyLayer = true;
-                    break;
-                }
-            }
-
-            if (!hasAnyLayer) return null;
-
-            // 创建简单的1x1控制纹理
-            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            Color color = Color.black;
-
-            // 设置每个通道的权重（简化处理，实际应该基于遮罩计算）
-            for (int i = startIndex; i < endIndex && i < layers.Count; i++)
-            {
-                var layer = layers[i];
-                if (layer != null && layer.enabled && layer.terrainLayer?.diffuseTexture != null)
-                {
-                    float weight = layer.opacity;
-                    int channel = i - startIndex;
-                    switch (channel)
-                    {
-                        case 0: color.r = weight; break;
-                        case 1: color.g = weight; break;
-                        case 2: color.b = weight; break;
-                        case 3: color.a = weight; break;
-                    }
-                }
-            }
-
-            tex.SetPixel(0, 0, color);
-            tex.Apply();
-            tex.hideFlags = HideFlags.HideAndDontSave;
-            return tex;
+            if (!_instance.HasProperty(MaskAtlas)) return;
+            _instance.SetTexture(MaskAtlas, _maskAtlas ?? Texture2D.whiteTexture);
+            _instance.SetFloat(AtlasInvHeight, _maskAtlas && _maskAtlas.height > 0 ? 1f / _maskAtlas.height : 1f);
         }
 
         private void ApplyStylized(PathProfile profile)
         {
             var layer = profile.roadRecipe?.blendLayers?[0]?.terrainLayer;
-            if (layer?.diffuseTexture != null)
+            if (layer?.diffuseTexture)
             {
-                _instance.SetTexture("_LayerTex", layer.diffuseTexture);
+                _instance.SetTexture(LayerTex, layer.diffuseTexture);
                 var sz = layer.tileSize;
                 if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
                 if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
-                Vector2 tiling = LayerTilingUtility.CalcLayerTiling(profile.roadWidth, layer);
-                _instance.SetVector("_LayerTiling", new Vector4(tiling.x, tiling.y, 0, 0));
-                _instance.SetColor("_LayerTint", layer.specular); // assuming specular used as tint currently
+                var tiling = LayerTilingUtility.CalcLayerTiling(profile.roadWidth, layer);
+                _instance.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
+                _instance.SetColor(LayerTint, layer.specular); // assuming specular used as tint currently
             }
             else
             {
-                _instance.SetTexture("_LayerTex", Texture2D.whiteTexture);
-                _instance.SetVector("_LayerTiling", Vector4.one);
+                _instance.SetTexture(LayerTex, Texture2D.whiteTexture);
+                _instance.SetVector(LayerTiling, Vector4.one);
             }
 
-            float master = profile.roadRecipe?.masterOpacity ?? 1f;
-            _instance.SetFloat("_LayerOpacity", master);
-            _instance.SetFloat("_BlendMode", 0f);
+            var master = profile.roadRecipe?.masterOpacity ?? 1f;
+            _instance.SetFloat(LayerOpacity, master);
+            _instance.SetFloat(Mode, 0f);
         }
 
         private void SetLayer(int index, TerrainLayer layer, float worldWidth)
@@ -311,7 +217,7 @@ namespace MrPathV2
             if (layer?.diffuseTexture != null)
             {
                 _instance.SetTexture($"_Layer{index}_Texture", layer.diffuseTexture);
-                Vector2 tiling = LayerTilingUtility.CalcLayerTiling(worldWidth, layer);
+                var tiling = LayerTilingUtility.CalcLayerTiling(worldWidth, layer);
                 _instance.SetVector($"_Layer{index}_Tiling", new Vector4(tiling.x, tiling.y, 0, 0));
                 _instance.SetColor($"_Layer{index}_Color", Color.white); // 使用白色保持与地形贴图一致
             }
@@ -343,7 +249,7 @@ namespace MrPathV2
 #endif
             unchecked
             {
-                int hash = 17;
+                var hash = 17;
                 hash = hash * 31 + (profile?.GetHashCode() ?? 0);
                 hash = hash * 31 + (template?.GetHashCode() ?? 0);
                 hash = hash * 31 + alpha.GetHashCode();
@@ -354,7 +260,7 @@ namespace MrPathV2
 #if UNITY_EDITOR
                 if (profile?.roadRecipe != null)
                 {
-                    string json = UnityEditor.EditorJsonUtility.ToJson(profile.roadRecipe);
+                    var json = UnityEditor.EditorJsonUtility.ToJson(profile.roadRecipe);
                     hash = hash * 31 + json.GetHashCode();
                 }
 #else
@@ -371,11 +277,6 @@ namespace MrPathV2
             {
                 UnityEngine.Object.DestroyImmediate(_instance);
                 _instance = null;
-            }
-            if (_maskLUT != null)
-            {
-                UnityEngine.Object.DestroyImmediate(_maskLUT);
-                _maskLUT = null;
             }
             if (_maskAtlas != null)
             {

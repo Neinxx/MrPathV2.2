@@ -1,7 +1,9 @@
-// 文件路径: neinxx/mrpathv2.2/MrPathV2.2-2.31/Editor/Settings/MrPathAppearanceDefaults.cs
+
+
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2._2.Editor.Settings
 {
     /// <summary>
     /// 负责路径的默认视觉表现，包括Profile和预览材质。

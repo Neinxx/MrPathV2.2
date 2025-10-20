@@ -1,14 +1,14 @@
 using System;
+using __temp.MrPathV2._2.Runtime.Jobs;
 using Unity.Collections;
 using UnityEngine;
-using MrPathV2;
 
-namespace MrPathV2.Tests
+namespace __temp.MrPathV2._2.Editor.Tests
 {
     /// <summary>
     /// 测试修复后的NativeCollectionManager disposal流程
     /// </summary>
-    public class TestDisposalFix
+    public abstract class TestDisposalFix
     {
         [UnityEditor.MenuItem("MrPathV2/Test Disposal Fix")]
         public static void RunTest()
@@ -82,7 +82,7 @@ namespace MrPathV2.Tests
             }
             finally
             {
-                manager?.Dispose();
+                manager.Dispose();
             }
         }
         
@@ -98,14 +98,14 @@ namespace MrPathV2.Tests
                 manager.ForceCleanup();
                 
                 // 创建后立即清理
-                var array = manager.CreateNativeArray<float>(10, Allocator.Persistent, "TestArray");
+                manager.CreateNativeArray<float>(10, Allocator.Persistent, "TestArray");
                 manager.ForceCleanup();
                 
                 Debug.Log("✅ Null和空集合处理测试通过");
             }
             finally
             {
-                manager?.Dispose();
+                manager.Dispose();
             }
         }
     }
