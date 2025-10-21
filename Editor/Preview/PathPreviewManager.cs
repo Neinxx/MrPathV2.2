@@ -17,7 +17,8 @@ namespace __temp.MrPathV2._2.Editor.Preview
         readonly float _alpha;
 
         bool _active = true;
-        bool _dirty = true;
+        bool _spineDirty = true; // replaced previous _dirty
+        bool _meshDirty = true;
         bool _materialsDirty = true;
 
         readonly List<Material> _materials = new();
@@ -29,6 +30,7 @@ namespace __temp.MrPathV2._2.Editor.Preview
 
         readonly PreviewRenderingOptimizer _optimizer = new();
         readonly PreviewLineRenderer _line = new();
+        private MaterialPropertyBlock _singleMpb; // 缓存单材质渲染时的属性块，避免重复分配
 
         const float MaxRenderDistance = 1000f;
         const float LodThreshold = 100f;
@@ -47,32 +49,57 @@ namespace __temp.MrPathV2._2.Editor.Preview
         }
 
         public void SetActive(bool value) => _active = value;
-        public void MarkDirty() => _dirty = true;
+        public void MarkSpineDirty() { _spineDirty = true; }
+        // 网格只有在曲线(spine)发生变动时才重建，其他参数变化（如材质）无需重绘网格。
+        public void MarkMeshDirty() { _meshDirty = true; }
         public void MarkMaterialsDirty() => _materialsDirty = true;
+        // Backwards compatibility
+        public void MarkDirty() => MarkSpineDirty();
 
         /// <summary>Main update entry called from editor each frame.</summary>
         public void Update(PathCreator creator, IHeightProvider heightProvider)
         {
             if (!_active || creator?.profile == null) return;
 
-            var profileHash = CalcProfileHash(creator.profile);
-            if (_materialsDirty || profileHash != _lastProfileHash)
+            // 始终尝试更新材质管理器：内部 CalculateHash 会确保仅在参数变化时才重建材质，性能开销可忽略。
+            _matMgr.Update(creator.profile, _template, _alpha);
+            if (_materialsDirty)
             {
-                _matMgr.Update(creator.profile, _template, _alpha);
                 RefreshMaterialCache();
                 _materialsDirty = false;
-                _lastProfileHash = profileHash;
+            }
+            else
+            {
+                // 如果内嵌 Mask 等资源变更导致材质实例被替换，也需要刷新缓存；通过检查引用变化实现。
+                int currentMatCount = _matMgr.GetRenderMaterials()?.Count ?? 0;
+                if (currentMatCount != _materials.Count)
+                {
+                    RefreshMaterialCache();
+                }
             }
 
-            if (_dirty)
+            // 更新用于判断 Profile 引用变化的哈希（不再决定是否调用 Update，仅用于脏标记优化）
+            _lastProfileHash = CalcProfileHash(creator.profile);
+
+            if (_spineDirty)
             {
                 LatestSpine = PathSampler.SamplePath(creator, heightProvider);
                 if (LatestSpine.HasValue)
                 {
                     _generator.StartMeshGeneration(LatestSpine.Value, creator.profile);
                 }
-                _dirty = false;
+                _spineDirty = false;
+                _meshDirty = false; // spine change implies mesh change
             }
+            else if (_meshDirty)
+            {
+                if (LatestSpine.HasValue)
+                {
+                    _generator.StartMeshGeneration(LatestSpine.Value, creator.profile);
+                }
+                _meshDirty = false;
+            }
+            // 移除仅因非曲线变化而触发的网格重建逻辑，避免频繁重绘。
 
             if (_generator.TryFinalizeMesh() || (_generator.PreviewMesh?.vertexCount ?? 0) > 0 && _generator.ForceFinalizeMesh())
             {
@@ -119,8 +146,11 @@ namespace __temp.MrPathV2._2.Editor.Preview
             }
             else
             {
-                Shader.SetGlobalFloat(PreviewAlpha, _alpha);
-                Graphics.DrawMesh(_mesh, matrix, _materials[0], 0, cam);
+                // 使用 MaterialPropertyBlock 而非全局 Shader 属性，避免因其他编辑器 UI 绘制修改全局状态导致闪烁。
+                if (_singleMpb == null)
+                    _singleMpb = new MaterialPropertyBlock();
+                _singleMpb.SetFloat(PreviewAlpha, _alpha);
+                Graphics.DrawMesh(_mesh, matrix, _materials[0], 0, cam, 0, _singleMpb);
             }
         }
 

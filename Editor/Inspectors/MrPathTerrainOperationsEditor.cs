@@ -24,8 +24,8 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private void CreateAndAssignDefaultAsset()
         {
             var targetObject = (MrPathTerrainOperations)target;
-            string settingsPath = GetSettingsPath();
-            string path = settingsPath + "/TerrainOperations/DefaultTerrainOperation.asset";
+            var settingsPath = GetSettingsPath();
+            var path = settingsPath + "/TerrainOperations/DefaultTerrainOperation.asset";
 
             // 检查是否已经有资产
             if (targetObject == null)
@@ -52,17 +52,17 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             var foundOpsList = new System.Collections.Generic.List<PathTerrainOperation>();
             
             // 目标文件夹：将所有操作资产集中放在 TerrainOperations 子文件夹下
-            string opsFolder = settingsPath + "/TerrainOperations/Operations";
+            var opsFolder = settingsPath + "/TerrainOperations/Operations";
             EnsureFolderExists(opsFolder);
             
             foreach (var type in concreteTypes)
             {
                 // 先尝试查找已经存在的资产
-                string[] guids = AssetDatabase.FindAssets($"t:{type.Name}");
+                var guids = AssetDatabase.FindAssets($"t:{type.Name}");
                 PathTerrainOperation opAsset = null;
                 if (guids.Length > 0)
                 {
-                    string assetPath = AssetDatabase.GUIDToAssetPath(guids[0]);
+                    var assetPath = AssetDatabase.GUIDToAssetPath(guids[0]);
                     opAsset = AssetDatabase.LoadAssetAtPath(assetPath, type) as PathTerrainOperation;
                 }
             
@@ -70,7 +70,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 if (opAsset == null)
                 {
                     opAsset = ScriptableObject.CreateInstance(type) as PathTerrainOperation;
-                    string assetPath = $"{opsFolder}/{type.Name}.asset";
+                    var assetPath = $"{opsFolder}/{type.Name}.asset";
                     AssetDatabase.CreateAsset(opAsset, assetPath);
                     Debug.Log($"已创建缺失的 PathTerrainOperation 资产: {assetPath}");
                 }
@@ -105,8 +105,8 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             if (AssetDatabase.IsValidFolder(folderPath)) return;
 
-            string parent = System.IO.Path.GetDirectoryName(folderPath);
-            string folderName = System.IO.Path.GetFileName(folderPath);
+            var parent = System.IO.Path.GetDirectoryName(folderPath);
+            var folderName = System.IO.Path.GetFileName(folderPath);
             if (!AssetDatabase.IsValidFolder(parent))
             {
                 EnsureFolderExists(parent);

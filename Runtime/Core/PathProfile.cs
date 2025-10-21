@@ -40,6 +40,42 @@ namespace __temp.MrPathV2._2.Runtime.Core
         private const int MIN_SEGMENTS = 3;
         private const int MAX_SEGMENTS = 64;
 
+        public event Action ProfileModified;
+        
+        private StylizedRoadRecipe _subscribedRecipe;
+
+        private void OnEnable()
+        {
+            SubscribeToRecipe();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeFromRecipe();
+        }
+
+        private void SubscribeToRecipe()
+        {
+            UnsubscribeFromRecipe(); // 确保不会重复订阅
+
+            if (!roadRecipe) return;
+            _subscribedRecipe = roadRecipe;
+            _subscribedRecipe.RecipeChanged += OnRecipeChanged;
+        }
+
+        private void UnsubscribeFromRecipe()
+        {
+            if (!_subscribedRecipe) return;
+            _subscribedRecipe.RecipeChanged -= OnRecipeChanged;
+            _subscribedRecipe = null;
+        }
+
+        private void OnRecipeChanged()
+        {
+            // 当关联的Recipe发生变化时，触发Profile的修改事件
+            ProfileModified?.Invoke();
+        }
+
         private void OnValidate()
         {
             // Keep generated parameters within safe range
@@ -54,6 +90,12 @@ namespace __temp.MrPathV2._2.Runtime.Core
             // Ensure falloff curve starts at 0->1 and ends at 1->0
             EnsureKey(ref falloffShape, 0f, 1f);
             EnsureKey(ref falloffShape, 1f, 0f);
+
+            // 重新订阅Recipe（可能在Inspector中更换了Recipe引用）
+            SubscribeToRecipe();
+
+            // 新增：触发配置文件修改事件
+            ProfileModified?.Invoke();
         }
 
         private static void EnsureKey(ref AnimationCurve curve, float time, float value)

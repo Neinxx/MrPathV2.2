@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 408a5360af682eb429cab1ff8532d43f, type: 3}
   m_Name: PathStrategyRegistry
   m_EditorClassIdentifier: 
-  _strategyEntries:
+  strategyEntries:
   - type: 0
     strategy: {fileID: 11400000, guid: ef9ab77836e51104cb4cb3dbe8ccda13, type: 2}
   - type: 1

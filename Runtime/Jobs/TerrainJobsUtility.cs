@@ -50,13 +50,13 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 return false;
 
             // Ray casting算法，增加数值稳定性
-            bool inside = false; 
-            int n = contour.Length;
+            var inside = false; 
+            var n = contour.Length;
             
             for (int i = 0, j = n - 1; i < n; j = i++)
             {
-                float2 pi = contour[i]; 
-                float2 pj = contour[j];
+                var pi = contour[i]; 
+                var pj = contour[j];
                 
                 // 验证轮廓点的有效性
                 if (!IsValidPoint(pi) || !IsValidPoint(pj))
@@ -65,14 +65,14 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 }
                 
                 // 增强数值稳定性的交点检测
-                bool intersect = ((pi.y > p.y) != (pj.y > p.y));
+                var intersect = ((pi.y > p.y) != (pj.y > p.y));
                 if (intersect)
                 {
-                    float denominator = pj.y - pi.y;
+                    var denominator = pj.y - pi.y;
                     // 避免除零，使用更大的epsilon值提高稳定性
                     if (math.abs(denominator) > 1e-6f)
                     {
-                        float intersectionX = (pj.x - pi.x) * (p.y - pi.y) / denominator + pi.x;
+                        var intersectionX = (pj.x - pi.x) * (p.y - pi.y) / denominator + pi.x;
                         if (p.x < intersectionX)
                         {
                             inside = !inside;
@@ -114,12 +114,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 return new float4(0, 0, 0, 0);
             }
 
-            float2 min = new float2(float.MaxValue, float.MaxValue);
-            float2 max = new float2(float.MinValue, float.MinValue);
+            var min = new float2(float.MaxValue, float.MaxValue);
+            var max = new float2(float.MinValue, float.MinValue);
 
-            for (int i = 0; i < contour.Length; i++)
+            for (var i = 0; i < contour.Length; i++)
             {
-                float2 point = contour[i];
+                var point = contour[i];
                 if (IsValidPoint(point))
                 {
                     min = math.min(min, point);
@@ -154,8 +154,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 time = 0f; // 无效时间，使用默认值
             }
 
-            int start = slice.x; 
-            int count = slice.y;
+            var start = slice.x; 
+            var count = slice.y;
             
             // 验证slice参数
             if (start < 0 || count <= 0 || start >= allKeys.Length)
@@ -164,7 +164,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             }
 
             // 确保不会越界
-            int actualCount = math.min(count, allKeys.Length - start);
+            var actualCount = math.min(count, allKeys.Length - start);
             if (actualCount <= 0) 
                 return 0f;
             
@@ -174,10 +174,10 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 return math.isnan(key.value) || math.isinf(key.value) ? 0f : key.value;
             }
 
-            int end = start + actualCount - 1;
+            var end = start + actualCount - 1;
             
             // 在区间内查找相邻关键帧
-            for (int i = start; i < end; i++)
+            for (var i = start; i < end; i++)
             {
                 var k1 = allKeys[i]; 
                 var k2 = allKeys[i + 1];
@@ -193,11 +193,11 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 
                 if (k1.time <= time && k2.time >= time)
                 {
-                    float dt = k2.time - k1.time;
+                    var dt = k2.time - k1.time;
                     if (dt <= 1e-6f) 
                         return k1.value;
                     
-                    float t = (time - k1.time) / dt;
+                    var t = (time - k1.time) / dt;
                     t = math.saturate(t); // 确保插值参数在有效范围内
                     return math.lerp(k1.value, k2.value, t);
                 }
@@ -232,8 +232,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 normalizedDist = 0f; // 无效距离，使用默认值
             }
 
-            int start = slice.x; 
-            int count = slice.y;
+            var start = slice.x; 
+            var count = slice.y;
             
             // 验证参数有效性
             if (stripResolution <= 1 || count <= 0 || start < 0 || start >= strips.Length)
@@ -242,12 +242,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             }
 
             // 确保不会越界
-            int actualCount = math.min(count, strips.Length - start);
+            var actualCount = math.min(count, strips.Length - start);
             if (actualCount <= 0)
                 return 0f;
 
             // 限制stripResolution不超过实际可用数据
-            int effectiveResolution = math.min(stripResolution, actualCount);
+            var effectiveResolution = math.min(stripResolution, actualCount);
             if (effectiveResolution <= 1)
             {
                 var value = strips[start];
@@ -255,19 +255,19 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             }
 
             // 归一化到 [0, effectiveResolution-1]
-            float fIndex = math.saturate(normalizedDist) * (effectiveResolution - 1);
-            int idxA = math.clamp((int)math.floor(fIndex), 0, effectiveResolution - 1);
-            int idxB = math.clamp(idxA + 1, 0, effectiveResolution - 1);
+            var fIndex = math.saturate(normalizedDist) * (effectiveResolution - 1);
+            var idxA = math.clamp((int)math.floor(fIndex), 0, effectiveResolution - 1);
+            var idxB = math.clamp(idxA + 1, 0, effectiveResolution - 1);
             
             // 确保索引不会越界
             idxA = math.min(idxA, actualCount - 1);
             idxB = math.min(idxB, actualCount - 1);
             
-            float w = fIndex - idxA;
+            var w = fIndex - idxA;
             w = math.saturate(w); // 确保权重在有效范围内
             
-            float a = strips[start + idxA];
-            float b = strips[start + idxB];
+            var a = strips[start + idxA];
+            var b = strips[start + idxB];
             
             // 验证采样值的有效性
             if (math.isnan(a) || math.isinf(a)) a = 0f;
@@ -288,42 +288,72 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             if (math.isnan(layerValue) || math.isinf(layerValue)) layerValue = 0f;
 
             // 简单叠加并限制最大值
-            float result = math.saturate(baseValue + layerValue);
+            var result = math.saturate(baseValue + layerValue);
             return result;
         }
         
         /// <summary>
         /// 在 Job 中从 2D MaskAtlas 采样遮罩值。
-        /// atlas: 按行存储，每行对应一层，长度 = atlasWidth * atlasHeight。
-        /// layerIndex: 要采样的层索引 (0-based)。
-        /// normalizedDist: 0..1，横向归一化距离（0=道路中心，1=边缘）。
+        /// atlas: 行优先存储，行数 = layerCount * pathSamples，列数 = atlasWidth。
+        /// layerIndex: 遮罩层索引 (0-based)
+        /// normalizedDist: 0..1 横向距离 (中心0, 边缘1)
+        /// pathProgress: 0..1 沿路径的进度 (0=起点,1=终点)
+        /// pathSamples: atlas 中纵向采样行数。
         /// </summary>
+        public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int pathSamples, int layerIndex, float normalizedDist, float pathProgress)
+        {
+            if (!atlas.IsCreated || atlas.Length == 0 || atlasWidth <= 0 || pathSamples <= 0)
+                return 0f;
+
+            // 先做参数校验
+            normalizedDist = (math.isnan(normalizedDist) || math.isinf(normalizedDist)) ? 0f : normalizedDist;
+            pathProgress = (math.isnan(pathProgress) || math.isinf(pathProgress)) ? 0.5f : pathProgress;
+
+            var layerRowStart = layerIndex * pathSamples;
+            var atlasHeight = atlas.Length / atlasWidth;
+            if (layerRowStart < 0 || layerRowStart >= atlasHeight)
+                return 0f;
+
+            // 计算双线性插值坐标
+            var maxX = atlasWidth - 1;
+            var maxY = pathSamples - 1;
+
+            var fX = math.saturate(normalizedDist) * maxX;
+            var xA = (int)math.floor(fX);
+            var xB = math.min(xA + 1, maxX);
+            var wx = fX - xA;
+
+            var fY = math.saturate(pathProgress) * maxY;
+            var yA = (int)math.floor(fY);
+            var yB = math.min(yA + 1, maxY);
+            var wy = fY - yA;
+
+            // 取四个邻居
+            int rowAOffset = (layerRowStart + yA) * atlasWidth;
+            int rowBOffset = (layerRowStart + yB) * atlasWidth;
+
+            var v00 = atlas[rowAOffset + xA];
+            var v10 = atlas[rowAOffset + xB];
+            var v01 = atlas[rowBOffset + xA];
+            var v11 = atlas[rowBOffset + xB];
+
+            // 处理无效值
+            if (math.isnan(v00) || math.isinf(v00)) v00 = 0f;
+            if (math.isnan(v10) || math.isinf(v10)) v10 = 0f;
+            if (math.isnan(v01) || math.isinf(v01)) v01 = 0f;
+            if (math.isnan(v11) || math.isinf(v11)) v11 = 0f;
+
+            // 双线性插值
+            var v0 = math.lerp(v00, v10, wx);
+            var v1 = math.lerp(v01, v11, wx);
+            var v = math.lerp(v0, v1, wy);
+            return v;
+        }
+
+        // 向后兼容的一维版本：假设 pathSamples==1 ，pathProgress=0.5
         public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int layerIndex, float normalizedDist)
         {
-            if (!atlas.IsCreated || atlas.Length == 0 || atlasWidth <= 0)
-                return 0f;
-        
-            if (math.isnan(normalizedDist) || math.isinf(normalizedDist))
-                normalizedDist = 0f;
-        
-            int atlasHeight = atlas.Length / atlasWidth;
-            if (layerIndex < 0 || layerIndex >= atlasHeight)
-                return 0f;
-        
-            int maxX = atlasWidth - 1;
-            float fX = math.saturate(normalizedDist) * maxX;
-            int xA = (int)math.floor(fX);
-            int xB = math.min(xA + 1, maxX);
-            float w = fX - xA;
-        
-            int rowOffset = layerIndex * atlasWidth;
-            float vA = atlas[rowOffset + xA];
-            float vB = atlas[rowOffset + xB];
-        
-            if (math.isnan(vA) || math.isinf(vA)) vA = 0f;
-            if (math.isnan(vB) || math.isinf(vB)) vB = 0f;
-        
-            return math.lerp(vA, vB, w);
+            return SampleMaskAtlas(atlas, atlasWidth, 1, layerIndex, normalizedDist, 0.5f);
         }
 
     }

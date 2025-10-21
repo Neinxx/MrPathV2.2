@@ -20,16 +20,16 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             var layers = new List<TerrainLayer>(td.terrainLayers ?? System.Array.Empty<TerrainLayer>());
 
             // 现有映射
-            for (int i = 0; i < layers.Count; i++)
+            for (var i = 0; i < layers.Count; i++)
             {
                 var l = layers[i];
                 if (l) result.TryAdd(l, i);
             }
 
             // 按配方逐一检查，缺失则询问是否添加到地形
-            foreach (var blend in recipe.blendLayers)
+            foreach (var roadLayer in recipe.GetLayers())
             {
-                var tl = blend?.terrainLayer;
+                var tl = roadLayer?.contentLayer;
                 if (!tl) continue;
 
                 if (!result.ContainsKey(tl))
@@ -44,8 +44,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                     {
                         Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
                         // 寻找空位，优先填补前面的空槽
-                        int insertIndex = -1;
-                        for (int si = 0; si < layers.Count; si++)
+                        var insertIndex = -1;
+                        for (var si = 0; si < layers.Count; si++)
                         {
                             if (layers[si] == null) { insertIndex = si; break; }
                         }

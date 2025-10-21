@@ -1,0 +1,90 @@
+﻿/* MrPathSettingsProvider.uss — Unity 2021.3.18 Compatible + Locate Buttons */
+
+.root {
+    padding: 20px;
+    gap: 20px;
+}
+
+.header {
+    font-size: 22px;
+    font-weight: 600;
+}
+
+.section-header {
+    font-size: 17px;
+    font-weight: 600;
+    margin-top: 16px;
+}
+
+.card-title {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.card-description {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.config-label {
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.asset-label {
+    font-size: 1px;
+    opacity: 0.8;
+    margin-top: 8px;
+}
+
+.mac-card {
+    padding: 16px;
+    gap: 8px;
+}
+
+.config-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px; /* 稍微缩小按钮间距 */
+}
+
+.control-group .unity-property-field {
+    flex: 1;
+}
+
+.asset-group {
+    margin-top: 10px;
+}
+
+/* Primary button (Scan) */
+.primary-button {
+    width: auto;
+    height: 26px;
+    min-width: 100px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Action buttons: Set / Locate */
+.action-button {
+    width: auto;
+    height: 22px;
+    min-width: 56px;      /* "Locate" 比 "Set" 长，适当增加 */
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* ScrollView */
+#main-scroll-view {
+    -unity-padding-top: 0;
+    -unity-padding-bottom: 20px;
+}

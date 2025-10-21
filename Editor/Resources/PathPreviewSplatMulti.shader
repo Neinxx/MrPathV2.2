@@ -7,7 +7,8 @@ Shader "MrPath/PathPreviewSplatMulti"
         [Header(Render State)]
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8 // Default to Always (8). Use LEqual (4) for normal depth.
         [Space]
-        _PreviewAlpha("Preview Alpha", Range(0, 1)) = 0.5
+        _PreviewAlpha("Preview Alpha", Range(0,1)) = 0.6
+        _MaskStrength("Mask Strength", Range(0,4)) = 1
 
         [Header(Control Textures)]
         // NOTE : These control textures are NOT used by the fixed shader logic,
@@ -76,6 +77,7 @@ Shader "MrPath/PathPreviewSplatMulti"
         [Header(Path Masking)]
         _AcrossScale ("Across Scale", Float) = 1
         _MaskThreshold ("Mask Threshold", Range(0, 1)) = 0
+        _PathSamples("Path Samples", Float) = 64
     }
 
     SubShader
@@ -111,7 +113,8 @@ Shader "MrPath/PathPreviewSplatMulti"
             struct Varyings
             {
                 float2 uv : TEXCOORD0;
-                half4 color : TEXCOORD1;
+                float2 worldUV : TEXCOORD1;
+                half4 color : COLOR;
                 float4 positionHCS : SV_POSITION;
             };
 
@@ -148,8 +151,10 @@ Shader "MrPath/PathPreviewSplatMulti"
             float _AtlasInvHeight;
             float _MaskThreshold;
             float _PreviewAlpha;
+            float _MaskStrength;
             float _AcrossScale;
             int _LayerCount;
+            float _PathSamples;
 
             // New unified layer parameter arrays (populated from PreviewMaterialManager)
             CBUFFER_START(UnityPerMaterial)
@@ -160,8 +165,10 @@ Shader "MrPath/PathPreviewSplatMulti"
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                output.positionHCS = TransformObjectToHClip(input.positionOS.xyz);
+                float3 worldPos = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionHCS = TransformWorldToHClip(worldPos);
                 output.uv = input.uv;
+                output.worldUV = worldPos.xz;
                 output.color = input.color;
                 return output;
             }
@@ -213,40 +220,51 @@ Shader "MrPath/PathPreviewSplatMulti"
             half4 frag(Varyings input) : SV_Target
             {
                 // Calculate across - road coordinate in [0, 1]
-                float scaledU = frac(input.uv.x * _AcrossScale);
-                float across = saturate(abs(scaledU * 2.0 - 1.0));
+                // 利用 LayerTilings[0].x 反推出跨宽度的纹理重复次数，使 across 基于世界坐标
+                float acrossRepeat = max(_LayerTilings[0].x, 1e-5);
+                float acrossPos = input.uv.x / acrossRepeat; // 0..1 从左到右
+                float across = saturate(abs(acrossPos * 2.0 - 1.0) * _AcrossScale);
+                // 计算沿路径的进度 (0..1) world-space
+                // repeat mask along path according to y-tiling
+                float pathRepeat   = max(_LayerTilings[0].y, 1.0);
+                float pathProgress = frac(input.uv.y * pathRepeat);
 
-                half4 finalColor = half4(0, 0, 0, 1);
+                // 初始完全透明
+                half4 finalColor = half4(0, 0, 0, 0);
 
                 int maxLayers = min(_LayerCount, 16);
                 for (int i = 0; i < maxLayers; i ++)
                 {
                     // Sample weight from 2D mask atlas; each layer is stored as a horizontal slice
-                    float weight = SAMPLE_TEXTURE2D(_MaskAtlas, sampler_LinearClamp, float2(across, (i + 0.5) * _AtlasInvHeight)).r;
-                    // Apply threshold
-                    weight = saturate((weight - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
-
+                    float weight = SampleMaskAtlas2D(
+                        _MaskAtlas,
+                        sampler_LinearClamp,
+                        across,
+                        pathProgress,
+                        i,
+                        _PathSamples,
+                        _AtlasInvHeight,
+                        _MaskThreshold) * _MaskStrength;
                     if (weight < 1e-4)
                     continue;
 
                     float2 layerTiling = GetLayerTiling(i);
-                    float2 layerUV = input.uv * layerTiling;
+                    float2 layerUV = input.worldUV * layerTiling;
                     half4 layerColor = SampleLayerTexture(i, layerUV);
 
-                    // Apply weight as alpha to layer color
-                    layerColor.rgb *= weight;
+                    // 仅透明度受 mask 影响，颜色保持原值
+                    layerColor.a   *= weight;
 
                     float layerOpacity = GetLayerOpacity(i);
                     float blendMode = GetLayerBlendMode(i);
-                    float blendOpacity = layerOpacity * weight;
+                    float blendOpacity = layerOpacity;
 
                     finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
                 }
 
-                if (all(finalColor.rgb == 0))
-                clip(- 1);
-
-                finalColor.a = saturate(_PreviewAlpha);
+                // 使用颜色强度驱动透明度；全黑像素输出全透明
+                float alphaFactor = saturate(max(max(finalColor.r, finalColor.g), finalColor.b));
+                finalColor.a = alphaFactor * saturate(_PreviewAlpha);
                 return finalColor;
             }
             ENDHLSL

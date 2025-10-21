@@ -1,3 +1,4 @@
+// shaderlab
 Shader "MrPathV2/StylizedRoadBlend"
 {
     Properties
@@ -8,6 +9,11 @@ Shader "MrPathV2/StylizedRoadBlend"
         _AtlasInvHeight ("Atlas Inv Height", Float) = 1
         _MaskThreshold  ("Mask Threshold", Range(0,1)) = 0
         _MaskRowCenter  ("Mask Row Center", Float) = 0.5
+        // 新增属性：Layer 索引和 PathSamples 用于 2D MaskAtlas 采样
+        _LayerIndex     ("Layer Index", Float) = 0
+        _PathSamples    ("Path Samples", Float) = 64
+        _AcrossScale    ("Across Scale", Float) = 1
+        
         _LayerTiling    ("Layer Tiling", Vector) = (1, 1, 0, 0)
         _LayerTint      ("Layer Tint", Color) = (1, 1, 1, 1)
         _LayerOpacity   ("Layer Opacity", Range(0,1)) = 1
@@ -34,16 +40,21 @@ Shader "MrPathV2/StylizedRoadBlend"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 uv         : TEXCOORD0;
+                float2 uv         : TEXCOORD0;     // original mesh UV
+                float2 worldUV    : TEXCOORD1;     // world-space UV (XZ) for texture sampling
             };
 
             sampler2D _PrevResultTex;
             sampler2D _LayerTex;
-            sampler2D _MaskAtlas;
+            Texture2D _MaskAtlas;
+            SamplerState sampler_LinearClamp;
 
             float _AtlasInvHeight;
             float _MaskThreshold;
-            float _MaskRowCenter;   // (rowIndex+0.5)*_AtlasInvHeight
+            float _MaskRowCenter;   // legacy single-row center (仍保留作兼容，但 2D 版本不使用)
+            float _LayerIndex;      // 当前图层索引 (0-based)
+            float _PathSamples;     // 每层纵向采样行数
+            float _AcrossScale;
 
             float4 _LayerTiling;
             float4 _LayerTint;
@@ -52,34 +63,50 @@ Shader "MrPathV2/StylizedRoadBlend"
             Varyings vert (Attributes IN)
             {
                 Varyings OUT;
-                OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);
+                float3 worldPos = TransformObjectToWorld(IN.positionOS.xyz);
+                OUT.positionCS = TransformWorldToHClip(worldPos);
                 OUT.uv         = IN.uv;
+                OUT.worldUV    = worldPos.xz;
                 return OUT;
             }
 
             float4 frag (Varyings IN) : SV_Target
             {
-                // Sample mask grayscale (R channel) along the mask atlas row
-                float across = saturate(abs(frac(IN.uv.x) * 2.0 - 1.0));
-                float mask   = tex2D(_MaskAtlas, float2(across, _MaskRowCenter)).r;
+                // 计算 across（横向）: 将 uv.x 折叠到 0..1 并映射到中心 0，支持 AcrossScale
+                float scaledU = frac(IN.uv.x * _AcrossScale);
+                float across = saturate(abs(scaledU * 2.0 - 1.0));
 
-                // Apply threshold (soft step to allow feather)
-                mask = saturate((mask - _MaskThreshold) / max(1e-5, 1.0 - _MaskThreshold));
+                // 计算沿路径的进度 (0..1)。直接使用未取模的 uv.y，以保持与 CPU 逻辑一致
+                float pathProgress = saturate(IN.uv.y);
 
-                // Early out when mask is effectively zero to avoid unnecessary texture fetches/blending
-                if (mask <= 1e-3)
-                {
-                    return tex2D(_PrevResultTex, IN.uv);
-                }
+                // 使用新的 2D 采样函数
+                float mask = SampleMaskAtlas2D(
+                    _MaskAtlas,
+                    sampler_LinearClamp,
+                    across,
+                    pathProgress,
+                    _LayerIndex,
+                    _PathSamples,
+                    _AtlasInvHeight,
+                    _MaskThreshold);
 
+                // 移除硬裁剪早退，改为软透明混合，依赖 mask 透明度进行平滑过渡
                 float4 prevResult = tex2D(_PrevResultTex, IN.uv);
-                float4 layerColor = tex2D(_LayerTex, IN.uv * _LayerTiling.xy + _LayerTiling.zw) * _LayerTint;
+                
+                // 当 mask 非零时逐渐混合；mask 已通过阈值归一化，值接近 0 时基本透明
+                // float4 prevResult = tex2D(_PrevResultTex, IN.uv); // 已上移
+                float2 layerUV = IN.worldUV * _LayerTiling.xy + _LayerTiling.zw;
+                float4 layerColor = tex2D(_LayerTex, layerUV) * _LayerTint;
 
-                // Use mask grayscale as transparency only; keep original color intact
-                float opacity = _LayerOpacity * mask;
+                // 使用纹理自身的 Alpha 通道作为透明度乘子
+                float srcAlpha = layerColor.a * _LayerOpacity * mask;
 
-                // Standard alpha blend (lerp) between previous result and layer color
-                return lerp(prevResult, layerColor, opacity);
+                // Alpha 混合：src over dst
+                float4 outColor;
+                outColor.rgb = lerp(prevResult.rgb, layerColor.rgb, srcAlpha);
+                outColor.a   = saturate(srcAlpha + prevResult.a * (1.0 - srcAlpha));
+
+                return outColor;
             }
             ENDHLSL
         }

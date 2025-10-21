@@ -102,7 +102,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             if (_jobHandles.Count > 0)
             {
                 var handleArray = new NativeArray<JobHandle>(_jobHandles.Count, Allocator.Temp);
-                for (int i = 0; i < _jobHandles.Count; i++)
+                for (var i = 0; i < _jobHandles.Count; i++)
                 {
                     handleArray[i] = _jobHandles[i];
                 }

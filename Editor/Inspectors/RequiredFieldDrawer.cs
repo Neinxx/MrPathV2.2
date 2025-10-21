@@ -18,7 +18,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             // 【笔法精进】先计算好各个区域，再进行绘制
-            Rect propertyRect = position;
+            var propertyRect = position;
 
             if (property.objectReferenceValue == null)
             {
@@ -39,7 +39,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            float baseHeight = EditorGUI.GetPropertyHeight(property, label, true);
+            var baseHeight = EditorGUI.GetPropertyHeight(property, label, true);
             if (property.objectReferenceValue == null)
             {
                 return baseHeight + ErrorLabelHeight;

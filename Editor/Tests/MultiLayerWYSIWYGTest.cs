@@ -80,7 +80,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
             try
             {
                 // 验证配方层数
-                int layerCount = _recipe.blendLayers.Count;
+                int layerCount = _recipe.GetLayers().Count;
                 LogResult($"开始测试 - 配方包含 {layerCount} 层");
 
                 // 检查预览材质支持
@@ -159,11 +159,11 @@ namespace __temp.MrPathV2._2.Editor.Tests
             var testRecipe = CreateInstance<StylizedRoadRecipe>();
             for (int i = 0; i < 8; i++)
             {
-                testRecipe.blendLayers.Add(new BlendLayer
+                testRecipe.layers.Add(new RoadLayer
                 {
                     name = $"Test Layer {i}",
                     enabled = true,
-                    terrainLayer = _testTerrain.terrainData.terrainLayers.FirstOrDefault()
+                    contentLayer = _testTerrain.terrainData.terrainLayers.FirstOrDefault()
                 });
             }
 
@@ -215,7 +215,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
             // 创建8层测试配方
             for (int i = 0; i < 8; i++)
             {
-                recipe.blendLayers.Add(new BlendLayer
+                recipe.layers.Add(new RoadLayer
                 {
                     name = $"Test Layer {i + 1}",
                     enabled = true,

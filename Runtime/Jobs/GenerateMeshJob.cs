@@ -25,26 +25,26 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         public void Execute(int index)
         {
             if (Spine.Length < 2 || Segments < 2) return;
-            int i = index / Segments;
-            int j = index % Segments;
+            var i = index / Segments;
+            var j = index % Segments;
             if (i < 0 || i >= Spine.Length) return;
 
-            float3 spinePoint = Spine.Points[i];
-            float3 tangent = Spine.Tangents[i];
-            float3 normal = Spine.Normals[i];
-            float3 upVector = Profile.ForceHorizontal ? new float3(0, 1, 0) : normal;
-            float3 right = math.normalize(math.cross(upVector, tangent));
+            var spinePoint = Spine.Points[i];
+            var tangent = Spine.Tangents[i];
+            var normal = Spine.Normals[i];
+            var upVector = Profile.ForceHorizontal ? new float3(0, 1, 0) : normal;
+            var right = math.normalize(math.cross(upVector, tangent));
 
-            float t = j / (float)(Segments - 1);
-            float signedT = t * 2f - 1f;
-            float3 offset = right * (signedT * Profile.RoadWidth * 0.5f);
+            var t = j / (float)(Segments - 1);
+            var signedT = t * 2f - 1f;
+            var offset = right * (signedT * Profile.RoadWidth * 0.5f);
 
             // 高性能预览：移除截面竖向抬升，保持网格平整
             Vertices[index] = spinePoint + offset;
 
             // 应用平铺信息到UV
-            float u = t * Tiling.x;
-            float v = ((float)i / math.max(1, (Spine.Length - 1))) * Tiling.y;
+            var u = t * Tiling.x;
+            var v = ((float)i / math.max(1, (Spine.Length - 1))) * Tiling.y;
             Uvs[index] = new float2(u, v);
         }
     }
@@ -111,6 +111,10 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var signedT = t * 2f - 1f;                  // -1..1 中心为0
             var normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
 
+            // 新增：计算沿路径的进度 0..1（基于当前脊线索引）
+            var segCount = math.max(1, Spine.Length - 1);
+            var pathProgress = math.saturate(i / (float)segCount);
+
             // 只取前4层作为预览（RGBA），其余层忽略
             float r = 0f, g = 0f, b = 0f, a = 0f;
             var layerCount = math.min(4, Recipe.Length);
@@ -119,7 +123,14 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 float layerMask;
                 if (Recipe.MaskAtlas.IsCreated)
                 {
-                    layerMask = TerrainJobsUtility.SampleMaskAtlas(Recipe.MaskAtlas, Recipe.AtlasWidth, k, normalizedDist);
+                    // 使用 2D Mask Atlas 采样，支持沿路径变化
+                    layerMask = TerrainJobsUtility.SampleMaskAtlas(
+                        Recipe.MaskAtlas,
+                        Recipe.AtlasWidth,
+                        Recipe.PathSamples,
+                        k,
+                        normalizedDist,
+                        pathProgress);
                 }
 
                 else
@@ -136,7 +147,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 }
             }
 
-            // 不再在顶点阶段归一化，保持 LUT 的原始不透明度信息
+            // 不再在顶点阶段归一化，保持 LUT 的 original opacity 信息
             Colors[index] = new float4(r, g, b, a) * BaseColor;
         }
     }

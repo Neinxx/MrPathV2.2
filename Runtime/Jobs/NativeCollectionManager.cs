@@ -37,7 +37,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             _trackedCollections.Add(owner); // 跟踪包装器以便统一释放
             
-            string key = tag ?? typeof(T).Name;
+            var key = tag ?? typeof(T).Name;
             _allocationStats[key] = _allocationStats.GetValueOrDefault(key, 0) + 1;
             
             return array;
@@ -58,7 +58,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             _trackedCollections.Add(owner);
 
-            string key = tag ?? typeof(T).Name;
+            var key = tag ?? typeof(T).Name;
             _allocationStats[key] = _allocationStats.GetValueOrDefault(key, 0) + 1;
 
             return list;
@@ -107,8 +107,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         /// </summary>
         public int GetActiveCollectionCount()
         {
-            int count = 0;
-            for (int i = _trackedCollections.Count - 1; i >= 0; i--)
+            var count = 0;
+            for (var i = _trackedCollections.Count - 1; i >= 0; i--)
             {
                 var collection = _trackedCollections[i];
                 if (collection == null || !IsCollectionCreated(collection))
@@ -160,7 +160,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             // 创建一个副本来避免在迭代过程中修改集合
             var collectionsToDispose = new List<object>(_trackedCollections);
             
-            for (int i = collectionsToDispose.Count - 1; i >= 0; i--)
+            for (var i = collectionsToDispose.Count - 1; i >= 0; i--)
             {
                 var collection = collectionsToDispose[i];
                 

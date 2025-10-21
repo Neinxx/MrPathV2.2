@@ -96,7 +96,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 HeightProvider?.MarkAsDirty();
             }
         }
-        private void Copy2DTo1D(float[,] s, NativeArray<float> d, int r) { for (int y=0;y<r;y++) for(int x=0;x<r;x++) d[y*r+x]=s[y,x]; }
-        private void Copy1DTo2D(NativeArray<float> s, float[,] d, int r) { for (int y=0;y<r;y++) for(int x=0;x<r;x++) d[y,x]=s[y*r+x]; }
+        private void Copy2DTo1D(float[,] s, NativeArray<float> d, int r) { for (var y=0;y<r;y++) for(var x=0;x<r;x++) d[y*r+x]=s[y,x]; }
+        private void Copy1DTo2D(NativeArray<float> s, float[,] d, int r) { for (var y=0;y<r;y++) for(var x=0;x<r;x++) d[y,x]=s[y*r+x]; }
     }
 }

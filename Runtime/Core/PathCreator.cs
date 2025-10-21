@@ -1,5 +1,6 @@
 // PathCreator.cs
 
+using System;
 using __temp.MrPathV2._2.Runtime.Settings;
 using UnityEngine;
 
@@ -20,6 +21,9 @@ namespace __temp.MrPathV2._2.Runtime.Core
     public class PathCreator : MonoBehaviour
     {
         public event System.Action<PathChangeCommand> PathModified;
+        public event System.Action CurveDefinitionChanged;
+        public event System.Action AppearanceChanged;
+        public event System.Action TerrainInteractionChanged;
 
         [Tooltip("决定路径一切外观与行为的剖面资产")]
 
@@ -31,6 +35,10 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
         public int NumPoints => pathData?.KnotCount ?? 0;
         public int NumSegments => pathData?.SegmentCount ?? 0;
+
+        // --- 新增：用于跟踪已订阅的 Profile，并在其修改时回调 ---
+        [NonSerialized]
+        private PathProfile _subscribedProfile;
 
         /// <summary>
         /// 一个便捷的私有属性，用于获取当前应执行的"法则"。
@@ -103,8 +111,8 @@ namespace __temp.MrPathV2._2.Runtime.Core
             // 保证中心点位于第一个节点
             EnsurePivotAtFirstPoint();
 
-            // OnValidate 触发一个通用的 BulkUpdateCommand (或null)，通知UI刷新
-            PathModified?.Invoke(null);
+            // 仅触发外观变化事件，避免重采样
+            AppearanceChanged?.Invoke();
         }
 
         private void EnsurePivotAtFirstPoint()
@@ -255,6 +263,21 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
                 // 2. 将此敕令作为"事件"，广播给所有关心此变化的系统
                 PathModified?.Invoke(command);
+
+                // 根据命令类型触发更具体的事件
+                if (command is AddPointCommand || command is MovePointCommand || command is InsertPointCommand || command is DeletePointCommand || command is ClearPointsCommand)
+                {
+                    CurveDefinitionChanged?.Invoke();
+                }
+                else if (command is BatchCommand)
+                {
+                    // batch命令，保守地认为曲线定义可能变化
+                    CurveDefinitionChanged?.Invoke();
+                }
+                else
+                {
+                    AppearanceChanged?.Invoke();
+                }
             }, "PathCreator.ExecuteCommand", this);
         }
 
@@ -262,8 +285,9 @@ namespace __temp.MrPathV2._2.Runtime.Core
         {
             ErrorHandler.SafeExecute(() =>
             {
-                // 广播一个通用的"路径已修改"事件，内容为 null 表示是批量或未知类型的更新。
-                // 所有监听者（如场景编辑器或预览系统）都应响应该事件并刷新自身状态。
+                // 根据修改内容假设为外观变化
+                AppearanceChanged?.Invoke();
+                // 同时保持旧事件
                 PathModified?.Invoke(null);
             }, "PathCreator.NotifyProfileModified", this);
         }

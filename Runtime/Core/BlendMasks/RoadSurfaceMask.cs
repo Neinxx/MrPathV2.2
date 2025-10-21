@@ -51,7 +51,7 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             Custom
         }
 
-        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
             // 应用中心偏移
             float adjustedPosition = horizontalPosition - centerOffset;
@@ -87,6 +87,12 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             }
             
             return ApplySmoothing(Mathf.Clamp01(maskValue));
+        }
+
+        // 兼容旧接口
+        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        {
+            return Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);
         }
         
         /// <summary>

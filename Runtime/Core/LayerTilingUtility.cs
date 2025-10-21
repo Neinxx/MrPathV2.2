@@ -18,8 +18,9 @@ namespace __temp.MrPathV2._2.Runtime.Core
             if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
             if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
 
-            float tilingX = previewWorldWidth / sz.x;
-            float tilingY = previewWorldWidth / sz.y;
+            // For world-space UV mapping, tiling should be the reciprocal of terrain tile size
+            float tilingX = 1f / sz.x;
+            float tilingY = 1f / sz.y;
             if (!float.IsFinite(tilingX)) tilingX = 1f;
             if (!float.IsFinite(tilingY)) tilingY = 1f;
             return new Vector2(tilingX, tilingY);

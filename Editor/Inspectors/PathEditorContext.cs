@@ -154,7 +154,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         /// </summary>
         public void MarkDirty()
     {
-            PreviewManager?.MarkDirty();
+            // 当路径或外观参数变更时，同时标记脊线、网格与材质为脏，确保 UV 等属性得到重新计算
+            PreviewManager?.MarkSpineDirty();
+            PreviewManager?.MarkMeshDirty();
             PreviewManager?.MarkMaterialsDirty(); // Ensure material updates when parameters change
             RequestPreviewRefresh();
     }

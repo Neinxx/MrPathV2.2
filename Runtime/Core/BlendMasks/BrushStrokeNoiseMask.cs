@@ -27,7 +27,7 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
         [Tooltip("笔触位置的随机抖动程度。0表示笔触均匀排列。")]
         [Range(0, 1)] public float jitter = 1.0f;
 
-        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
             float p = horizontalPosition * Mathf.Max(0.0001f, scale);
             
@@ -70,6 +70,11 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             }
 
             return ApplySmoothing(Mathf.Clamp01(finalValue));
+        }
+
+        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        {
+            return Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);
         }
 
         // 一个简单的伪随机哈希函数，加一个'salt'参数可以从同一个输入得到不同的随机结果

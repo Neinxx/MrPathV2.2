@@ -52,13 +52,14 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             var refreshBtn = _root.Q<Button>("refreshButton");
             if (refreshBtn != null)
             {
+                // Update button label
+                refreshBtn.text = "清除空白 SplatAlpha";
                 refreshBtn.clicked += () =>
                 {
-                    _ctx?.HeightProvider?.MarkAsDirty();
-                    _ctx?.MarkDirty();
-                    SceneView.lastActiveSceneView?.ShowNotification(new GUIContent("地形缓存已刷新"));
+                    ClearEmptySplatAlphaUnderPath();
                 };
             }
+
 
             // Subscribe to selection change events
             Selection.selectionChanged += OnSelectionChanged;
@@ -195,6 +196,80 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             }
 
             _ = _ctx.TerrainHandler.ExecuteAsync(cmd, _ => { });
+        }
+
+        private void ClearEmptySplatAlphaUnderPath()
+        {
+            // Determine path bounds in XZ plane if available
+            Rect pathRect = default;
+            bool hasPathBounds = false;
+            if (_ctx?.PreviewGenerator?.PreviewMesh != null)
+            {
+                var b = _ctx.PreviewGenerator.PreviewMesh.bounds;
+                pathRect = new Rect(b.min.x, b.min.z, b.size.x, b.size.z);
+                hasPathBounds = b.size.x > 0f && b.size.z > 0f;
+            }
+
+            var terrains = UnityEngine.Terrain.activeTerrains;
+            if (terrains == null || terrains.Length == 0)
+            {
+                Debug.LogWarning("[TerrainOperations] 未找到场景中的 Terrain 对象");
+                return;
+            }
+
+            int clearedCount = 0;
+            foreach (var terrain in terrains)
+            {
+                var td = terrain.terrainData;
+                if (td == null) continue;
+
+                // 路径包围盒过滤
+                if (hasPathBounds)
+                {
+                    var pos = terrain.GetPosition();
+                    var tRect = new Rect(pos.x, pos.z, td.size.x, td.size.z);
+                    if (!tRect.Overlaps(pathRect))
+                    {
+                        continue; // Not affected by current path
+                    }
+                }
+
+                int res = td.alphamapResolution;
+                int layers = td.alphamapLayers;
+                if (layers == 0) continue;
+
+                var alpha = td.GetAlphamaps(0, 0, res, res);
+                bool isEmpty = true;
+                for (int y = 0; y < res && isEmpty; y++)
+                {
+                    for (int x = 0; x < res && isEmpty; x++)
+                    {
+                        float sum = 0f;
+                        for (int l = 0; l < layers; l++)
+                        {
+                            sum += alpha[y, x, l];
+                        }
+                        if (sum > 0.0001f)
+                        {
+                            isEmpty = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (isEmpty)
+                {
+                    var zeros = new float[res, res, layers]; // default zero-initialized
+                    td.SetAlphamaps(0, 0, zeros);
+                    clearedCount++;
+                    EditorUtility.SetDirty(td);
+                }
+            }
+
+            // Feedback
+            var msg = clearedCount > 0 ? $"已清理 {clearedCount} 个 Terrain 的空白 SplatAlpha" : "未找到需要清理的 Terrain";
+            SceneView.lastActiveSceneView?.ShowNotification(new GUIContent(msg));
+            Debug.Log($"[TerrainOperations] {msg}");
         }
     }
 }

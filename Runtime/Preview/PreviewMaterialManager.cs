@@ -27,6 +27,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private static readonly int LayerTilingsArr = Shader.PropertyToID("_LayerTilings");
         private static readonly int LayerOpacitiesArr = Shader.PropertyToID("_LayerOpacities");
         private static readonly int LayerBlendModesArr = Shader.PropertyToID("_LayerBlendModes");
+        private static readonly int PathSamplesId = Shader.PropertyToID("_PathSamples");
+        private static readonly int LayerIndexId = Shader.PropertyToID("_LayerIndex");
+        private static readonly int MaskStrengthId = Shader.PropertyToID("_MaskStrength");
 
         private enum ShaderFlavor { Splat, Stylized, Unknown }
 
@@ -92,7 +95,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private void ApplySplat(PathProfile profile, float alpha)
         {
             var recipe = profile.roadRecipe;
-            var layerCount = recipe?.blendLayers?.Count ?? 0;
+            var layers = recipe?.GetLayers();
+            var layerCount = layers?.Count ?? 0;
             
             // 检测是否使用多层着色器
             var isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
@@ -111,14 +115,14 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 var blendMode = BlendMode.Normal;
                 var tilingVec = Vector4.one;
                 
-                if (recipe?.blendLayers != null && i < recipe.blendLayers.Count)
+                if (layers != null && i < layers.Count)
                 {
-                    var blendLayer = recipe.blendLayers[i];
-                    if (blendLayer != null && blendLayer.enabled)
+                    var roadLayer = layers[i];
+                    if (roadLayer != null && roadLayer.enabled)
                     {
-                        layer = blendLayer.terrainLayer;
-                        layerOpacity = blendLayer.opacity;
-                        blendMode = blendLayer.blendMode;
+                        layer = roadLayer.contentLayer;
+                        layerOpacity = roadLayer.opacity;
+                        blendMode = roadLayer.blendMode;
                     }
                 }
                 
@@ -155,6 +159,12 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             _instance.SetFloat(MasterOpacity, master);
             _instance.SetFloat(EdgeFadeStart, 0.7f);
             _instance.SetFloat(EdgeFadeEnd, 1f);
+            _instance.SetFloat(PathSamplesId, 64f);
+            // 将整体不透明度同时推送到遮罩强度，用户可在Inspector调整PreviewAlpha或MasterOpacity
+            _instance.SetFloat(MaskStrengthId, master);
+            _instance.SetFloat(LayerIndexId, 0f);
+            // Prepare mask atlas texture even for stylized single-layer preview
+            SetupMaskTextures(profile);
 
             // Generate and bind LUT so shader can sample accurate weights
             SetupMaskTextures(profile); // 使用默认路径长度，实际应该从PathSpine获取
@@ -167,7 +177,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private void SetupMaskTextures(PathProfile profile, float pathLength = 100f)
         {
             var recipe = profile.roadRecipe;
-            if (recipe == null || recipe.blendLayers == null || recipe.blendLayers.Count == 0)
+            var layers = recipe?.GetLayers();
+            if (layers == null || layers.Count == 0)
             {
                 // 无有效图层则绑定白纹理，确保着色器能正常工作
                 if (_instance.HasProperty(MaskAtlas))
@@ -179,13 +190,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
 
             // 收集层信息（不限制层数）
-            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new(recipe.blendLayers.Count);
+            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new(layers.Count);
             var worldWidth = Mathf.Max(0.1f, profile.roadWidth);
 
-            foreach (var blendLayer in recipe.blendLayers)
+            foreach (var roadLayer in layers)
             {
-                if (blendLayer is not { enabled: true }) continue;
-                var tLayer = blendLayer.terrainLayer;
+                if (roadLayer is not { enabled: true }) continue;
+                var tLayer = roadLayer.contentLayer;
                 if (tLayer?.diffuseTexture is not { } tex) continue;
 
                 var tiling = PreviewPipelineUtility.CalcLayerTiling(worldWidth, tLayer);
@@ -194,9 +205,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     tiling,
                     Vector2.zero,
                     Color.white,
-                    Mathf.Clamp01(blendLayer.opacity * recipe.masterOpacity),
-                    blendLayer.blendMode,
-                    blendLayer.GetActiveMask());
+                    Mathf.Clamp01(roadLayer.opacity * recipe.masterOpacity),
+                    roadLayer.blendMode,
+                    roadLayer.layerMask);
                 layerInfos.Add(info);
             }
 
@@ -213,11 +224,14 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             if (!_instance.HasProperty(MaskAtlas)) return;
             _instance.SetTexture(MaskAtlas, _maskAtlas ?? Texture2D.whiteTexture);
             _instance.SetFloat(AtlasInvHeight, _maskAtlas && _maskAtlas.height > 0 ? 1f / _maskAtlas.height : 1f);
+            _instance.SetFloat(PathSamplesId, 64f);
+            // Stylized shader expects layer index uniform (always 0 for single-layer preview)
+            _instance.SetFloat(LayerIndexId, 0f);
         }
 
         private void ApplyStylized(PathProfile profile)
         {
-            var layer = profile.roadRecipe?.blendLayers?[0]?.terrainLayer;
+            var layer = profile.roadRecipe?.GetLayers()?[0]?.contentLayer;
             if (layer?.diffuseTexture)
             {
                 _instance.SetTexture(LayerTex, layer.diffuseTexture);
@@ -236,7 +250,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
             var master = profile.roadRecipe?.masterOpacity ?? 1f;
             _instance.SetFloat(LayerOpacity, master);
+            _instance.SetFloat(MaskStrengthId, master);
             _instance.SetFloat(Mode, 0f);
+            _instance.SetFloat(PathSamplesId, 64f);
+            _instance.SetFloat(LayerIndexId, 0f);
+
+            // 确保单层预览也能获取遮罩贴图（0号层）以应用透明度渐变
+            SetupMaskTextures(profile);
         }
 
         private void SetLayer(int index, TerrainLayer layer, float worldWidth)
@@ -288,8 +308,24 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 #if UNITY_EDITOR
                 if (profile?.roadRecipe != null)
                 {
+                    // Include recipe itself
                     var json = UnityEditor.EditorJsonUtility.ToJson(profile.roadRecipe);
                     hash = hash * 31 + json.GetHashCode();
+
+                    // Additionally include embedded mask assets so tweaking their parameters triggers refresh
+                    var layers = profile.roadRecipe.GetLayers();
+                    if (layers != null)
+                    {
+                        foreach (var roadLayer in layers)
+                        {
+                            var mask = roadLayer?.layerMask;
+                            if (mask)
+                            {
+                                var maskJson = UnityEditor.EditorJsonUtility.ToJson(mask);
+                                hash = hash * 31 + maskJson.GetHashCode();
+                            }
+                        }
+                    }
                 }
 #else
                 // 在运行时只使用引用哈希，避免额外的字符串分配成本

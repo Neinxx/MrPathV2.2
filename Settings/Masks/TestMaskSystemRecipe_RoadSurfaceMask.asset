@@ -12,11 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2f3a43335d8749146bf6df0474950a25, type: 3}
   m_Name: TestMaskSystemRecipe_RoadSurfaceMask
   m_EditorClassIdentifier: 
-  smooth: 0.716
-  surfaceWidthRatio: 0.562
-  surfaceStrength: 0.904
-  edgeTransition: 0.183
-  centerOffset: -0.19
+  smooth: 0.417
+  tiling: {x: 0.56, y: 1.2}
+  offset: {x: 0, y: 0}
+  overallScale: 1
+  surfaceWidthRatio: 0.839
+  surfaceStrength: 0.639
+  edgeTransition: 0.302
+  centerOffset: -0.11
   surfaceProfile:
     serializedVersion: 2
     m_Curve:

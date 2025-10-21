@@ -28,19 +28,19 @@ inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, f
     float4 alphaBlend = lerp(baseColor, layerColor, layerColor.a);
 
     // Additive: base + layer * opacity
-    float4 addBlend   = float4(baseColor.rgb + layerColor.rgb * opacity, alphaBlend.a);
+    float4 addBlend = float4(baseColor.rgb + layerColor.rgb * opacity, alphaBlend.a);
 
     // Multiply: base * lerp(1, layer, opacity)
-    float4 mulBlend   = float4(baseColor.rgb * lerp(1.0, layerColor.rgb, opacity), alphaBlend.a);
+    float4 mulBlend = float4(baseColor.rgb * lerp(1.0, layerColor.rgb, opacity), alphaBlend.a);
 
     // Overlay (approx): if base < 0.5 use 2*base*layer else 1 - 2*(1-base)*(1-layer)
-    float3 overlayRgbLow  = 2.0 * baseColor.rgb * layerColor.rgb;
+    float3 overlayRgbLow = 2.0 * baseColor.rgb * layerColor.rgb;
     float3 overlayRgbHigh = 1.0 - 2.0 * (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
-    float3 overlayRgb     = lerp(overlayRgbLow, overlayRgbHigh, step(0.5, baseColor.rgb));
-    float4 overlayBlend   = float4(lerp(baseColor.rgb, overlayRgb, opacity), alphaBlend.a);
+    float3 overlayRgb = lerp(overlayRgbLow, overlayRgbHigh, step(0.5, baseColor.rgb));
+    float4 overlayBlend = float4(lerp(baseColor.rgb, overlayRgb, opacity), alphaBlend.a);
 
     // Select blend result based on mode
-    outColor = (blendMode < 0.5) ? alphaBlend : outColor;          // 0
+    outColor = (blendMode < 0.5) ? alphaBlend : outColor; // 0
     outColor = (abs(blendMode - 1.0) < 0.5) ? addBlend : outColor; // 1
     outColor = (abs(blendMode - 2.0) < 0.5) ? mulBlend : outColor; // 2
     outColor = (abs(blendMode - 3.0) < 0.5) ? overlayBlend : outColor; // 3
@@ -54,19 +54,34 @@ inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, f
 // a full-width strip with uniform height (1/_AtlasInvHeight). This helper
 // converts canonical UV into atlas coordinates and applies threshold/scale.
 // -----------------------------------------------------------------------------
-inline float SampleMaskAtlas(Texture2D maskAtlas, SamplerState samp, float2 uv, float atlasInvHeight, float acrossScale, float maskThreshold)
+// SampleMaskAtlas (2D with pathProgress)
+// Each layer occupies a vertical slice of <pathSamples> rows.
+// atlasInvHeight = 1.0 / (layerCount * pathSamples)
+// -----------------------------------------------------------------------------
+inline float SampleMaskAtlas2D(
+    Texture2D maskAtlas,
+    SamplerState samp,
+    float across, // 0..1 distance across road (normalizedDist)
+    float pathProgress, // 0..1 along road
+    float layerIndex, // int but pass as float to avoid int ops
+    float pathSamples, // rows per layer
+    float atlasInvHeight,
+    float maskThreshold)
 {
-    // Wrap X (road length) and scale across
-    float2 atlasUV;
-    atlasUV.x = frac(uv.x);                                 // repeat along X
-    atlasUV.y = saturate(uv.y * atlasInvHeight);            // map Y into [0,1] range per strip
+    across = saturate(across);
+    pathProgress = saturate(pathProgress);
 
-    float mask = maskAtlas.Sample(samp, atlasUV).r;
+    // Compute row index = layerIndex * pathSamples + pathProgress*(pathSamples-1)
+    float row = layerIndex * pathSamples + pathProgress * (pathSamples - 1.0);
+    // +0.5 for texel center
+    float v = (row + 0.5) * atlasInvHeight;
+    float2 uvAtlas = float2(across, v);
 
-    // Apply threshold & across falloff scaling
-    mask = saturate((mask - maskThreshold) * acrossScale);
-
+    float mask = maskAtlas.Sample(samp, uvAtlas).r;
+    mask = saturate((mask - maskThreshold) / max(1e-5, 1.0 - maskThreshold));
     return mask;
 }
+
+
 
 #endif // BLEND_LAYER_INCLUDED

@@ -30,11 +30,11 @@ namespace __temp.MrPathV2._2.Editor.Performance
             if (recipe == null) return default;
             
             int activeLayerCount = 0;
-            foreach (var layer in recipe.blendLayers)
+            foreach (var layer in recipe.GetLayers())
             {
-                if (layer.enabled && layer.mask != null && layer.terrainLayer != null)
-                    activeLayerCount++;
-            }
+            if (layer != null && layer.enabled && layer.layerMask != null && layer.contentLayer != null)
+                     activeLayerCount++;
+             }
             
             var metrics = new PerformanceMetrics
             {

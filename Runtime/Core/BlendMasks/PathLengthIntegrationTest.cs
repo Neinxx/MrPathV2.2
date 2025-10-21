@@ -1,3 +1,4 @@
+using MrPathV2;
 using UnityEngine;
 
 namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks

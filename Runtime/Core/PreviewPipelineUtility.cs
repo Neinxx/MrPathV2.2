@@ -48,10 +48,18 @@ namespace __temp.MrPathV2._2.Runtime.Core
         /// 在 -1..1 范围 pos 采样遮罩值。
         /// 若 mask 为空，返回 1。
         /// </summary>
-        public static float EvaluateMask(float pos, float worldWidth, float pathLength, BlendMaskBase mask)
+        public static float EvaluateMask(float pos, float pathProgress, float worldWidth, float pathLength, BlendMaskBase mask)
         {
             // 当未指定遮罩时返回 1，表示全权重，将直接使用图层自身的不透明度
-            return mask == null ? 1f : Mathf.Clamp01(mask.Evaluate(pos, worldWidth, pathLength));
+            return mask == null ? 1f : Mathf.Clamp01(mask.Evaluate(pos, pathProgress, worldWidth, pathLength));
+        }
+
+        /// <summary>
+        /// 兼容旧接口：若未提供 pathProgress，则使用 0.5f 作为默认值（路径中点）
+        /// </summary>
+        public static float EvaluateMask(float pos, float worldWidth, float pathLength, BlendMaskBase mask)
+        {
+            return EvaluateMask(pos, 0.5f, worldWidth, pathLength, mask);
         }
 
         /// <summary>
@@ -75,6 +83,5 @@ namespace __temp.MrPathV2._2.Runtime.Core
         {
             return MaskAtlasGenerator.BuildMaskAtlas(reuse, layers, worldWidth, pathLength, baseResolution);
         }
-
     }
 }

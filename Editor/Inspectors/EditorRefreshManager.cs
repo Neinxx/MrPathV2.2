@@ -11,9 +11,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
     public class EditorRefreshManager : IDisposable
     {
         private readonly Dictionary<string, float> _lastRefreshTimes = new Dictionary<string, float>();
-        private readonly Dictionary<string, Action> _pendingRefreshActions = new Dictionary<string, Action>();
-        private readonly float _minRefreshInterval = 0.1f; // 最小刷新间隔100ms
-        private bool _disposed;
+    private readonly Dictionary<string, Action> _pendingRefreshActions = new Dictionary<string, Action>();
+    private readonly float _minRefreshInterval = 0.3f; // 最小刷新间隔300ms，增大防抖动间隔，减少频繁重建
+    private bool _disposed;
 
         public EditorRefreshManager()
         {
@@ -31,7 +31,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             if (_disposed || refreshAction == null)
                 return;
 
-            float currentTime = (float)EditorApplication.timeSinceStartup;
+            var currentTime = (float)EditorApplication.timeSinceStartup;
             
             if (forceImmediate)
             {
@@ -50,7 +50,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
 
             // 检查是否需要防抖动
-            if (_lastRefreshTimes.TryGetValue(key, out float lastTime))
+            if (_lastRefreshTimes.TryGetValue(key, out var lastTime))
             {
                 if (currentTime - lastTime < _minRefreshInterval)
                 {
@@ -113,14 +113,14 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             if (_disposed || _pendingRefreshActions.Count == 0)
                 return;
 
-            float currentTime = (float)EditorApplication.timeSinceStartup;
+            var currentTime = (float)EditorApplication.timeSinceStartup;
             var keysToProcess = new List<string>();
 
             // 找出可以执行的待执行操作
             foreach (var kvp in _pendingRefreshActions)
             {
-                string key = kvp.Key;
-                if (_lastRefreshTimes.TryGetValue(key, out float lastTime))
+                var key = kvp.Key;
+                if (_lastRefreshTimes.TryGetValue(key, out var lastTime))
                 {
                     if (currentTime - lastTime >= _minRefreshInterval)
                     {
@@ -134,9 +134,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
 
             // 执行待执行的操作
-            foreach (string key in keysToProcess)
+            foreach (var key in keysToProcess)
             {
-                if (_pendingRefreshActions.TryGetValue(key, out Action action))
+                if (_pendingRefreshActions.TryGetValue(key, out var action))
                 {
                     try
                     {

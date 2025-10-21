@@ -3,6 +3,7 @@ using System.IO;
 using __temp.MrPathV2._2.Editor.Settings;
 using __temp.MrPathV2._2.Runtime.Settings;
 using __temp.MrPathV2._2.Runtime.Strategies;
+using __temp.MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -61,14 +62,14 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             box.Add(createBtn);
 
             // 按钮：打开策略文件夹
-            var openFolderBtn = new Button(() =>
-            {
-                string dir = GetDynamicStrategiesPath();
-                if (string.IsNullOrEmpty(dir)) return;
-                Directory.CreateDirectory(dir);
-                EditorUtility.RevealInFinder(dir);
-            }) { text = "打开策略文件夹" };
-            box.Add(openFolderBtn);
+            // var openFolderBtn = new Button(() =>
+            // {
+            //     var dir = GetDynamicStrategiesPath();
+            //     if (string.IsNullOrEmpty(dir)) return;
+            //     Directory.CreateDirectory(dir);
+            //     EditorUtility.RevealInFinder(dir);
+            // }) { text = "打开策略文件夹" };
+            // box.Add(openFolderBtn);
 
             // 按钮：同步策略
             var syncBtn = new Button(() =>
@@ -98,23 +99,23 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             var bezierProp = so.FindProperty("bezierStrategy");
             var catmullProp = so.FindProperty("catmullRomStrategy");
 
-            string dir = GetDynamicStrategiesPath();
+            var dir = GetDynamicStrategiesPath();
             if (string.IsNullOrEmpty(dir)) return;
 
             Directory.CreateDirectory(dir);
 
-            if (bezierProp.objectReferenceValue == null)
+            if (!bezierProp.objectReferenceValue)
             {
                 var bez = CreateInstance<BezierStrategy>();
-                string path = Path.Combine(dir, "BezierStrategy.asset").Replace("\\", "/");
+                var path = Path.Combine(dir, "BezierStrategy.asset").Replace("\\", "/");
                 AssetDatabase.CreateAsset(bez, path);
                 bezierProp.objectReferenceValue = bez;
             }
 
-            if (catmullProp.objectReferenceValue == null)
+            if (!catmullProp.objectReferenceValue)
             {
                 var cat = CreateInstance<CatmullRomStrategy>();
-                string path = Path.Combine(dir, "CatmullRomStrategy.asset").Replace("\\", "/");
+                var path = Path.Combine(dir, "CatmullRomStrategy.asset").Replace("\\", "/");
                 AssetDatabase.CreateAsset(cat, path);
                 catmullProp.objectReferenceValue = cat;
             }
@@ -130,7 +131,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private void SyncOverridesToRegistry()
         {
             // 确保注册表资产存在
-            string registryPath = Path.Combine(GetDynamicResourcesPath(), "PathStrategyRegistry.asset").Replace("\\", "/");
+            var registryPath = Path.Combine(GetDynamicResourcesPath(), "PathStrategyRegistry.asset").Replace("\\", "/");
             var registry = AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(registryPath);
             if (registry == null)
             {
@@ -140,9 +141,44 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 AssetDatabase.SaveAssets();
             }
 
-            var rso = new SerializedObject(registry);
-            rso.FindProperty("_strategyEntries");
-            rso.ApplyModifiedProperties();
+            // 将当前设置中的策略写入注册表
+            var settings = (MrPathAdvancedSettings)target;
+            var entriesProp = new SerializedObject(registry).FindProperty("strategyEntries"); // field is private but SerializeField; use name
+
+            // 由于 strategyEntries 是 private，需要通过 SerializedObject 修改
+            var so = new SerializedObject(registry);
+            var listProp = so.FindProperty("strategyEntries");
+            if (listProp == null)
+            {
+                Debug.LogError("[MrPathAdvancedSettingsEditor] Failed to find 'strategyEntries' property on PathStrategyRegistry.");
+                return;
+            }
+
+            // 清空并重新填充
+            listProp.arraySize = 0;
+            void AddEntry(int index, __temp.MrPathV2._2.Runtime.Core.CurveType type, PathStrategy strategy)
+            {
+                if (strategy == null) return;
+                listProp.InsertArrayElementAtIndex(index);
+                var element = listProp.GetArrayElementAtIndex(index);
+                element.FindPropertyRelative("type").enumValueIndex = (int)type;
+                element.FindPropertyRelative("strategy").objectReferenceValue = strategy;
+            }
+
+            int idx = 0;
+            if (settings.bezierStrategy)
+            {
+                AddEntry(idx++, __temp.MrPathV2._2.Runtime.Core.CurveType.Bezier, settings.bezierStrategy);
+            }
+            if (settings.catmullRomStrategy)
+            {
+                AddEntry(idx++, __temp.MrPathV2._2.Runtime.Core.CurveType.CatmullRom, settings.catmullRomStrategy);
+            }
+
+            so.ApplyModifiedProperties();
+
+            // 通知注册表立即刷新缓存
+            registry.ValidateConfiguration();
         }
     }
 }

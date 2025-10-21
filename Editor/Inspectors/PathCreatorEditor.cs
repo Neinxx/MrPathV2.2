@@ -42,6 +42,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private PathEditorContext _ctx;
       //  private TerrainOperationsPanel _terrainPanel;
 
+        // --- Profile 事件订阅跟踪 ---
+        private PathProfile _lastSubscribedProfile;
+
         // [新增] 为场景UI中的常量值定义，避免魔法数字。
         // private const float TooltipOffsetX = 12f;
         // private const float TooltipOffsetY = 12f;
@@ -62,19 +65,19 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             _targetCreator = target as PathCreator;
             // Debug.Log("PathCreatorEditor OnEnable called for " + target.name);
-            if (_targetCreator == null) return;
+            if (!_targetCreator) return;
 
             // [优化] 在 OnEnable 中一次性查找并缓存 SerializedProperty是是。
             _profileProperty = serializedObject.FindProperty(nameof(PathCreator.profile));
             _pathDataProperty = serializedObject.FindProperty(nameof(PathCreator.pathData));
 
             // 初始化 Profile 引用
-            if (_targetCreator.profile != null)
+            if (_targetCreator.profile)
             {
                 InitProfileEmbeddedEditor(_targetCreator.profile);
 
                 // 初始化 StylizedRoadRecipe 引用
-                if (_targetCreator.profile.roadRecipe != null)
+                if (_targetCreator.profile.roadRecipe)
                 {
                     InitRecipeEmbeddedEditor(_targetCreator.profile.roadRecipe);
                 }
@@ -87,9 +90,15 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             // 订阅事件
             Undo.undoRedoPerformed += OnUndoRedo;
-            _targetCreator.PathModified += OnPathModified;
-
-            StylizedRoadRecipeEditor.OnRecipeModified += OnRecipeChanged;
+            _targetCreator.CurveDefinitionChanged += OnCurveDefinitionChanged;
+            _targetCreator.AppearanceChanged += OnAppearanceChanged;
+            _targetCreator.TerrainInteractionChanged += OnTerrainInteractionChanged;
+            
+            // 订阅 Profile 的修改事件
+            if (_targetCreator.profile != null)
+            {
+                _targetCreator.profile.ProfileModified += OnProfileModified;
+            }
 
             MarkPathAsDirty(); // 首次启用时强制刷新
             _lastPosition = _targetCreator.transform.position;
@@ -101,13 +110,13 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             // Debug.Log("PathCreatorEditor OnDisable called for " + target.name);
             // [优化] 增加空值检查，使清理逻辑更健壮。
-            if (_profileEmbeddedEditor != null)
+            if (_profileEmbeddedEditor)
             {
                 DestroyImmediate(_profileEmbeddedEditor);
                 _profileEmbeddedEditor = null;
             }
 
-            if (_recipeEmbeddedEditor != null)
+            if (_recipeEmbeddedEditor)
             {
                 DestroyImmediate(_recipeEmbeddedEditor);
                 _recipeEmbeddedEditor = null;
@@ -118,11 +127,26 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
            // _terrainPanel = null;
 
             Undo.undoRedoPerformed -= OnUndoRedo;
-            if (_targetCreator != null)
+            if (_targetCreator)
             {
-                _targetCreator.PathModified -= OnPathModified;
+                //_targetCreator.PathModified -= OnPathModified;
+                _targetCreator.CurveDefinitionChanged -= OnCurveDefinitionChanged;
+                _targetCreator.AppearanceChanged -= OnAppearanceChanged;
+                _targetCreator.TerrainInteractionChanged -= OnTerrainInteractionChanged;
+                
+                // 取消订阅 Profile 的修改事件
+                if (_targetCreator.profile != null)
+                {
+                    _targetCreator.profile.ProfileModified -= OnProfileModified;
+                }
             }
-            StylizedRoadRecipeEditor.OnRecipeModified -= OnRecipeChanged;
+            
+            // 清理 Profile 事件订阅跟踪
+            if (_lastSubscribedProfile != null)
+            {
+                _lastSubscribedProfile.ProfileModified -= OnProfileModified;
+                _lastSubscribedProfile = null;
+            }
         }
 
 
@@ -136,6 +160,24 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             _targetCreator = target as PathCreator;
             if (!_targetCreator) return;
 
+            // 检查 Profile 是否发生变化，如果变化则重新订阅事件
+            var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
+            if (currentProfile != _lastSubscribedProfile)
+            {
+                // 取消订阅旧的 Profile 事件
+                if (_lastSubscribedProfile != null)
+                {
+                    _lastSubscribedProfile.ProfileModified -= OnProfileModified;
+                }
+                
+                // 订阅新的 Profile 事件
+                if (currentProfile != null)
+                {
+                    currentProfile.ProfileModified += OnProfileModified;
+                }
+                
+                _lastSubscribedProfile = currentProfile;
+            }
 
             // [优化] 总是先调用 Update，最后调用 ApplyModifiedProperties，这是标准做法。
             serializedObject.Update();
@@ -147,13 +189,13 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             // [优化] 检查 profileProperty.objectReferenceValue 而不是直接访问 _targetCreator.profile，
             // 这样可以更好地与序列化系统协同工作。
-            if (_profileProperty.objectReferenceValue != null)
+            if (_profileProperty.objectReferenceValue)
             {
                 DrawEmbeddedProfileUI();
 
                 // 如果 Profile 中有 StylizedRoadRecipe，则显示它
-                var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
-                if (currentProfile != null && currentProfile.roadRecipe != null)
+                 currentProfile = _profileProperty.objectReferenceValue as PathProfile;
+                if (currentProfile && currentProfile.roadRecipe)
                 {
                     DrawEmbeddedRecipeUI();
                 }
@@ -169,7 +211,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private void OnSceneGUI()
         {
             _targetCreator = target as PathCreator;
-            if (_targetCreator == null) return;
+            if (!_targetCreator) return;
 
             // 确保预览始终激活（即使选中了Recipe等其他对象）
             if (_ctx != null && _ctx.IsPathValid())
@@ -234,54 +276,46 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
 
             // 检测 Transform 变化，若有则刷新
-            if (_targetCreator.transform.position != _lastPosition ||
-                _targetCreator.transform.rotation != _lastRotation ||
-                _targetCreator.transform.localScale != _lastScale)
-            {
-                _lastPosition = _targetCreator.transform.position;
-                _lastRotation = _targetCreator.transform.rotation;
-                _lastScale = _targetCreator.transform.localScale;
-                MarkPathAsDirty();
-            }
+            if (_targetCreator.transform.position == _lastPosition &&
+                _targetCreator.transform.rotation == _lastRotation &&
+                _targetCreator.transform.localScale == _lastScale) return;
+            _lastPosition = _targetCreator.transform.position;
+            _lastRotation = _targetCreator.transform.rotation;
+            _lastScale = _targetCreator.transform.localScale;
+            MarkPathAsDirty();
         }
 
         private void DrawEmbeddedRecipeUI()
         {
             var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
-            if (currentProfile == null || currentProfile.roadRecipe == null) return;
+            if (currentProfile is null || currentProfile.roadRecipe == null) return;
 
             // [优化] 检查内嵌编辑器的目标对象是否与当前 Recipe 一致。
-            if (_recipeEmbeddedEditor == null || _recipeEmbeddedEditor.target != currentProfile.roadRecipe)
+            if (!_recipeEmbeddedEditor || _recipeEmbeddedEditor.target != currentProfile.roadRecipe)
             {
                 InitRecipeEmbeddedEditor(currentProfile.roadRecipe);
             }
 
-            if (_recipeEmbeddedEditor == null) return;
+            if (!_recipeEmbeddedEditor) return;
 
             using (new EditorGUILayout.VerticalScope("Box"))
             {
                 _recipeLocalExpanded = EditorGUILayout.Foldout(_recipeLocalExpanded, "道路风格配方 (Stylized Road Recipe)", true, EditorStyles.foldoutHeader);
-                if (_recipeLocalExpanded)
+                if (!_recipeLocalExpanded) return;
+                EditorGUI.indentLevel++;
+
+                // [优化] 对内嵌编辑器的修改也使用 BeginChangeCheck/EndChangeCheck
+                EditorGUI.BeginChangeCheck();
+
+                _recipeEmbeddedEditor.OnInspectorGUI();
+
+                if (EditorGUI.EndChangeCheck())
                 {
-                    EditorGUI.indentLevel++;
-
-                    // [优化] 对内嵌编辑器的修改也使用 BeginChangeCheck/EndChangeCheck
-                    EditorGUI.BeginChangeCheck();
-
-                    _recipeEmbeddedEditor.OnInspectorGUI();
-
-                    if (EditorGUI.EndChangeCheck())
-                    {
-                        // 如果 Recipe 被修改，通知 targetCreator 并手动触发 Recipe 修改事件
-                        _targetCreator?.NotifyProfileModified();
-
-                        // 手动触发 StylizedRoadRecipeEditor 的 OnRecipeModified 事件
-                        // 这确保了嵌入式编辑器中的修改也能被正确处理
-                        StylizedRoadRecipeEditor.TriggerRecipeModified(currentProfile.roadRecipe);
-                    }
-
-                    EditorGUI.indentLevel--;
+                    // 如果 Recipe 被修改，通知 targetCreator
+                    _targetCreator?.NotifyProfileModified();
                 }
+
+                EditorGUI.indentLevel--;
             }
         }
 
@@ -311,12 +345,12 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
 
             // [优化] 检查内嵌编辑器的目标对象是否与当前 Profile 一致。
-            if (_profileEmbeddedEditor == null || _profileEmbeddedEditor.target != currentProfile)
+            if (!_profileEmbeddedEditor || _profileEmbeddedEditor.target != currentProfile)
             {
                 InitProfileEmbeddedEditor(currentProfile);
             }
 
-            if (_profileEmbeddedEditor == null) return;
+            if (!_profileEmbeddedEditor) return;
 
             using (new EditorGUILayout.VerticalScope("Box"))
             {
@@ -345,17 +379,30 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         #region 逻辑与辅助方法
 
-        private void OnPathModified(PathChangeCommand command) => MarkPathAsDirty();
+        // private void OnPathModified() => MarkPathAsDirty();
+        private void OnCurveDefinitionChanged() => MarkPathAsDirty();
+        private void OnTerrainInteractionChanged() => MarkPathAsDirty();
+        private void OnAppearanceChanged()
+        {
+            _ctx?.PreviewManager?.MarkMaterialsDirty();
+            _ctx?.RequestSceneViewRefresh();
+        }
         private void OnUndoRedo() => MarkPathAsDirty();
+
+        private void OnProfileModified()
+        {
+            // Profile 修改时，标记材质为脏并刷新场景视图
+            _ctx?.PreviewManager?.MarkMaterialsDirty();
+            _ctx?.RequestSceneViewRefresh(true); // 强制立即刷新
+            MarkPathAsDirty();
+        }
 
         private void OnRecipeChanged(StylizedRoadRecipe recipe)
         {
-            if (_targetCreator != null && _targetCreator.profile != null && _targetCreator.profile.roadRecipe == recipe)
-            {
-                // 标记材质为脏，确保实时更新Scene视图中的预览效果
-                _ctx?.PreviewManager?.MarkMaterialsDirty();
-                MarkPathAsDirty();
-            }
+            if (!_targetCreator || !_targetCreator.profile || _targetCreator.profile.roadRecipe != recipe) return;
+            // 标记材质为脏，确保实时更新Scene视图中的预览效果
+            _ctx?.PreviewManager?.MarkMaterialsDirty();
+            MarkPathAsDirty();
         }
 
         private void MarkPathAsDirty()
@@ -367,7 +414,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         private void InitProfileEmbeddedEditor(PathProfile profile)
         {
-            if (_profileEmbeddedEditor != null)
+            if (_profileEmbeddedEditor)
             {
                 DestroyImmediate(_profileEmbeddedEditor);
             }
@@ -376,7 +423,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         private void InitRecipeEmbeddedEditor(StylizedRoadRecipe recipe)
         {
-            if (_recipeEmbeddedEditor != null)
+            if (_recipeEmbeddedEditor)
             {
                 DestroyImmediate(_recipeEmbeddedEditor);
             }
@@ -387,7 +434,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             // [优化] 使用 EditorUtility.SaveFilePanelInProject 让用户选择保存路径，而不是硬编码。
             // 这是创建新资产的标准做法，更灵活、更健壮。
-            string path = EditorUtility.SaveFilePanelInProject(
+            var path = EditorUtility.SaveFilePanelInProject(
                 "创建新的路径配置文件",
                 "New PathProfile.asset",
                 "asset",

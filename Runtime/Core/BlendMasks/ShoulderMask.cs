@@ -37,7 +37,7 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
         [Tooltip("路肩形状曲线：控制路肩区域内的强度分布")]
         public AnimationCurve shoulderProfile = AnimationCurve.EaseInOut(0f, 1f, 1f, 1f);
 
-        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
             // horizontalPosition: -1(左边界) 到 1(右边界)
             float absPosition = Mathf.Abs(horizontalPosition);
@@ -84,6 +84,11 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             }
             
             return ApplySmoothing(Mathf.Clamp01(maskValue));
+        }
+
+        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        {
+            return Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);
         }
         
         /// <summary>

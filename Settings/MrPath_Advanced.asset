@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 878b8e169c7396b4088eb84af11f367f, type: 3}
   m_Name: MrPath_Advanced
   m_EditorClassIdentifier: 
-  defaultStrategy: {fileID: 11400000, guid: bd36c88b0765ed24aa6b868b64fc5642, type: 2}
-  availableStrategies:
-  - {fileID: 11400000, guid: ef9ab77836e51104cb4cb3dbe8ccda13, type: 2}
-  - {fileID: 11400000, guid: bd36c88b0765ed24aa6b868b64fc5642, type: 2}
+  bezierStrategy: {fileID: 11400000, guid: ef9ab77836e51104cb4cb3dbe8ccda13, type: 2}
+  catmullRomStrategy: {fileID: 11400000, guid: bd36c88b0765ed24aa6b868b64fc5642, type: 2}
+  paintingBackend: 1
+  enableMemoryTracking: 1

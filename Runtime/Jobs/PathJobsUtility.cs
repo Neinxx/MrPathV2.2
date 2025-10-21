@@ -28,7 +28,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 Tangents = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
                 Normals = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
                 
-                for (int i = 0; i < spine.VertexCount; i++)
+                for (var i = 0; i < spine.VertexCount; i++)
                 {
                     Points[i] = spine.points[i];
                     Tangents[i] = spine.tangents[i];
@@ -78,19 +78,19 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             private static void BakeCurve(AnimationCurve curve, NativeArray<float> bakedData, float start, float end)
             {
-                for (int i = 0; i < BakeResolution; i++)
+                for (var i = 0; i < BakeResolution; i++)
                 {
-                    float time = math.lerp(start, end, i / (float)(BakeResolution - 1));
+                    var time = math.lerp(start, end, i / (float)(BakeResolution - 1));
                     bakedData[i] = curve.Evaluate(time);
                 }
             }
 
             private static float EvaluateBakedCurve(NativeArray<float> bakedData, float t, float start, float end)
             {
-                float normalizedT = math.saturate((t - start) / (end - start));
-                float floatIndex = normalizedT * (BakeResolution - 1);
-                int indexA = (int)math.floor(floatIndex);
-                int indexB = (int)math.ceil(floatIndex);
+                var normalizedT = math.saturate((t - start) / (end - start));
+                var floatIndex = normalizedT * (BakeResolution - 1);
+                var indexA = (int)math.floor(floatIndex);
+                var indexB = (int)math.ceil(floatIndex);
                 if (indexA == indexB) return bakedData[indexA];
                 return math.lerp(bakedData[indexA], bakedData[indexB], floatIndex - indexA);
             }

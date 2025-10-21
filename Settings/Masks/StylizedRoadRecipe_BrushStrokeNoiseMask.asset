@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af06d4dead14eb847b4504bc43ad56fa, type: 3}
   m_Name: StylizedRoadRecipe_BrushStrokeNoiseMask
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 6.11, y: 3.45}
+  smooth: 0.583
+  tiling: {x: 1, y: 30}
   offset: {x: 0, y: 0}
-  overallScale: 1.08
-  scale: 2.41
-  strength: 0.528
+  overallScale: 2
+  scale: 5.95
+  strength: 0.262
   strengthVariation: 0.97
   strokeWidth: 0.77
   widthVariation: 0.473

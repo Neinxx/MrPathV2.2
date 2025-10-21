@@ -63,12 +63,12 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
         private List<UnityEngine.Terrain> FindAffectedTerrains(PathSpine spine)
         {
-            Bounds projectedBounds = GetProjectedSpineBounds(spine);
+            var projectedBounds = GetProjectedSpineBounds(spine);
             var affectedTerrains = new List<UnityEngine.Terrain>();
             foreach (var terrain in UnityEngine.Terrain.activeTerrains)
             {
                 if (terrain == null || terrain.terrainData == null) continue;
-                Bounds terrainBounds = new Bounds(terrain.GetPosition() + terrain.terrainData.size / 2f, terrain.terrainData.size);
+                var terrainBounds = new Bounds(terrain.GetPosition() + terrain.terrainData.size / 2f, terrain.terrainData.size);
                 if (projectedBounds.Intersects(terrainBounds)) { affectedTerrains.Add(terrain); }
             }
             return affectedTerrains;
@@ -77,8 +77,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             if (spine.VertexCount == 0) return new Bounds();
             var pathBounds = new Bounds(spine.points[0], Vector3.zero);
-            for (int i = 1; i < spine.VertexCount; i++) { pathBounds.Encapsulate(spine.points[i]); }
-            float maxExtent = Creator.profile != null ? Creator.profile.roadWidth / 2f + Creator.profile.falloffWidth : 0;
+            for (var i = 1; i < spine.VertexCount; i++) { pathBounds.Encapsulate(spine.points[i]); }
+            var maxExtent = Creator.profile != null ? Creator.profile.roadWidth / 2f + Creator.profile.falloffWidth : 0;
             pathBounds.Expand(new Vector3(maxExtent * 2, 0, maxExtent * 2));
             return new Bounds(new Vector3(pathBounds.center.x, pathBounds.center.y, pathBounds.center.z), new Vector3(pathBounds.size.x, float.MaxValue, pathBounds.size.z));
         }
@@ -92,9 +92,9 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (spine.VertexCount == 0)
                 return new Vector4(float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
 
-            float halfWidth = (profile != null ? profile.roadWidth * 0.5f + profile.falloffWidth : 0f);
+            var halfWidth = (profile != null ? profile.roadWidth * 0.5f + profile.falloffWidth : 0f);
             float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
-            for (int i = 0; i < spine.VertexCount; i++)
+            for (var i = 0; i < spine.VertexCount; i++)
             {
                 var p = spine.points[i];
                 minX = Mathf.Min(minX, p.x - halfWidth);
@@ -108,7 +108,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             var terrainLayers = terrain.terrainData.terrainLayers;
             var layerToIndexMap = new Dictionary<TerrainLayer, int>();
-            for (int i = 0; i < terrainLayers.Length; i++) { if (terrainLayers[i] != null) layerToIndexMap[terrainLayers[i]] = i; }
+            for (var i = 0; i < terrainLayers.Length; i++) { if (terrainLayers[i] != null) layerToIndexMap[terrainLayers[i]] = i; }
             return layerToIndexMap;
         }
         private void StitchTerrains(List<UnityEngine.Terrain> terrains)

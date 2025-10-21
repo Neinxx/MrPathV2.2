@@ -181,7 +181,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
             
             if (preserveData && array.IsValid())
             {
-                int copyLength = Mathf.Min(array.Length, newLength);
+                var copyLength = Mathf.Min(array.Length, newLength);
                 array.SafeCopyTo(newArray, 0, 0, copyLength);
             }
             
@@ -222,7 +222,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         {
             if (!array.IsValid()) return;
 
-            for (int i = 0; i < array.Length; i++)
+            for (var i = 0; i < array.Length; i++)
             {
                 array[i] = value;
             }

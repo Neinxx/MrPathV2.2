@@ -5,6 +5,7 @@ using System.Linq;
 using __temp.MrPathV2._2.Editor.Performance;
 using __temp.MrPathV2._2.Runtime.Core;
 using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2;
 using Sirenix.OdinInspector.Editor;
 using Sirenix.Utilities.Editor;
 using UnityEditor;
@@ -15,16 +16,14 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
     [CustomEditor(typeof(StylizedRoadRecipe))]
     public class StylizedRoadRecipeEditor : OdinEditor
     {
-        public static event Action<StylizedRoadRecipe> OnRecipeModified;
-
         /// <summary>
         /// 手动触发Recipe修改事件，用于嵌入式编辑器
         /// </summary>
         public static void TriggerRecipeModified(StylizedRoadRecipe recipe)
         {
-            OnRecipeModified?.Invoke(recipe);
+            recipe?.RaiseRecipeChanged();
         }
-
+        
 
         private StylizedRoadRecipe _recipe;
         private int _lastRecipeHash;
@@ -57,35 +56,40 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             base.OnEnable();
             _recipe = target as StylizedRoadRecipe;
+            _lastRecipeHash = _recipe?.GetHashCode() ?? 0;
+
+            // 订阅属性变化事件，直接调用recipe的事件而不是静态事件
+            Tree.OnPropertyValueChanged += (_, _) => _recipe?.RaiseRecipeChanged();
+            
             if (MaskTypes.Length > 0)
                 _selectedMaskType = MaskTypes[0];
 
 
             // --- 预览材质初始化（静态共享）---
-            if (_previewShader == null)
+            if (!_previewShader)
             {
                 _previewShader = Shader.Find("MrPathV2/StylizedRoadBlend");
-                if (_previewShader == null && !_missingShaderLogged)
+                if (!_previewShader && !_missingShaderLogged)
                 {
                     Debug.LogError("MrPath: 预览 Shader 'MrPathV2/StylizedRoadBlend' 未找到！请确认文件存在。");
                     _missingShaderLogged = true;
                 }
             }
 
-            if (_sharedPreviewMaterial == null && _previewShader != null)
+            if (!_sharedPreviewMaterial && _previewShader)
             {
                 _sharedPreviewMaterial = new Material(_previewShader) { hideFlags = HideFlags.HideAndDontSave };
             }
 
             _previewMaterial = _sharedPreviewMaterial; // 使用共享实例，避免重复创建/销毁
 
-            this.Tree.OnPropertyValueChanged += (_, _) => OnRecipeModified?.Invoke(_recipe);
+            this.Tree.OnPropertyValueChanged += (_, _) => _recipe?.RaiseRecipeChanged();
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
-            if (_previewRT != null) _previewRT.Release();
+            if (_previewRT) _previewRT.Release();
 
 
             // 不再销毁 _previewMaterial，因为它是静态共享实例
@@ -100,14 +104,14 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             SirenixEditorGUI.BeginBox();
             
-            // 移除Inspector预览面板，用户现在可以在Scene视图中实时看到效果
-            EditorGUILayout.HelpBox("道路预览已移至Scene视图，调节参数可实时查看效果。", MessageType.Info);
+            // Scene preview tip
+            // HelpBox removed per UI redesign
             
-            EditorGUILayout.Space();
-            DrawMaskCreator();
+            // EditorGUILayout.Space();
+            // DrawMaskCreator(); // Removed as per redesign
             
-            // 添加性能分析面板
-            MultiLayerPerformanceManager.DrawPerformanceInfo(_recipe);
+            // 移除性能分析面板调用
+            // MultiLayerPerformanceManager.DrawPerformanceInfo(_recipe);
             
             SirenixEditorGUI.EndBox();
 
@@ -116,18 +120,16 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         private void CheckForChanges()
         {
-            int currentHash = ComputeRecipeHash(_recipe);
-            if (currentHash != _lastRecipeHash)
-            {
-                _lastRecipeHash = currentHash;
+            var currentHash = ComputeRecipeHash(_recipe);
+            if (currentHash == _lastRecipeHash) return;
+            _lastRecipeHash = currentHash;
 
-                // 【FIX】Clear the LUT cache to force regeneration of mask textures
+            // 【FIX】Clear the LUT cache to force regeneration of mask textures
 
-                // LUT 缓存已删除，无需额外处理
+            // LUT 缓存已删除，无需额外处理
 
-                UpdatePreviewTexture();
-                OnRecipeModified?.Invoke(_recipe);
-            }
+            UpdatePreviewTexture();
+            _recipe?.RaiseRecipeChanged();
         }
 
         #region Preview Generation
@@ -135,7 +137,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private void UpdatePreviewTexture()
         {
             // 统一使用 GPU 预览
-            if (_previewMaterial != null) GenerateCombinedPreviewGPU(_recipe);
+            if (_previewMaterial) GenerateCombinedPreviewGPU(_recipe);
             Repaint();
         }
 
@@ -143,15 +145,15 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             // 修改预览尺寸：使用更宽的比例以显示完整道路横截面（水平方向）
             // 640x160 提供4:1的宽高比，更适合显示道路横截面
-            if (_previewRT == null || _previewRT.width != 640 || _previewRT.height != 160)
+            if (!_previewRT || _previewRT.width != 640 || _previewRT.height != 160)
             {
-                if (_previewRT != null) _previewRT.Release();
+                if (_previewRT) _previewRT.Release();
                 _previewRT = new RenderTexture(640, 160, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Default);
                 _previewRT.Create();
             }
 
-            float previewWorldWidth = GetPreviewWorldWidth(recipe);
-            var activeLayers = recipe.blendLayers.Where(l => l.enabled && l.mask != null && l.terrainLayer != null).ToList();
+            var previewWorldWidth = GetPreviewWorldWidth(recipe);
+            var activeLayers = recipe.GetLayers().Where(l => l is { enabled: true } && l.layerMask && l.contentLayer).ToList();
             if (activeLayers.Count == 0)
             {
                 // ... 清空 RT 的代码不变 ...
@@ -163,23 +165,23 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
 
             // --- 乒乓渲染 ---
-            RenderTexture rt1 = RenderTexture.GetTemporary(_previewRT.descriptor);
-            RenderTexture rt2 = RenderTexture.GetTemporary(_previewRT.descriptor);
+            var rt1 = RenderTexture.GetTemporary(_previewRT.descriptor);
+            var rt2 = RenderTexture.GetTemporary(_previewRT.descriptor);
 
             Graphics.SetRenderTarget(rt1);
             GL.Clear(true, true, Color.clear);
 
-            for (int i = 0; i < activeLayers.Count; i++)
+            for (var i = 0; i < activeLayers.Count; i++)
             {
                 var layer = activeLayers[i];
                 // 使用 PreviewPipelineUtility 统一计算 tiling 并生成 LUT
-                Vector2 tiling = PreviewPipelineUtility.CalcLayerTiling(previewWorldWidth, layer.terrainLayer);
+                var tiling = PreviewPipelineUtility.CalcLayerTiling(previewWorldWidth, layer.contentLayer);
                 
                 // 使用新的mask系统获取活动遮罩
-                var activeMask = layer.GetActiveMask();
+                var activeMask = layer.layerMask;
                 
                 var pli = new PreviewPipelineUtility.PreviewLayerInfo(
-                    layer.terrainLayer.diffuseTexture ?? Texture2D.whiteTexture,
+                    layer.contentLayer != null ? layer.contentLayer.diffuseTexture : Texture2D.whiteTexture,
                     tiling,
                     Vector2.zero,
                     Color.white,
@@ -187,7 +189,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                     layer.blendMode,
                     activeMask);
                 // Build single-layer Mask Atlas and configure material
-                Texture2D maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
+                var maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(null, new List<PreviewPipelineUtility.PreviewLayerInfo> { pli }, previewWorldWidth);
 
                 _previewMaterial.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
                 _previewMaterial.SetColor(LayerTint, Color.white);
@@ -223,8 +225,8 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         // 根据配方（Recipe）的实际道路宽度，动态计算预览所使用的世界宽度。
         private static float GetPreviewWorldWidth(StylizedRoadRecipe recipe)
         {
-            if (!recipe) return 10f;          // 合理地默认值，避免 Null 引发异常
-            return Mathf.Max(0.1f, recipe.width);   // 避免出现 0 带来的除零错误
+            return !recipe ? 10f : // 合理地默认值，避免 Null 引发异常
+                Mathf.Max(0.1f, recipe.width); // 避免出现 0 带来的除零错误
         }
 
         /// <summary>
@@ -233,29 +235,31 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         // (removed GenerateChannelsPreviewCPU method as GPU replaces it)
 
         
-        private int ComputeRecipeHash(StylizedRoadRecipe r)
+        private static int ComputeRecipeHash(StylizedRoadRecipe r)
         {
             unchecked
             {
-                int hash = 17;
+                var hash = 17;
 
-                if (r == null) return hash;
+                if (!r) return hash;
 
-                foreach (var layer in r.blendLayers)
+                foreach (var layer in r.GetLayers())
                 {
                     if (layer == null) continue;
                     hash = hash * 23 + layer.enabled.GetHashCode();
                     hash = hash * 23 + layer.opacity.GetHashCode();
                     hash = hash * 23 + layer.blendMode.GetHashCode();
-                    hash = hash * 23 + (layer.terrainLayer != null ? layer.terrainLayer.GetInstanceID() : 0);
+                    hash = hash * 23 + (layer.contentLayer != null ? layer.contentLayer.GetInstanceID() : 0);
 
-                    // 使用新的mask系统计算hash
-                    hash = hash * 23 + layer.maskType.GetHashCode();
-                    
-                    var activeMask = layer.GetActiveMask();
-                    if (activeMask != null)
+                    // 使用新的mask系统计算hash (maskType removed)
+                    // 删除旧的 maskType 和 GetActiveMask 逻辑，直接使用 layer.layerMask
+                    if (layer.layerMask)
                     {
-                        hash = hash * 23 + JsonUtility.ToJson(activeMask).GetHashCode();
+                        hash = hash * 23 + JsonUtility.ToJson(layer.layerMask).GetHashCode();
+                    }
+                    if (layer.layerMask)
+                    {
+                        hash = hash * 23 + JsonUtility.ToJson(layer.layerMask).GetHashCode();
                     }
                 }
                 return hash;
@@ -290,9 +294,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 
                 if (MaskTypes.Length > 0)
                 {
-                    int currentIndex = Array.IndexOf(MaskTypes, _selectedMaskType);
+                    var currentIndex = Array.IndexOf(MaskTypes, _selectedMaskType);
                     var typeNames = MaskTypes.Select(GetMaskTypeDisplayName).ToArray();
-                    int newIndex = EditorGUILayout.Popup(currentIndex, typeNames);
+                    var newIndex = EditorGUILayout.Popup(currentIndex, typeNames);
                     if (newIndex != currentIndex) _selectedMaskType = MaskTypes[newIndex];
                 }
                 
@@ -311,17 +315,17 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
 
             var newMask = CreateInstance(maskType);
-            string recipePath = AssetDatabase.GetAssetPath(_recipe);
-            string folder = Path.GetDirectoryName(recipePath) ?? "Assets";
-            string masksFolder = Path.Combine(folder, "Masks");
+            var recipePath = AssetDatabase.GetAssetPath(_recipe);
+            var folder = Path.GetDirectoryName(recipePath) ?? "Assets";
+            var masksFolder = Path.Combine(folder, "Masks");
             
             if (!AssetDatabase.IsValidFolder(masksFolder))
             {
                 AssetDatabase.CreateFolder(folder, "Masks");
             }
             
-            string assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{maskType.Name}.asset").Replace("\\", "/");
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+            var assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{maskType.Name}.asset").Replace("\\", "/");
+            var uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
             
             AssetDatabase.CreateAsset(newMask, uniquePath);
             AssetDatabase.SaveAssets();
@@ -330,7 +334,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             Debug.Log($"MrPath: 已创建新的{displayName}资产: {uniquePath}");
         }
 
-        private string GetMaskTypeDisplayName(Type maskType)
+        private static string GetMaskTypeDisplayName(Type maskType)
         {
             if (maskType == typeof(ShoulderMask)) return "路肩遮罩";
             if (maskType == typeof(RoadSurfaceMask)) return "路面遮罩";
@@ -343,12 +347,12 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             if (_selectedMaskType == null) { Debug.LogError("没有可用的遮罩类型！"); return; }
             var newMask = CreateInstance(_selectedMaskType);
-            string recipePath = AssetDatabase.GetAssetPath(_recipe);
-            string folder = Path.GetDirectoryName(recipePath) ?? "Assets";
-            string masksFolder = Path.Combine(folder, "Masks");
+            var recipePath = AssetDatabase.GetAssetPath(_recipe);
+            var folder = Path.GetDirectoryName(recipePath) ?? "Assets";
+            var masksFolder = Path.Combine(folder, "Masks");
             if (!AssetDatabase.IsValidFolder(masksFolder)) { AssetDatabase.CreateFolder(folder, "Masks"); }
-            string assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{_selectedMaskType.Name}.asset").Replace("\\", "/");
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+            var assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{_selectedMaskType.Name}.asset").Replace("\\", "/");
+            var uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
             AssetDatabase.CreateAsset(newMask, uniquePath);
             AssetDatabase.SaveAssets();
             EditorGUIUtility.PingObject(newMask);
@@ -363,5 +367,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         #endregion
+
+      
     }
 }

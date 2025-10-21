@@ -113,7 +113,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 // 调度所有Job
                 using (SJobScheduleMarker.Auto())
                 {
-                    for (int i = 0; i < jobSchedulers.Length; i++)
+                    for (var i = 0; i < jobSchedulers.Length; i++)
                     {
                         handles[i] = jobSchedulers[i]();
                     }
@@ -127,7 +127,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             catch (OperationCanceledException)
             {
                 // 取消时完成所有Job
-                for (int i = 0; i < handles.Length; i++)
+                for (var i = 0; i < handles.Length; i++)
                 {
                     handles[i].Complete();
                 }
@@ -138,7 +138,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 Debug.LogError($"批量Job执行失败: {ex.Message}");
                 
                 // 异常时完成所有Job
-                for (int i = 0; i < handles.Length; i++)
+                for (var i = 0; i < handles.Length; i++)
                 {
                     handles[i].Complete();
                 }

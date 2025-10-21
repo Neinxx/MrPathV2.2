@@ -80,7 +80,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
             var outputData = _resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
 
             // 初始化输入数据
-            for (int i = 0; i < dataSize; i++)
+            for (var i = 0; i < dataSize; i++)
             {
                 inputData[i] = UnityEngine.Random.Range(0f, 100f);
             }
@@ -100,7 +100,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
                 
             // 验证结果
             float sum = 0;
-            for (int i = 0; i < math.min(10, dataSize); i++)
+            for (var i = 0; i < math.min(10, dataSize); i++)
             {
                 sum += outputData[i];
             }
@@ -125,7 +125,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
                 outputData = Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
 
                 // 初始化输入数据
-                for (int i = 0; i < dataSize; i++)
+                for (var i = 0; i < dataSize; i++)
                 {
                     inputData[i] = UnityEngine.Random.Range(0f, 100f);
                 }
@@ -178,13 +178,13 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
             try
             {
                 // 创建多个Job
-                for (int i = 0; i < batchSize; i++)
+                for (var i = 0; i < batchSize; i++)
                 {
                     inputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
                     outputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
 
                     // 初始化数据
-                    for (int j = 0; j < dataSize / batchSize; j++)
+                    for (var j = 0; j < dataSize / batchSize; j++)
                     {
                         inputArrays[i][j] = UnityEngine.Random.Range(0f, 100f);
                     }
@@ -292,7 +292,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         public void Execute(int index)
         {
             // 模拟一些计算
-            float value = InputData[index];
+            var value = InputData[index];
             value = math.sin(value) * Multiplier;
             value = math.sqrt(math.abs(value));
             OutputData[index] = value;

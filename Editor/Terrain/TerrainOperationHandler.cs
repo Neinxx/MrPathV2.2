@@ -65,7 +65,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 EditorUtility.DisplayProgressBar("应用路径到地形", $"正在执行: {operationId}...", 0.3f);
                 
                 // 使用AsyncOperationManager执行操作
-                bool success = await _asyncManager.ExecuteAsync(operationId, async (token) =>
+                var success = await _asyncManager.ExecuteAsync(operationId, async (token) =>
                 {
                     // 创建兼容的CancellationTokenSource
                     _cts?.Dispose();
@@ -102,7 +102,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (_currentCommand != null)
             {
                 var operationId = _currentCommand.GetCommandName();
-                bool cancelled = _asyncManager.CancelOperation(operationId);
+                var cancelled = _asyncManager.CancelOperation(operationId);
                 
                 if (cancelled)
                 {
@@ -162,7 +162,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             var activeIds = _asyncManager.GetActiveOperationIds();
             var tasks = new Task<bool>[activeIds.Length];
             
-            for (int i = 0; i < activeIds.Length; i++)
+            for (var i = 0; i < activeIds.Length; i++)
             {
                 tasks[i] = _asyncManager.WaitForOperationAsync(activeIds[i], timeout);
             }

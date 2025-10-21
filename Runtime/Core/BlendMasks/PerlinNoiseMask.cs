@@ -22,5 +22,16 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             float rawValue = noiseValue * strength;
             return ApplySmoothing(Mathf.Clamp01(rawValue));
         }
+        public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
+        {
+            float inputX = TransformPosition(horizontalPosition, worldWidth);
+            float inputY = TransformPathPosition(pathProgress, pathLength);
+
+            float noiseValue = Mathf.PerlinNoise(inputX, inputY);
+            float rawValue = noiseValue * strength;
+            return ApplySmoothing(Mathf.Clamp01(rawValue));
+        }
+
+      
     }
 }

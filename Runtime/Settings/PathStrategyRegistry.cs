@@ -26,7 +26,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
         {
             get
             {
-                if (_instance == null && !_initializationAttempted)
+                if (!_instance && !_initializationAttempted)
                 {
                     InitializeInstance();
                 }
@@ -45,7 +45,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
 
             public bool Equals(StrategyEntry other)
             {
-                return type == other.type && strategy == other.strategy;
+                return type == other.type && strategy && strategy && other.strategy && strategy == other.strategy;
             }
 
             public override bool Equals(object obj)
@@ -61,13 +61,13 @@ namespace __temp.MrPathV2._2.Runtime.Settings
             /// <summary>
             /// 验证策略条目是否有效
             /// </summary>
-            public bool IsValid => strategy != null;
+            public bool IsValid => strategy;
         }
 
         [FormerlySerializedAs("_strategyEntries")]
         [Header("策略映射配置")]
         [Tooltip("曲线类型与策略的映射列表")]
-        [SerializeField] private List<StrategyEntry> strategyEntries = new List<StrategyEntry>();
+        [SerializeField] private List<StrategyEntry> strategyEntries = new();
 
         // 缓存策略映射，提高查询性能
         private Dictionary<CurveType, PathStrategy> _strategyCache;
@@ -86,7 +86,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
 
                 // 编辑器下尝试查找现有资源
 #if UNITY_EDITOR
-                if (_instance == null)
+                if (!_instance)
                 {
                     var guids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(PathStrategyRegistry)}");
                     if (guids?.Length > 0)
@@ -101,7 +101,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
 #endif
 
                 // 未找到资产则保持为 null，由调用方处理提示与阻止。
-                if (_instance != null)
+                if (_instance)
                 {
                     // 初始化缓存
                     _instance.InitializeCache();

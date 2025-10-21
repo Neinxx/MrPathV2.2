@@ -1,5 +1,6 @@
 using System.Collections.Generic;
-using __temp.MrPathV2._2.Runtime.Core;
+using System.Linq;
+using __temp.MrPathV2._2.Runtime.Core; // add near top
 using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -20,7 +21,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         // 统一的遮罩采样条：把每层的遮罩（Gradient/Noise/Texture）采样为固定长度的一维数组
         [ReadOnly] public NativeArray<float> Strips;            // 长度 = stripResolution * Length
         [ReadOnly] public NativeArray<int2> StripSlices;        // 每层在 strips 中的起始偏移与长度（length = stripResolution）
-        [ReadOnly] public int StripResolution;                  // 采样条分辨率（固定长度）
+        [ReadOnly] public readonly int StripResolution;                  // 采样条分辨率（固定长度）
 
         // 兼容旧实现：仍保留曲线关键帧（用于外部可能的评估复用），但当前共享算法使用 strips
         [ReadOnly] public NativeArray<Keyframe> GradientKeys;   // 合并后的所有关键帧
@@ -28,14 +29,15 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         [ReadOnly] public NativeArray<float4> MaskLut256;   // 删除该字段及相关逻辑
         // 新 2D MaskAtlas，每行对应一层，单通道 R 保存权重
         [ReadOnly] public NativeArray<float> MaskAtlas;    // 长度 = atlasWidth * atlasHeight
-        public int AtlasWidth;
-        public int AtlasHeight;
-        public int Length { get; private set; }
+        public readonly int AtlasWidth;
+        public readonly int AtlasHeight;
+        public readonly int PathSamples;
+        public int Length { get; }
 
         public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, float roadWorldLength, Allocator allocator)
         {
-            var blends = recipe?.blendLayers?.ToArray() ?? System.Array.Empty<BlendLayer>();
-            Length = blends.Length;
+            var roadLayers = recipe?.GetLayers()?.ToArray() ?? System.Array.Empty<RoadLayer>();
+            Length = roadLayers.Length;
             TerrainLayerIndices = Extensions.NativeArrayExtensions.CreateTracked<int>(Length, allocator);
             BlendModes = Extensions.NativeArrayExtensions.CreateTracked<int>(Length, allocator);
             Opacities = Extensions.NativeArrayExtensions.CreateTracked<float>(Length, allocator);
@@ -48,93 +50,47 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             // 设定 MaskAtlas 分辨率（与 Preview 保持一致，可后续参数化）
             AtlasWidth = 256;
-            AtlasHeight = math.max(1, Length);
+            PathSamples = 64; // 纵向采样数，可后续做成可配置
+            AtlasHeight = math.max(1, Length * PathSamples);
             MaskAtlas = Extensions.NativeArrayExtensions.CreateTracked<float>(AtlasWidth * AtlasHeight, allocator);
 
-            int totalKeyframes = 0;
-            if (blends != null)
-            {
-                foreach (var b in blends)
-                {
-                    var activeMask = b?.GetActiveMask();
-                    var gradAsset = activeMask as GradientMask;
-                    var keys = gradAsset != null ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>())
-                                                : (b?.blendMask?.gradient?.keys ?? System.Array.Empty<Keyframe>());
-                    totalKeyframes += keys.Length;
-                }
-            }
+            _disposed = false;
+
+            var totalKeyframes = 0;
+            totalKeyframes += (from b in roadLayers select b?.layerMask as GradientMask into gradAsset select gradAsset ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>()) : System.Array.Empty<Keyframe>() into keys select keys.Length).Sum();
             GradientKeys = Extensions.NativeArrayExtensions.CreateTracked<Keyframe>(math.max(1, totalKeyframes), allocator);
 
-            int keyOffset = 0;
-            int stripOffset = 0;
-            for (int i = 0; i < Length; i++)
+            var keyOffset = 0;
+            var stripOffset = 0;
+            for (var i = 0; i < Length; i++)
             {
-                var b = blends[i];
-                int idx = (b?.terrainLayer != null && terrainLayerMap != null && terrainLayerMap.ContainsKey(b.terrainLayer))
-                    ? terrainLayerMap[b.terrainLayer] : -1;
+                var b = roadLayers[i];
+                var activeMask = b?.layerMask;
+                 var idx = (b?.contentLayer && terrainLayerMap != null && terrainLayerMap.TryGetValue(b.contentLayer, out var value))
+                    ? value : -1;
                 TerrainLayerIndices[i] = idx;
 
                 BlendModes[i] = b != null ? (int)b.blendMode : 0; // 默认 Normal=0
-                Opacities[i] = Mathf.Clamp01(b != null ? b.opacity * recipe.masterOpacity : recipe.masterOpacity);
+                if (recipe)
+                    Opacities[i] = Mathf.Clamp01(b != null ? b.opacity * recipe.masterOpacity : recipe.masterOpacity);
 
-                // 兼容：若使用 GradientMask 资产则读取其曲线关键帧，否则读取旧字段
-                var activeMask = b?.GetActiveMask();
-                var gradAsset = activeMask as GradientMask;
-                var keys = gradAsset != null ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>())
-                                             : (b?.blendMask?.gradient?.keys ?? System.Array.Empty<Keyframe>());
-                for (int k = 0; k < keys.Length; k++) GradientKeys[keyOffset + k] = keys[k];
+                var gradAsset = b?.layerMask as GradientMask;
+                var keys = gradAsset ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>()) : System.Array.Empty<Keyframe>();
+                for (var k = 0; k < keys.Length; k++) GradientKeys[keyOffset + k] = keys[k];
                 GradientKeySlices[i] = new int2(keyOffset, keys.Length);
                 keyOffset += keys.Length;
 
-                // 采样遮罩为一维 Strip（-1..1 -> 0..stripResolution-1）
                 StripSlices[i] = new int2(stripOffset, StripResolution);
-                for (int s = 0; s < StripResolution; s++)
+                for (var s = 0; s < StripResolution; s++)
                 {
-                    float t = s / (float)(StripResolution - 1);    // 0..1
-                    float pos = Mathf.Lerp(-1f, 1f, t);             // -1..1（横向位置）
-                    float v = 1f;
-                    var activeBrush = b?.GetActiveMask(); // 新资产引用
-                    if (activeBrush != null)
+                    var t = s / (float)(StripResolution - 1);    // 0..1
+                    var pos = Mathf.Lerp(-1f, 1f, t);             // -1..1
+                    var v = 1f;
+                    if (activeMask)
                     {
-                        v = Mathf.Clamp01(activeBrush.Evaluate(pos, roadWorldWidth, roadWorldLength));
+                        v = Mathf.Clamp01(activeMask.Evaluate(pos, roadWorldWidth, roadWorldLength));
                     }
-                    else
-                    {
-                        // 回退到旧字段逻辑
-                        var mask = b?.blendMask;
-                        if (mask != null)
-                        {
-                            switch (mask.maskType)
-                            {
-                                case BlendMaskType.PositionalGradient:
-                                    v = mask.gradient != null ? Mathf.Clamp01(mask.gradient.Evaluate(pos)) : 1f;
-                                    break;
-                                case BlendMaskType.ProceduralNoise:
-                                    float scale = Mathf.Max(0.0001f, mask.noiseScale);
-                                    v = Mathf.Clamp01(Mathf.PerlinNoise(s / scale, 0.5f) * mask.noiseStrength);
-                                    break;
-                                case BlendMaskType.CustomTexture:
-                                    if (mask.customTexture != null)
-                                    {
-                                        var tex2D = mask.customTexture as Texture2D;
-                                        if (tex2D != null && tex2D.isReadable)
-                                        {
-                                            int texX = Mathf.Clamp(Mathf.RoundToInt(t * (tex2D.width - 1)), 0, tex2D.width - 1);
-                                            int texY = tex2D.height / 2;
-                                            var c = tex2D.GetPixel(texX, texY);
-                                            v = c.a;
-                                        }
-                                        else v = 1f;
-                                    }
-                                    else v = 0f;
-                                    break;
-                                default:
-                                    v = 1f;
-                                    break;
-                            }
-                        }
-                    }
-                    // 应用不透明度后写入条带
+                    // 默认填充 1 (不影响底层)，再应用不透明度
                     v = Mathf.Clamp01(v * Opacities[i]);
                     Strips[stripOffset + s] = v;
                 }
@@ -176,26 +132,33 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             }*/
             // 待移除的旧 LUT 生成逻辑已清理
 
-            // 生成 2D MaskAtlas：逐层填充 R 通道（单通道数组）
-            for (int li = 0; li < Length; li++)
+            // 生成 2D MaskAtlas：
+            // Y 方向先是 layer，再是 pathProgress 采样，共 Length * PathSamples 行。
+            for (var li = 0; li < Length; li++)
             {
-                int sliceStart = StripSlices[li].x;
-                int res = StripResolution;
+                var sliceStart = StripSlices[li].x;
+                var res = StripResolution;
 
-                for (int x = 0; x < AtlasWidth; x++)
+                for (var py = 0; py < PathSamples; py++)
                 {
-                    float t = x / (float)(AtlasWidth - 1);
-                    float fIdx = t * (res - 1);
-                    int ia = (int)math.floor(fIdx);
-                    ia = math.clamp(ia, 0, res - 1);
-                    int ib = math.min(ia + 1, res - 1);
-                    float w = fIdx - ia;
-                    float va = Strips[sliceStart + ia];
-                    float vb = Strips[sliceStart + ib];
-                    float v = math.lerp(va, vb, w);
-                    // 写入 atlas (row-major: y*width + x)
-                    int idx = li * AtlasWidth + x;
-                    MaskAtlas[idx] = v;
+                    var pathProgress = py / (float)(PathSamples - 1); // 0..1
+                    var rowIndex = li * PathSamples + py;
+
+                    for (var x = 0; x < AtlasWidth; x++)
+                    {
+                        var t = x / (float)(AtlasWidth - 1);
+                        var fIdx = t * (res - 1);
+                        var ia = (int)math.floor(fIdx);
+                        ia = math.clamp(ia, 0, res - 1);
+                        var ib = math.min(ia + 1, res - 1);
+                        var w = fIdx - ia;
+                        var va = Strips[sliceStart + ia];
+                        var vb = Strips[sliceStart + ib];
+                        var v = math.lerp(va, vb, w);
+                        // 写入 atlas
+                        var idx = rowIndex * AtlasWidth + x;
+                        MaskAtlas[idx] = v; // 先用横向strip值，稍后将考虑沿 pathProgress 的变化
+                    }
                 }
             }
         }
@@ -203,8 +166,14 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         // 验证数据是否已创建
         public bool IsCreated => TerrainLayerIndices.IsCreated;
 
+        // 标记是否已释放，避免重复 Dispose
+        private bool _disposed;
+
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
+
             if (TerrainLayerIndices.IsCreated) TerrainLayerIndices.Dispose();
             if (BlendModes.IsCreated) BlendModes.Dispose();
             if (Opacities.IsCreated) Opacities.Dispose();

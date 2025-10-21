@@ -99,12 +99,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                         var worldWidth = profile.roadWidth;
                         var tileSizeX = 1f;
                         var tileSizeY = 1f;
-                        if (profile.roadRecipe && profile.roadRecipe.blendLayers is { Count: > 0 })
+                        var firstLayers = profile.roadRecipe?.GetLayers();
+                        if (firstLayers != null && firstLayers.Count > 0)
                         {
-                            var firstLayer = profile.roadRecipe.blendLayers[0];
-                            if (firstLayer != null && firstLayer.terrainLayer)
+                            var firstLayer = firstLayers[0];
+                            if (firstLayer != null && firstLayer.contentLayer)
                             {
-                                var ts = firstLayer.terrainLayer.tileSize;
+                                var ts = firstLayer.contentLayer.tileSize;
                                 tileSizeX = ts.x != 0 ? ts.x : 1f;
                                 tileSizeY = ts.y != 0 ? ts.y : 1f;
                             }
