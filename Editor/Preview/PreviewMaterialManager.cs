@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using __temp.MrPathV2._2.Runtime.Core;
 using UnityEngine;
+#if UNITY_EDITOR
+using EditorGpuPreviewCache = __temp.MrPathV2._2.Editor.Terrain.GpuPreviewCache;
+#endif
 
 namespace __temp.MrPathV2._2.Runtime.Preview
 {
@@ -30,6 +33,10 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private static readonly int PathSamplesId = Shader.PropertyToID("_PathSamples");
         private static readonly int LayerIndexId = Shader.PropertyToID("_LayerIndex");
         private static readonly int MaskStrengthId = Shader.PropertyToID("_MaskStrength");
+        // 新增：GPU 预览相关属性
+#if UNITY_EDITOR
+        private static readonly int ControlTexArray = Shader.PropertyToID("_ControlTexArray");
+#endif
 
         private enum ShaderFlavor { Splat, Stylized, Unknown }
 
@@ -58,6 +65,26 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             return _cachedList;
         }
 
+#if UNITY_EDITOR
+        /// <summary>
+        /// 设置当前预览所关联的 Terrain（用于从 <see cref="__temp.MrPathV2._2.Editor.Terrain.GpuPreviewCache"/> 获取缓存的 alphamap RenderTextureArray）
+        /// </summary>
+        /// <param name="terrain">目标 Terrain</param>
+        public void SetTargetTerrain(UnityEngine.Terrain terrain)
+        {
+            _targetTerrain = terrain;
+        }
+#endif
+
+        // GPU 预览目标 Terrain（仅在 Editor 环境下使用）
+#if UNITY_EDITOR
+        private UnityEngine.Terrain _targetTerrain;
+        /// <summary>
+        /// 全局开关：是否启用 GPU 实时预览。
+        /// 后续可替换为 ProjectSettings / ScriptableObject 配置。
+        /// </summary>
+        public static bool EnableGpuPreview = true;
+#endif
         public void Update(PathProfile profile, Material template, float previewAlpha)
         {
             if (profile == null || template == null)
@@ -87,6 +114,26 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     break;
             }
 
+#if UNITY_EDITOR
+            // Editor-only GPU preview binding with graceful fallback
+            if (_instance && _instance.HasProperty(ControlTexArray))
+            {
+                if (EnableGpuPreview && _targetTerrain &&
+                    EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt != null)
+                {
+                    // Bind cached alphamap array for GPU blending
+                    _instance.SetTexture(ControlTexArray, rt);
+                    Debug.Log($"[PreviewMaterialManager] GPU Preview enabled - binding cached RT for terrain {_targetTerrain.name}");
+                }
+                else
+                {
+                    // Fallback: unbind or bind a dummy white texture so shader falls back to CPU path
+                    _instance.SetTexture(ControlTexArray, Texture2D.whiteTexture);
+                    Debug.Log($"[PreviewMaterialManager] GPU Preview disabled or no cached RT - using fallback texture. EnableGpuPreview: {EnableGpuPreview}, HasTerrain: {_targetTerrain != null}");
+                }
+            }
+#endif
+
             _dirty = true;
         }
 
@@ -97,16 +144,23 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             var recipe = profile.roadRecipe;
             var layers = recipe?.GetLayers();
             var layerCount = layers?.Count ?? 0;
-            
+
             // 检测是否使用多层着色器
             var isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
             var maxLayers = isMultiLayerShader ? 16 : 4;
+
+            // 当没有任何启用的图层时，仍然为着色器提供一个占位图层，
+            // 以避免 _LayerCount 为 0 导致渲染结果完全透明。
+            if (layerCount == 0)
+            {
+                layerCount = 1; // 至少一个图层
+            }
 
             // ================= 新增：准备数组以批量推送到着色器 =================
             Vector4[] tilingsArr = new Vector4[maxLayers];
             float[] opacitiesArr = new float[maxLayers];
             float[] blendModesArr = new float[maxLayers];
-            
+
             // 设置所有层（最多16层），确保与StylizedRoadRecipe配方一致
             for (var i = 0; i < maxLayers; i++)
             {
@@ -114,7 +168,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 var layerOpacity = 0f;
                 var blendMode = BlendMode.Normal;
                 var tilingVec = Vector4.one;
-                
+
                 if (layers != null && i < layers.Count)
                 {
                     var roadLayer = layers[i];
@@ -125,21 +179,32 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                         blendMode = roadLayer.blendMode;
                     }
                 }
-                
-                // 计算tiling（当layer为null时使用1,1,0,0）
-                if (layer?.diffuseTexture != null)
+
+
+                if (layer == null)
                 {
+                    // 当内容纹理与遮罩均为空时，使用默认白纹理占位，继续处理后续图层
+                    tilingVec = Vector4.one;
+                    // 保留 layer 为 null 以便 SetLayer 写入默认纹理
+                }
+
+                // 现在确定layer不为null，检查diffuseTexture
+                if (layer != null && layer.diffuseTexture != null)
+                {
+                    // 使用CalcLayerTiling计算值
                     var t = PreviewPipelineUtility.CalcLayerTiling(profile.roadWidth, layer);
                     tilingVec = new Vector4(t.x, t.y, 0, 0);
                 }
                 else
                 {
-                    tilingVec = Vector4.one; // 默认
+                    // layer 为 null 或无纹理时使用默认值
+                    tilingVec = Vector4.one;
                 }
-                
+
                 // 保存到数组
                 tilingsArr[i] = tilingVec;
-                opacitiesArr[i] = Mathf.Clamp01(layerOpacity);
+                // 如果不存在任何有效图层，则保持不透明以避免全透明
+                opacitiesArr[i] = layers == null || layers.Count == 0 ? 1f : Mathf.Clamp01(layerOpacity);
                 blendModesArr[i] = (float)blendMode;
 
                 // 旧版兼容：仍保留纹理与颜色写入；已删除单独 Opacity/BlendMode 写入，完全依赖数组

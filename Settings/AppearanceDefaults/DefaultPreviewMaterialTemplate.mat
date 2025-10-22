@@ -20,6 +20,10 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _Control0:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -139,13 +143,19 @@ Material:
     m_Ints: []
     m_Floats:
     - _AcrossScale: 1
+    - _AlphaClip: 0
     - _AlwaysOnTop: 0
     - _AtlasInvHeight: 1
+    - _Blend: 0
     - _BlendMode: 0
     - _BlendMode0: 0
     - _BlendMode1: 0
     - _BlendMode2: 0
     - _BlendMode3: 0
+    - _BlendOp: 0
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DstBlend: 0
     - _Layer0_BlendMode: 0
     - _Layer0_Opacity: 1
     - _Layer10_BlendMode: 0
@@ -179,6 +189,7 @@ Material:
     - _Layer9_BlendMode: 0
     - _Layer9_Opacity: 1
     - _LayerCount: 0
+    - _LayerIndex: 0
     - _LayerOpacity: 1
     - _MaskRowCenter: 0.5
     - _MaskStrength: 4
@@ -190,10 +201,16 @@ Material:
     - _Opacity3: 1
     - _PathSamples: 64
     - _PreviewAlpha: 1
+    - _QueueOffset: 0
+    - _SampleGI: 0
+    - _SrcBlend: 1
+    - _Surface: 0
     - _WireThickness: 1.5
     - _ZTest: 8
+    - _ZWrite: 1
     m_Colors:
     - _BaseColor: {r: 0.19999996, g: 0.39999998, b: 0.9, a: 0.3}
+    - _Color: {r: 0.19999993, g: 0.39999995, b: 0.9, a: 0.3}
     - _Layer0_Color: {r: 1, g: 1, b: 1, a: 1}
     - _Layer0_Tiling: {r: 1, g: 1, b: 0, a: 0}
     - _Layer10_Color: {r: 1, g: 1, b: 1, a: 1}

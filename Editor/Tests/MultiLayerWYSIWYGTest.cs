@@ -161,7 +161,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
             {
                 testRecipe.layers.Add(new RoadLayer
                 {
-                    name = $"Test Layer {i}",
+                    //name = $"Test Layer {i}",
                     enabled = true,
                     contentLayer = _testTerrain.terrainData.terrainLayers.FirstOrDefault()
                 });
@@ -217,7 +217,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
             {
                 recipe.layers.Add(new RoadLayer
                 {
-                    name = $"Test Layer {i + 1}",
+                    //name = $"Test Layer {i + 1}",
                     enabled = true,
                     opacity = 0.8f,
                     blendMode = BlendMode.Normal

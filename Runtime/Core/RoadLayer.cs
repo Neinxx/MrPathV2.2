@@ -18,13 +18,14 @@ namespace __temp.MrPathV2._2.Runtime.Core
     [Serializable]
     public class RoadLayer
     {
-        [HorizontalGroup("Header", 75, LabelWidth = 55)]
-        [BoxGroup("Header/Left", showLabel: false)]
+        [HorizontalGroup("Header", Width = 20)]
+        [HideLabel]
+        [ToggleLeft]
         public bool enabled = true;
 
-        [BoxGroup("Header/Left", showLabel: false)]
-        [HideLabel]
-        public string name = "New Layer";
+        // [BoxGroup("Header/Left", showLabel: false)]
+        // [HideLabel]
+        // public string name = "New Layer";
 
         [BoxGroup("Content")]
         [LabelText("Content Layer")]
@@ -38,12 +39,14 @@ namespace __temp.MrPathV2._2.Runtime.Core
         [InlineEditor(Expanded = false)]
         public BlendMaskBase layerMask;
 
-        [HorizontalGroup("Header", MarginLeft = 0.05f)]
+        [HorizontalGroup("Header", Width = 100)]
         [HideLabel]
         public BlendMode blendMode = BlendMode.Normal;
 
-        [HorizontalGroup("Header", Width = 150)]
-        [HideLabel]
+        // 调整 UI/UX：为 Opacity 提供明确标签并保证滑块与输入框在同一行右对齐
+        [HorizontalGroup("Header", Width = 0)]
+        [LabelText("Opacity")]
+        [LabelWidth(50)]
         [Range(0f, 1f)]
         public float opacity = 1f;
 
@@ -54,7 +57,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         {
             return new RoadLayer
             {
-                name = $"Layer {index}",
+               // name = $"Layer {index}",
                 enabled = true,
                 opacity = 0.85f,
                 blendMode = BlendMode.Normal,

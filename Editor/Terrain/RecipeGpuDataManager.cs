@@ -223,33 +223,65 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 return;
             }
 
-            int width = _cachedTextures[0].width;
-            int height = _cachedTextures[0].height;
-            GraphicsFormat format = _cachedTextures[0].graphicsFormat;
-            bool mipChain = _cachedTextures[0].mipmapCount > 1;
+            // Find the most common texture format and dimensions to use as the standard
+            var formatCounts = new Dictionary<(int width, int height, GraphicsFormat format), int>();
+            foreach (var texture in _cachedTextures)
+            {
+                var key = (texture.width, texture.height, texture.graphicsFormat);
+                formatCounts[key] = formatCounts.GetValueOrDefault(key, 0) + 1;
+            }
 
-            if (TerrainTextureArray == null || TerrainTextureArray.width != width || TerrainTextureArray.height != height || TerrainTextureArray.depth != _cachedTextures.Count || TerrainTextureArray.graphicsFormat != format)
+            var mostCommon = formatCounts.OrderByDescending(kvp => kvp.Value).First();
+            int width = mostCommon.Key.width;
+            int height = mostCommon.Key.height;
+            GraphicsFormat format = mostCommon.Key.format;
+            bool mipChain = _cachedTextures.Any(t => t.mipmapCount > 1);
+
+            // Filter out incompatible textures and create a list of valid ones
+            var validTextures = new List<Texture2D>();
+            var textureIndices = new List<int>(); // Track original indices
+            
+            for (int i = 0; i < _cachedTextures.Count; i++)
+            {
+                var texture = _cachedTextures[i];
+                if (texture.width == width && texture.height == height && texture.graphicsFormat == format)
+                {
+                    validTextures.Add(texture);
+                    textureIndices.Add(i);
+                }
+                else
+                {
+                    Debug.LogWarning($"Texture '{texture.name}' has incompatible dimensions/format. Expected {width}x{height} {format}, got {texture.width}x{texture.height} {texture.graphicsFormat}. This texture will be excluded from the array.");
+                }
+            }
+
+            if (validTextures.Count == 0)
+            {
+                Debug.LogError("No valid textures found for texture array creation. All textures have incompatible formats.");
+                ReleaseTextureArray();
+                return;
+            }
+
+            if (TerrainTextureArray == null || TerrainTextureArray.width != width || TerrainTextureArray.height != height || TerrainTextureArray.depth != validTextures.Count || TerrainTextureArray.graphicsFormat != format)
             {
                 ReleaseTextureArray();
-                TerrainTextureArray = new Texture2DArray(width, height, _cachedTextures.Count, format, mipChain ? TextureCreationFlags.MipChain : TextureCreationFlags.None);
+                TerrainTextureArray = new Texture2DArray(width, height, validTextures.Count, format, mipChain ? TextureCreationFlags.MipChain : TextureCreationFlags.None);
                 TerrainTextureArray.wrapMode = TextureWrapMode.Repeat;
                 TerrainTextureArray.filterMode = mipChain ? FilterMode.Trilinear : FilterMode.Bilinear;
                 TerrainTextureArray.name = "TerrainLayer Texture Array";
             }
 
-            for (int i = 0; i < _cachedTextures.Count; i++)
+            for (int i = 0; i < validTextures.Count; i++)
             {
-                 if (_cachedTextures[i].width != width || _cachedTextures[i].height != height || _cachedTextures[i].graphicsFormat != format)
-                 {
-                      Debug.LogWarning($"Texture '{_cachedTextures[i].name}' has incompatible dimensions/format. Expected {width}x{height} {format}. Skipping.");
-                      continue;
-                 }
-                int mipCount = mipChain ? _cachedTextures[i].mipmapCount : 1;
+                int mipCount = mipChain ? validTextures[i].mipmapCount : 1;
                 for (int mip = 0; mip < mipCount; mip++)
                 {
-                    Graphics.CopyTexture(_cachedTextures[i], 0, mip, TerrainTextureArray, i, mip);
+                    Graphics.CopyTexture(validTextures[i], 0, mip, TerrainTextureArray, i, mip);
                 }
             }
+
+            // Log summary of texture array creation
+            Debug.Log($"Created texture array with {validTextures.Count} textures ({width}x{height}, {format}). Excluded {_cachedTextures.Count - validTextures.Count} incompatible textures.");
         }
 
 

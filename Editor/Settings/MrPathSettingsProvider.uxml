@@ -1,7 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" editor-extension-mode="False">
     <ui:ScrollView name="main-scroll-view" view-data-key="MrPathSettingsScrollView">
         <ui:Box class="root">
-            <ui:Label text="MrPath Settings" class="header" style="color: rgb(226, 152, 61); height: 51px; font-size: 37px; -unity-font-style: bold;" />
+            <ui:Label text="MrPath Settings" name="settings-title" class="header" style="color: rgb(226, 152, 61); height: 51px; font-size: 37px; -unity-font-style: bold;" />
             <ui:Box class="mac-card">
                 <ui:Label text="Resource Scanner" class="card-title" style="font-size: 18px;" />
                 <ui:Label text="       Automatically discover road recipes, path profiles, and terrain operations." class="card-description" />
@@ -13,7 +13,7 @@
                 <ui:Box class="control-group">
                     <uie:PropertyField name="creationDefaults" binding-path="creationDefaults" />
                     <ui:Button name="creationDefaults-create" text="Find" enable-rich-text="true" class="action-button" />
-                    <ui:Button name="creationDefaults-ping" text="Locate" class="action-button" />
+                    <ui:Button name="creationDefaults-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
             <ui:Box class="config-row">
@@ -21,7 +21,7 @@
                 <ui:Box class="control-group">
                     <uie:PropertyField name="appearanceDefaults" binding-path="appearanceDefaults" />
                     <ui:Button name="appearanceDefaults-create" text="Find" class="action-button" />
-                    <ui:Button name="appearanceDefaults-ping" text="Locate" class="action-button" />
+                    <ui:Button name="appearanceDefaults-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
             <ui:Box class="config-row">
@@ -29,7 +29,7 @@
                 <ui:Box class="control-group">
                     <uie:PropertyField name="terrainOperations" binding-path="terrainOperations" />
                     <ui:Button name="terrainOperations-create" text="Find" class="action-button" />
-                    <ui:Button name="terrainOperations-ping" text="Locate" class="action-button" />
+                    <ui:Button name="terrainOperations-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
             <ui:Box class="config-row">
@@ -37,7 +37,7 @@
                 <ui:Box class="control-group">
                     <uie:PropertyField name="advancedSettings" binding-path="advancedSettings" />
                     <ui:Button name="advancedSettings-create" text="Find" class="action-button" />
-                    <ui:Button name="advancedSettings-ping" text="Locate" class="action-button" />
+                    <ui:Button name="advancedSettings-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
             <ui:Label text="Discovered Assets" class="section-header" />

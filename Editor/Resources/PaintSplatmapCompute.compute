@@ -1,290 +1,142 @@
 #pragma kernel PaintTerrain
 
-// --- 包含库文件 ---
-// 确保这些 #include 路径指向你项目中的正确位置
-#include "Assets/__temp/MrPathV2.2/Runtime/Shaders/Includes/BlendingLibrary.hlsl" 
-#include "Assets/__temp/MrPathV2.2/Runtime/Shaders/Includes/BlendMaskLibrary.hlsl" 
-#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "BlendingLibrary.hlsl"
+#include "BlendMaskLibrary.hlsl"
+#include "Common.hlsl"
 
-// --- 1. 修复：结构体定义 ---
-// C# GpuDataStructures.cs 中的结构体必须在 HLSL 中精确镜像
-// (注意：这里的Padding/Pad字段是为了确保内存对齐，必须与 C# Marshal.SizeOf 计算出的大小一致)
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-struct GpuShoulderMaskParams
+// Constants
+#define FLT_INF 3.402823466e+38f
+
+// Structs (must be defined before use)
+struct LayerParams
 {
-    float ShoulderWidthRatio;
-    float ShoulderStrength;
-    float EdgeFalloff;
-    int EnableLeftShoulder;
-    int EnableRightShoulder;
-    float2 Tiling;
-    float2 Offset;
-    float OverallScale;
-    float Smooth;
-    float Pad1;
-    float Pad2;
+    int layerIndex;
+    float strength;
+    float4 blendSettings;
+    GpuMaskParams maskParams;
 };
 
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-struct GpuNoiseMaskParams
+// Input buffers
+StructuredBuffer<LayerParams> LayerParamsBuffer;
+StructuredBuffer<float3> SpineData;
+
+// Textures
+RWTexture2DArray<unorm float4> AlphamapTextures;
+
+// Uniforms
+int _LayerCount;
+int _SpinePointCount;
+float _BrushSize;
+float _BrushStrength;
+float _FalloffDistance;
+float2 _TerrainSize;
+float2 _AlphamapResolution;
+int2 _TerrainOffset;
+int2 _AlphamapOffset;
+
+// Helper function to calculate squared distance
+float distanceSq(float2 a, float2 b)
 {
-    float Strength;
-    float Seed;
-    float2 Tiling;
-    float2 Offset;
-    float OverallScale;
-    float Smooth;
-    float Pad1;
-};
-
-// ... TODO: 在这里添加 GpuGradientMaskParams, GpuRoadSurfaceMaskParams 等其他Mask的结构体 ...
-
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-struct GpuMaskParams
-{
-    int MaskType; // 0=None, 1=Shoulder, 2=Noise, 3=Gradient, 4=RoadSurface...
-    float Pad1; 
-    float Pad2;
-    float Pad3;
-    
-    GpuShoulderMaskParams ShoulderParams;
-    GpuNoiseMaskParams NoiseParams;
-    // ... TODO: 添加其他Mask结构体实例 ...
-};
-
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-struct GpuBlendLayerParams
-{
-    int BlendMode;
-    float Opacity;
-    int TextureIndex;
-    int TerrainLayerSplatIndex;
-    float4 TilingOffset; // XY=Tiling, ZW=Offset
-    float4 TintColor;    // Color (RGBA)
-    GpuMaskParams MaskParams;
-};
-// --- 结构体定义结束 ---
-
-
-// --- Input Buffers ---
-StructuredBuffer<GpuBlendLayerParams> _LayerParams;
-StructuredBuffer<float3> _SpinePoints;
-StructuredBuffer<float3> _SpineTangents;
-StructuredBuffer<float3> _SpineNormals;
-
-// --- Input Textures ---
-Texture2DArray _TerrainTextures; 
-// Texture2D _MaskAtlas; // (如果使用预烘焙 Atlas)
-
-// --- Uniforms ---
-float3 _TerrainPosition;
-float3 _TerrainSize;
-uint _AlphamapResolution;
-uint _AlphamapLayerCount; // Max layers supported by terrain
-uint _SpinePointCount;
-float _RoadWidth;
-float _PathLength;
-// --- 2. 修复：bool 类型匹配 ---
-uint _ForceHorizontal; // C# SetBool 对应 HLSL 的 uint/int
-// -----------------------------
-int2 _CoverageMin;
-int2 _CoverageMax;
-uint _NumActiveLayers; // Actual number of layers in _LayerParams buffer
-
-// --- Output ---
-RWTexture2DArray<float> _OutputAlphaMaps; // Format RFloat
-
-// --- Sampler ---
-SamplerState sampler_linear_repeat;
-
-// --- Constants ---
-static const float Epsilon = 1e-6f;
-
-// --- HLSL Port: CalculateDistanceAndProgress (已移植) ---
-bool CalculateDistanceAndProgress(float2 worldPos2D, out float normalizedDist, out float pathProgress)
-{
-    normalizedDist = 1.0f; // Default to outside
-    pathProgress = 0.0f;
-    
-    float minDistanceSq = FLT_INF; // Use large float for infinity
-    int closestSegmentIndex = -1;
-    float tClosest = 0.0f;
-    uint spineSegmentCount = _SpinePointCount - 1;
-
-    if (_SpinePointCount < 2) return false;
-
-    // 循环所有路径段
-    [loop]
-    for (uint i = 0; i < spineSegmentCount; ++i)
-    {
-        float3 pA_3D = _SpinePoints[i];
-        float3 pB_3D = _SpinePoints[i + 1];
-        float2 pA = pA_3D.xz;
-        float2 pB = pB_3D.xz;
-        
-        float2 segmentVec = pB - pA;
-        float segLenSq = dot(segmentVec, segmentVec);
-        float2 pointVec = worldPos2D - pA;
-        
-        float t = 0.0f;
-        float distSq;
-
-        if (segLenSq < Epsilon) {
-            distSq = distanceSq(worldPos2D, pA);
-            t = 0.0f;
-        } else {
-            t = saturate(dot(pointVec, segmentVec) / segLenSq);
-            float2 closestPoint = pA + t * segmentVec;
-            distSq = distanceSq(worldPos2D, closestPoint);
-        }
-
-        if (distSq < minDistanceSq)
-        {
-            minDistanceSq = distSq;
-            closestSegmentIndex = (int)i;
-            tClosest = t;
-        }
-    }
-
-    if (closestSegmentIndex == -1) return false;
-
-    // Calculate interpolated values on spine
-    float3 spinePoint = lerp(_SpinePoints[closestSegmentIndex], _SpinePoints[closestSegmentIndex + 1], tClosest);
-    float3 spineNormal = normalize(lerp(_SpineNormals[closestSegmentIndex], _SpineNormals[closestSegmentIndex + 1], tClosest));
-    float3 spineTangent = normalize(lerp(_SpineTangents[closestSegmentIndex], _SpineTangents[closestSegmentIndex + 1], tClosest));
-    
-    // --- 2. 修复：bool 比较 ---
-    float3 upVec = (_ForceHorizontal > 0) ? float3(0, 1, 0) : spineNormal;
-    // -------------------------
-    float3 rightVec = normalize(cross(upVec, spineTangent));
-
-    float halfWidth = _RoadWidth * 0.5f;
-    if (halfWidth < Epsilon) halfWidth = Epsilon;
-
-    float2 offsetVec = worldPos2D - spinePoint.xz;
-    float signedDist = dot(offsetVec, rightVec.xz);
-    
-    normalizedDist = saturate(abs(signedDist) / halfWidth); // 0 at center, 1 at edge
-    pathProgress = saturate(((float)closestSegmentIndex + tClosest) / (float)spineSegmentCount);
-
-    return true;
+    float2 diff = a - b;
+    return dot(diff, diff);
 }
 
-
-// --- HLSL Port: ApplyBlending ---
-void ApplyBlending(uint2 alphaMapCoords, float normalizedDist, float pathProgress)
+// Calculate distance and progress along the path
+float2 CalculateDistanceAndProgress(float2 worldPos, StructuredBuffer<float3> spineData, int spinePointCount)
 {
-    // 定义一个最大值（必须是编译时常量），确保它大于等于你地形的最大层数
-    const int MAX_TERRAIN_LAYERS = 16; 
-    float layerWeights[MAX_TERRAIN_LAYERS];
+    float minDistanceSq = FLT_INF;
+    float progress = 0.0f;
     
-    // --- 3. 修复：数组初始化 ---
-    [unroll]
-    for (int i = 0; i < MAX_TERRAIN_LAYERS; ++i)
+    for (int i = 0; i < spinePointCount - 1; i++)
     {
-        layerWeights[i] = 0.0f;
-    }
-    // -------------------------
-
-    bool anyLayerPainted = false;
-    int firstValidSplatIndex = -1;
-
-    // 2. Loop through Active Recipe Layers
-    for (uint layerIndex = 0; layerIndex < _NumActiveLayers; ++layerIndex)
-    {
-        GpuBlendLayerParams layerParams = _LayerParams[layerIndex];
-        int splatIndex = layerParams.TerrainLayerSplatIndex;
-
-        if (splatIndex < 0 || splatIndex >= (int)_AlphamapLayerCount) continue;
-        if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
-
-        // 3. Evaluate Mask using HLSL function from included library
-        float posAcross = normalizedDist * 2.0f - 1.0f; // Remap 0..1 to -1..1
-        float maskValue = EvaluateMask(posAcross, pathProgress, _RoadWidth, _PathLength, layerParams.MaskParams);
-
-        maskValue *= layerParams.Opacity;
-
-        if (maskValue > Epsilon) anyLayerPainted = true;
-
-        // 4. Blend the mask value (weight) onto the correct splat index
-        if (splatIndex < MAX_TERRAIN_LAYERS) // Safety check
+        float3 p1 = spineData[i];
+        float3 p2 = spineData[i + 1];
+        
+        float2 segmentStart = p1.xy;
+        float2 segmentEnd = p2.xy;
+        float2 segmentDir = segmentEnd - segmentStart;
+        float segmentLengthSq = dot(segmentDir, segmentDir);
+        
+        if (segmentLengthSq > 0.0001f)
         {
-             layerWeights[splatIndex] = BlendWeight(layerWeights[splatIndex], maskValue, layerParams.BlendMode);
+            float t = saturate(dot(worldPos - segmentStart, segmentDir) / segmentLengthSq);
+            float2 closestPoint = segmentStart + t * segmentDir;
+            float distSq = distanceSq(worldPos, closestPoint);
+            
+            if (distSq < minDistanceSq)
+            {
+                minDistanceSq = distSq;
+                progress = (float(i) + t) / float(spinePointCount - 1);
+            }
         }
     }
-
-    // 5. Handle fallback if nothing painted
-    if (!anyLayerPainted && firstValidSplatIndex >= 0 && firstValidSplatIndex < MAX_TERRAIN_LAYERS)
-    {
-        layerWeights[firstValidSplatIndex] = 1.0f;
-    }
-
-    // 6. Normalize weights
-    float totalWeight = 0.0f;
-    int paintedCount = 0;
-    [unroll(MAX_TERRAIN_LAYERS)] // 假设 _AlphamapLayerCount <= MAX_TERRAIN_LAYERS
-    for (int j = 0; j < (int)_AlphamapLayerCount; ++j)
-    {
-        if (j < MAX_TERRAIN_LAYERS)
-        {
-            if (layerWeights[j] > 1e-4f) paintedCount++;
-            totalWeight += layerWeights[j];
-        }
-    }
-
-    if (paintedCount > 1 && totalWeight > 1e-5f)
-    {
-        float invTotal = 1.0f / totalWeight;
-        [unroll(MAX_TERRAIN_LAYERS)]
-        for (int k = 0; k < (int)_AlphamapLayerCount; ++k)
-        {
-            if (k < MAX_TERRAIN_LAYERS) layerWeights[k] *= invTotal;
-        }
-    }
-    else if (paintedCount == 0 && firstValidSplatIndex >= 0 && firstValidSplatIndex < MAX_TERRAIN_LAYERS)
-    {
-         [unroll(MAX_TERRAIN_LAYERS)]
-         for (int l = 0; l < (int)_AlphamapLayerCount; ++l)
-         {
-             if (l < MAX_TERRAIN_LAYERS) layerWeights[l] = (l == firstValidSplatIndex) ? 1.0f : 0.0f;
-         }
-    }
-
-
-    // 7. Write weights to output AlphaMap Texture Array
-    [unroll(MAX_TERRAIN_LAYERS)]
-    for (int m = 0; m < (int)_AlphamapLayerCount; ++m)
-    {
-         float finalWeight = (m < MAX_TERRAIN_LAYERS) ? layerWeights[m] : 0.0f;
-        _OutputAlphaMaps[uint3(alphaMapCoords.x, alphaMapCoords.y, m)] = saturate(finalWeight);
-    }
+    
+    return float2(sqrt(minDistanceSq), progress);
 }
 
-// --- Kernel Entry Point ---
-[numthreads(8,8,1)] 
-void PaintTerrain (uint3 dispatchThreadID : SV_DispatchThreadID)
+// Apply blending based on layer parameters
+void ApplyBlending(int2 pixelCoord, int layerIndex, float strength, float4 blendSettings, GpuMaskParams maskParams, float distance, float progress)
 {
-    // Map dispatchThreadID (0..NumPixelsX-1, 0..NumPixelsY-1) to global alphamap coords
-    uint globalX = _CoverageMin.x + dispatchThreadID.x;
-    uint globalY = _CoverageMin.y + dispatchThreadID.y;
-
-    if (globalX >= _AlphamapResolution || globalY >= _AlphamapResolution)
+    // Calculate brush falloff
+    float falloff = 1.0f - saturate(distance / _FalloffDistance);
+    if (falloff <= 0.0f) return;
+    
+    // Evaluate mask
+    float2 worldPos = float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+    float maskValue = EvaluateMask(maskParams, worldPos, progress);
+    
+    // Calculate final strength
+    float finalStrength = strength * falloff * maskValue * _BrushStrength;
+    if (finalStrength <= 0.0f) return;
+    
+    // Get current alphamap values
+    uint alphamapIndex = (uint)layerIndex / 4u;
+    uint channelIndex = (uint)layerIndex % 4u;
+    
+    float4 currentAlpha = AlphamapTextures[int3(pixelCoord, alphamapIndex)];
+    
+    // Apply blending
+    if (channelIndex == 0) currentAlpha.r = saturate(currentAlpha.r + finalStrength);
+    else if (channelIndex == 1) currentAlpha.g = saturate(currentAlpha.g + finalStrength);
+    else if (channelIndex == 2) currentAlpha.b = saturate(currentAlpha.b + finalStrength);
+    else if (channelIndex == 3) currentAlpha.a = saturate(currentAlpha.a + finalStrength);
+    
+    // Normalize to ensure sum doesn't exceed 1.0
+    float sum = currentAlpha.r + currentAlpha.g + currentAlpha.b + currentAlpha.a;
+    if (sum > 1.0f)
     {
+        currentAlpha /= sum;
+    }
+    
+    AlphamapTextures[int3(pixelCoord, alphamapIndex)] = currentAlpha;
+}
+
+[numthreads(8, 8, 1)]
+void PaintTerrain(uint3 id : SV_DispatchThreadID)
+{
+    int2 pixelCoord = int2(id.xy) + _AlphamapOffset;
+    
+    // Check bounds
+    if (pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y)
         return;
-    }
     
-    float invResolution = 1.0f / (_AlphamapResolution - 1);
-    float2 worldPos2D = float2(
-        _TerrainPosition.x + globalX * invResolution * _TerrainSize.x,
-        _TerrainPosition.z + globalY * invResolution * _TerrainSize.z
-    );
-
-    float normalizedDist;
-    float pathProgress;
-    if (CalculateDistanceAndProgress(worldPos2D, normalizedDist, pathProgress))
+    // Convert to world position
+    float2 worldPos = float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+    worldPos += float2(_TerrainOffset) * _TerrainSize;
+    
+    // Calculate distance and progress along the path
+    float2 distanceAndProgress = CalculateDistanceAndProgress(worldPos, SpineData, _SpinePointCount);
+    float distance = distanceAndProgress.x;
+    float progress = distanceAndProgress.y;
+    
+    // Skip if too far from path
+    if (distance > _FalloffDistance)
+        return;
+    
+    // Apply each layer
+    for (int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
     {
-        ApplyBlending(uint2(globalX, globalY), normalizedDist, pathProgress);
+        LayerParams layer = LayerParamsBuffer[layerIdx];
+        ApplyBlending(pixelCoord, layer.layerIndex, layer.strength, layer.blendSettings, layer.maskParams, distance, progress);
     }
-    // Else: Pixel is outside the road influence area.
-    // 假设 _OutputAlphaMaps 预先填充了原始地形数据或已清零
 }

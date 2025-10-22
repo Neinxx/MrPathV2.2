@@ -27,7 +27,10 @@ namespace __temp.MrPathV2._2.Runtime.Core
         )]
 
         // 整体控制属性
-        [LabelText("Opacity")]
+        // UI/UX：使主 Opacity 滑块与数值输入框右对齐
+        [HorizontalGroup("Header")]
+        [LabelText("Master Opacity")]
+        [LabelWidth(90)]
         [Range(0f, 1f)]
         [Tooltip("整体配方透明度，可统一控制所有图层的可见度")]
         public float masterOpacity = 1f;
@@ -39,9 +42,10 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
 
 #if UNITY_EDITOR
+        // [HideInInspector]
+        // [HorizontalGroup("Header", Width = 150), LabelText("Preview Width"), MinValue(0.1f)]
+        // [Tooltip("仅供编辑器预览使用的参考道路宽度，运行时将使用 PathProfile.roadWidth")]
         [HideInInspector]
-        [HorizontalGroup("Header", Width = 150), LabelText("Preview Width"), MinValue(0.1f)]
-        [Tooltip("仅供编辑器预览使用的参考道路宽度，运行时将使用 PathProfile.roadWidth")]
         public float width = 5f;
 
         /// <summary>

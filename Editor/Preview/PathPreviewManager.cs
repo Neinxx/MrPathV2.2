@@ -62,6 +62,28 @@ namespace __temp.MrPathV2._2.Editor.Preview
             if (!_active || creator?.profile == null) return;
 
             // 始终尝试更新材质管理器：内部 CalculateHash 会确保仅在参数变化时才重建材质，性能开销可忽略。
+#if UNITY_EDITOR
+            // 设置目标 Terrain 供 GPU 预览使用。此处简单选取与 PathCreator 最接近的活跃 Terrain，后续可根据包围盒精确匹配。
+            var activeTerrains = UnityEngine.Terrain.activeTerrains;
+            UnityEngine.Terrain targetTerrain = null;
+            if (activeTerrains != null && activeTerrains.Length > 0)
+            {
+                // 取离路径起点最近的 Terrain
+                var pos0 = creator.transform.position;
+                var minDist = float.MaxValue;
+                foreach (var t in activeTerrains)
+                {
+                    if (t == null) continue;
+                    var d = Vector3.Distance(pos0, t.GetPosition());
+                    if (d < minDist)
+                    {
+                        minDist = d;
+                        targetTerrain = t;
+                    }
+                }
+            }
+            _matMgr.SetTargetTerrain(targetTerrain);
+#endif
             _matMgr.Update(creator.profile, _template, _alpha);
             if (_materialsDirty)
             {

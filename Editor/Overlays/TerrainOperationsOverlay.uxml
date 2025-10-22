@@ -2,7 +2,7 @@
     <Style src="project://database/Assets/__temp/MrPathV2.2/Editor/Overlays/TerrainOperationsOverlay.uss?fileID=7433441132597879392&amp;guid=8c64c8cb499234c44b0cc473d98f4348&amp;type=3#TerrainOperationsOverlay" />
     <ui:VisualElement name="root" style="flex-direction: column; padding: 3px; width: 183px; flex-shrink: 0; height: 152px; justify-content: flex-start;">
         <ui:Label name="header" text="MR.PATH" style="unity-font-style: bold; margin-bottom: 2px; font-size: 20px; -unity-text-align: middle-center; -unity-font-style: bold; color: rgb(253, 189, 126); -unity-text-outline-width: 0; -unity-text-outline-color: rgb(255, 255, 255); text-shadow: 0 0 0 rgb(0, 0, 0); flex-shrink: 1; flex-grow: 0; height: 28px;" />
-        <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]" name="CpuOrGpu" style="flex-grow: 0; flex-shrink: 1; background-color: rgba(0, 0, 0, 0.55); -unity-font-style: bold; -unity-text-align: middle-center;" />
+        <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]" name="CpuOrGpu" style="flex-grow: 0; flex-shrink: 1; background-color: rgba(0, 0, 0, 0.47); -unity-font-style: bold; -unity-text-align: middle-center; background-image: none; opacity: 0.66;" />
         <ui:VisualElement style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 1.5px; padding-left: 4px; padding-right: 4px; padding-top: 4px; padding-bottom: 4px; flex-shrink: 1; height: 49px; justify-content: center;">
             <ui:VisualElement name="operationsContainer" style="flex-direction: column; flex-grow: 0; flex-shrink: 1;" />
         </ui:VisualElement>
