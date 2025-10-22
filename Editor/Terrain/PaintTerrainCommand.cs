@@ -37,7 +37,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         protected override async Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token)
         {
             // --- 1. 选择后端 ---
-            PaintingBackend backend = PaintingBackend.CPU_Job_TwoPass; // 默认
+            var backend = PaintingBackend.CPU_Job_TwoPass; // 默认
             var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
             
             // --- 修正：检查 advancedSettings 是否存在 ---
@@ -99,8 +99,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                      {
                           if (terrain == null || terrain.terrainData == null || Creator.profile.roadRecipe == null) continue;
                           var layerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
-                          float roadWorldWidth = Creator.profile.roadWidth;
-                          float roadWorldLength = Creator.GetPathLength();
+                          var roadWorldWidth = Creator.profile.roadWidth;
+                          var roadWorldLength = Creator.GetPathLength();
                           var recipeData = new RecipeData(Creator.profile.roadRecipe, layerMap, roadWorldWidth, roadWorldLength, Allocator.Persistent);
                            if (!recipeData.IsCreated) {
                                Debug.LogError($"[PaintTerrainCommand] Failed to create CPU RecipeData for terrain {terrain.name}");
@@ -114,7 +114,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 token.ThrowIfCancellationRequested();
 
                 // --- 6. 处理每个地形 (创建并执行 Painter 任务) ---
-                List<Task> tasks = new List<Task>();
+                var tasks = new List<Task>();
                 foreach (var terrain in terrains)
                 {
                     token.ThrowIfCancellationRequested();
@@ -123,8 +123,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                     if (td == null || td.alphamapLayers == 0 || Creator.profile.roadRecipe == null) continue;
 
                     var (_, coverageMin, coverageMax) = CalculateCoverageArea(terrain, finalBounds);
-                    int numPixelsX = coverageMax.x - coverageMin.x + 1;
-                    int numPixelsY = coverageMax.y - coverageMin.y + 1;
+                    var numPixelsX = coverageMax.x - coverageMin.x + 1;
+                    var numPixelsY = coverageMax.y - coverageMin.y + 1;
                     if (numPixelsX <= 0 || numPixelsY <= 0) continue;
 
                     ITerrainPainter painter;
@@ -211,7 +211,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             var td = terrain.terrainData;
             if(td == null) return (true, int2.zero, new int2(-1,-1));
 
-            float4 bounds = contourBounds;
+            var bounds = contourBounds;
             if (PreferredBoundsXZ.HasValue) {
                  var pb = PreferredBoundsXZ.Value;
                  bounds = new float4(pb.x, pb.y, pb.z, pb.w);
@@ -232,10 +232,10 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
 
             float invSizeX = 1f / terrainSize.x, invSizeZ = 1f / terrainSize.z;
-            int pixelMinX = Mathf.FloorToInt((intersectMinX - terrainMinX) * invSizeX * (resolution - 1));
-            int pixelMinZ = Mathf.FloorToInt((intersectMinZ - terrainMinZ) * invSizeZ * (resolution - 1));
-            int pixelMaxX = Mathf.CeilToInt((intersectMaxX - terrainMinX) * invSizeX * (resolution - 1));
-            int pixelMaxZ = Mathf.CeilToInt((intersectMaxZ - terrainMinZ) * invSizeZ * (resolution - 1));
+            var pixelMinX = Mathf.FloorToInt((intersectMinX - terrainMinX) * invSizeX * (resolution - 1));
+            var pixelMinZ = Mathf.FloorToInt((intersectMinZ - terrainMinZ) * invSizeZ * (resolution - 1));
+            var pixelMaxX = Mathf.CeilToInt((intersectMaxX - terrainMinX) * invSizeX * (resolution - 1));
+            var pixelMaxZ = Mathf.CeilToInt((intersectMaxZ - terrainMinZ) * invSizeZ * (resolution - 1));
 
             pixelMinX = Mathf.Clamp(pixelMinX, 0, resolution - 1);
             pixelMinZ = Mathf.Clamp(pixelMinZ, 0, resolution - 1);

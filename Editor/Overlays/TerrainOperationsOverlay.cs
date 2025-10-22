@@ -2,6 +2,7 @@ using System;
 using __temp.MrPathV2._2.Editor.Inspectors;
 using __temp.MrPathV2._2.Editor.Operations;
 using __temp.MrPathV2._2.Editor.Settings;
+using __temp.MrPathV2._2.Editor.Terrain;
 using __temp.MrPathV2._2.Runtime.Core;
 using __temp.MrPathV2._2.Runtime.Settings;
 using UnityEditor;
@@ -32,6 +33,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
         private VisualElement _root;
         // private Toolbar _toolbar; // remove unused field
         private VisualElement _content;
+        private DropdownField _backendDropdown;
 
         // Unity calls this once when the overlay is created.
         public override VisualElement CreatePanelContent()
@@ -48,12 +50,34 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             }
 
             _root = visualTree.CloneTree();
+            // Initialize backend dropdown (CPU/GPU)
+            _backendDropdown = _root.Q<DropdownField>("CpuOrGpu");
+            if (_backendDropdown != null)
+            {
+                var choices = new[] { "CPU", "GPU" };
+                _backendDropdown.choices = choices.ToList();
+
+                var currentBackend = MrPathProjectSettings.GetOrCreateSettings().advancedSettings?.paintingBackend ?? PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
+                _backendDropdown.index = currentBackend == PaintTerrainCommand.PaintingBackend.GPU_Compute ? 1 : 0;
+
+                _backendDropdown.RegisterValueChangedCallback(evt =>
+                {
+                    var sel = evt.newValue;
+                    var settings = MrPathProjectSettings.GetOrCreateSettings();
+                    if (settings == null || settings.advancedSettings == null) return;
+                    var newBackend = sel == "GPU" ? PaintTerrainCommand.PaintingBackend.GPU_Compute : PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
+                    if (settings.advancedSettings.paintingBackend == newBackend) return;
+                    Undo.RecordObject(settings.advancedSettings, "Change Painting Backend");
+                    settings.advancedSettings.paintingBackend = newBackend;
+                    EditorUtility.SetDirty(settings.advancedSettings);
+                });
+            }
             _content = _root.Q<VisualElement>("operationsContainer");
             var refreshBtn = _root.Q<Button>("refreshButton");
             if (refreshBtn != null)
             {
                 // Update button label
-                refreshBtn.text = "清除空白 SplatAlpha";
+               // refreshBtn.text = "ClearSplatAlpha";
                 refreshBtn.clicked += () =>
                 {
                     ClearEmptySplatAlphaUnderPath();
@@ -164,6 +188,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             {
                 _ctx?.Dispose();
                 _ctx = null;
+                // no special disposal needed for dropdown
             }
         }
 

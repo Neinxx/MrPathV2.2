@@ -18,7 +18,7 @@ MonoBehaviour:
     name: New Layer
     contentLayer: {fileID: 8574412962073106934, guid: 89ca6fb9e91aa4b4690363196020a1bd,
       type: 2}
-    layerMask: {fileID: 11400000, guid: 400866702f572be4b986baa7e0ac8182, type: 2}
+    layerMask: {fileID: 11400000, guid: e2d5c757f536aa044b16eaff5dec9640, type: 2}
     blendMode: 0
     opacity: 1
   width: 3.62
