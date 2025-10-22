@@ -31,7 +31,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
         public override VisualElement CreatePanelContent()
         {
             _terrainOpsConfig = MrPathProjectSettings.GetOrCreateSettings().terrainOperations;
-          //  _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>(); 
+            //  _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>(); 
             _root = UIResourceLoader.LoadAndCloneByName(nameof(TerrainOperationsOverlay));
             InitializeBackendDropdown();
 
@@ -40,7 +40,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             _content = _root.Q<VisualElement>("operationsContainer");
 
             var refreshBtn = _root.Q<Button>("refreshButton");
-            refreshBtn?.RegisterCallback<ClickEvent>(_ => ClearEmptySplatAlphaUnderPath());
+            refreshBtn?.RegisterCallback<ClickEvent>(_ => RemoveUnusedSplatLayersOnPathIntersectingTerrains());
 
             Selection.selectionChanged += OnSelectionChanged;
             RefreshContent();
@@ -194,9 +194,15 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             );
         }
 
-        private void ClearEmptySplatAlphaUnderPath()
+        private void RemoveUnusedSplatLayersOnPathIntersectingTerrains()
         {
             var pathRect = GetPathBounds();
+            if (!pathRect.HasValue)
+            {
+                ShowNotification("道路路径无效，无法获取包围区域");
+                return;
+            }
+
             var terrains = UnityEngine.Terrain.activeTerrains;
             if (terrains == null || terrains.Length == 0)
             {
@@ -204,53 +210,89 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 return;
             }
 
-            var clearedCount = 0;
+            int totalRemovedLayers = 0;
+            const float threshold = 1e-4f; // 判断“非零”的最小值
+
             foreach (var terrain in terrains)
             {
                 var td = terrain.terrainData;
-                if (td == null || td.alphamapLayers == 0) continue;
+                if (td == null || td.alphamapLayers <= 0 || td.terrainLayers == null)
+                    continue;
 
-                if (pathRect.HasValue)
+                // 计算 Terrain 在 XZ 平面的世界包围盒（Unity Terrain 使用 XZ 为水平面）
+                var pos = terrain.transform.position;
+                var tRect = new Rect(pos.x, pos.z, td.size.x, td.size.z);
+
+                // 仅处理与道路区域相交的 Terrain
+                if (!tRect.Overlaps(pathRect.Value))
+                    continue;
+
+                int res = td.alphamapResolution;
+                int oldLayerCount = td.alphamapLayers;
+                var oldAlpha = td.GetAlphamaps(0, 0, res, res);
+                var oldSplats = td.terrainLayers;
+
+                // Step 1: 检查每个 layer 是否被使用（在整个 alphamap 范围内）
+                var keptIndices = new List<int>();
+                for (int l = 0; l < oldLayerCount; l++)
                 {
-                    var pos = terrain.GetPosition();
-                    var tRect = new Rect(pos.x, pos.z, td.size.x, td.size.z);
-                    if (!tRect.Overlaps(pathRect.Value)) continue;
-                }
-
-                var res = td.alphamapResolution;
-                var layers = td.alphamapLayers;
-                var alpha = td.GetAlphamaps(0, 0, res, res);
-
-                if (!IsAlphaMapEmpty()) continue;
-
-                td.SetAlphamaps(0, 0, new float[res, res, layers]);
-                EditorUtility.SetDirty(td);
-                clearedCount++;
-
-                
-                bool IsAlphaMapEmpty()
-                {
-                    for (var y = 0; y < res; y++)
-                    for (var x = 0; x < res; x++)
+                    bool isUsed = false;
+                    for (int y = 0; y < res && !isUsed; y++)
                     {
-                        var sum = 0f;
-                        for (var l = 0; l < layers; l++)
+                        for (int x = 0; x < res && !isUsed; x++)
                         {
-                            sum += alpha[y, x, l];
+                            if (oldAlpha[y, x, l] > threshold)
+                            {
+                                isUsed = true;
+                            }
                         }
-
-                        if (sum > 1e-4f) return false;
                     }
 
-                    return true;
+                    if (isUsed)
+                    {
+                        keptIndices.Add(l);
+                    }
                 }
+
+                int removedCount = oldLayerCount - keptIndices.Count;
+                if (removedCount <= 0)
+                    continue; // 无未使用层，跳过
+
+                // Step 2: 重建 splatPrototypes
+                var newSplats = new TerrainLayer[keptIndices.Count];
+                for (int i = 0; i < keptIndices.Count; i++)
+                {
+                    newSplats[i] = oldSplats[keptIndices[i]];
+                }
+    
+                // Step 3: 重建 alphamap（仅保留使用的 layer）
+                var newAlpha = new float[res, res, keptIndices.Count];
+                for (int y = 0; y < res; y++)
+                {
+                    for (int x = 0; x < res; x++)
+                    {
+                        for (int i = 0; i < keptIndices.Count; i++)
+                        {
+                            newAlpha[y, x, i] = oldAlpha[y, x, keptIndices[i]];
+                        }
+                    }
+                }
+
+                // Step 4: 应用新数据
+                td.terrainLayers = newSplats;
+                td.SetAlphamaps(0, 0, newAlpha);
+                EditorUtility.SetDirty(td);
+
+                totalRemovedLayers += removedCount;
+                Debug.Log($"[OptimizeSplat] Terrain '{terrain.name}' 移除了 {removedCount} 个未使用的 Splat 层");
             }
 
-            var msg = clearedCount > 0
-                ? $"已清理 {clearedCount} 个 Terrain 的空白 SplatAlpha"
-                : "未找到需要清理的 Terrain";
+            string msg = totalRemovedLayers > 0
+                ? $"✅ 成功从道路覆盖区域的 Terrain 中移除 {totalRemovedLayers} 个未使用 Splat 层"
+                : "🚧 道路覆盖区域内的 Terrain 无未使用 Splat 层";
+
             ShowNotification(msg);
-            Debug.Log($"[TerrainOperations] {msg}");
+            Debug.Log($"[TerrainSplatOptimizer] {msg}");
         }
 
         private Rect? GetPathBounds()

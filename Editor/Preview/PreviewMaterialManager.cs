@@ -11,7 +11,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
     /// <summary>
     /// Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current profile/template.
-    /// Supports both PathPreviewSplat and StylizedRoadBlend shaders.
+    /// Supports PathPreviewSplatMulti shader (multi-layer preview).
     /// </summary>
     public sealed class PreviewMaterialManager : IDisposable
     {
@@ -35,7 +35,12 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private static readonly int MaskStrengthId = Shader.PropertyToID("_MaskStrength");
         // 新增：GPU 预览相关属性
 #if UNITY_EDITOR
-        private static readonly int ControlTexArray = Shader.PropertyToID("_ControlTexArray");
+        private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
+        private static readonly int UseSplatWeightsID = Shader.PropertyToID("_UseSplatWeights");
+        private static readonly int TerrainPositionID = Shader.PropertyToID("_TerrainPosition");
+        private static readonly int TerrainSizeID = Shader.PropertyToID("_TerrainSize");
+        private static readonly int AlphamapResolutionID = Shader.PropertyToID("_AlphamapResolution");
+        private static readonly int LayerSplatIndicesArr = Shader.PropertyToID("_LayerSplatIndices");
 #endif
 
         private enum ShaderFlavor { Splat, Stylized, Unknown }
@@ -116,20 +121,32 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
 #if UNITY_EDITOR
             // Editor-only GPU preview binding with graceful fallback
-            if (_instance && _instance.HasProperty(ControlTexArray))
+            if (_instance && _instance.HasProperty(SplatWeightsID))
             {
                 if (EnableGpuPreview && _targetTerrain &&
                     EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt != null)
                 {
                     // Bind cached alphamap array for GPU blending
-                    _instance.SetTexture(ControlTexArray, rt);
+                    _instance.SetTexture(SplatWeightsID, rt);
+                    _instance.SetInt(UseSplatWeightsID, 1);
+
+                    var td = _targetTerrain.terrainData;
+                    if (td)
+                    {
+                        var tpos = _targetTerrain.GetPosition();
+                        _instance.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
+                        _instance.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
+                        _instance.SetVector(AlphamapResolutionID, new Vector4(td.alphamapResolution, td.alphamapResolution, 0f, 0f));
+                    }
+
                     Debug.Log($"[PreviewMaterialManager] GPU Preview enabled - binding cached RT for terrain {_targetTerrain.name}");
                 }
                 else
                 {
-                    // Fallback: unbind or bind a dummy white texture so shader falls back to CPU path
-                    _instance.SetTexture(ControlTexArray, Texture2D.whiteTexture);
-                    Debug.Log($"[PreviewMaterialManager] GPU Preview disabled or no cached RT - using fallback texture. EnableGpuPreview: {EnableGpuPreview}, HasTerrain: {_targetTerrain != null}");
+                    // Disable GPU weights usage; shader will fallback to mask atlas path
+                    _instance.SetInt(UseSplatWeightsID, 0);
+                    _instance.SetTexture(SplatWeightsID, null);
+                    Debug.Log($"[PreviewMaterialManager] GPU Preview disabled or no cached RT - falling back to mask atlas. EnableGpuPreview: {EnableGpuPreview}, HasTerrain: {_targetTerrain != null}");
                 }
             }
 #endif
@@ -176,7 +193,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     {
                         layer = roadLayer.contentLayer;
                         layerOpacity = roadLayer.opacity;
-                        blendMode = roadLayer.blendMode;
+                        blendMode = (BlendMode)roadLayer.blendMode;
                     }
                 }
 
@@ -215,6 +232,26 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             _instance.SetVectorArray(LayerTilingsArr, tilingsArr);
             _instance.SetFloatArray(LayerOpacitiesArr, opacitiesArr);
             _instance.SetFloatArray(LayerBlendModesArr, blendModesArr);
+
+#if UNITY_EDITOR
+            // 推送每层在 Terrain 中的 splat 索引，供着色器从 _SplatWeights 采样正确的 slice/channel
+            var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, layerCount) : Mathf.Min(4, layerCount);
+            var splatIndicesArr = new float[maxLayers];
+            for (int i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
+            if (EnableGpuPreview && _targetTerrain && profile.roadRecipe)
+            {
+                var map = __temp.MrPathV2._2.Editor.Terrain.LayerResolver.Resolve(_targetTerrain, profile.roadRecipe);
+                if (map != null && layers != null)
+                {
+                    for (int i = 0; i < layerCountForIndices; i++)
+                    {
+                        var tl = layers[i]?.contentLayer;
+                        if (tl && map.TryGetValue(tl, out var idx)) splatIndicesArr[i] = idx;
+                    }
+                }
+            }
+            if (_instance.HasProperty(LayerSplatIndicesArr)) _instance.SetFloatArray(LayerSplatIndicesArr, splatIndicesArr);
+#endif
 
             // 设置层数
             _instance.SetInt(LayerCount, layerCount);
@@ -351,7 +388,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             if (shader == null) return ShaderFlavor.Unknown;
             var name = shader.name;
             return name.Contains("StylizedRoadBlend") ? ShaderFlavor.Stylized :
-                   (name.Contains("PathPreviewSplat") || name.Contains("PathPreviewSplatMulti")) ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
+                   name.Contains("PathPreviewSplatMulti") ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
         }
 
         private static int CalculateHash(PathProfile profile, Material template, float alpha)

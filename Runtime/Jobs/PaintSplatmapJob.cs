@@ -136,30 +136,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void NormalizeAlphaWeights(int baseAlphaIndex, int firstValidSplatIndex)
         {
-            var paintedCount = 0;
-            var totalWeight = 0f;
-            for (var i = 0; i < AlphamapLayerCount; i++)
-            {
-                var v = Alphamaps[baseAlphaIndex + i];
-                totalWeight += v;
-                if (v > 1e-4f) paintedCount++;
-            }
-
-            if (paintedCount > 1 && totalWeight > NormalizationThreshold)
-            {
-                var invTotalWeight = 1f / totalWeight;
-                for (var i = 0; i < AlphamapLayerCount; i++)
-                {
-                    Alphamaps[baseAlphaIndex + i] *= invTotalWeight;
-                }
-            }
-            else if (paintedCount == 0 && firstValidSplatIndex >= 0)
-            {
-                for (var i = 0; i < AlphamapLayerCount; i++)
-                {
-                    Alphamaps[baseAlphaIndex + i] = (i == firstValidSplatIndex) ? 1f : 0f;
-                }
-            }
+            TerrainJobsUtility.NormalizeWeightsKeep(Alphamaps, baseAlphaIndex, AlphamapLayerCount, firstValidSplatIndex);
         }
 
         #endregion

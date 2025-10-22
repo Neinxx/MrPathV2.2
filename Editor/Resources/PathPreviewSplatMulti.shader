@@ -148,6 +148,8 @@ Shader "MrPath/PathPreviewSplatMulti"
 
             // Mask atlas and other properties
             TEXTURE2D(_MaskAtlas);
+            // 新增：GPU 计算的地形权重数组
+            TEXTURE2D_ARRAY(_SplatWeights);
             float _AtlasInvHeight;
             float _MaskThreshold;
             float _PreviewAlpha;
@@ -161,6 +163,12 @@ Shader "MrPath/PathPreviewSplatMulti"
             float4 _LayerTilings[16];
             float _LayerOpacities[16];
             float _LayerBlendModes[16];
+            // 新增：GPU 权重采样所需的地形与映射参数
+            float2 _TerrainPosition;
+            float2 _TerrainSize;
+            float2 _AlphamapResolution;
+            float _LayerSplatIndices[16];
+            float _UseSplatWeights;
             CBUFFER_END
             Varyings vert(Attributes input)
             {
@@ -217,6 +225,38 @@ Shader "MrPath/PathPreviewSplatMulti"
             // Legacy BlendLayer replaced by shared ApplyBlend in BlendLayer.hlsl
             #define BlendLayer(baseColor, layerColor, mode, opacity) ApplyBlend(baseColor, layerColor, mode, opacity)
 
+            // 根据可用性从 GPU _SplatWeights 或 2D MaskAtlas 采样权重
+            float SampleWeightForLayer(float2 worldUV, float across, float progress, int layerIndex)
+            {
+                // 优先使用 GPU 权重
+                if (_UseSplatWeights > 0.5)
+                {
+                    int splatIndex = (int)round(_LayerSplatIndices[layerIndex]);
+                    if (splatIndex >= 0)
+                    {
+                        int slice = splatIndex / 4;
+                        int channel = splatIndex % 4;
+                        float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
+                        half4 rgba = SAMPLE_TEXTURE2D_ARRAY(_SplatWeights, sampler_LinearClamp, terrainUV, slice);
+                        if (channel == 0) return rgba.r;
+                        else if (channel == 1) return rgba.g;
+                        else if (channel == 2) return rgba.b;
+                        else return rgba.a;
+                    }
+                }
+
+                // 回退到 2D MaskAtlas
+                return SampleMaskAtlas2D(
+                    _MaskAtlas,
+                    sampler_LinearClamp,
+                    across,
+                    progress,
+                    layerIndex,
+                    _PathSamples,
+                    _AtlasInvHeight,
+                    _MaskThreshold) * _MaskStrength;
+            }
+
             half4 frag(Varyings input) : SV_Target
             {
                 // Calculate across - road coordinate in [0, 1]
@@ -235,16 +275,8 @@ Shader "MrPath/PathPreviewSplatMulti"
                 int maxLayers = min(_LayerCount, 16);
                 for (int i = 0; i < maxLayers; i ++)
                 {
-                    // Sample weight from 2D mask atlas; each layer is stored as a horizontal slice
-                    float weight = SampleMaskAtlas2D(
-                        _MaskAtlas,
-                        sampler_LinearClamp,
-                        across,
-                        pathProgress,
-                        i,
-                        _PathSamples,
-                        _AtlasInvHeight,
-                        _MaskThreshold) * _MaskStrength;
+                    // 从 GPU 权重或 MaskAtlas 采样
+                    float weight = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
                     if (weight < 1e-4)
                     continue;
 

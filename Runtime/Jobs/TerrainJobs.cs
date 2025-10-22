@@ -228,26 +228,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             {
                 Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
             }
-
-            // 修改归一化逻辑：仅在命中 2 个及以上图层时才归一化，保持单图层遮罩梯度
-            var paintedCount = 0;
-            var total = 0f;
-            for (var i = 0; i < AlphamapLayerCount; i++)
-            {
-                var v = Alphamaps[baseAlphaIndex + i];
-                total += v;
-                if (v > 1e-4f) paintedCount++;
-            }
-
-            if (paintedCount > 1 && total > 1e-5f)
-            {
-                var invTotal = 1f / total;
-                for (var i = 0; i < AlphamapLayerCount; i++) Alphamaps[baseAlphaIndex + i] *= invTotal;
-            }
-            else if (paintedCount == 0 && firstValidSplatIndex >= 0)
-            {
-                Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
-            }
+TerrainJobsUtility.NormalizeWeightsKeep(Alphamaps, baseAlphaIndex, AlphamapLayerCount, firstValidSplatIndex);
         }
     }
 }

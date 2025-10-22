@@ -45,13 +45,22 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             if (existingMaterialTemplate == null)
             {
                 EnsureFolderExists(System.IO.Path.GetDirectoryName(materialTemplatePath));
-                var defaultMaterialTemplate = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                var defaultMaterialTemplate = new Material(Shader.Find("MrPath/PathPreviewSplatMulti"));
                 AssetDatabase.CreateAsset(defaultMaterialTemplate, materialTemplatePath);
                 AssetDatabase.SaveAssets();
-                Debug.Log("默认预览材质模板已创建: " + materialTemplatePath);
+                Debug.Log("默认预览材质模板已创建(多层预览 Shader): " + materialTemplatePath);
                 existingMaterialTemplate = defaultMaterialTemplate;
             }
             targetObject.previewMaterialTemplate = existingMaterialTemplate;
+
+            // 如果已存在的模板不是多层预览 Shader，自动升级以适配新版管线
+            var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");
+            if (existingMaterialTemplate != null && multiShader != null && existingMaterialTemplate.shader != multiShader)
+            {
+                existingMaterialTemplate.shader = multiShader;
+                EditorUtility.SetDirty(existingMaterialTemplate);
+                Debug.Log("已将现有预览材质模板升级为多层预览 Shader");
+            }
 
             EditorUtility.SetDirty(targetObject);
         }

@@ -76,4 +76,21 @@ float4 ApplyBlending(float4 base, float4 overlay, float strength, int blendMode)
     }
 }
 
+// Normalize RGBA weights while preserving already-painted channels
+float4 NormalizeWeightsKeep(float4 w)
+{
+    const float threshold = 1e-4;
+    const float sumThreshold = 1e-5;
+    int painted = ((w.r > threshold) ? 1 : 0)
+                + ((w.g > threshold) ? 1 : 0)
+                + ((w.b > threshold) ? 1 : 0)
+                + ((w.a > threshold) ? 1 : 0);
+    float sum = w.r + w.g + w.b + w.a;
+    if (painted > 1 && sum > sumThreshold)
+    {
+        w *= (1.0 / sum);
+    }
+    return saturate(w);
+}
+
 #endif // BLENDING_LIBRARY_HLSL

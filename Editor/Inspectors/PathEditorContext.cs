@@ -75,9 +75,31 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
                 // 初始化预览管理器
                 var generator = new DefaultPreviewGenerator();
-                PreviewManager = new PathPreviewManager(generator, MaterialManager,
-                _mrPathProjectSettings.appearanceDefaults?.previewMaterialTemplate,
-                _mrPathProjectSettings.appearanceDefaults != null ? _mrPathProjectSettings.appearanceDefaults.previewAlpha : 0.5f);
+                var appearance = _mrPathProjectSettings.appearanceDefaults;
+                var template = appearance?.previewMaterialTemplate;
+                var alpha = appearance != null ? appearance.previewAlpha : 0.5f;
+
+                // 运行时强制使用多层预览 Shader（若为空或非多层，自动回退/升级）
+                var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");
+                if (multiShader != null)
+                {
+                    if (template == null || template.shader == null || !template.shader.name.Contains("PathPreviewSplatMulti"))
+                    {
+                        if (template != null && template.shader != null)
+                        {
+                            // 就地升级已有模板的 shader 引用
+                            template.shader = multiShader;
+                            EditorUtility.SetDirty(template);
+                        }
+                        else
+                        {
+                            // 为空时创建一个运行时材质实例用于预览
+                            template = new Material(multiShader) { name = "DefaultPreviewMaterialTemplate" };
+                        }
+                    }
+                }
+
+                PreviewManager = new PathPreviewManager(generator, MaterialManager, template, alpha);
 
                 // 初始化地形操作处理器
                 TerrainHandler = new TerrainOperationHandler(HeightProvider);

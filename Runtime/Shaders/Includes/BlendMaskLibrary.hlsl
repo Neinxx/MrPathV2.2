@@ -1,21 +1,31 @@
 #ifndef BLEND_MASK_LIBRARY_INCLUDED
 #define BLEND_MASK_LIBRARY_INCLUDED
 
-// Include noise functions if needed (e.g., from Unity Mathematics or custom)
-// #include "Packages/com.unity.mathematics/Unity.Mathematics/noise.hlsl"
+// -----------------------------------------------------------------------------
+// Runtime BlendMaskLibrary.hlsl
+// Unified with Editor version: struct layouts, mask type constants, and
+// Evaluate* APIs. Includes backward-compatible wrapper for old signatures.
+// -----------------------------------------------------------------------------
 
-// --- GPU Structs (Must match C# exactly) ---
+// Mask types (keep consistent across editor/runtime)
+#define MASK_TYPE_NONE 0
+#define MASK_TYPE_SHOULDER 1
+#define MASK_TYPE_NOISE 2
+#define MASK_TYPE_GRADIENT 3
+
+// --- GPU Structs (must match C# memory layout exactly) ---
 struct GpuShoulderMaskParams {
     float ShoulderWidthRatio;
     float ShoulderStrength;
     float EdgeFalloff;
-    int EnableLeftShoulder;
-    int EnableRightShoulder;
+    int   EnableLeftShoulder;
+    int   EnableRightShoulder;
     float2 Tiling;
     float2 Offset;
     float OverallScale;
     float Smooth;
-    // AnimationCurve needs approximation (e.g., sample points to LUT or polynomial)
+    float Pad1;
+    float Pad2;
 };
 
 struct GpuNoiseMaskParams {
@@ -25,105 +35,114 @@ struct GpuNoiseMaskParams {
     float2 Offset;
     float OverallScale;
     float Smooth;
+    float Pad1;
 };
-// ... Structs for Gradient, RoadSurface etc. ...
 
 struct GpuMaskParams {
-    int MaskType; // 0=None, 1=Shoulder, 2=Noise, 3=Gradient, 4=RoadSurface...
-    GpuShoulderMaskParams ShoulderParams;
-    GpuNoiseMaskParams NoiseParams;
-    // ... other mask structs ...
+    int   maskType;   // C#: MaskType
+    float strength;   // C#: Strength
+    float2 padding;   // C#: Pad2, Pad3
+    GpuShoulderMaskParams shoulderParams;
+    GpuNoiseMaskParams    noiseParams;
 };
 
-// --- Helper: Apply Smoothing (ported from C#) ---
-float ApplySmoothing(float maskValue, float smooth)
+// Provide name aliases to ease transition from older HLSL using MaskType/Strength
+#define MaskType  maskType
+#define Strength  strength
+
+// --- Simple noise helpers (placeholder, fast pseudo-perlin) ---
+float SimpleNoise(float2 uv)
 {
-    if (smooth <= 0.0f) return maskValue;
-    float edge0 = smooth * 0.5f;
-    float edge1 = 1.0f - smooth * 0.5f;
-    float t = saturate((maskValue - edge0) / max(1e-6f, edge1 - edge0));
-    return t * t * (3.0f - 2.0f * t);
+    return frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453);
 }
 
-// --- Helper: Transform Coords (ported from C#) ---
-float TransformPosition(float horizontalPosition, float worldWidth, float2 tilingOffset)
+float PerlinNoise(float2 uv, float scale)
 {
-    float u = (horizontalPosition + 1.0f) * 0.5f; // -1..1 => 0..1
-    // Preserve sign of tiling.x to allow negative values (mirroring)
-    float denom = (abs(tilingOffset.x) < 0.0001f) ? (0.0001f * (tilingOffset.x < 0.0f ? -1.0f : 1.0f)) : tilingOffset.x;
-    float repeatCount = worldWidth / denom; // 保留符号以支持镜像
-    return u * repeatCount + tilingOffset.y; // offset.x
+    uv *= max(1e-5, scale);
+    float2 i = floor(uv);
+    float2 f = frac(uv);
+
+    float a = SimpleNoise(i);
+    float b = SimpleNoise(i + float2(1.0, 0.0));
+    float c = SimpleNoise(i + float2(0.0, 1.0));
+    float d = SimpleNoise(i + float2(1.0, 1.0));
+
+    float2 u = f * f * (3.0 - 2.0 * f);
+    float res = lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+    return res;
 }
 
-float TransformPathPosition(float pathProgress, float pathLength, float2 tilingOffset)
+// --- Smoothing helper ---
+float ApplySmoothing(float value, float smoothing)
 {
-    // Preserve sign of tiling.x (actually y passed in) to allow negative values (mirroring)
-    float denom = (abs(tilingOffset.x) < 0.0001f) ? (0.0001f * (tilingOffset.x < 0.0f ? -1.0f : 1.0f)) : tilingOffset.x;
-    float repeatCount = pathLength / denom; // 保留符号以支持镜像
-    return pathProgress * repeatCount + tilingOffset.y; // offset.y
+    return smoothstep(0.0, 1.0, value * (1.0 + smoothing));
 }
 
-
-// --- Evaluate Functions (Implement logic here!) ---
-
-float EvaluateShoulderMask(float posAcross, float pathProgress, float worldW, float pathLen, GpuShoulderMaskParams p)
+// --- Evaluate shoulder mask (distance-based, unified) ---
+float EvaluateShoulderMask(GpuShoulderMaskParams p, float distanceFromPath, float roadWidth)
 {
-    // TODO: Implement HLSL logic similar to ShoulderMask.cs Evaluate
-    float absPos = abs(posAcross);
-    float innerBoundary = 1.0 - p.ShoulderWidthRatio;
-    if (absPos < innerBoundary) return 0.0f;
+    // Inside road core: no shoulder
+    float coreHalfWidth = roadWidth * 0.5;
+    float d = abs(distanceFromPath) - coreHalfWidth;
+    if (d <= 0.0) return 0.0;
 
-    bool isLeft = posAcross < 0.0f;
-    bool enabled = (isLeft && p.EnableLeftShoulder > 0) || (!isLeft && p.EnableRightShoulder > 0);
-    if (!enabled) return 0.0f;
+    // Shoulder span
+    float shoulderWidth = max(1e-5, p.ShoulderWidthRatio * roadWidth);
+    if (d <= shoulderWidth) return saturate(p.ShoulderStrength);
 
-    float shoulderWidth = max(1e-6f, p.ShoulderWidthRatio); // Avoid div by zero
-    float relPos = saturate((absPos - innerBoundary) / shoulderWidth);
+    // Edge falloff beyond shoulder
+    float beyond = d - shoulderWidth;
+    float falloff = 1.0 - saturate(beyond / max(1e-5, p.EdgeFalloff));
+    return saturate(falloff * p.ShoulderStrength);
+}
 
-    // Evaluate profile curve (needs approximation/LUT)
-    float profileValue = relPos; // Placeholder - Use LUT sampling or polynomial
+// --- Evaluate procedural noise mask (world-space) ---
+float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos)
+{
+    float2 uv = (worldPos * p.OverallScale) * p.Tiling + p.Offset + p.Seed;
+    float n = PerlinNoise(uv, max(1e-5, p.OverallScale));
+    n = ApplySmoothing(n, p.Smooth);
+    return saturate(n * p.Strength);
+}
 
-    // Apply edge falloff
-    if (p.EdgeFalloff > 0.0f) {
-         float falloffDist = p.EdgeFalloff / shoulderWidth; // Normalize falloff
-         if (relPos < falloffDist) {
-             profileValue *= saturate(relPos / max(1e-6f, falloffDist));
-         }
+// --- Evaluate gradient (progress parameter) ---
+float EvaluateGradientMask(float progress, float strength)
+{
+    return progress * strength;
+}
+
+// --- Main unified EvaluateMask ---
+float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth)
+{
+    float maskValue = 1.0;
+    switch (maskParams.maskType)
+    {
+        case MASK_TYPE_SHOULDER:
+            maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
+            break;
+        case MASK_TYPE_NOISE:
+            maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos);
+            break;
+        case MASK_TYPE_GRADIENT:
+            maskValue = EvaluateGradientMask(progress, 1.0);
+            break;
+        case MASK_TYPE_NONE:
+        default:
+            maskValue = 1.0;
+            break;
     }
-
-    float finalValue = profileValue * p.ShoulderStrength * p.OverallScale;
-    return ApplySmoothing(finalValue, p.Smooth);
+    return saturate(maskValue * maskParams.strength);
 }
 
-float EvaluateNoiseMask(float posAcross, float pathProgress, float worldW, float pathLen, GpuNoiseMaskParams p)
-{
-    // TODO: Implement HLSL logic using noise functions
-    float u = TransformPosition(posAcross, worldW, float2(p.Tiling.x, p.Offset.x));
-    float v = TransformPathPosition(pathProgress, pathLen, float2(p.Tiling.y, p.Offset.y));
-
-    // Use a noise function (e.g., Unity.Mathematics.noise.snoise)
-    // float noiseVal = snoise(float2(u, v) + p.Seed); // Value in -1..1 range usually
-    // noiseVal = noiseVal * 0.5 + 0.5; // Remap to 0..1
-    float noiseVal = 0.5f; // Placeholder - Replace with actual noise call
-
-    float finalValue = noiseVal * p.Strength * p.OverallScale;
-    return ApplySmoothing(finalValue, p.Smooth);
-}
-
-// ... Implement Evaluate functions for Gradient, RoadSurface etc. ...
-
-// --- Main Evaluate Function ---
+// --- Backward-compatible wrapper (old signature) ---
+// Maps posAcross/pathProgress/worldW/pathLen to new API.
 float EvaluateMask(float posAcross, float pathProgress, float worldW, float pathLen, GpuMaskParams p)
 {
-    switch (p.MaskType)
-    {
-        case 1: return EvaluateShoulderMask(posAcross, pathProgress, worldW, pathLen, p.ShoulderParams);
-        case 2: return EvaluateNoiseMask(posAcross, pathProgress, worldW, pathLen, p.NoiseParams);
-        // case 3: return EvaluateGradientMask(...);
-        // case 4: return EvaluateRoadSurfaceMask(...);
-        default: return 0.0f; // No mask or unknown
-    }
+    // Estimate signed distance from path center in world units
+    float distanceFromPath = posAcross * (worldW * 0.5);
+    // Derive a world-space pos (approx) for noise masks
+    float2 worldPos = float2(posAcross * worldW, pathProgress * pathLen);
+    return EvaluateMask(p, worldPos, pathProgress, distanceFromPath, worldW);
 }
-
 
 #endif // BLEND_MASK_LIBRARY_INCLUDED

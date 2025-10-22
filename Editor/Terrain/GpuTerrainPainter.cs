@@ -43,9 +43,14 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         private static readonly int LayerParamsID = Shader.PropertyToID("LayerParamsBuffer");
         private static readonly int SpineDataID = Shader.PropertyToID("SpineData");
         private static readonly int TerrainTexturesID = Shader.PropertyToID("_TerrainTextures");
-        private static readonly int OutputAlphaMapsID = Shader.PropertyToID("_OutputAlphaMaps");
         private static readonly int NumActiveLayersID = Shader.PropertyToID("_NumActiveLayers");
-        private static readonly int AlphamapTexturesID = Shader.PropertyToID("AlphamapTextures");
+        private static readonly int LayerCountID = Shader.PropertyToID("_LayerCount");
+        private static readonly int AlphamapOffsetID = Shader.PropertyToID("_AlphamapOffset");
+        private static readonly int TerrainOffsetID = Shader.PropertyToID("_TerrainOffset");
+        private static readonly int FalloffDistanceID = Shader.PropertyToID("_FalloffDistance");
+        private static readonly int BrushStrengthID = Shader.PropertyToID("_BrushStrength");
+        private static readonly int BrushSizeID = Shader.PropertyToID("_BrushSize");
+        private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
         // --------------------------------
 
         public GpuTerrainPainter()
@@ -211,22 +216,25 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 #endif
                 }
 
-                // IMPORTANT: Clear or copy from existing alpha maps only if we didn't reuse a cached RT
-                if (!reusedCachedRt)
+                // Always sync RT from current Terrain alphamaps to avoid stale/zero weights
+                for (int i = 0; i < arrayCount && i < alphaMapTextures.Length; i++)
                 {
-                    for (int i = 0; i < arrayCount && i < alphaMapTextures.Length; i++)
-                    {
-                        Graphics.CopyTexture(alphaMapTextures[i], 0, 0, tempAlphaMaps, i, 0);
-                    }
+                    Graphics.CopyTexture(alphaMapTextures[i], 0, 0, tempAlphaMaps, i, 0);
                 }
 
                 token.ThrowIfCancellationRequested();
 
                 // 2. Prepare Compute Shader Inputs
-                 _paintComputeShader.SetInt(AlphamapResolutionID, resolution);
+                 _paintComputeShader.SetInts(AlphamapResolutionID, resolution, resolution);
                  _paintComputeShader.SetInt(AlphamapLayerCountID, layers);
-                 _paintComputeShader.SetVector(TerrainPositionID, terrain.GetPosition());
-                 _paintComputeShader.SetVector(TerrainSizeID, td.size);
+                 var tpos = terrain.GetPosition();
+                 _paintComputeShader.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
+                 _paintComputeShader.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
+                 _paintComputeShader.SetInts(AlphamapOffsetID, coverageMin.x, coverageMin.y);
+                 _paintComputeShader.SetInts(TerrainOffsetID, 0, 0);
+                 _paintComputeShader.SetFloat(FalloffDistanceID, Mathf.Max(0.001f, profileData.RoadWidth * 0.6f));
+                 _paintComputeShader.SetFloat(BrushStrengthID, 1.0f);
+                 _paintComputeShader.SetFloat(BrushSizeID, Mathf.Max(0.001f, profileData.RoadWidth));
 
                  // --- Upload Spine Data ---
                  spinePointsBuffer = new ComputeBuffer(math.max(1, spineData.Points.Length), sizeof(float) * 3);
@@ -253,7 +261,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 _paintComputeShader.SetInts(CoverageMaxID, coverageMax.x, coverageMax.y);
 
                 // --- Recipe Data ---
-                _paintComputeShader.SetInt(NumActiveLayersID, recipeGpuData.ActiveLayerCount); // <-- FIX
+                _paintComputeShader.SetInt(NumActiveLayersID, recipeGpuData.ActiveLayerCount);
+                _paintComputeShader.SetInt(LayerCountID, recipeGpuData.ActiveLayerCount);
                 _paintComputeShader.SetBuffer(_kernelHandle, LayerParamsID, recipeGpuData.LayerParamsBuffer);
                 if (recipeGpuData.TerrainTextureArray != null)
                 {
@@ -264,8 +273,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 // 3. Set Output Texture
                 Debug.Log($"[GpuTerrainPainter] Binding RenderTexture to compute shader. Texture valid: {tempAlphaMaps != null && tempAlphaMaps.IsCreated()}, enableRandomWrite: {tempAlphaMaps?.enableRandomWrite}");
                 
-                _paintComputeShader.SetTexture(_kernelHandle, OutputAlphaMapsID, tempAlphaMaps);
-                _paintComputeShader.SetTexture(_kernelHandle, AlphamapTexturesID, tempAlphaMaps);
+                _paintComputeShader.SetTexture(_kernelHandle, SplatWeightsID, tempAlphaMaps);
                 
                 // Verify texture binding by checking if the texture is properly set
                 if (tempAlphaMaps == null || !tempAlphaMaps.IsCreated() || !tempAlphaMaps.enableRandomWrite)
@@ -392,10 +400,12 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 if (request.hasError)
                 {
                     Debug.LogError($"[GpuTerrainPainter] AsyncGPUReadback encountered an error! Texture format: {tempAlphaMaps.graphicsFormat}, Dimension: {tempAlphaMaps.dimension}, Size: {tempAlphaMaps.width}x{tempAlphaMaps.height}x{tempAlphaMaps.volumeDepth}");
+                    return;
                 }
                 else if (!request.done)
                 {
                     Debug.LogError("[GpuTerrainPainter] AsyncGPUReadback is not done but no error reported!");
+                    return;
                 }
                 else
                 {
@@ -410,7 +420,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                             int width = resolution;
                             int height = resolution;
                             int layerCount = layers;
-                            int sliceCount = arrayCount;
+                            int sliceCount = request.layerCount;
                             Debug.Log($"[GpuTerrainPainter] Readback ok. Converting {sliceCount} slices ({width}x{height}) to {layerCount} layers...");
                             
                             float[,,] layerData = new float[height, width, layerCount];

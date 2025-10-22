@@ -9,12 +9,14 @@ using UnityEngine.Experimental.Rendering;
 using System.Runtime.InteropServices;
 using System;
 using MrPathV2; // For Exception
+using UnityEngine.Rendering;
 
 namespace __temp.MrPathV2._2.Editor.Terrain
 {
     // --- GpuDataStructures (放在同一文件或单独文件) ---
     [StructLayout(LayoutKind.Sequential)]
-    public struct GpuShoulderMaskParams {
+    public struct GpuShoulderMaskParams
+    {
         public float ShoulderWidthRatio;
         public float ShoulderStrength;
         public float EdgeFalloff;
@@ -28,7 +30,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         public float Pad2;
     }
     [StructLayout(LayoutKind.Sequential)]
-    public struct GpuNoiseMaskParams {
+    public struct GpuNoiseMaskParams
+    {
         public float Strength;
         public float Seed;
         public Vector2 Tiling;
@@ -39,9 +42,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
     }
     // TODO: Define GpuGradientMaskParams, GpuRoadSurfaceMaskParams etc.
     [StructLayout(LayoutKind.Sequential)]
-    public struct GpuMaskParams {
+    public struct GpuMaskParams
+    {
         public int MaskType;
-        public float Pad1, Pad2, Pad3;
+        public float Strength;
+        public float Pad2, Pad3;
         public GpuShoulderMaskParams ShoulderParams;
         public GpuNoiseMaskParams NoiseParams;
         // ... other mask structs ...
@@ -71,6 +76,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         private StylizedRoadRecipe _lastRecipe;
         private int _lastRecipeHash = -1;
         private Dictionary<int, int> _maskInstanceIdToHash = new Dictionary<int, int>();
+        private RenderTexture _stagingRt; // 复用的中转 RT
 
         /// <summary>
         /// 获取当前为 GPU 准备的活动图层数量。
@@ -88,11 +94,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             var newHash = CalculateRecipeDeepHash(recipe);
             if (newHash == _lastRecipeHash && _lastRecipe == recipe)
             {
-                 if (!CheckMaskParametersChanged(recipe))
-                 {
-                      return false;
-                 }
-                 newHash = CalculateRecipeDeepHash(recipe);
+                if (!CheckMaskParametersChanged(recipe))
+                {
+                    return false;
+                }
+                newHash = CalculateRecipeDeepHash(recipe);
             }
 
             Debug.Log("[RecipeGpuDataManager] Recipe data changed, updating GPU buffers.");
@@ -129,7 +135,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 var packedMask = PackMaskParams(activeMask);
                 if (activeMask != null)
                 {
-                     _maskInstanceIdToHash[activeMask.GetInstanceID()] = CalculateMaskHash(activeMask);
+                    _maskInstanceIdToHash[activeMask.GetInstanceID()] = CalculateMaskHash(activeMask);
                 }
 
                 var gpuParams = new GpuBlendLayerParams
@@ -154,29 +160,29 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
             return true;
         }
-        
+
         private bool CheckMaskParametersChanged(StylizedRoadRecipe recipe)
         {
-             if (recipe == null) return false;
-             foreach(var layer in recipe.GetLayers()) // 假设是 'blendLayers'
-             {
-                  var activeMask = layer.layerMask;
-                  if(layer.enabled && activeMask != null)
-                  {
-                       int maskId = activeMask.GetInstanceID();
-                       int currentMaskHash = CalculateMaskHash(activeMask);
-                       if(!_maskInstanceIdToHash.TryGetValue(maskId, out int previousHash) || previousHash != currentMaskHash)
-                       {
-                            return true;
-                       }
-                  }
-             }
-             return false;
+            if (recipe == null) return false;
+            foreach (var layer in recipe.GetLayers()) // 假设是 'blendLayers'
+            {
+                var activeMask = layer.layerMask;
+                if (layer.enabled && activeMask != null)
+                {
+                    int maskId = activeMask.GetInstanceID();
+                    int currentMaskHash = CalculateMaskHash(activeMask);
+                    if (!_maskInstanceIdToHash.TryGetValue(maskId, out int previousHash) || previousHash != currentMaskHash)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private GpuMaskParams PackMaskParams(BlendMaskBase mask)
         {
-            var gpuMask = new GpuMaskParams { MaskType = 0 };
+            var gpuMask = new GpuMaskParams { MaskType = 0, Strength = 1.0f };
             if (mask == null) return gpuMask;
 
             Vector2 tiling = mask.tiling;
@@ -189,24 +195,35 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (mask is ShoulderMask sm)
             {
                 gpuMask.MaskType = 1;
-                gpuMask.ShoulderParams = new GpuShoulderMaskParams {
+                // 顶层 Strength 对肩部遮罩设为 1，实际强度由 ShoulderParams 控制
+                gpuMask.Strength = 1.0f;
+                gpuMask.ShoulderParams = new GpuShoulderMaskParams
+                {
                     ShoulderWidthRatio = sm.shoulderWidthRatio,
                     ShoulderStrength = sm.shoulderStrength,
                     EdgeFalloff = sm.edgeFalloff,
                     EnableLeftShoulder = sm.enableLeftShoulder ? 1 : 0,
                     EnableRightShoulder = sm.enableRightShoulder ? 1 : 0,
-                    Tiling = tiling, Offset = offset, OverallScale = overallScale, Smooth = smooth
+                    Tiling = tiling,
+                    Offset = offset,
+                    OverallScale = overallScale,
+                    Smooth = smooth
                 };
             }
             else if (mask is NoiseMask nm)
             {
-                 var pmb = mask as ProceduralMaskBase;
-                 gpuMask.MaskType = 2;
-                 gpuMask.NoiseParams = new GpuNoiseMaskParams {
-                     Strength = pmb?.strength ?? 1.0f,
-                     Seed = pmb?.seed ?? 0.0f,
-                     Tiling = tiling, Offset = offset, OverallScale = overallScale, Smooth = smooth
-                 };
+                var pmb = mask as ProceduralMaskBase;
+                gpuMask.MaskType = 2;
+                gpuMask.Strength = pmb?.strength ?? 1.0f; // 统一顶层强度，避免 HLSL 读取到 0
+                gpuMask.NoiseParams = new GpuNoiseMaskParams
+                {
+                    Strength = pmb?.strength ?? 1.0f,
+                    Seed = pmb?.seed ?? 0.0f,
+                    Tiling = tiling,
+                    Offset = offset,
+                    OverallScale = overallScale,
+                    Smooth = smooth
+                };
             }
             // TODO: else if (mask is GradientMask gm) { ... }
             // TODO: else if (mask is RoadSurfaceMask rsm) { ... }
@@ -217,13 +234,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
         private void UpdateTextureArray()
         {
-            if (_cachedTextures.Count == 0)
-            {
-                ReleaseTextureArray();
-                return;
-            }
-
-            // Find the most common texture format and dimensions to use as the standard
+            // Count formats and choose the most common size/format among cached textures
             var formatCounts = new Dictionary<(int width, int height, GraphicsFormat format), int>();
             foreach (var texture in _cachedTextures)
             {
@@ -234,24 +245,23 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             var mostCommon = formatCounts.OrderByDescending(kvp => kvp.Value).First();
             int width = mostCommon.Key.width;
             int height = mostCommon.Key.height;
-            GraphicsFormat format = mostCommon.Key.format;
-            bool mipChain = _cachedTextures.Any(t => t.mipmapCount > 1);
+            GraphicsFormat srcCommonFormat = mostCommon.Key.format;
+            bool mipChainRequested = _cachedTextures.Any(t => t.mipmapCount > 1);
 
-            // Filter out incompatible textures and create a list of valid ones
+            // Filter out incompatible textures and create a list of valid ones (same size & format)
             var validTextures = new List<Texture2D>();
             var textureIndices = new List<int>(); // Track original indices
-            
             for (int i = 0; i < _cachedTextures.Count; i++)
             {
                 var texture = _cachedTextures[i];
-                if (texture.width == width && texture.height == height && texture.graphicsFormat == format)
+                if (texture.width == width && texture.height == height && texture.graphicsFormat == srcCommonFormat)
                 {
                     validTextures.Add(texture);
                     textureIndices.Add(i);
                 }
                 else
                 {
-                    Debug.LogWarning($"Texture '{texture.name}' has incompatible dimensions/format. Expected {width}x{height} {format}, got {texture.width}x{texture.height} {texture.graphicsFormat}. This texture will be excluded from the array.");
+                    Debug.LogWarning($"Texture '{texture.name}' has incompatible dimensions/format. Expected {width}x{height} {srcCommonFormat}, got {texture.width}x{texture.height} {texture.graphicsFormat}. This texture will be excluded from the array.");
                 }
             }
 
@@ -262,26 +272,86 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 return;
             }
 
-            if (TerrainTextureArray == null || TerrainTextureArray.width != width || TerrainTextureArray.height != height || TerrainTextureArray.depth != validTextures.Count || TerrainTextureArray.graphicsFormat != format)
+            // Decide target array format: prefer original when renderable; otherwise fall back to uncompressed RGBA8
+            bool srcIsSRGB = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(srcCommonFormat);
+            bool srcIsCompressed = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsCompressedFormat(srcCommonFormat);
+            bool srcRenderable = SystemInfo.IsFormatSupported(srcCommonFormat, FormatUsage.Render);
+            GraphicsFormat targetFormat = srcCommonFormat;
+            if (srcIsCompressed || !srcRenderable)
+            {
+                targetFormat = srcIsSRGB ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
+            }
+
+            // Staging RT can only be created for renderable formats; use mips only when we can stage
+            bool stagingRenderable = SystemInfo.IsFormatSupported(targetFormat, FormatUsage.Render);
+            bool useMip = mipChainRequested && stagingRenderable;
+
+            // (Re)create the Texture2DArray with target format
+            if (TerrainTextureArray == null || TerrainTextureArray.width != width || TerrainTextureArray.height != height || TerrainTextureArray.depth != validTextures.Count || TerrainTextureArray.graphicsFormat != targetFormat)
             {
                 ReleaseTextureArray();
-                TerrainTextureArray = new Texture2DArray(width, height, validTextures.Count, format, mipChain ? TextureCreationFlags.MipChain : TextureCreationFlags.None);
+                TerrainTextureArray = new Texture2DArray(width, height, validTextures.Count, targetFormat, useMip ? TextureCreationFlags.MipChain : TextureCreationFlags.None);
                 TerrainTextureArray.wrapMode = TextureWrapMode.Repeat;
-                TerrainTextureArray.filterMode = mipChain ? FilterMode.Trilinear : FilterMode.Bilinear;
+                TerrainTextureArray.filterMode = useMip ? FilterMode.Trilinear : FilterMode.Bilinear;
                 TerrainTextureArray.name = "TerrainLayer Texture Array";
             }
 
+            // Prepare staging RT if renderable; otherwise we will fall back to ConvertTexture base level only
+            if (stagingRenderable)
+            {
+                EnsureStagingRt(width, height, targetFormat, useMip);
+            }
+
+            var cmd = new CommandBuffer { name = "RecipeGpuDataManager TextureArray Build" };
+            var stagingId = stagingRenderable ? new RenderTargetIdentifier(_stagingRt) : default;
+
             for (int i = 0; i < validTextures.Count; i++)
             {
-                int mipCount = mipChain ? validTextures[i].mipmapCount : 1;
-                for (int mip = 0; mip < mipCount; mip++)
+                var srcTex = validTextures[i];
+                int mipCount = useMip ? srcTex.mipmapCount : 1;
+
+                bool isCrunch = false;
+#if UNITY_EDITOR
+                isCrunch = IsCrunchCompressed(srcTex);
+#endif
+                bool sameFormatAsTarget = srcTex.graphicsFormat == targetFormat;
+
+                if (!stagingRenderable)
                 {
-                    Graphics.CopyTexture(validTextures[i], 0, mip, TerrainTextureArray, i, mip);
+                    // Last-resort path: convert base level into uncompressed array slice (mips skipped)
+                    Graphics.ConvertTexture(srcTex, 0, TerrainTextureArray, i);
+                    if (mipCount > 1)
+                    {
+                        Debug.LogWarning($"[RecipeGpuDataManager] '{srcTex.name}' target format {targetFormat} cannot use staging RT; converted base level only. Mipmaps skipped.");
+                    }
+                    continue;
+                }
+
+                // Use staging blit whenever conversion is needed (Crunch or format mismatch)
+                bool needConvert = isCrunch || !sameFormatAsTarget;
+                if (needConvert)
+                {
+                    cmd.Blit(srcTex, stagingId);
+                    if (useMip) cmd.GenerateMips(stagingId);
+                    for (int mip = 0; mip < mipCount; mip++)
+                    {
+                        cmd.CopyTexture(_stagingRt, 0, mip, TerrainTextureArray, i, mip);
+                    }
+                }
+                else
+                {
+                    // Direct copy when formats match and not Crunch
+                    for (int mip = 0; mip < mipCount; mip++)
+                    {
+                        cmd.CopyTexture(srcTex, 0, mip, TerrainTextureArray, i, mip);
+                    }
                 }
             }
 
-            // Log summary of texture array creation
-            Debug.Log($"Created texture array with {validTextures.Count} textures ({width}x{height}, {format}). Excluded {_cachedTextures.Count - validTextures.Count} incompatible textures.");
+            Graphics.ExecuteCommandBuffer(cmd);
+            cmd.Release();
+
+            Debug.Log($"Created texture array with {validTextures.Count} textures ({width}x{height}, {targetFormat}). Excluded {_cachedTextures.Count - validTextures.Count} incompatible textures.");
         }
 
 
@@ -305,35 +375,40 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
         private int CalculateRecipeDeepHash(StylizedRoadRecipe recipe)
         {
-             if (recipe == null) return 0;
+            if (recipe == null) return 0;
             unchecked
             {
                 int hash = 17;
                 hash = hash * 23 + recipe.GetInstanceID();
                 hash = hash * 23 + recipe.masterOpacity.GetHashCode();
                 hash = hash * 23 + recipe.GetLayers().Count; // 假设是 'blendLayers'
-                foreach(var layer in recipe.GetLayers()) {
-                    if (layer.enabled) {
-                         hash = hash * 23 + (layer.contentLayer?.GetInstanceID() ?? 0);
-                         var activeMask = layer.layerMask;
-                         hash = hash * 23 + (activeMask?.GetInstanceID() ?? 0);
-                         hash = hash * 23 + layer.opacity.GetHashCode();
-                         hash = hash * 23 + layer.blendMode.GetHashCode();
-                         if (activeMask != null) hash = hash * 23 + CalculateMaskHash(activeMask);
+                foreach (var layer in recipe.GetLayers())
+                {
+                    if (layer.enabled)
+                    {
+                        hash = hash * 23 + (layer.contentLayer?.GetInstanceID() ?? 0);
+                        var activeMask = layer.layerMask;
+                        hash = hash * 23 + (activeMask?.GetInstanceID() ?? 0);
+                        hash = hash * 23 + layer.opacity.GetHashCode();
+                        hash = hash * 23 + layer.blendMode.GetHashCode();
+                        if (activeMask != null) hash = hash * 23 + CalculateMaskHash(activeMask);
                     }
                 }
                 return hash;
             }
         }
-        
+
         private int CalculateMaskHash(BlendMaskBase mask)
         {
-             if (mask == null) return 0;
-             try {
-                  return JsonUtility.ToJson(mask).GetHashCode();
-             } catch (Exception) {
-                  return mask.GetInstanceID();
-             }
+            if (mask == null) return 0;
+            try
+            {
+                return JsonUtility.ToJson(mask).GetHashCode();
+            }
+            catch (Exception)
+            {
+                return mask.GetInstanceID();
+            }
         }
 
         public void Dispose() { ReleaseBuffers(); }
@@ -343,13 +418,91 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             if (TerrainTextureArray != null)
             {
-                 #if UNITY_EDITOR
-                 UnityEngine.Object.DestroyImmediate(TerrainTextureArray);
-                 #else
+#if UNITY_EDITOR
+                UnityEngine.Object.DestroyImmediate(TerrainTextureArray);
+#else
                  UnityEngine.Object.Destroy(TerrainTextureArray);
-                 #endif
+#endif
                 TerrainTextureArray = null;
             }
+            if (_stagingRt != null)
+            {
+                _stagingRt.Release();
+                UnityEngine.Object.DestroyImmediate(_stagingRt);
+                _stagingRt = null;
+            }
+        }
+#if UNITY_EDITOR
+        private static bool IsCrunchCompressed(Texture2D tex)
+        {
+            if (tex == null) return false;
+            try
+            {
+                var path = UnityEditor.AssetDatabase.GetAssetPath(tex);
+                var importer = UnityEditor.AssetImporter.GetAtPath(path) as UnityEditor.TextureImporter;
+                if (importer != null && importer.crunchedCompression) return true;
+            }
+            catch { }
+            var fmt = tex.format;
+            return fmt == TextureFormat.DXT1Crunched
+                || fmt == TextureFormat.DXT5Crunched
+                || fmt == TextureFormat.ETC_RGB4Crunched
+                || fmt == TextureFormat.ETC2_RGBA8Crunched;
+        }
+#endif
+
+        private void CopyTextureSliceCrunchSafe(Texture2D src, int sliceIndex, int mipCount, GraphicsFormat format)
+        {
+            bool useMip = mipCount > 1;
+            var desc = new RenderTextureDescriptor(src.width, src.height, format, 0)
+            {
+                dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
+                useMipMap = useMip,
+                autoGenerateMips = false
+            };
+            var rt = RenderTexture.GetTemporary(desc);
+            try
+            {
+                Graphics.Blit(src, rt);
+                if (useMip)
+                {
+                    rt.GenerateMips();
+                }
+                for (int mip = 0; mip < mipCount; mip++)
+                {
+                    Graphics.CopyTexture(rt, 0, mip, TerrainTextureArray, sliceIndex, mip);
+                }
+            }
+            finally
+            {
+                RenderTexture.ReleaseTemporary(rt);
+            }
+        }
+        private void EnsureStagingRt(int width, int height, GraphicsFormat format, bool useMip)
+        {
+            if (_stagingRt != null)
+            {
+                if (_stagingRt.width == width && _stagingRt.height == height && _stagingRt.graphicsFormat == format && _stagingRt.useMipMap == useMip)
+                {
+                    return; // 已匹配，复用
+                }
+                _stagingRt.Release();
+                UnityEngine.Object.DestroyImmediate(_stagingRt);
+                _stagingRt = null;
+            }
+            var desc = new RenderTextureDescriptor(width, height, format, 0)
+            {
+                dimension = UnityEngine.Rendering.TextureDimension.Tex2D,
+                useMipMap = useMip,
+                autoGenerateMips = false
+            };
+            _stagingRt = new RenderTexture(desc);
+            _stagingRt.name = "RecipeGPU Staging RT";
+            _stagingRt.wrapMode = TextureWrapMode.Repeat;
+            _stagingRt.filterMode = useMip ? FilterMode.Trilinear : FilterMode.Bilinear;
+            _stagingRt.Create();
         }
     }
 }
+
+

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using __temp.MrPathV2._2.Runtime.Jobs;
 using UnityEngine;
 
 namespace __temp.MrPathV2._2.Runtime.Core
@@ -67,8 +68,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         /// </summary>
         public static float BlendChannel(float baseValue, float layerValue, BlendMode mode)
         {
-            // 直接采用加权累加并夹取 0..1，忽略混合模式
-            return Mathf.Clamp01(baseValue + layerValue);
+            return TerrainJobsUtility.Blend(baseValue, layerValue, (int)mode);
         }
 
         /// <summary>

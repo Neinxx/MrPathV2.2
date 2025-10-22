@@ -7,24 +7,35 @@
 #define MASK_TYPE_NOISE 2
 #define MASK_TYPE_GRADIENT 3
 
-// Shoulder mask parameters
+// Shoulder mask parameters (match C# layout)
 struct GpuShoulderMaskParams
 {
-    float shoulderWidth;
-    float shoulderFalloff;
-    float shoulderStrength;
-    float padding;
+    float ShoulderWidthRatio;
+    float ShoulderStrength;
+    float EdgeFalloff;
+    int EnableLeftShoulder;
+    int EnableRightShoulder;
+    float2 Tiling;
+    float2 Offset;
+    float OverallScale;
+    float Smooth;
+    float Pad1;
+    float Pad2;
 };
 
-// Noise mask parameters
+// Noise mask parameters (match C# layout)
 struct GpuNoiseMaskParams
 {
-    float noiseScale;
-    float noiseStrength;
-    float2 noiseOffset;
+    float Strength;
+    float Seed;
+    float2 Tiling;
+    float2 Offset;
+    float OverallScale;
+    float Smooth;
+    float Pad1;
 };
 
-// Main mask parameters
+// Main mask parameters (match C# layout)
 struct GpuMaskParams
 {
     int maskType;
@@ -88,52 +99,55 @@ float2 TransformPathPosition(float2 worldPos, float progress, float pathWidth)
     return worldPos;
 }
 
-// Evaluate shoulder mask
-float EvaluateShoulderMask(GpuShoulderMaskParams params, float2 worldPos, float progress, float distanceFromPath)
+// Evaluate shoulder mask using path distance and road width
+float EvaluateShoulderMask(GpuShoulderMaskParams p, float distanceFromPath, float roadWidth)
 {
-    float shoulderDistance = abs(distanceFromPath) - params.shoulderWidth * 0.5;
-    if (shoulderDistance <= 0.0) return 0.0; // Inside main path
-    
-    float falloff = 1.0 - saturate(shoulderDistance / params.shoulderFalloff);
-    return falloff * params.shoulderStrength;
+    float coreHalfWidth = roadWidth * 0.5;
+    float d = abs(distanceFromPath) - coreHalfWidth;
+    if (d <= 0.0) return 0.0; // inside main road
+
+    float shoulderWidth = max(1e-5, p.ShoulderWidthRatio * roadWidth);
+    if (d <= shoulderWidth) return saturate(p.ShoulderStrength);
+
+    float beyond = d - shoulderWidth;
+    float falloff = 1.0 - saturate(beyond / max(1e-5, p.EdgeFalloff));
+    return saturate(falloff * p.ShoulderStrength);
 }
 
-// Evaluate noise mask
-float EvaluateNoiseMask(GpuNoiseMaskParams params, float2 worldPos, float progress)
+// Evaluate noise mask with tiling/offset/scale and smoothing
+float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos)
 {
-    float2 noiseUV = worldPos + params.noiseOffset;
-    float noise = PerlinNoise(noiseUV, params.noiseScale);
-    return noise * params.noiseStrength;
+    float2 uv = (worldPos * p.OverallScale) * p.Tiling + p.Offset + p.Seed;
+    float n = PerlinNoise(uv, max(1e-5, p.OverallScale));
+    n = ApplySmoothing(n, p.Smooth);
+    return saturate(n * p.Strength);
 }
 
 // Evaluate gradient mask (based on progress along path)
 float EvaluateGradientMask(float progress, float strength)
 {
-    // Simple linear gradient - can be enhanced with animation curves
     return progress * strength;
 }
 
-// Main mask evaluation function
-float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress)
+// Main mask evaluation function (now takes distance & roadWidth)
+float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth)
 {
     float maskValue = 1.0;
-    
     switch (maskParams.maskType)
     {
         case MASK_TYPE_SHOULDER:
         {
-            float distanceFromPath = length(worldPos); // Simplified - should use actual distance from path
-            maskValue = EvaluateShoulderMask(maskParams.shoulderParams, worldPos, progress, distanceFromPath);
+            maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
             break;
         }
         case MASK_TYPE_NOISE:
         {
-            maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos, progress);
+            maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos);
             break;
         }
         case MASK_TYPE_GRADIENT:
         {
-            maskValue = EvaluateGradientMask(progress, maskParams.strength);
+            maskValue = EvaluateGradientMask(progress, 1.0);
             break;
         }
         case MASK_TYPE_NONE:
@@ -141,7 +155,6 @@ float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress)
             maskValue = 1.0;
             break;
     }
-    
     return saturate(maskValue * maskParams.strength);
 }
 

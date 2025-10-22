@@ -1,6 +1,6 @@
 #pragma kernel PaintTerrain
 
-#include "BlendingLibrary.hlsl"
+#include "Assets/__temp/MrPathV2.2/Runtime/Shaders/Includes/BlendingLibrary.hlsl"
 #include "BlendMaskLibrary.hlsl"
 #include "Common.hlsl"
 
@@ -10,10 +10,13 @@
 // Structs (must be defined before use)
 struct LayerParams
 {
-    int layerIndex;
-    float strength;
-    float4 blendSettings;
-    GpuMaskParams maskParams;
+    int BlendMode;
+    float Opacity;
+    int TextureIndex;
+    int TerrainLayerSplatIndex;
+    float4 TilingOffset;
+    float4 TintColor;
+    GpuMaskParams MaskParams;
 };
 
 // Input buffers
@@ -21,16 +24,19 @@ StructuredBuffer<LayerParams> LayerParamsBuffer;
 StructuredBuffer<float3> SpineData;
 
 // Textures
-RWTexture2DArray<unorm float4> AlphamapTextures;
+RWTexture2DArray<unorm float4> _SplatWeights;
 
 // Uniforms
 int _LayerCount;
+int _AlphamapLayerCount;
 int _SpinePointCount;
 float _BrushSize;
 float _BrushStrength;
 float _FalloffDistance;
+float _RoadWidth;
 float2 _TerrainSize;
-float2 _AlphamapResolution;
+float2 _TerrainPosition;
+int2 _AlphamapResolution;
 int2 _TerrainOffset;
 int2 _AlphamapOffset;
 
@@ -75,40 +81,46 @@ float2 CalculateDistanceAndProgress(float2 worldPos, StructuredBuffer<float3> sp
 }
 
 // Apply blending based on layer parameters
-void ApplyBlending(int2 pixelCoord, int layerIndex, float strength, float4 blendSettings, GpuMaskParams maskParams, float distance, float progress)
+void ApplyBlending(int2 pixelCoord, LayerParams layer, float distance, float progress)
 {
     // Calculate brush falloff
     float falloff = 1.0f - saturate(distance / _FalloffDistance);
     if (falloff <= 0.0f) return;
-    
-    // Evaluate mask
-    float2 worldPos = float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
-    float maskValue = EvaluateMask(maskParams, worldPos, progress);
-    
-    // Calculate final strength
-    float finalStrength = strength * falloff * maskValue * _BrushStrength;
+
+    // Evaluate mask with recipe-provided params
+    float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+    float maskValue = EvaluateMask(layer.MaskParams, worldPos, progress, distance, _RoadWidth);
+
+    // Calculate final strength using recipe opacity
+    float finalStrength = layer.Opacity * falloff * maskValue * _BrushStrength;
     if (finalStrength <= 0.0f) return;
-    
-    // Get current alphamap values
-    uint alphamapIndex = (uint)layerIndex / 4u;
-    uint channelIndex = (uint)layerIndex % 4u;
-    
-    float4 currentAlpha = AlphamapTextures[int3(pixelCoord, alphamapIndex)];
-    
-    // Apply blending
-    if (channelIndex == 0) currentAlpha.r = saturate(currentAlpha.r + finalStrength);
-    else if (channelIndex == 1) currentAlpha.g = saturate(currentAlpha.g + finalStrength);
-    else if (channelIndex == 2) currentAlpha.b = saturate(currentAlpha.b + finalStrength);
-    else if (channelIndex == 3) currentAlpha.a = saturate(currentAlpha.a + finalStrength);
-    
-    // Normalize to ensure sum doesn't exceed 1.0
-    float sum = currentAlpha.r + currentAlpha.g + currentAlpha.b + currentAlpha.a;
-    if (sum > 1.0f)
-    {
-        currentAlpha /= sum;
-    }
-    
-    AlphamapTextures[int3(pixelCoord, alphamapIndex)] = currentAlpha;
+
+    // Validate splat index
+    int splatIdxSigned = layer.TerrainLayerSplatIndex;
+    if (splatIdxSigned < 0 || splatIdxSigned >= _AlphamapLayerCount) return;
+
+    // Map to alphamap slice/channel via terrain splat index
+    uint splatIndex = (uint)splatIdxSigned;
+    uint alphamapIndex = splatIndex / 4u;
+    uint channelIndex = splatIndex % 4u;
+
+    // Read current alpha before blending
+    float4 currentAlpha = _SplatWeights[int3(pixelCoord, alphamapIndex)];
+
+    // Blend per selected channel using unified BlendMode weight function
+    float baseWeight = (channelIndex == 0) ? currentAlpha.r : (channelIndex == 1) ? currentAlpha.g : (channelIndex == 2) ? currentAlpha.b : currentAlpha.a;
+    float blendedWeight = BlendWeight(baseWeight, finalStrength, layer.BlendMode);
+    blendedWeight = saturate(blendedWeight);
+
+    if (channelIndex == 0) currentAlpha.r = blendedWeight;
+    else if (channelIndex == 1) currentAlpha.g = blendedWeight;
+    else if (channelIndex == 2) currentAlpha.b = blendedWeight;
+    else /* channelIndex == 3 */ currentAlpha.a = blendedWeight;
+
+    // Replace local normalization with shared helper to keep multiple channels sum=1
+    currentAlpha = NormalizeWeightsKeep(currentAlpha);
+
+    _SplatWeights[int3(pixelCoord, alphamapIndex)] = currentAlpha;
 }
 
 [numthreads(8, 8, 1)]
@@ -121,8 +133,7 @@ void PaintTerrain(uint3 id : SV_DispatchThreadID)
         return;
     
     // Convert to world position
-    float2 worldPos = float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
-    worldPos += float2(_TerrainOffset) * _TerrainSize;
+    float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
     
     // Calculate distance and progress along the path
     float2 distanceAndProgress = CalculateDistanceAndProgress(worldPos, SpineData, _SpinePointCount);
@@ -130,13 +141,12 @@ void PaintTerrain(uint3 id : SV_DispatchThreadID)
     float progress = distanceAndProgress.y;
     
     // Skip if too far from path
-    if (distance > _FalloffDistance)
-        return;
+    if (distance > _FalloffDistance) return;
     
     // Apply each layer
     for (int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
     {
         LayerParams layer = LayerParamsBuffer[layerIdx];
-        ApplyBlending(pixelCoord, layer.layerIndex, layer.strength, layer.blendSettings, layer.maskParams, distance, progress);
+        ApplyBlending(pixelCoord, layer, distance, progress);
     }
 }

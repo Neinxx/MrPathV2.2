@@ -277,21 +277,37 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 共享的灰度 Blend 算法，匹配编辑器预览的实现。
+        /// 共享的灰度 Blend 算法，匹配编辑器预览与 GPU 权重库实现。
         /// BlendMode 枚举序数：需与 Runtime/Core/PathTool.Data.cs 保持一致。
-        /// 增强了数值稳定性和错误恢复。
         /// </summary>
         public static float Blend(float baseValue, float layerValue, int blendModeOrdinal)
         {
-            // 仅保留图层不透明度混合：简单加权并钳制到 0..1
+            // 规范化输入
             if (math.isnan(baseValue) || math.isinf(baseValue)) baseValue = 0f;
             if (math.isnan(layerValue) || math.isinf(layerValue)) layerValue = 0f;
+            baseValue = math.clamp(baseValue, 0f, 1f);
+            layerValue = math.clamp(layerValue, 0f, 1f);
 
-            // 简单叠加并限制最大值
-            var result = math.saturate(baseValue + layerValue);
-            return result;
+            switch (blendModeOrdinal)
+            {
+                case 1: // Multiply
+                    return baseValue * layerValue;
+                case 2: // Add
+                case 6: // Additive
+                    return math.saturate(baseValue + layerValue);
+                case 3: // Overlay (float variant)
+                    return baseValue < 0.5f
+                        ? (2f * baseValue * layerValue)
+                        : (1f - 2f * (1f - baseValue) * (1f - layerValue));
+                case 4: // Screen (float variant)
+                    return 1f - (1f - baseValue) * (1f - layerValue);
+                case 5: // Lerp (use layer as alpha)
+                    return math.lerp(baseValue, layerValue, math.saturate(layerValue));
+                default: // Normal (override)
+                    return layerValue;
+            }
         }
-        
+
         /// <summary>
         /// 在 Job 中从 2D MaskAtlas 采样遮罩值。
         /// atlas: 行优先存储，行数 = layerCount * pathSamples，列数 = atlasWidth。
@@ -348,6 +364,34 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var v1 = math.lerp(v01, v11, wx);
             var v = math.lerp(v0, v1, wy);
             return v;
+        }
+
+        public static void NormalizeWeightsKeep(NativeArray<float> alphamaps, int baseIndex, int layerCount, int firstValidSplatIndex)
+        {
+            var paintedCount = 0;
+            var total = 0f;
+            for (var i = 0; i < layerCount; i++)
+            {
+                var v = alphamaps[baseIndex + i];
+                total += v;
+                if (v > 1e-4f) paintedCount++;
+            }
+
+            if (paintedCount > 1 && total > 1e-5f)
+            {
+                var invTotal = 1f / total;
+                for (var i = 0; i < layerCount; i++)
+                {
+                    alphamaps[baseIndex + i] *= invTotal;
+                }
+            }
+            else if (paintedCount == 0 && firstValidSplatIndex >= 0)
+            {
+                for (var i = 0; i < layerCount; i++)
+                {
+                    alphamaps[baseIndex + i] = (i == firstValidSplatIndex) ? 1f : 0f;
+                }
+            }
         }
 
         // 向后兼容的一维版本：假设 pathSamples==1 ，pathProgress=0.5

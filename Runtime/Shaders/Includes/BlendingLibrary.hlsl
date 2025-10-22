@@ -1,4 +1,4 @@
-﻿#ifndef BLENDING_LIBRARY_INCLUDED
+#ifndef BLENDING_LIBRARY_INCLUDED
 #define BLENDING_LIBRARY_INCLUDED
 
 // --- Blend Modes Enum (match C# BlendMode) ---
@@ -30,5 +30,20 @@ float4 BlendColor(float4 baseColor, float4 layerColor, int blendMode)
     return layerColor; // Placeholder
 }
 
+float4 NormalizeWeightsKeep(float4 w)
+{
+    const float threshold = 1e-4;
+    const float sumThreshold = 1e-5;
+    int painted = ((w.r > threshold) ? 1 : 0)
+                + ((w.g > threshold) ? 1 : 0)
+                + ((w.b > threshold) ? 1 : 0)
+                + ((w.a > threshold) ? 1 : 0);
+    float sum = w.r + w.g + w.b + w.a;
+    if (painted > 1 && sum > sumThreshold)
+    {
+        w *= (1.0 / sum);
+    }
+    return saturate(w);
+}
 
 #endif // BLENDING_LIBRARY_INCLUDED

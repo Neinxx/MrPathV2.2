@@ -220,7 +220,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
                     //name = $"Test Layer {i + 1}",
                     enabled = true,
                     opacity = 0.8f,
-                    blendMode = BlendMode.Normal
+                    blendMode = (Runtime.Core.BlendMode)BlendMode.Normal
                 });
             }
 
