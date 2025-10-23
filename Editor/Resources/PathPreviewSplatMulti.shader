@@ -7,8 +7,9 @@ Shader "MrPath/PathPreviewSplatMulti"
         [Header(Render State)]
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8 // Default to Always (8). Use LEqual (4) for normal depth.
         [Space]
-        _PreviewAlpha("Preview Alpha", Range(0,1)) = 0.6
-        _MaskStrength("Mask Strength", Range(0,4)) = 1
+        _PreviewAlpha("Preview Alpha", Range(0, 1)) = 0.6
+        _MaskStrength("Mask Strength", Range(0, 4)) = 1
+        [Toggle] _OpaquePreview ("Opaque Preview", Float) = 0
 
         [Header(Control Textures)]
         // NOTE : These control textures are NOT used by the fixed shader logic,
@@ -78,6 +79,8 @@ Shader "MrPath/PathPreviewSplatMulti"
         _AcrossScale ("Across Scale", Float) = 1
         _MaskThreshold ("Mask Threshold", Range(0, 1)) = 0
         _PathSamples("Path Samples", Float) = 64
+        _MeshRepeatAcross ("Mesh Repeat Across", Float) = 1
+        _MeshRepeatAlong ("Mesh Repeat Along", Float) = 1
     }
 
     SubShader
@@ -101,7 +104,7 @@ Shader "MrPath/PathPreviewSplatMulti"
             #pragma fragment frag
             // REMOVED : Unused multi_compile directive
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "Assets/__temp/MrPathV2.2/Runtime/Shaders/BlendLayer.hlsl"
+            #include "BlendLayer.hlsl"
 
             struct Attributes
             {
@@ -153,8 +156,11 @@ Shader "MrPath/PathPreviewSplatMulti"
             float _AtlasInvHeight;
             float _MaskThreshold;
             float _PreviewAlpha;
+            float _OpaquePreview;
             float _MaskStrength;
             float _AcrossScale;
+            float _MeshRepeatAcross;
+            float _MeshRepeatAlong;
             int _LayerCount;
             float _PathSamples;
 
@@ -186,24 +192,25 @@ Shader "MrPath/PathPreviewSplatMulti"
             // changing to uniform arrays and a C# controller script.
             half4 SampleLayerTexture(int layerIndex, float2 uv)
             {
+
                 switch(layerIndex)
                 {
-                    case 0 : return SAMPLE_TEXTURE2D(_Layer0_Texture, sampler_LinearRepeat, uv) * _Layer0_Color;
-                    case 1 : return SAMPLE_TEXTURE2D(_Layer1_Texture, sampler_LinearRepeat, uv) * _Layer1_Color;
-                    case 2 : return SAMPLE_TEXTURE2D(_Layer2_Texture, sampler_LinearRepeat, uv) * _Layer2_Color;
-                    case 3 : return SAMPLE_TEXTURE2D(_Layer3_Texture, sampler_LinearRepeat, uv) * _Layer3_Color;
-                    case 4 : return SAMPLE_TEXTURE2D(_Layer4_Texture, sampler_LinearRepeat, uv) * _Layer4_Color;
-                    case 5 : return SAMPLE_TEXTURE2D(_Layer5_Texture, sampler_LinearRepeat, uv) * _Layer5_Color;
-                    case 6 : return SAMPLE_TEXTURE2D(_Layer6_Texture, sampler_LinearRepeat, uv) * _Layer6_Color;
-                    case 7 : return SAMPLE_TEXTURE2D(_Layer7_Texture, sampler_LinearRepeat, uv) * _Layer7_Color;
-                    case 8 : return SAMPLE_TEXTURE2D(_Layer8_Texture, sampler_LinearRepeat, uv) * _Layer8_Color;
-                    case 9 : return SAMPLE_TEXTURE2D(_Layer9_Texture, sampler_LinearRepeat, uv) * _Layer9_Color;
-                    case 10 : return SAMPLE_TEXTURE2D(_Layer10_Texture, sampler_LinearRepeat, uv) * _Layer10_Color;
-                    case 11 : return SAMPLE_TEXTURE2D(_Layer11_Texture, sampler_LinearRepeat, uv) * _Layer11_Color;
-                    case 12 : return SAMPLE_TEXTURE2D(_Layer12_Texture, sampler_LinearRepeat, uv) * _Layer12_Color;
-                    case 13 : return SAMPLE_TEXTURE2D(_Layer13_Texture, sampler_LinearRepeat, uv) * _Layer13_Color;
-                    case 14 : return SAMPLE_TEXTURE2D(_Layer14_Texture, sampler_LinearRepeat, uv) * _Layer14_Color;
-                    case 15 : return SAMPLE_TEXTURE2D(_Layer15_Texture, sampler_LinearRepeat, uv) * _Layer15_Color;
+                    case 0 : return SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0) * _Layer0_Color;
+                    case 1 : return SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0) * _Layer1_Color;
+                    case 2 : return SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0) * _Layer2_Color;
+                    case 3 : return SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0) * _Layer3_Color;
+                    case 4 : return SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0) * _Layer4_Color;
+                    case 5 : return SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0) * _Layer5_Color;
+                    case 6 : return SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0) * _Layer6_Color;
+                    case 7 : return SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0) * _Layer7_Color;
+                    case 8 : return SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0) * _Layer8_Color;
+                    case 9 : return SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0) * _Layer9_Color;
+                    case 10 : return SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0) * _Layer10_Color;
+                    case 11 : return SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0) * _Layer11_Color;
+                    case 12 : return SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0) * _Layer12_Color;
+                    case 13 : return SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0) * _Layer13_Color;
+                    case 14 : return SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0) * _Layer14_Color;
+                    case 15 : return SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0) * _Layer15_Color;
                     default : return half4(1, 1, 1, 1);
                 }
             }
@@ -234,40 +241,44 @@ Shader "MrPath/PathPreviewSplatMulti"
                     int splatIndex = (int)round(_LayerSplatIndices[layerIndex]);
                     if (splatIndex >= 0)
                     {
-                        int slice = splatIndex / 4;
-                        int channel = splatIndex % 4;
+                        // (我们顺便也修复一下上次的整数除法和梯度警告)
+                        uint slice = (uint)splatIndex / 4u;
+                        uint channel = (uint)splatIndex % 4u;
                         float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
-                        half4 rgba = SAMPLE_TEXTURE2D_ARRAY(_SplatWeights, sampler_LinearClamp, terrainUV, slice);
+
+                        // 使用 _LOD 避免梯度警告
+                        half4 rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
+
                         if (channel == 0) return rgba.r;
                         else if (channel == 1) return rgba.g;
                         else if (channel == 2) return rgba.b;
                         else return rgba.a;
                     }
+                    else
+                    {
+                        // !! 这是修复 uninitialized variable 错误的关键 !!
+                        return 0.0;
+                    }
                 }
 
                 // 回退到 2D MaskAtlas
                 return SampleMaskAtlas2D(
-                    _MaskAtlas,
-                    sampler_LinearClamp,
-                    across,
-                    progress,
-                    layerIndex,
-                    _PathSamples,
-                    _AtlasInvHeight,
-                    _MaskThreshold) * _MaskStrength;
+                _MaskAtlas,
+                sampler_LinearClamp,
+                across,
+                progress,
+                layerIndex,
+                _PathSamples,
+                _AtlasInvHeight,
+                _MaskThreshold) * _MaskStrength;
             }
-
             half4 frag(Varyings input) : SV_Target
             {
-                // Calculate across - road coordinate in [0, 1]
-                // 利用 LayerTilings[0].x 反推出跨宽度的纹理重复次数，使 across 基于世界坐标
-                float acrossRepeat = max(_LayerTilings[0].x, 1e-5);
-                float acrossPos = input.uv.x / acrossRepeat; // 0..1 从左到右
-                float across = saturate(abs(acrossPos * 2.0 - 1.0) * _AcrossScale);
-                // 计算沿路径的进度 (0..1) world-space
-                // repeat mask along path according to y-tiling
-                float pathRepeat   = max(_LayerTilings[0].y, 1.0);
-                float pathProgress = frac(input.uv.y * pathRepeat);
+                // 拉伸到道路宽度：Across 不再重复，直接使用 0..1
+                float acrossPos01 = saturate(input.uv.x);
+                float across = saturate(abs(acrossPos01 * 2.0 - 1.0) * _AcrossScale);
+                // 沿路径方向仍允许重复控制
+                float pathProgress = saturate(input.uv.y / max(_MeshRepeatAlong, 0.0001));
 
                 // 初始完全透明
                 half4 finalColor = half4(0, 0, 0, 0);
@@ -277,7 +288,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                 {
                     // 从 GPU 权重或 MaskAtlas 采样
                     float weight = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
-                    if (weight < 1e-4)
+                    if (weight < 0.0004)
                     continue;
 
                     float2 layerTiling = GetLayerTiling(i);
@@ -285,7 +296,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                     half4 layerColor = SampleLayerTexture(i, layerUV);
 
                     // 仅透明度受 mask 影响，颜色保持原值
-                    layerColor.a   *= weight;
+                    layerColor.a *= weight;
 
                     float layerOpacity = GetLayerOpacity(i);
                     float blendMode = GetLayerBlendMode(i);
@@ -296,7 +307,7 @@ Shader "MrPath/PathPreviewSplatMulti"
 
                 // 使用颜色强度驱动透明度；全黑像素输出全透明
                 float alphaFactor = saturate(max(max(finalColor.r, finalColor.g), finalColor.b));
-                finalColor.a = alphaFactor * saturate(_PreviewAlpha);
+                finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : alphaFactor * saturate(_PreviewAlpha);
                 return finalColor;
             }
             ENDHLSL

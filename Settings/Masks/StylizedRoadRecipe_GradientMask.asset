@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: StylizedRoadRecipe_GradientMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 2.81, y: -9.82}
+  tiling: {x: 4.24, y: -8.67}
   offset: {x: 0, y: 0}
-  overallScale: 1.07
+  overallScale: 1.4
   gradient:
     serializedVersion: 2
     m_Curve:

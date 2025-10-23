@@ -17,6 +17,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
     {
         private static readonly int LayerCount = Shader.PropertyToID("_LayerCount");
         private static readonly int PreviewAlpha = Shader.PropertyToID("_PreviewAlpha");
+        private static readonly int OpaquePreview = Shader.PropertyToID("_OpaquePreview");
         private static readonly int MasterOpacity = Shader.PropertyToID("_MasterOpacity");
         private static readonly int EdgeFadeStart = Shader.PropertyToID("_EdgeFadeStart");
         private static readonly int EdgeFadeEnd = Shader.PropertyToID("_EdgeFadeEnd");
@@ -33,6 +34,10 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private static readonly int PathSamplesId = Shader.PropertyToID("_PathSamples");
         private static readonly int LayerIndexId = Shader.PropertyToID("_LayerIndex");
         private static readonly int MaskStrengthId = Shader.PropertyToID("_MaskStrength");
+        private static readonly int ZTestId = Shader.PropertyToID("_ZTest");
+        // 新增：Mesh UV 重复参数（用于遮罩与采样自适应）
+        private static readonly int MeshRepeatAcrossId = Shader.PropertyToID("_MeshRepeatAcross");
+        private static readonly int MeshRepeatAlongId = Shader.PropertyToID("_MeshRepeatAlong");
         // 新增：GPU 预览相关属性
 #if UNITY_EDITOR
         private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
@@ -54,6 +59,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         // private Texture2D _maskLUT;
         // Future: cached 2D mask atlas
         private Texture2D _maskAtlas;
+
+        // 新增：记录路径长度供构建 MaskAtlas 使用
+        private float _pathLength = -1f;
 
         private readonly List<Material> _cachedList = new(1);
 
@@ -90,6 +98,21 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         /// </summary>
         public static bool EnableGpuPreview = true;
 #endif
+
+        // 新增：供外部推送路径长度与Mesh重复参数
+        public void SetPathLength(float length)
+        {
+            _pathLength = length;
+        }
+
+        public void SetMeshRepeats(float across, float along)
+        {
+            if (_instance == null) return;
+            if (_instance.HasProperty(MeshRepeatAcrossId)) _instance.SetFloat(MeshRepeatAcrossId, Mathf.Max(1e-4f, across));
+            if (_instance.HasProperty(MeshRepeatAlongId)) _instance.SetFloat(MeshRepeatAlongId, Mathf.Max(1e-4f, along));
+        }
+
+        // 恢复 Update 方法（被前一次编辑移除），保持材质刷新与GPU绑定逻辑
         public void Update(PathProfile profile, Material template, float previewAlpha)
         {
             if (profile == null || template == null)
@@ -153,8 +176,6 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
             _dirty = true;
         }
-
-        #region Apply helpers
 
         private void ApplySplat(PathProfile profile, float alpha)
         {
@@ -240,7 +261,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             for (int i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
             if (EnableGpuPreview && _targetTerrain && profile.roadRecipe)
             {
-                var map = __temp.MrPathV2._2.Editor.Terrain.LayerResolver.Resolve(_targetTerrain, profile.roadRecipe);
+                var map = __temp.MrPathV2._2.Editor.Terrain.LayerResolver.Resolve(_targetTerrain, profile.roadRecipe, interactive: false);
                 if (map != null && layers != null)
                 {
                     for (int i = 0; i < layerCountForIndices; i++)
@@ -258,6 +279,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
             var master = profile.roadRecipe?.masterOpacity ?? 1f;
             _instance.SetFloat(PreviewAlpha, Mathf.Clamp01(alpha * master));
+            _instance.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
             _instance.SetFloat(MasterOpacity, master);
             _instance.SetFloat(EdgeFadeStart, 0.7f);
             _instance.SetFloat(EdgeFadeEnd, 1f);
@@ -265,18 +287,20 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             // 将整体不透明度同时推送到遮罩强度，用户可在Inspector调整PreviewAlpha或MasterOpacity
             _instance.SetFloat(MaskStrengthId, master);
             _instance.SetFloat(LayerIndexId, 0f);
+            if (_instance.HasProperty(ZTestId)) _instance.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
             // Prepare mask atlas texture even for stylized single-layer preview
             SetupMaskTextures(profile);
 
             // Generate and bind LUT so shader can sample accurate weights
-            SetupMaskTextures(profile); // 使用默认路径长度，实际应该从PathSpine获取
+            // 移除重复调用，统一由一次调用完成生成与绑定
+            // SetupMaskTextures(profile); // 使用默认路径长度，实际应该从PathSpine获取
         }
 
         /// <summary>
         /// Generates or updates the mask atlas texture that stores per-layer mask weights.
         /// This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
         /// </summary>
-        private void SetupMaskTextures(PathProfile profile, float pathLength = 100f)
+        private void SetupMaskTextures(PathProfile profile)
         {
             var recipe = profile.roadRecipe;
             var layers = recipe?.GetLayers();
@@ -321,8 +345,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 return;
             }
 
-            // 生成或更新 MaskAtlas
-            _maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(_maskAtlas, layerInfos, worldWidth, pathLength);
+            // 使用外部推送的真实路径长度；若未知则采用保守默认
+            var effectivePathLength = _pathLength > 0f ? _pathLength : 100f;
+            _maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(_maskAtlas, layerInfos, worldWidth, effectivePathLength);
             if (!_instance.HasProperty(MaskAtlas)) return;
             _instance.SetTexture(MaskAtlas, _maskAtlas ?? Texture2D.whiteTexture);
             _instance.SetFloat(AtlasInvHeight, _maskAtlas && _maskAtlas.height > 0 ? 1f / _maskAtlas.height : 1f);
@@ -356,6 +381,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             _instance.SetFloat(Mode, 0f);
             _instance.SetFloat(PathSamplesId, 64f);
             _instance.SetFloat(LayerIndexId, 0f);
+            if (_instance.HasProperty(ZTestId)) _instance.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
+            // 新增：Stylized 预览也支持不透明预览
+            if (_instance.HasProperty(OpaquePreview)) _instance.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
 
             // 确保单层预览也能获取遮罩贴图（0号层）以应用透明度渐变
             SetupMaskTextures(profile);
@@ -379,7 +407,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
         }
 
-        #endregion
+
 
         #region Utilities
 
@@ -403,6 +431,10 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 hash = hash * 31 + (profile?.GetHashCode() ?? 0);
                 hash = hash * 31 + (template?.GetHashCode() ?? 0);
                 hash = hash * 31 + alpha.GetHashCode();
+                if (profile != null)
+                {
+                    hash = hash * 31 + profile.enableDepthTest.GetHashCode();
+                }
 
                 // Profile 中的路面配方可能在 Inspector 中发生了修改，
                 // 仅依赖引用哈希不足以检测到内部字段变化，这里通过序列化为 JSON 的方式

@@ -84,24 +84,7 @@ namespace __temp.MrPathV2._2.Editor.Preview
             }
             _matMgr.SetTargetTerrain(targetTerrain);
 #endif
-            _matMgr.Update(creator.profile, _template, _alpha);
-            if (_materialsDirty)
-            {
-                RefreshMaterialCache();
-                _materialsDirty = false;
-            }
-            else
-            {
-                // 如果内嵌 Mask 等资源变更导致材质实例被替换，也需要刷新缓存；通过检查引用变化实现。
-                int currentMatCount = _matMgr.GetRenderMaterials()?.Count ?? 0;
-                if (currentMatCount != _materials.Count)
-                {
-                    RefreshMaterialCache();
-                }
-            }
 
-            // 更新用于判断 Profile 引用变化的哈希（不再决定是否调用 Update，仅用于脏标记优化）
-            _lastProfileHash = CalcProfileHash(creator.profile);
 
             if (_spineDirty)
             {
@@ -131,6 +114,51 @@ namespace __temp.MrPathV2._2.Editor.Preview
                     _bounds = _mesh ? _mesh.bounds : default;
                 }
             }
+
+            // 计算路径长度并推送到材质管理器
+            float pathLen = ComputeSpineLength(LatestSpine);
+            _matMgr.SetPathLength(pathLen > 0f ? pathLen : 100f);
+
+            // 计算 Mesh UV 重复（Across/Along），用于着色器自适应遮罩采样
+            float tileX = 1f, tileY = 1f;
+            var layers = creator.profile.roadRecipe?.GetLayers();
+            if (layers != null)
+            {
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    var tl = layers[i]?.contentLayer;
+                    if (tl != null && tl.diffuseTexture != null)
+                    {
+                        var sz = tl.tileSize;
+                        tileX = Mathf.Approximately(sz.x, 0f) ? 1f : sz.x;
+                        tileY = Mathf.Approximately(sz.y, 0f) ? 1f : sz.y;
+                        break;
+                    }
+                }
+            }
+            var acrossRepeat = Mathf.Max(1e-4f, creator.profile.roadWidth / tileX);
+            var alongRepeat = Mathf.Max(1e-4f, (pathLen > 0f ? pathLen : 1f) / tileY);
+            _matMgr.SetMeshRepeats(acrossRepeat, alongRepeat);
+
+            // 更新材质并刷新缓存
+            _matMgr.Update(creator.profile, _template, _alpha);
+            if (_materialsDirty)
+            {
+                RefreshMaterialCache();
+                _materialsDirty = false;
+            }
+            else
+            {
+                // 如果内嵌 Mask 等资源变更导致材质实例被替换，也需要刷新缓存；通过检查引用变化实现。
+                int currentMatCount = _matMgr.GetRenderMaterials()?.Count ?? 0;
+                if (currentMatCount != _materials.Count)
+                {
+                    RefreshMaterialCache();
+                }
+            }
+
+            // 更新用于判断 Profile 引用变化的哈希（不再决定是否调用 Update，仅用于脏标记优化）
+            _lastProfileHash = CalcProfileHash(creator.profile);
 
             if (!creator.profile.showPreviewMesh || _mesh == null || _materials.Count == 0) return;
 
@@ -202,6 +230,19 @@ namespace __temp.MrPathV2._2.Editor.Preview
             _optimizer.Dispose();
             _line.Dispose();
             _materials.Clear();
+        }
+
+        // 统一计算脊线长度
+        private static float ComputeSpineLength(PathSpine? spine)
+        {
+            if (!spine.HasValue || spine.Value.VertexCount < 2) return 0f;
+            float len = 0f;
+            var pts = spine.Value.points;
+            for (int i = 1; i < pts.Length; i++)
+            {
+                len += Vector3.Distance(pts[i - 1], pts[i]);
+            }
+            return len;
         }
     }
 }

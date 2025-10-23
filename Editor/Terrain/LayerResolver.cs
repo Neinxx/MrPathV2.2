@@ -11,7 +11,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
     /// </summary>
     public static class LayerResolver
     {
-        public static Dictionary<TerrainLayer, int> Resolve(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        public static Dictionary<TerrainLayer, int> Resolve(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe, bool interactive = true)
         {
             var result = new Dictionary<TerrainLayer, int>();
             if (terrain == null || terrain.terrainData == null || recipe == null) return result;
@@ -26,7 +26,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 if (l) result.TryAdd(l, i);
             }
 
-            // 按配方逐一检查，缺失则询问是否添加到地形
+            // 按配方逐一检查，缺失则询问是否添加到地形（interactive=true时）
             foreach (var roadLayer in recipe.GetLayers())
             {
                 var tl = roadLayer?.contentLayer;
@@ -34,32 +34,36 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
                 if (!result.ContainsKey(tl))
                 {
-                    var ok = EditorUtility.DisplayDialog(
-                        "添加缺失地形图层",
-                        $"检测到配方引用的 TerrainLayer 未在当前地形中存在:\n\n{tl.name}\n\n是否将其添加到地形图层列表末尾?",
-                        "是 (添加)",
-                        "否 (跳过)");
-
-                    if (ok)
+                    if (interactive)
                     {
-                        Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
-                        // 寻找空位，优先填补前面的空槽
-                        var insertIndex = -1;
-                        for (var si = 0; si < layers.Count; si++)
+                        var ok = EditorUtility.DisplayDialog(
+                            "添加缺失地形图层",
+                            $"检测到配方引用的 TerrainLayer 未在当前地形中存在:\n\n{tl.name}\n\n是否将其添加到地形图层列表末尾?",
+                            "是 (添加)",
+                            "否 (跳过)");
+
+                        if (ok)
                         {
-                            if (layers[si] == null) { insertIndex = si; break; }
+                            Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
+                            // 寻找空位，优先填补前面的空槽
+                            var insertIndex = -1;
+                            for (var si = 0; si < layers.Count; si++)
+                            {
+                                if (layers[si] == null) { insertIndex = si; break; }
+                            }
+                            if (insertIndex >= 0)
+                            {
+                                layers[insertIndex] = tl;
+                            }
+                            else
+                            {
+                                layers.Add(tl);
+                            }
+                            td.terrainLayers = layers.ToArray();
+                            result[tl] = insertIndex >= 0 ? insertIndex : layers.Count - 1;
                         }
-                        if (insertIndex >= 0)
-                        {
-                            layers[insertIndex] = tl;
-                        }
-                        else
-                        {
-                            layers.Add(tl);
-                        }
-                        td.terrainLayers = layers.ToArray();
-                        result[tl] = insertIndex >= 0 ? insertIndex : layers.Count - 1;
                     }
+                    // 非交互模式下不修改地形，也不弹窗，保持缺失层未映射
                 }
             }
 

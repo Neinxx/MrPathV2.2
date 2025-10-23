@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: DefaultPathProfile
   m_EditorClassIdentifier: 
   curveType: 1
-  generationPrecision: 0.47
-  roadWidth: 4.41
+  generationPrecision: 0.88
+  roadWidth: 3.84
   crossSection:
     serializedVersion: 2
     m_Curve:
@@ -73,10 +73,12 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  snapToTerrain: 1
+  snapToTerrain: 0
   heightOffset: 0
-  smoothness: 0
+  smoothness: 100
   forceHorizontal: 1
-  crossSectionSegments: 4
+  crossSectionSegments: 3
   showPreviewMesh: 1
+  enableDepthTest: 1
+  opaquePreview: 1
   roadRecipe: {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}

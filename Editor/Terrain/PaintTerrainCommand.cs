@@ -39,7 +39,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             // --- 1. 选择后端 ---
             var backend = PaintingBackend.CPU_Job_TwoPass; // 默认
             var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
-            
+
             // --- 修正：检查 advancedSettings 是否存在 ---
             if (projectSettings != null && projectSettings.advancedSettings != null)
             {
@@ -78,36 +78,33 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 finalBounds = DetermineFinalBounds(contourBounds, roadContour, spine);
                 spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
                 profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
-                
+
                 token.ThrowIfCancellationRequested();
 
                 // --- 5. 准备后端特定数据 ---
                 if (backend == PaintingBackend.GPU_Compute)
                 {
-                    gpuDataManager = new RecipeGpuDataManager();
-                    var firstTerrain = terrains.FirstOrDefault(t => t != null && t.terrainData != null);
-                    if (firstTerrain != null && Creator.profile.roadRecipe != null)
-                    {
-                        var layerMapForGpu = LayerResolver.Resolve(firstTerrain, Creator.profile.roadRecipe);
-                        gpuDataManager.UpdateData(Creator.profile.roadRecipe, layerMapForGpu);
-                    }
+
+                    // GPU 路径：不在此处创建共享的 RecipeGpuDataManager，避免并发冲突
+                    gpuDataManager = null;
                 }
                 else // CPU_Job_TwoPass
                 {
-                     cpuRecipeDataMap = new Dictionary<UnityEngine.Terrain, RecipeData>();
-                     foreach(var terrain in terrains) 
-                     {
-                          if (terrain == null || terrain.terrainData == null || Creator.profile.roadRecipe == null) continue;
-                          var layerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
-                          var roadWorldWidth = Creator.profile.roadWidth;
-                          var roadWorldLength = Creator.GetPathLength();
-                          var recipeData = new RecipeData(Creator.profile.roadRecipe, layerMap, roadWorldWidth, roadWorldLength, Allocator.Persistent);
-                           if (!recipeData.IsCreated) {
-                               Debug.LogError($"[PaintTerrainCommand] Failed to create CPU RecipeData for terrain {terrain.name}");
-                               continue;
-                           }
-                           cpuRecipeDataMap.Add(terrain, recipeData);
-                     }
+                    cpuRecipeDataMap = new Dictionary<UnityEngine.Terrain, RecipeData>();
+                    foreach (var terrain in terrains)
+                    {
+                        if (terrain == null || terrain.terrainData == null || Creator.profile.roadRecipe == null) continue;
+                        var layerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
+                        var roadWorldWidth = Creator.profile.roadWidth;
+                        var roadWorldLength = Creator.GetPathLength();
+                        var recipeData = new RecipeData(Creator.profile.roadRecipe, layerMap, roadWorldWidth, roadWorldLength, Allocator.Persistent);
+                        if (!recipeData.IsCreated)
+                        {
+                            Debug.LogError($"[PaintTerrainCommand] Failed to create CPU RecipeData for terrain {terrain.name}");
+                            continue;
+                        }
+                        cpuRecipeDataMap.Add(terrain, recipeData);
+                    }
                 }
                 // ---------------------------
 
@@ -129,27 +126,34 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
                     ITerrainPainter painter;
                     RecipeData currentCpuRecipeData = default;
+                    RecipeGpuDataManager gpuDataForThisTerrain = null;
 
                     if (backend == PaintingBackend.CPU_Job_TwoPass)
                     {
-                        if(cpuRecipeDataMap == null || !cpuRecipeDataMap.TryGetValue(terrain, out currentCpuRecipeData) || !currentCpuRecipeData.IsCreated) 
+                        if (cpuRecipeDataMap == null || !cpuRecipeDataMap.TryGetValue(terrain, out currentCpuRecipeData) || !currentCpuRecipeData.IsCreated)
                         {
-                             Debug.LogWarning($"[PaintTerrainCommand] Skipping terrain {terrain.name} due to missing CPU RecipeData.");
-                             continue;
+                            Debug.LogWarning($"[PaintTerrainCommand] Skipping terrain {terrain.name} due to missing CPU RecipeData.");
+                            continue;
                         }
                         painter = new CpuTerrainPainter();
                     }
                     else
                     {
-                        if (gpuDataManager == null) {
-                             Debug.LogWarning($"[PaintTerrainCommand] Skipping terrain {terrain.name} due to invalid GpuDataManager.");
-                             continue;
+                        // 为每个地形创建独立的 GPU 数据管理器，避免共享缓冲引发冲突
+
+                        gpuDataForThisTerrain = new RecipeGpuDataManager();
+                        if (Creator.profile != null && Creator.profile.roadRecipe != null)
+                        {
+                            var terrainLayerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
+
+                            gpuDataForThisTerrain.UpdateData(Creator.profile.roadRecipe, terrainLayerMap);
                         }
                         painter = new GpuTerrainPainter();
                     }
-                    
+
+
                     tasks.Add(ExecutePainterAsync(painter, terrain, spineData, profileData,
-                                                  currentCpuRecipeData, gpuDataManager,
+                                                  currentCpuRecipeData, gpuDataForThisTerrain,
                                                   roadContour, finalBounds,
                                                   coverageMin, coverageMax, token));
 
@@ -160,21 +164,22 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
             catch (OperationCanceledException)
             {
-                 Debug.Log($"[PaintTerrainCommand] Operation cancelled.");
-                 throw;
+                Debug.Log($"[PaintTerrainCommand] Operation cancelled.");
+                throw;
             }
             catch (Exception ex)
             {
-                 Debug.LogError($"[PaintTerrainCommand] Error during processing: {ex.Message}\n{ex.StackTrace}");
-                 throw;
+                Debug.LogError($"[PaintTerrainCommand] Error during processing: {ex.Message}\n{ex.StackTrace}");
+                throw;
             }
             finally
             {
                 // --- 7. 清理资源 ---
                 roadContour.SafeDispose();
-                 if (spineData.IsCreated) spineData.Dispose();
-                 if (profileData.IsCreated) profileData.Dispose();
-                gpuDataManager?.Dispose();
+                if (spineData.IsCreated) spineData.Dispose();
+                if (profileData.IsCreated) profileData.Dispose();
+
+                // GPU 数据管理器在每个 ExecutePainterAsync 调用中单独释放
                 // CPU RecipeData instances are disposed within each ExecutePainterAsync call. Avoid double disposal here to prevent redundant operations.
                 // if (cpuRecipeDataMap != null) {
                 //      foreach(var recipeData in cpuRecipeDataMap.Values) {
@@ -184,7 +189,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 HeightProvider?.MarkAsDirty();
             }
         }
-        
+
         private async Task ExecutePainterAsync(
              ITerrainPainter painter, UnityEngine.Terrain terrain,
              PathJobsUtility.SpineData spineData, PathJobsUtility.ProfileData profileData,
@@ -192,29 +197,33 @@ namespace __temp.MrPathV2._2.Editor.Terrain
              NativeArray<float2> roadContour, float4 finalBounds,
              int2 coverageMin, int2 coverageMax, CancellationToken token)
         {
-             try
-             {
-                   await painter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, gpuDataManager, roadContour, finalBounds, coverageMin, coverageMax, token);
-             }
-             finally
-             {
-                  painter?.Dispose();
-                   // CPU RecipeData 是为这个特定任务创建的，在这里释放
-                   if (cpuRecipeData.IsCreated && painter is CpuTerrainPainter) {
-                        cpuRecipeData.Dispose();
-                   }
-             }
+            try
+            {
+                await painter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, gpuDataManager, roadContour, finalBounds, coverageMin, coverageMax, token);
+            }
+            finally
+            {
+                painter?.Dispose();
+                // CPU RecipeData 是为这个特定任务创建的，在这里释放
+                if (cpuRecipeData.IsCreated && painter is CpuTerrainPainter)
+                {
+                    cpuRecipeData.Dispose();
+                }
+                // GPU 数据管理器按地形单独创建，在此释放避免共享资源冲突
+                gpuDataManager?.Dispose();
+            }
         }
 
         private (bool useCoverageLimit, int2 coverageMin, int2 coverageMax) CalculateCoverageArea(UnityEngine.Terrain terrain, float4 contourBounds)
         {
             var td = terrain.terrainData;
-            if(td == null) return (true, int2.zero, new int2(-1,-1));
+            if (td == null) return (true, int2.zero, new int2(-1, -1));
 
             var bounds = contourBounds;
-            if (PreferredBoundsXZ.HasValue) {
-                 var pb = PreferredBoundsXZ.Value;
-                 bounds = new float4(pb.x, pb.y, pb.z, pb.w);
+            if (PreferredBoundsXZ.HasValue)
+            {
+                var pb = PreferredBoundsXZ.Value;
+                bounds = new float4(pb.x, pb.y, pb.z, pb.w);
             }
 
             var terrainPos = terrain.GetPosition();
@@ -244,24 +253,24 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
             return (true, new int2(pixelMinX, pixelMinZ), new int2(pixelMaxX, pixelMaxZ));
         }
-        
+
         // --- 修正: 保持 `CalculateCoverageArea(TerrainWorkItem, ...)` 重载（如果仍有内部依赖）
         // (或者删除旧的 TerrainPaintResourceManager 和 TerrainWorkItem)
         // 为简单起见，我们假设旧的 TerrainWorkItem 不再需要，只保留 Terrain 版本
-        
+
         private float4 DetermineFinalBounds(float4 contourBounds, NativeArray<float2> roadContour, PathSpine spine)
         {
             if (PreferredBoundsXZ.HasValue) return new float4(PreferredBoundsXZ.Value.x, PreferredBoundsXZ.Value.y, PreferredBoundsXZ.Value.z, PreferredBoundsXZ.Value.w);
             if (!roadContour.IsCreated || roadContour.Length < 3)
             {
-                 var fallback = GetExpandedXZBounds(spine, Creator.profile);
-                 return new float4(fallback.x, fallback.y, fallback.z, fallback.w);
+                var fallback = GetExpandedXZBounds(spine, Creator.profile);
+                return new float4(fallback.x, fallback.y, fallback.z, fallback.w);
             }
             return contourBounds;
         }
 
         #endregion
-        
+
         // --- 移除了旧的辅助类 (TerrainWorkItem, TerrainPaintResourceManager) ---
     }
 }

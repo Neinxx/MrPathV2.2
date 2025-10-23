@@ -17,16 +17,26 @@ using UnityEngine.UIElements;
 
 namespace __temp.MrPathV2._2.Editor.Overlays
 {
-    [Overlay(typeof(SceneView), id: "MrPath.TerrainOperationsOverlay", displayName: "地形操作")]
+    [Overlay(typeof(SceneView), id: "MrPath.TerrainOperationsOverlay", displayName: "Modife Terrain Operations")]
     public class TerrainOperationsOverlay : Overlay
     {
         private PathEditorContext _ctx;
         private MrPathTerrainOperations _terrainOpsConfig;
+        private MrPathProjectSettings _projectSettings;
         private VisualElement _root;
         private VisualElement _content;
         private DropdownField _backendDropdown;
         private Toggle _gpuPreviewToggle;
+
         private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
+
+
+        private const string ElCpuOrGpu = "CpuOrGpu";
+        private const string ElOperationsContainer = "operationsContainer";
+        private const string ElGpuPreviewToggle = "gpuPreviewToggle";
+
+        private static readonly string[] BackendChoices = { "CPU", "GPU" };
+
         /// <summary>
         /// 跟踪当前是否有地形操作正在异步执行
         /// </summary>
@@ -39,18 +49,27 @@ namespace __temp.MrPathV2._2.Editor.Overlays
 
         public override VisualElement CreatePanelContent()
         {
-            _terrainOpsConfig = MrPathProjectSettings.GetOrCreateSettings().terrainOperations;
-            //  _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>(); 
+            _projectSettings = MrPathProjectSettings.GetOrCreateSettings();
+            _terrainOpsConfig = _projectSettings.terrainOperations;
             _root = UIResourceLoader.LoadAndCloneByName(nameof(TerrainOperationsOverlay));
-            InitializeBackendDropdown();
+            if (_root == null)
+            {
+                return new Label("Overlay UI 加载失败");
+            }
 
-            InitializeGpuPreviewToggle();
+            // <--- 更改：从 UXML 查询元素，而不是手动创建
+            _backendDropdown = _root.Q<DropdownField>(ElCpuOrGpu);
+            _gpuPreviewToggle = _root.Q<Toggle>(ElGpuPreviewToggle);
+            _content = _root.Q<VisualElement>(ElOperationsContainer);
 
-            _content = _root.Q<VisualElement>("operationsContainer");
+            InitializeBackendDropdown(); // <--- 更改：方法现在只负责注册回调和设置初始值
+            InitializeGpuPreviewToggleFromUXML(); // <--- 更改：新方法，用于绑定 UXML 中的 Toggle
 
-            var refreshBtn = _root.Q<Button>("refreshButton");
-            refreshBtn?.RegisterCallback<ClickEvent>(_ => RemoveUnusedSplatLayersOnPathIntersectingTerrains());
+            // <--- 更改：移除了手动删除 "refreshButton" 的代码
+            // var staleRefreshBtn = _root.Q<Button>("refreshButton");
+            // staleRefreshBtn?.RemoveFromHierarchy();
 
+            Selection.selectionChanged -= OnSelectionChanged;
             Selection.selectionChanged += OnSelectionChanged;
             RefreshContent();
             UpdateVisibility();
@@ -60,33 +79,61 @@ namespace __temp.MrPathV2._2.Editor.Overlays
 
         private void InitializeBackendDropdown()
         {
-            _backendDropdown = _root.Q<DropdownField>("CpuOrGpu");
+            // <--- 更改：移除了查询 (Q)，因为它已在 CreatePanelContent 中完成
             if (_backendDropdown == null) return;
 
-            _backendDropdown.choices = new List<string> { "CPU", "GPU" };
+            _backendDropdown.choices = BackendChoices.ToList();
 
-            var settings = MrPathProjectSettings.GetOrCreateSettings();
-            var backend = settings.advancedSettings?.paintingBackend ??
+            var backend = _projectSettings?.advancedSettings?.paintingBackend ??
                           PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
             _backendDropdown.index = backend == PaintTerrainCommand.PaintingBackend.GPU_Compute ? 1 : 0;
 
-            _backendDropdown.RegisterValueChangedCallback(evt =>
-            {
-                var newBackend = evt.newValue == "GPU"
-                    ? PaintTerrainCommand.PaintingBackend.GPU_Compute
-                    : PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
-
-                var advanced = MrPathProjectSettings.GetOrCreateSettings().advancedSettings;
-                if (advanced == null || advanced.paintingBackend == newBackend) return;
-
-                Undo.RecordObject(advanced, "Change Painting Backend");
-                advanced.paintingBackend = newBackend;
-                EditorUtility.SetDirty(advanced);
-            });
+            _backendDropdown.UnregisterValueChangedCallback(OnBackendChanged);
+            _backendDropdown.RegisterValueChangedCallback(OnBackendChanged);
         }
+
+        private void OnBackendChanged(ChangeEvent<string> evt)
+        {
+            var newBackend = evt.newValue == "GPU"
+                ? PaintTerrainCommand.PaintingBackend.GPU_Compute
+                : PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
+
+            var advanced = _projectSettings != null ? _projectSettings.advancedSettings : null;
+            if (advanced == null || advanced.paintingBackend == newBackend) return;
+
+            Undo.RecordObject(advanced, "Change Painting Backend");
+            advanced.paintingBackend = newBackend;
+            EditorUtility.SetDirty(advanced);
+        }
+
+        // <--- 更改：重命名并简化了 GpuPreviewToggle 的初始化
+        private void InitializeGpuPreviewToggleFromUXML()
+        {
+            if (_gpuPreviewToggle == null)
+            {
+                Debug.LogWarning("TerrainOperationsOverlay: 未在 UXML 中找到 'gpuPreviewToggle' 元素。");
+                return;
+            }
+
+            _gpuPreviewToggle.value = EditorPrefs.GetBool(GpuPreviewPrefKey, true);
+
+            _gpuPreviewToggle.RegisterValueChangedCallback(evt =>
+            {
+                PreviewMaterialManager.EnableGpuPreview = evt.newValue;
+                EditorPrefs.SetBool(GpuPreviewPrefKey, evt.newValue);
+
+                // Force SceneView to refresh so the preview updates immediately
+                UnityEditor.SceneView.RepaintAll();
+            });
+
+            // 初始同步
+            PreviewMaterialManager.EnableGpuPreview = _gpuPreviewToggle.value;
+        }
+
 
         private void RefreshContent()
         {
+
             if (_content == null) return;
             _content.Clear();
             _operationButtons.Clear();
@@ -117,7 +164,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 btn = new ToolbarButton(() => ExecuteOperation(op, btn))
                 {
                     text = originalText,
-                    userData = originalText 
+                    userData = originalText
                 };
                 btn.SetEnabled(!_isExecutingOperation);
                 btn.AddToClassList("terrain-op-button");
@@ -197,19 +244,20 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                     cmd.SetPreviewBoundsXZ(new Vector4(b.min.x, b.min.z, b.max.x, b.max.z));
                 }
             }
-            _isExecutingOperation = true;
-            SetOperationButtonsEnabled(false);
-            if (clickedButton != null)
-            {
 
-                clickedButton.text = "执行中..."; // "优雅" 的部分：提供即时反馈
-                
-            }
-            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, _ =>
-             {
-                 _isExecutingOperation = false;
-                 SetOperationButtonsEnabled(true);
-             });
+            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, isApplying =>
+            {
+                _isExecutingOperation = isApplying;
+                SetOperationButtonsEnabled(!isApplying);
+
+                // <--- 更改：简化了回调逻辑
+                // SetOperationButtonsEnabled(true) 会自动恢复所有按钮的原始文本。
+                // 我们只需要在 "isApplying" 时设置 "执行中..." 文本即可。
+                if (clickedButton != null && isApplying)
+                {
+                    clickedButton.text = "执行中...";
+                }
+            });
         }
 
         private static void ShowConfigError()
@@ -220,6 +268,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 "确定"
             );
         }
+
         /// <summary>
         /// 统一设置所有地形操作按钮的可用状态，并在启用时恢复其原始文本。
         /// </summary>
@@ -230,159 +279,25 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             {
                 btn.SetEnabled(enabled);
 
-                // 如果是重新启用，从 userData 恢复原始文本
+
                 if (enabled && btn.userData is string originalText)
                 {
                     btn.text = originalText;
                 }
             }
         }
-        private void RemoveUnusedSplatLayersOnPathIntersectingTerrains()
-        {
-            var pathRect = GetPathBounds();
-            if (!pathRect.HasValue)
-            {
-                ShowNotification("道路路径无效，无法获取包围区域");
-                return;
-            }
 
-            var terrains = UnityEngine.Terrain.activeTerrains;
-            if (terrains == null || terrains.Length == 0)
-            {
-                ShowNotification("未找到场景中的 Terrain 对象");
-                return;
-            }
 
-            int totalRemovedLayers = 0;
-            const float threshold = 1e-4f; // 判断“非零”的最小值
-
-            foreach (var terrain in terrains)
-            {
-                var td = terrain.terrainData;
-                if (td == null || td.alphamapLayers <= 0 || td.terrainLayers == null)
-                    continue;
-
-                // 计算 Terrain 在 XZ 平面的世界包围盒（Unity Terrain 使用 XZ 为水平面）
-                var pos = terrain.transform.position;
-                var tRect = new Rect(pos.x, pos.z, td.size.x, td.size.z);
-
-                // 仅处理与道路区域相交的 Terrain
-                if (!tRect.Overlaps(pathRect.Value))
-                    continue;
-
-                int res = td.alphamapResolution;
-                int oldLayerCount = td.alphamapLayers;
-                var oldAlpha = td.GetAlphamaps(0, 0, res, res);
-                var oldSplats = td.terrainLayers;
-
-                // Step 1: 检查每个 layer 是否被使用（在整个 alphamap 范围内）
-                var keptIndices = new List<int>();
-                for (int l = 0; l < oldLayerCount; l++)
-                {
-                    bool isUsed = false;
-                    for (int y = 0; y < res && !isUsed; y++)
-                    {
-                        for (int x = 0; x < res && !isUsed; x++)
-                        {
-                            if (oldAlpha[y, x, l] > threshold)
-                            {
-                                isUsed = true;
-                            }
-                        }
-                    }
-
-                    if (isUsed)
-                    {
-                        keptIndices.Add(l);
-                    }
-                }
-
-                int removedCount = oldLayerCount - keptIndices.Count;
-                if (removedCount <= 0)
-                    continue; // 无未使用层，跳过
-
-                // Step 2: 重建 splatPrototypes
-                var newSplats = new TerrainLayer[keptIndices.Count];
-                for (int i = 0; i < keptIndices.Count; i++)
-                {
-                    newSplats[i] = oldSplats[keptIndices[i]];
-                }
-
-                // Step 3: 重建 alphamap（仅保留使用的 layer）
-                var newAlpha = new float[res, res, keptIndices.Count];
-                for (int y = 0; y < res; y++)
-                {
-                    for (int x = 0; x < res; x++)
-                    {
-                        for (int i = 0; i < keptIndices.Count; i++)
-                        {
-                            newAlpha[y, x, i] = oldAlpha[y, x, keptIndices[i]];
-                        }
-                    }
-                }
-
-                // Step 4: 应用新数据
-                td.terrainLayers = newSplats;
-                td.SetAlphamaps(0, 0, newAlpha);
-                EditorUtility.SetDirty(td);
-
-                totalRemovedLayers += removedCount;
-                Debug.Log($"[OptimizeSplat] Terrain '{terrain.name}' 移除了 {removedCount} 个未使用的 Splat 层");
-            }
-
-            string msg = totalRemovedLayers > 0
-                ? $"✅ 成功从道路覆盖区域的 Terrain 中移除 {totalRemovedLayers} 个未使用 Splat 层"
-                : "🚧 道路覆盖区域内的 Terrain 无未使用 Splat 层";
-
-            ShowNotification(msg);
-            Debug.Log($"[TerrainSplatOptimizer] {msg}");
-        }
-
-        private Rect? GetPathBounds()
-        {
-            var mesh = _ctx?.PreviewGenerator?.PreviewMesh;
-            if (mesh == null) return null;
-
-            var b = mesh.bounds;
-            if (b.size.x <= 0 || b.size.z <= 0) return null;
-
-            return new Rect(b.min.x, b.min.z, b.size.x, b.size.z);
-        }
-
-        private void ShowNotification(string message)
-        {
-            SceneView.lastActiveSceneView?.ShowNotification(new GUIContent(message));
-        }
-
-        private void InitializeGpuPreviewToggle()
-        {
-            // 插入一个 Toggle 控件到 Toolbar 区域（与 CPU/GPU 下拉同级）
-            _gpuPreviewToggle = new Toggle("实时GPU预览")
-            {
-                value = EditorPrefs.GetBool(GpuPreviewPrefKey, true)
-            };
-            _gpuPreviewToggle.style.marginLeft = 6;
-            _gpuPreviewToggle.RegisterValueChangedCallback(evt =>
-            {
-                PreviewMaterialManager.EnableGpuPreview = evt.newValue;
-                EditorPrefs.SetBool(GpuPreviewPrefKey, evt.newValue);
-
-                // Force SceneView to refresh so the preview updates immediately
-                UnityEditor.SceneView.RepaintAll();
-            });
-
-            // 初始同步
-            PreviewMaterialManager.EnableGpuPreview = _gpuPreviewToggle.value;
-
-            var toolbar = _root.Q<VisualElement>("toolbarContainer") ?? _root; // fallback
-            toolbar.Add(_gpuPreviewToggle);
-        }
 
         public void OnDisable()
         {
             Selection.selectionChanged -= OnSelectionChanged;
             _ctx?.Dispose();
             _ctx = null;
+
+
+            SetOperationButtonsEnabled(true);
+            _isExecutingOperation = false;
         }
     }
 }

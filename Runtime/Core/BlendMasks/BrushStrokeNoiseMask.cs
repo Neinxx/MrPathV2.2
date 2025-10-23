@@ -29,7 +29,9 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
-            float p = horizontalPosition * Mathf.Max(0.0001f, scale);
+            // 将横向坐标转为重复坐标，使 tiling.x 控制笔触密度（频率）
+            float u = TransformPosition(horizontalPosition, worldWidth, pathLength);
+            float p = u * Mathf.Max(0.0001f, scale);
             
             // 确定当前位置所在的“格子”
             float cellIndex = Mathf.Floor(p);
@@ -56,15 +58,11 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
                 // 计算点到笔触中心的距离
                 float dist = Mathf.Abs(p - strokeCenter);
                 
-                // 笔触的边缘应该是平滑过渡的。我们使用 SmoothStep 函数来创建一个漂亮的钟形曲线，模拟笔刷的剖面。
-                // 当距离小于笔触半径时，开始计算影响值。
+                // SmoothStep 形成笔触圆顶
                 float halfWidth = randomWidth / 2f;
                 if (dist < halfWidth)
                 {
-                    // SmoothStep(edge1, edge0, x) 会在 x 从 edge0 过渡到 edge1 时，平滑地从 1 降到 0
                     float strokeValue = SmoothStep(halfWidth, 0, dist);
-                    
-                    // 我们取所有重叠笔触中的最大值，模拟厚涂颜料覆盖的效果
                     finalValue = Mathf.Max(finalValue, strokeValue * randomStrength);
                 }
             }

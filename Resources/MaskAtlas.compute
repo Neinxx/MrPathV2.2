@@ -30,6 +30,12 @@ struct GpuNoiseMaskParams {
     float2 Offset;
     float OverallScale;
     float Smooth;
+    float2 NoiseScale;
+    float RotationRad;
+    int   Octaves;
+    float Lacunarity;
+    float Gain;
+    int   AlgorithmId; // 统一算法调度 ID
     float Pad1;
 };
 
@@ -92,9 +98,6 @@ float EvaluateShoulderMask(GpuShoulderMaskParams p, float distanceFromPath, floa
 // --- Evaluate procedural noise mask (world-space) ---
 float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, float pathLength)
 {
-    // CPU 等价：
-    // u = ((horizontalPosition + 1) * 0.5) * (worldWidth / safe(tiling.x)) + offset.x;
-    // v = pathProgress * (pathLength / safe(tiling.y)) + offset.y;
     float tileX = p.Tiling.x;
     float tileY = p.Tiling.y;
     float denomX = (abs(tileX) < 1e-5) ? (1e-5 * ((tileX == 0.0) ? 1.0 : sign(tileX))) : tileX;
@@ -110,7 +113,43 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
     uv.x = uNorm * (roadWidth / denomX) + p.Offset.x;
     uv.y = vNorm * (pathLength / denomY) + p.Offset.y;
 
-    float n = PerlinNoise(uv, 1.0);
+    // 细调缩放与旋转
+    float2 uvScaled = float2(uv.x * max(1e-5, p.NoiseScale.x), uv.y * max(1e-5, p.NoiseScale.y));
+
+    float cosR = cos(p.RotationRad);
+    float sinR = sin(p.RotationRad);
+    float2 ruv = float2(uvScaled.x * cosR - uvScaled.y * sinR, uvScaled.x * sinR + uvScaled.y * cosR);
+
+    // 基于 seed 的确定性偏移
+    float sx = abs(sin(p.Seed * 12.9898) * 43758.5453);
+    float sy = abs(sin(p.Seed * 78.233) * 12345.678);
+    float2 seedOffset = float2(sx - floor(sx), sy - floor(sy));
+    ruv += seedOffset;
+
+    // fBm 采样（算法可选）
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float sum = 0.0;
+    float norm = 0.0;
+    int oct = max(1, p.Octaves);
+    for (int i = 0; i < oct; ++i)
+    {
+        float sample = 0.0;
+        if (p.AlgorithmId == 1)
+        {
+            sample = SimpleNoise(ruv * frequency);
+        }
+        else
+        {
+            // 默认 Perlin
+            sample = PerlinNoise(ruv * frequency, 1.0);
+        }
+        sum += sample * amplitude;
+        norm += amplitude;
+        frequency *= max(1.0, p.Lacunarity);
+        amplitude *= saturate(p.Gain);
+    }
+    float n = (norm > 1e-5) ? (sum / norm) : 0.0;
 
     // 与 CPU 的 ApplySmoothing 对齐：先整体缩放再平滑
     float valuePre = saturate(n * p.Strength) * p.OverallScale;
@@ -175,12 +214,19 @@ float _PathLength;
 [numthreads(8,8,1)]
 void BuildAtlas(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= _AtlasWidth || id.y >= _LayerCount * _PathSamples) return;
+    int idxX = (int)id.x;
+    int idxY = (int)id.y;
+    if (idxX >= _AtlasWidth || idxY >= _LayerCount * _PathSamples) return;
 
-    int layerIndex = id.y / _PathSamples;
-    int pathRow = id.y % _PathSamples;
+    // Compute layerIndex/pathRow using fast uint division/modulo
+    uint uIdxY = (uint)idxY;
+    uint uSamples = (uint)max(_PathSamples, 1);
+    uint uLayerIndex = uIdxY / uSamples;
+    uint uPathRow   = uIdxY % uSamples;
+    int layerIndex = (int)uLayerIndex;
+    int pathRow    = (int)uPathRow;
 
-    float across = (float)id.x / max(1, _AtlasWidth - 1); // 0..1
+    float across = (float)idxX / max(1, _AtlasWidth - 1); // 0..1
     float posAcross = across * 2.0 - 1.0; // -1..1, center=0
     float pathProgress = (float)pathRow / max(1, _PathSamples - 1);
 
@@ -189,5 +235,5 @@ void BuildAtlas(uint3 id : SV_DispatchThreadID)
     float opacity = _Opacities[layerIndex];
     weight = saturate(weight * opacity);
 
-    _Atlas[int2(id.x, id.y)] = float4(weight, 0, 0, 1);
+    _Atlas[int2(idxX, idxY)] = float4(weight, 0, 0, 1);
 }

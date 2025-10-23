@@ -13,8 +13,14 @@ MonoBehaviour:
   m_Name: StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 0.21, y: 3.54}
+  tiling: {x: 0.64, y: 5.58}
   offset: {x: 0, y: 0}
-  overallScale: 1.59
+  overallScale: 2
   strength: 1
-  seed: 52.52
+  seed: 50.85
+  noiseScale: {x: 0.7, y: 0.7}
+  uniformScale: 1
+  rotationDeg: 132
+  octaves: 1
+  lacunarity: 3.96
+  gain: 1

@@ -1,5 +1,6 @@
 using Sirenix.OdinInspector;
 using UnityEngine;
+using __temp.MrPathV2._2.Runtime.Core; // for GpuMaskParamsData
 
 namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 {
@@ -39,8 +40,12 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
-            // horizontalPosition: -1(左边界) 到 1(右边界)
-            float absPosition = Mathf.Abs(horizontalPosition);
+            // 通过 TransformPosition 接入 tiling（频率）与 offset，并在 0..1 范围重复
+            float u = TransformPosition(horizontalPosition, worldWidth, pathLength);
+            float u01 = Mathf.Repeat(u, 1f);
+            float x = u01 * 2f - 1f; // -1..1 域内进行路肩判断
+
+            float absPosition = Mathf.Abs(x);
             
             // 计算路肩区域的边界
             float shoulderInnerBoundary = 1f - shoulderWidthRatio; // 路肩内边界
@@ -51,9 +56,9 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             // 检查是否在路肩区域内
             if (absPosition >= shoulderInnerBoundary)
             {
-                // 确定是左侧还是右侧路肩
-                bool isLeftShoulder = horizontalPosition < 0;
-                bool isRightShoulder = horizontalPosition > 0;
+                // 确定是左侧还是右侧路肩（基于重复后的坐标）
+                bool isLeftShoulder = x < 0f;
+                bool isRightShoulder = x > 0f;
                 
                 // 检查对应侧的路肩是否启用
                 if ((isLeftShoulder && enableLeftShoulder) || (isRightShoulder && enableRightShoulder))
@@ -113,6 +118,23 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
             bool isRightShoulder = horizontalPosition > 0;
             
             return (isLeftShoulder && enableLeftShoulder) || (isRightShoulder && enableRightShoulder);
+        }
+        
+        // --- GPU 参数打包 ---
+        public override void FillGpuParams(ref GpuMaskParamsData dst)
+        {
+            dst.MaskType = 1; // MASK_TYPE_SHOULDER
+            dst.Strength = 1.0f; // 顶层强度沿用1.0，细分强度在肩参数内
+
+            dst.ShoulderParams.ShoulderWidthRatio = shoulderWidthRatio;
+            dst.ShoulderParams.ShoulderStrength = shoulderStrength;
+            dst.ShoulderParams.EdgeFalloff = edgeFalloff;
+            dst.ShoulderParams.EnableLeftShoulder = enableLeftShoulder;
+            dst.ShoulderParams.EnableRightShoulder = enableRightShoulder;
+            dst.ShoulderParams.Tiling = tiling;
+            dst.ShoulderParams.Offset = offset;
+            dst.ShoulderParams.OverallScale = overallScale;
+            dst.ShoulderParams.Smooth = smooth;
         }
     }
 }

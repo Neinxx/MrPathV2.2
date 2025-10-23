@@ -1,0 +1,29 @@
+/* PathCreatorEditor.uss */
+
+/* 根容器，增加一点边距 */
+.rootContainer {
+    padding: 5px;
+}
+
+/* 警告框，增加一点间距 */
+.warningBox {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+/* 警告框内的按钮，增加上边距 */
+#createProfileButton {
+    margin-top: 5px;
+}
+
+/* 内嵌编辑器的容器，增加上边距使其与 Profile 字段分开 */
+.embeddedContainer {
+    margin-top: 10px;
+}
+
+/* 默认隐藏 UI 元素，C# 将在初始化时负责显示它们 */
+#profileMissingWarning,
+#profileEmbeddedContainer,
+#recipeEmbeddedContainer {
+    display: none;
+}

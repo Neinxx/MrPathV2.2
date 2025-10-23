@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using __temp.MrPathV2._2.Runtime.Core;
 using __temp.MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
+using UnityEditor;
 
 namespace __temp.MrPathV2._2.Editor.Terrain
 {
@@ -28,7 +29,12 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
         public async Task ExecuteAsync(CancellationToken token)
         {
-            if (!Validate(out var spine, out var terrains)) return;
+            if (!Validate(out var spine, out var terrains))
+            {
+                // 为用户提供可见反馈：当前路径或地形不满足执行条件
+                SceneView.lastActiveSceneView?.ShowNotification(new GUIContent($"🚧 {GetCommandName()}：无可处理目标（检查路径与地形）"));
+                return;
+            }
             try
             {
                 await ProcessTerrainsAsync(terrains, spine, token);

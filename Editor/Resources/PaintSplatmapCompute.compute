@@ -1,6 +1,6 @@
 #pragma kernel PaintTerrain
 
-#include "Assets/__temp/MrPathV2.2/Runtime/Shaders/Includes/BlendingLibrary.hlsl"
+#include "BlendingLibrary.hlsl"
 #include "BlendMaskLibrary.hlsl"
 #include "Common.hlsl"
 
@@ -47,57 +47,91 @@ float distanceSq(float2 a, float2 b)
     return dot(diff, diff);
 }
 
-// Calculate distance and progress along the path
-float2 CalculateDistanceAndProgress(float2 worldPos, StructuredBuffer<float3> spineData, int spinePointCount)
+// Calculate distance, progress (length-normalized) and signed distance across the path
+float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3> spineData, int spinePointCount)
 {
+    // First pass: total path length
+    float totalLen = 0.0f;
+    for (int i = 0; i < spinePointCount - 1; i++)
+    {
+        float2 s = spineData[i].xy;
+        float2 e = spineData[i + 1].xy;
+        float2 d = e - s;
+        totalLen += length(d);
+    }
+    totalLen = max(0.0001f, totalLen);
+
+    // Second pass: find closest segment; compute progress by length and signed distance
     float minDistanceSq = FLT_INF;
-    float progress = 0.0f;
-    
+    float progressLen = 0.0f;
+    float accumLen = 0.0f;
+    float signedDist = 0.0f;
+
     for (int i = 0; i < spinePointCount - 1; i++)
     {
         float3 p1 = spineData[i];
         float3 p2 = spineData[i + 1];
-        
+
         float2 segmentStart = p1.xy;
         float2 segmentEnd = p2.xy;
         float2 segmentDir = segmentEnd - segmentStart;
-        float segmentLengthSq = dot(segmentDir, segmentDir);
-        
-        if (segmentLengthSq > 0.0001f)
+        float segmentLenSq = dot(segmentDir, segmentDir);
+        float segmentLen = sqrt(max(0.0f, segmentLenSq));
+
+        float t = 0.0f;
+        float2 closestPoint = segmentStart;
+        float distSq = FLT_INF;
+
+        if (segmentLenSq > 0.0001f)
         {
-            float t = saturate(dot(worldPos - segmentStart, segmentDir) / segmentLengthSq);
-            float2 closestPoint = segmentStart + t * segmentDir;
-            float distSq = distanceSq(worldPos, closestPoint);
-            
+            t = saturate(dot(worldPos - segmentStart, segmentDir) / segmentLenSq);
+            closestPoint = segmentStart + t * segmentDir;
+            float2 toPoint = worldPos - closestPoint;
+            // Per-segment normal (perpendicular, right-handed)
+            float2 normal2d = (segmentLenSq > 0.0f) ? normalize(float2(-segmentDir.y, segmentDir.x)) : float2(0.0f, 1.0f);
+            distSq = dot(toPoint, toPoint);
+            // Signed distance uses dot with the perpendicular
+            float distSigned = dot(toPoint, normal2d);
             if (distSq < minDistanceSq)
             {
                 minDistanceSq = distSq;
-                progress = (float(i) + t) / float(spinePointCount - 1);
+                float alongLen = accumLen + t * segmentLen;
+                progressLen = saturate(alongLen / totalLen);
+                signedDist = distSigned;
             }
         }
+        else
+        {
+            // Degenerate segment: keep accumLen only
+        }
+
+        accumLen += segmentLen;
     }
-    
-    return float2(sqrt(minDistanceSq), progress);
+
+    return float3(sqrt(minDistanceSq), progressLen, signedDist);
 }
 
 // Apply blending based on layer parameters
-void ApplyBlending(int2 pixelCoord, LayerParams layer, float distance, float progress)
+void ApplyBlending(int2 pixelCoord, LayerParams layer, float distanceAbs, float progress, float signedDistance)
 {
     // Calculate brush falloff
-    float falloff = 1.0f - saturate(distance / _FalloffDistance);
+    float falloff = 1.0f - saturate(distanceAbs / _FalloffDistance);
     if (falloff <= 0.0f) return;
 
     // Evaluate mask with recipe-provided params
     float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
-    float maskValue = EvaluateMask(layer.MaskParams, worldPos, progress, distance, _RoadWidth);
+    float maskValue = EvaluateMask(layer.MaskParams, worldPos, progress, signedDistance, _RoadWidth);
 
     // Calculate final strength using recipe opacity
     float finalStrength = layer.Opacity * falloff * maskValue * _BrushStrength;
     if (finalStrength <= 0.0f) return;
 
-    // Validate splat index
+    // Validate splat index (fallback to 0 when invalid)
     int splatIdxSigned = layer.TerrainLayerSplatIndex;
-    if (splatIdxSigned < 0 || splatIdxSigned >= _AlphamapLayerCount) return;
+    if (splatIdxSigned < 0 || splatIdxSigned >= _AlphamapLayerCount)
+    {
+        splatIdxSigned = 0; // 安全回退，避免完全不绘制
+    }
 
     // Map to alphamap slice/channel via terrain splat index
     uint splatIndex = (uint)splatIdxSigned;
@@ -127,26 +161,27 @@ void ApplyBlending(int2 pixelCoord, LayerParams layer, float distance, float pro
 void PaintTerrain(uint3 id : SV_DispatchThreadID)
 {
     int2 pixelCoord = int2(id.xy) + _AlphamapOffset;
-    
-    // Check bounds
-    if (pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y)
+
+    // Check bounds (including negative offsets)
+    if (pixelCoord.x < 0 || pixelCoord.y < 0 || pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y)
         return;
-    
+
     // Convert to world position
     float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
-    
-    // Calculate distance and progress along the path
-    float2 distanceAndProgress = CalculateDistanceAndProgress(worldPos, SpineData, _SpinePointCount);
-    float distance = distanceAndProgress.x;
-    float progress = distanceAndProgress.y;
-    
+
+    // Calculate distance, progress and signed distance along the path
+    float3 dps = CalculateDistanceProgressSigned(worldPos, SpineData, _SpinePointCount);
+    float distanceAbs = dps.x;
+    float progress = dps.y;
+    float signedDistance = dps.z;
+
     // Skip if too far from path
-    if (distance > _FalloffDistance) return;
-    
+    if (distanceAbs > _FalloffDistance) return;
+
     // Apply each layer
-    for (int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
+    for (int layerIdx = 0; layerIdx < _LayerCount; layerIdx ++)
     {
         LayerParams layer = LayerParamsBuffer[layerIdx];
-        ApplyBlending(pixelCoord, layer, distance, progress);
+        ApplyBlending(pixelCoord, layer, distanceAbs, progress, signedDistance);
     }
 }

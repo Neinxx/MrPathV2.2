@@ -8,6 +8,9 @@
 #define BLEND_MODE_SOFT_LIGHT 3
 #define BLEND_MODE_HARD_LIGHT 4
 
+float BlendOverlayf(float b, float l) { return b < 0.5 ? (2.0 * b * l) : (1.0 - 2.0 * (1.0 - b) * (1.0 - l)); }
+float BlendScreenf(float b, float l) { return 1.0 - (1.0 - b) * (1.0 - l); }
+
 // Normal blending
 float4 BlendNormal(float4 base, float4 overlay, float strength)
 {
@@ -36,14 +39,14 @@ float4 BlendOverlay(float4 base, float4 overlay, float strength)
 float4 BlendSoftLight(float4 base, float4 overlay, float strength)
 {
     float4 result;
-    result.r = overlay.r < 0.5 ? 2.0 * base.r * overlay.r + base.r * base.r * (1.0 - 2.0 * overlay.r) : 
-               sqrt(base.r) * (2.0 * overlay.r - 1.0) + 2.0 * base.r * (1.0 - overlay.r);
-    result.g = overlay.g < 0.5 ? 2.0 * base.g * overlay.g + base.g * base.g * (1.0 - 2.0 * overlay.g) : 
-               sqrt(base.g) * (2.0 * overlay.g - 1.0) + 2.0 * base.g * (1.0 - overlay.g);
-    result.b = overlay.b < 0.5 ? 2.0 * base.b * overlay.b + base.b * base.b * (1.0 - 2.0 * overlay.b) : 
-               sqrt(base.b) * (2.0 * overlay.b - 1.0) + 2.0 * base.b * (1.0 - overlay.b);
-    result.a = overlay.a < 0.5 ? 2.0 * base.a * overlay.a + base.a * base.a * (1.0 - 2.0 * overlay.a) : 
-               sqrt(base.a) * (2.0 * overlay.a - 1.0) + 2.0 * base.a * (1.0 - overlay.a);
+    result.r = overlay.r < 0.5 ? 2.0 * base.r * overlay.r + base.r * base.r * (1.0 - 2.0 * overlay.r) :
+    sqrt(base.r) * (2.0 * overlay.r - 1.0) + 2.0 * base.r * (1.0 - overlay.r);
+    result.g = overlay.g < 0.5 ? 2.0 * base.g * overlay.g + base.g * base.g * (1.0 - 2.0 * overlay.g) :
+    sqrt(base.g) * (2.0 * overlay.g - 1.0) + 2.0 * base.g * (1.0 - overlay.g);
+    result.b = overlay.b < 0.5 ? 2.0 * base.b * overlay.b + base.b * base.b * (1.0 - 2.0 * overlay.b) :
+    sqrt(base.b) * (2.0 * overlay.b - 1.0) + 2.0 * base.b * (1.0 - overlay.b);
+    result.a = overlay.a < 0.5 ? 2.0 * base.a * overlay.a + base.a * base.a * (1.0 - 2.0 * overlay.a) :
+    sqrt(base.a) * (2.0 * overlay.a - 1.0) + 2.0 * base.a * (1.0 - overlay.a);
     return lerp(base, result, strength);
 }
 
@@ -63,28 +66,42 @@ float4 ApplyBlending(float4 base, float4 overlay, float strength, int blendMode)
 {
     switch (blendMode)
     {
-        case BLEND_MODE_MULTIPLY:
-            return BlendMultiply(base, overlay, strength);
-        case BLEND_MODE_OVERLAY:
-            return BlendOverlay(base, overlay, strength);
-        case BLEND_MODE_SOFT_LIGHT:
-            return BlendSoftLight(base, overlay, strength);
-        case BLEND_MODE_HARD_LIGHT:
-            return BlendHardLight(base, overlay, strength);
-        default:
-            return BlendNormal(base, overlay, strength);
+        case BLEND_MODE_MULTIPLY :
+        return BlendMultiply(base, overlay, strength);
+        case BLEND_MODE_OVERLAY :
+        return BlendOverlay(base, overlay, strength);
+        case BLEND_MODE_SOFT_LIGHT :
+        return BlendSoftLight(base, overlay, strength);
+        case BLEND_MODE_HARD_LIGHT :
+        return BlendHardLight(base, overlay, strength);
+        default :
+        return BlendNormal(base, overlay, strength);
+    }
+}
+float BlendWeight(float baseWeight, float layerWeight, int blendMode)
+{
+    switch(blendMode)
+    {
+        case 1 : return baseWeight * layerWeight; // Multiply
+        case 2 : return saturate(baseWeight + layerWeight); // Add
+        case 3 : return BlendOverlayf(baseWeight, layerWeight); // Overlay
+        case 4 : return BlendScreenf(baseWeight, layerWeight); // Screen
+        case 5 : return lerp(baseWeight, layerWeight, saturate(layerWeight)); // Lerp (using layer as alpha)
+        case 6 : return saturate(baseWeight + layerWeight); // Additive (same as Add)
+        default : return layerWeight; // Normal (override)
     }
 }
 
-// Normalize RGBA weights while preserving already-painted channels
+
+// Normalize RGBA weights while preserving already - painted channels
 float4 NormalizeWeightsKeep(float4 w)
 {
     const float threshold = 1e-4;
     const float sumThreshold = 1e-5;
     int painted = ((w.r > threshold) ? 1 : 0)
-                + ((w.g > threshold) ? 1 : 0)
-                + ((w.b > threshold) ? 1 : 0)
-                + ((w.a > threshold) ? 1 : 0);
+    + ((w.g > threshold) ? 1 : 0)
+    + ((w.b > threshold) ? 1 : 0)
+    + ((w.a > threshold) ? 1 : 0);
     float sum = w.r + w.g + w.b + w.a;
     if (painted > 1 && sum > sumThreshold)
     {

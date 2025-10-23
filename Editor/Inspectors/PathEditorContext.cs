@@ -77,7 +77,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 var generator = new DefaultPreviewGenerator();
                 var appearance = _mrPathProjectSettings.appearanceDefaults;
                 var template = appearance?.previewMaterialTemplate;
-                var alpha = appearance != null ? appearance.previewAlpha : 0.5f;
+                var alpha = 1f;
 
                 // 运行时强制使用多层预览 Shader（若为空或非多层，自动回退/升级）
                 var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");

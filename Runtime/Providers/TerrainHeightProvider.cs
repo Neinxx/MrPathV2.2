@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using __temp.MrPathV2._2.Runtime.Interfaces;
 using __temp.MrPathV2._2.Runtime.Memory;
+using MrPathV2.Memory;
 using Unity.Collections;
 using UnityEngine;
 
@@ -20,7 +21,7 @@ namespace __temp.MrPathV2._2.Runtime.Providers
             public Rect Bounds;
             // REPLACED: NativeArray<float> heights;
             public MemoryOwner<NativeArray<float>> HeightsOwner; // 持有包装器以便安全释放
-            public NativeArray<float> Heights => HeightsOwner.Collection; // 便捷访问器
+            public readonly NativeArray<float> Heights => HeightsOwner.Collection; // 便捷访问器
             public int Resolution;
             public Vector3 Position;
             public Vector3 Size;

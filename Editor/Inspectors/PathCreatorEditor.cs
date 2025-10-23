@@ -1,23 +1,18 @@
-
-
+#if UNITY_EDITOR
 using __temp.MrPathV2._2.Runtime.Core;
 using __temp.MrPathV2._2.Runtime.Preview;
 using __temp.MrPathV2._2.Runtime.Settings;
 using __temp.MrPathV2._2.Runtime.Strategies;
 using UnityEditor;
 using UnityEditor.EditorTools;
+using UnityEditor.UIElements; // <--- 引入 UI Toolkit
+using UnityEngine;
+using UnityEngine.UIElements; // <--- 引入 UI Toolkit
 // alias UnityEditor.Tools to avoid namespace conflict
 using UnityEditorTools = UnityEditor.Tools;
-using UnityEngine;
 
 namespace __temp.MrPathV2._2.Editor.Inspectors
 {
-    /// <summary>
-    /// [最终整合版] PathCreator 的自定义编辑器。
-    /// 它是工具的核心交互界面，集成了 Inspector 面板、场景路径绘制、用户输入处理
-    /// 以及数据驱动的地形操作UI面板，遵循单一职责和最佳用户体验原则。
-    /// [优化版] 遵循 Unity 最佳实践，提升性能与可维护性。
-    /// </summary>
     [CustomEditor(typeof(PathCreator))]
     public class PathCreatorEditor : UnityEditor.Editor
     {
@@ -26,228 +21,362 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private PathCreator _targetCreator;
 
         // --- 序列化属性缓存 ---
-        // [优化] 缓存 SerializedProperty 以避免在 OnInspectorGUI 中重复查找，提升性能。
         private SerializedProperty _profileProperty;
         private SerializedProperty _pathDataProperty;
 
         // --- 内嵌编辑器 ---
         private UnityEditor.Editor _profileEmbeddedEditor;
         private bool _profileLocalExpanded = true;
-
-        // --- StylizedRoadRecipe 内嵌编辑器 ---
         private UnityEditor.Editor _recipeEmbeddedEditor;
         private bool _recipeLocalExpanded = true;
 
-        // --- 新的上下文与面板 ---
+        // --- 核心上下文 ---
         private PathEditorContext _ctx;
-      //  private TerrainOperationsPanel _terrainPanel;
 
         // --- Profile 事件订阅跟踪 ---
         private PathProfile _lastSubscribedProfile;
 
-        // [新增] 为场景UI中的常量值定义，避免魔法数字。
-        // private const float TooltipOffsetX = 12f;
-        // private const float TooltipOffsetY = 12f;
-        // private const float TooltipWidth = 200f;
-        // private const float TooltipHeight = 22f;
-
+        // --- Transform 变化跟踪 ---
         private Vector3 _lastPosition;
         private Quaternion _lastRotation;
         private Vector3 _lastScale;
 
+        // --- UI Toolkit 元素 ---
+        private VisualElement _rootElement;
+        private VisualElement _profileMissingWarning;
+        private Button _createProfileButton;
+        private IMGUIContainer _profileEmbeddedContainer;
+        private IMGUIContainer _recipeEmbeddedContainer;
+
         #endregion
 
-        #region 生命周期
+        #region 生命周期 (OnEnable / OnDisable)
 
         private void OnEnable()
         {
-
-
             _targetCreator = target as PathCreator;
-            // Debug.Log("PathCreatorEditor OnEnable called for " + target.name);
             if (!_targetCreator) return;
 
-            // [优化] 在 OnEnable 中一次性查找并缓存 SerializedProperty是是。
+            // 缓存 SerializedProperty
             _profileProperty = serializedObject.FindProperty(nameof(PathCreator.profile));
             _pathDataProperty = serializedObject.FindProperty(nameof(PathCreator.pathData));
 
-            // 初始化 Profile 引用
-            if (_targetCreator.profile)
-            {
-                InitProfileEmbeddedEditor(_targetCreator.profile);
-
-                // 初始化 StylizedRoadRecipe 引用
-                if (_targetCreator.profile.roadRecipe)
-                {
-                    InitRecipeEmbeddedEditor(_targetCreator.profile.roadRecipe);
-                }
-            }
-
-            // 初始化上下文与面板
+            // 初始化上下文
             _ctx = new PathEditorContext(_targetCreator);
             _ctx.Initialize(_targetCreator);
-           // _terrainPanel = new TerrainOperationsPanel(_ctx);
 
-            // 订阅事件
+            // 订阅核心事件
             Undo.undoRedoPerformed += OnUndoRedo;
             _targetCreator.CurveDefinitionChanged += OnCurveDefinitionChanged;
             _targetCreator.AppearanceChanged += OnAppearanceChanged;
             _targetCreator.TerrainInteractionChanged += OnTerrainInteractionChanged;
-            
-            // 订阅 Profile 的修改事件
-            if (_targetCreator.profile != null)
-            {
-                _targetCreator.profile.ProfileModified += OnProfileModified;
-            }
 
-            MarkPathAsDirty(); // 首次启用时强制刷新
-            _lastPosition = _targetCreator.transform.position;
-            _lastRotation = _targetCreator.transform.rotation;
-            _lastScale = _targetCreator.transform.localScale;
+            // 订阅初始 Profile 的修改事件
+            SubscribeToProfile(_targetCreator.profile);
+
+            // 标记为脏以进行初始刷新
+            MarkPathAsDirty();
+            CacheTransform();
         }
 
         private void OnDisable()
         {
-            // Debug.Log("PathCreatorEditor OnDisable called for " + target.name);
-            // [优化] 增加空值检查，使清理逻辑更健壮。
-            if (_profileEmbeddedEditor)
+            // [优化] 增加空值检查
+            if (_profileEmbeddedEditor) DestroyImmediate(_profileEmbeddedEditor);
+            if (_recipeEmbeddedEditor) DestroyImmediate(_recipeEmbeddedEditor);
+
+            _ctx?.Dispose();
+            _ctx = null;
+
+            Undo.undoRedoPerformed -= OnUndoRedo;
+
+            if (_targetCreator)
             {
-                DestroyImmediate(_profileEmbeddedEditor);
-                _profileEmbeddedEditor = null;
+                _targetCreator.CurveDefinitionChanged -= OnCurveDefinitionChanged;
+                _targetCreator.AppearanceChanged -= OnAppearanceChanged;
+                _targetCreator.TerrainInteractionChanged -= OnTerrainInteractionChanged;
             }
 
-            if (_recipeEmbeddedEditor)
+            // 取消订阅 Profile 事件
+            UnsubscribeFromLastProfile();
+        }
+
+        #endregion
+
+        #region GUI 绘制 (UI Toolkit)
+
+        /// <summary>
+        /// [重构] 使用 CreateInspectorGUI 替换 OnInspectorGUI
+        /// </summary>
+        public override VisualElement CreateInspectorGUI()
+        {
+            _rootElement = new VisualElement();
+            //_rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
+            _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
+
+
+
+
+
+
+            // 自动将 SerializedObject 绑定到 UXML (PropertyField 会自动生效)
+            _rootElement.Bind(serializedObject);
+
+            // --- 查询 UXML 中的元素 ---
+            _profileMissingWarning = _rootElement.Q<VisualElement>("profileMissingWarning");
+            _createProfileButton = _rootElement.Q<Button>("createProfileButton");
+            _profileEmbeddedContainer = _rootElement.Q<IMGUIContainer>("profileEmbeddedContainer");
+            _recipeEmbeddedContainer = _rootElement.Q<IMGUIContainer>("recipeEmbeddedContainer");
+
+            var profileField = _rootElement.Q<PropertyField>("profileProperty"); // UXML 中绑定的字段
+
+            // --- 注册事件回调 ---
+
+            // 1. 监听 "创建 Profile" 按钮点击
+            _createProfileButton.clicked += CreateDefaultProfile;
+
+            // 2. [关键] 监听 Profile 字段的变化，而不是在 OnInspectorGUI 中每帧检查
+            profileField.RegisterValueChangeCallback(OnProfilePropertyChanged);
+
+            // 3. 为内嵌编辑器设置 IMGUI 绘制处理器
+            _profileEmbeddedContainer.onGUIHandler = DrawEmbeddedProfileUI;
+            _recipeEmbeddedContainer.onGUIHandler = DrawEmbeddedRecipeUI;
+
+            // --- 初始化 UI 状态 ---
+            UpdateEmbeddedEditorUI(_targetCreator.profile);
+
+            return _rootElement;
+        }
+
+        /// <summary>
+        /// 当 Profile 属性在 Inspector 中被更改时调用
+        /// </summary>
+        private void OnProfilePropertyChanged(SerializedPropertyChangeEvent evt)
+        {
+            var newProfile = evt.changedProperty.objectReferenceValue as PathProfile;
+
+            // 重新订阅事件
+            UnsubscribeFromLastProfile();
+            SubscribeToProfile(newProfile);
+
+            // 更新 UI
+            UpdateEmbeddedEditorUI(newProfile);
+
+            // 立即刷新
+            MarkPathAsDirty();
+        }
+
+        /// <summary>
+        /// 绘制 Profile 内嵌编辑器 (被 IMGUIContainer 调用)
+        /// </summary>
+        private void DrawEmbeddedProfileUI()
+        {
+            if (_targetCreator.profile == null) return;
+
+            // [优雅] 重构为通用绘制方法
+            DrawEmbeddedEditor(
+                ref _profileEmbeddedEditor,
+                _targetCreator.profile,
+                ref _profileLocalExpanded,
+                "路径配置文件 (Profile)",
+                _targetCreator.NotifyProfileModified
+            );
+        }
+
+        /// <summary>
+        /// 绘制 Recipe 内嵌编辑器 (被 IMGUIContainer 调用)
+        /// </summary>
+        private void DrawEmbeddedRecipeUI()
+        {
+            if (_targetCreator.profile == null || _targetCreator.profile.roadRecipe == null) return;
+
+            // [优雅] 重构为通用绘制方法
+            DrawEmbeddedEditor(
+                ref _recipeEmbeddedEditor,
+                _targetCreator.profile.roadRecipe,
+                ref _recipeLocalExpanded,
+                "道路风格配方 (Stylized Road Recipe)",
+                _targetCreator.NotifyProfileModified
+            );
+        }
+
+        /// <summary>
+        /// [优雅] 用于绘制内嵌编辑器的通用方法，减少代码重复
+        /// </summary>
+        private void DrawEmbeddedEditor(ref UnityEditor.Editor editor, Object targetAsset, ref bool foldoutState, string title, System.Action onEditAction)
+        {
+            if (targetAsset == null) return;
+
+            // 检查编辑器是否需要重新创建 (例如切换了资产)
+            if (!editor || editor.target != targetAsset)
             {
+                if (editor) DestroyImmediate(editor);
+                editor = CreateEditor(targetAsset);
+            }
+
+            if (!editor) return;
+
+            // [优化] 使用 IMGUI 的 "Box" 风格
+            using (new EditorGUILayout.VerticalScope("Box"))
+            {
+                foldoutState = EditorGUILayout.Foldout(foldoutState, title, true, EditorStyles.foldoutHeader);
+                if (!foldoutState) return;
+
+                EditorGUI.indentLevel++;
+
+                EditorGUI.BeginChangeCheck();
+                editor.OnInspectorGUI();
+                if (EditorGUI.EndChangeCheck())
+                {
+                    // 如果内嵌编辑器有修改，通知 targetCreator
+                    onEditAction?.Invoke();
+                }
+
+                EditorGUI.indentLevel--;
+            }
+        }
+
+        /// <summary>
+        /// 根据当前 Profile 更新 Inspector UI 的可见性
+        /// </summary>
+        private void UpdateEmbeddedEditorUI(PathProfile currentProfile)
+        {
+            // 防御性编程：确保所有引用都不为null
+            if (_profileMissingWarning == null || _profileEmbeddedContainer == null || _recipeEmbeddedContainer == null)
+            {
+                Debug.LogError("UI元素未正确初始化，请检查UXML加载逻辑");
+                return;
+            }
+
+            // 检查当前Profile是否有效
+            if (currentProfile == null)
+            {
+                // 显示Profile缺失警告
+                _profileMissingWarning.style.display = DisplayStyle.Flex;
+                _profileEmbeddedContainer.style.display = DisplayStyle.None;
+                _recipeEmbeddedContainer.style.display = DisplayStyle.None;
+
+                // 确保嵌套编辑器被清理
+                if (_profileEmbeddedEditor != null)
+                {
+                    DestroyImmediate(_profileEmbeddedEditor);
+                    _profileEmbeddedEditor = null;
+                }
+
+                if (_recipeEmbeddedEditor != null)
+                {
+                    DestroyImmediate(_recipeEmbeddedEditor);
+                    _recipeEmbeddedEditor = null;
+                }
+
+                return;
+            }
+
+            // Profile存在的情况
+            _profileMissingWarning.style.display = DisplayStyle.None;
+            _profileEmbeddedContainer.style.display = DisplayStyle.Flex;
+
+            // 检查Recipe是否存在并设置对应样式
+            bool hasRecipe = currentProfile.roadRecipe != null;
+            _recipeEmbeddedContainer.style.display = hasRecipe ? DisplayStyle.Flex : DisplayStyle.None;
+
+            // 优化：在Profile变化时更新嵌套编辑器状态
+            if (hasRecipe && _recipeEmbeddedEditor == null)
+            {
+                // 创建新的Recipe编辑器实例
+                _recipeEmbeddedEditor = CreateEditor(currentProfile.roadRecipe);
+            }
+            else if (!hasRecipe && _recipeEmbeddedEditor != null)
+            {
+                // 销毁旧的Recipe编辑器实例
                 DestroyImmediate(_recipeEmbeddedEditor);
                 _recipeEmbeddedEditor = null;
             }
 
-            _ctx?.Dispose();
-            _ctx = null;
-           // _terrainPanel = null;
-
-            Undo.undoRedoPerformed -= OnUndoRedo;
-            if (_targetCreator)
+            // 确保Profile编辑器始终存在
+            if (_profileEmbeddedEditor == null || _profileEmbeddedEditor.target != currentProfile)
             {
-                //_targetCreator.PathModified -= OnPathModified;
-                _targetCreator.CurveDefinitionChanged -= OnCurveDefinitionChanged;
-                _targetCreator.AppearanceChanged -= OnAppearanceChanged;
-                _targetCreator.TerrainInteractionChanged -= OnTerrainInteractionChanged;
-                
-                // 取消订阅 Profile 的修改事件
-                if (_targetCreator.profile != null)
+                if (_profileEmbeddedEditor != null)
                 {
-                    _targetCreator.profile.ProfileModified -= OnProfileModified;
+                    DestroyImmediate(_profileEmbeddedEditor);
                 }
-            }
-            
-            // 清理 Profile 事件订阅跟踪
-            if (_lastSubscribedProfile != null)
-            {
-                _lastSubscribedProfile.ProfileModified -= OnProfileModified;
-                _lastSubscribedProfile = null;
+                _profileEmbeddedEditor = CreateEditor(currentProfile);
             }
         }
-
-
 
         #endregion
 
-        #region GUI 绘制
+        #region 场景 GUI (OnSceneGUI) - [模块化]
 
-        public override void OnInspectorGUI()
-        {
-            _targetCreator = target as PathCreator;
-            if (!_targetCreator) return;
-
-            // 检查 Profile 是否发生变化，如果变化则重新订阅事件
-            var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
-            if (currentProfile != _lastSubscribedProfile)
-            {
-                // 取消订阅旧的 Profile 事件
-                if (_lastSubscribedProfile != null)
-                {
-                    _lastSubscribedProfile.ProfileModified -= OnProfileModified;
-                }
-                
-                // 订阅新的 Profile 事件
-                if (currentProfile != null)
-                {
-                    currentProfile.ProfileModified += OnProfileModified;
-                }
-                
-                _lastSubscribedProfile = currentProfile;
-            }
-
-            // [优化] 总是先调用 Update，最后调用 ApplyModifiedProperties，这是标准做法。
-            serializedObject.Update();
-            // [策略] 和平共存：添加UI提示
-            if (ToolManager.activeToolType != typeof(Tools.PathCreatorTool) && UnityEditorTools.current != Tool.Move)
-                EditorGUILayout.HelpBox("当前未激活 MrPath PathCreator 工具，也未选择移动工具。\n请在场景左上角工具栏点击 Animator 图标按钮，或使用移动工具进入查看模式。", MessageType.Info);
-
-            DrawCoreProperties();
-
-            // [优化] 检查 profileProperty.objectReferenceValue 而不是直接访问 _targetCreator.profile，
-            // 这样可以更好地与序列化系统协同工作。
-            if (_profileProperty.objectReferenceValue)
-            {
-                DrawEmbeddedProfileUI();
-
-                // 如果 Profile 中有 StylizedRoadRecipe，则显示它
-                 currentProfile = _profileProperty.objectReferenceValue as PathProfile;
-                if (currentProfile && currentProfile.roadRecipe)
-                {
-                    DrawEmbeddedRecipeUI();
-                }
-            }
-            else
-            {
-                DrawProfileMissingUI();
-            }
-
-            serializedObject.ApplyModifiedProperties();
-        }
-
+        /// <summary>
+        /// 在场景中绘制的调度中心
+        /// </summary>
         private void OnSceneGUI()
         {
             _targetCreator = target as PathCreator;
-            if (!_targetCreator) return;
 
-            // 确保预览始终激活（即使选中了Recipe等其他对象）
-            if (_ctx != null && _ctx.IsPathValid())
-            {
-                _ctx.PreviewManager.SetActive(true);
-            }
-            else
+            // 1. 守卫与上下文检查
+            if (!ContextIsValid())
             {
                 _ctx?.PreviewManager?.SetActive(false);
                 return;
             }
 
-            // [策略] 和平共存：如果当前有其他自定义工具处于激活状态，则本工具不进行句柄绘制。
-            // 但预览仍然保持激活状态
-            if (ToolManager.activeToolType != typeof(Tools.PathCreatorTool) && UnityEditorTools.current != Tool.Move)
-            {
-                return;
-            }
+            // 2. 激活预览
+            _ctx.PreviewManager.SetActive(true);
 
-            // [优化] 将 Event.current 缓存到局部变量，轻微提升可读性和性能。
+            // 3. 检查是否有其他工具处于活动状态
+            if (IsOtherToolActive()) return;
+
             var currentEvent = Event.current;
 
+            // 4. 清理上帧的辅助线
+            CleanupPreviewLines();
+
+            // 5. 绘制句柄并处理输入
+            ProcessSceneHandlesAndInput(currentEvent);
+
+            // 6. 更新预览网格
+            _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
+
+            // 7. 处理场景重绘
+            HandleSceneRepainting(currentEvent);
+
+            // 8. 检查 Transform 变化
+            CheckForTransformChanges();
+        }
+
+        // --- OnSceneGUI 辅助方法 ---
+
+        private bool ContextIsValid()
+        {
+            return _targetCreator != null && _ctx != null && _ctx.IsPathValid();
+        }
+
+        private bool IsOtherToolActive()
+        {
+            // [策略] 和平共存
+            return ToolManager.activeToolType != typeof(Tools.PathCreatorTool) && UnityEditorTools.current != Tool.Move;
+        }
+
+        private void CleanupPreviewLines()
+        {
+            var context = _ctx.CreateHandleContext();
+            if (context.lineRenderer == null) return;
+
+            var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType);
+
+            // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
+            context.lineRenderer.Clear(currentStrategy is BezierStrategy
+                ? PreviewLineRenderer.LineType.PathCurve
+                // 如果当前不是贝塞尔曲线策略，则清除上一帧可能遗留的贝塞尔控制线
+                : PreviewLineRenderer.LineType.ControlLine);
+        }
+
+        private void ProcessSceneHandlesAndInput(Event currentEvent)
+        {
             var context = _ctx.CreateHandleContext();
 
-            // 根据当前曲线策略决定是否需要清理共享 LineRenderer 中的特定线条，避免残留控制线又不影响其它曲线段
-            if (context.lineRenderer != null)
-            {
-                var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType);
-                // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
-                context.lineRenderer.Clear(currentStrategy is BezierStrategy
-                    ? PreviewLineRenderer.LineType.PathCurve
-                    // 如果当前不是贝塞尔曲线策略，则清除上一帧可能遗留的贝塞尔控制线
-                    : PreviewLineRenderer.LineType.ControlLine);
-            }
-
-            // [优化] 使用 EditorGUI.EndChangeCheck 来检测句柄是否被拖动，仅在发生变化时重绘。
             EditorGUI.BeginChangeCheck();
             PathEditorHandles.Draw(ref context);
             if (EditorGUI.EndChangeCheck())
@@ -258,128 +387,35 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             _ctx.UpdateHoverState(context);
             _ctx.InputHandler.HandleInputEvents(currentEvent, _targetCreator, context.hoveredPathT, context.hoveredPointIndex);
+        }
 
-            _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
-
-           // _terrainPanel?.Draw();
-
-            //  DrawCoordinateTooltip(_targetCreator, context);
-
-            // [性能优化] 关键改动：移除 SceneView.RepaintAll()。
-            // RepaintAll() 会强制重绘所有场景视图，非常耗费性能。
-            // Unity 的事件系统（如鼠标移动、点击）会自动触发重绘。
-            // 只在必要时进行重绘，避免过度重绘导致的闪烁
+        private void HandleSceneRepainting(Event currentEvent)
+        {
+            // [性能优化] 仅在必要时重绘
             if (currentEvent.type == EventType.MouseMove || currentEvent.type == EventType.MouseDrag)
             {
-                // 仅在鼠标交互时才重绘，减少不必要的重绘
                 HandleUtility.Repaint();
             }
+        }
 
-            // 检测 Transform 变化，若有则刷新
+        private void CheckForTransformChanges()
+        {
             if (_targetCreator.transform.position == _lastPosition &&
                 _targetCreator.transform.rotation == _lastRotation &&
-                _targetCreator.transform.localScale == _lastScale) return;
-            _lastPosition = _targetCreator.transform.position;
-            _lastRotation = _targetCreator.transform.rotation;
-            _lastScale = _targetCreator.transform.localScale;
+                _targetCreator.transform.localScale == _lastScale)
+            {
+                return;
+            }
+
+            CacheTransform();
             MarkPathAsDirty();
         }
 
-        private void DrawEmbeddedRecipeUI()
-        {
-            var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
-            if (currentProfile is null || currentProfile.roadRecipe == null) return;
-
-            // [优化] 检查内嵌编辑器的目标对象是否与当前 Recipe 一致。
-            if (!_recipeEmbeddedEditor || _recipeEmbeddedEditor.target != currentProfile.roadRecipe)
-            {
-                InitRecipeEmbeddedEditor(currentProfile.roadRecipe);
-            }
-
-            if (!_recipeEmbeddedEditor) return;
-
-            using (new EditorGUILayout.VerticalScope("Box"))
-            {
-                _recipeLocalExpanded = EditorGUILayout.Foldout(_recipeLocalExpanded, "道路风格配方 (Stylized Road Recipe)", true, EditorStyles.foldoutHeader);
-                if (!_recipeLocalExpanded) return;
-                EditorGUI.indentLevel++;
-
-                // [优化] 对内嵌编辑器的修改也使用 BeginChangeCheck/EndChangeCheck
-                EditorGUI.BeginChangeCheck();
-
-                _recipeEmbeddedEditor.OnInspectorGUI();
-
-                if (EditorGUI.EndChangeCheck())
-                {
-                    // 如果 Recipe 被修改，通知 targetCreator
-                    _targetCreator?.NotifyProfileModified();
-                }
-
-                EditorGUI.indentLevel--;
-            }
-        }
-
         #endregion
 
-        #region UI 绘制辅助方法
+        #region 事件处理器
 
-        private void DrawCoreProperties()
-        {
-            // [优化] 使用缓存的 SerializedProperty 进行绘制。
-            EditorGUILayout.PropertyField(_profileProperty);
-            EditorGUILayout.PropertyField(_pathDataProperty, true);
-            EditorGUILayout.Space();
-        }
-
-        private void DrawProfileMissingUI()
-        {
-            EditorGUILayout.HelpBox("未指定路径配置文件 (Profile)。请先创建或指定一个 Profile 资产。", MessageType.Warning);
-            if (GUILayout.Button("快速创建默认 Profile"))
-            {
-                CreateDefaultProfile();
-            }
-        }
-
-        private void DrawEmbeddedProfileUI()
-        {
-            var currentProfile = _profileProperty.objectReferenceValue as PathProfile;
-
-            // [优化] 检查内嵌编辑器的目标对象是否与当前 Profile 一致。
-            if (!_profileEmbeddedEditor || _profileEmbeddedEditor.target != currentProfile)
-            {
-                InitProfileEmbeddedEditor(currentProfile);
-            }
-
-            if (!_profileEmbeddedEditor) return;
-
-            using (new EditorGUILayout.VerticalScope("Box"))
-            {
-                _profileLocalExpanded = EditorGUILayout.Foldout(_profileLocalExpanded, "路径配置文件 (Profile)", true, EditorStyles.foldoutHeader);
-                if (_profileLocalExpanded)
-                {
-                    EditorGUI.indentLevel++;
-
-                    // [优化] 对内嵌编辑器的修改也使用 BeginChangeCheck/EndChangeCheck
-                    EditorGUI.BeginChangeCheck();
-
-                    _profileEmbeddedEditor.OnInspectorGUI();
-
-                    if (EditorGUI.EndChangeCheck())
-                    {
-                        // 如果 Profile 被修改，通知 targetCreator
-                        _targetCreator?.NotifyProfileModified();
-                    }
-
-                    EditorGUI.indentLevel--;
-                }
-            }
-        }
-
-        #endregion
-
-        #region 逻辑与辅助方法
-
-        // private void OnPathModified() => MarkPathAsDirty();
+        // private void OnPathModified() => MarkPathAsDirty(); // 似乎已被其他事件涵盖
         private void OnCurveDefinitionChanged() => MarkPathAsDirty();
         private void OnTerrainInteractionChanged() => MarkPathAsDirty();
         private void OnAppearanceChanged()
@@ -389,51 +425,57 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
         private void OnUndoRedo() => MarkPathAsDirty();
 
+        /// <summary>
+        /// 当 Profile 资产本身被修改时调用
+        /// </summary>
         private void OnProfileModified()
         {
-            // Profile 修改时，标记材质为脏并刷新场景视图
+            // 确保 Recipe 内嵌编辑器的 UI 状态也刷新
+            UpdateEmbeddedEditorUI(_targetCreator.profile);
+
             _ctx?.PreviewManager?.MarkMaterialsDirty();
             _ctx?.RequestSceneViewRefresh(true); // 强制立即刷新
             MarkPathAsDirty();
         }
 
-        private void OnRecipeChanged(StylizedRoadRecipe recipe)
-        {
-            if (!_targetCreator || !_targetCreator.profile || _targetCreator.profile.roadRecipe != recipe) return;
-            // 标记材质为脏，确保实时更新Scene视图中的预览效果
-            _ctx?.PreviewManager?.MarkMaterialsDirty();
-            MarkPathAsDirty();
-        }
+
+
+        #endregion
+
+        #region 逻辑与辅助方法
 
         private void MarkPathAsDirty()
         {
             _ctx?.MarkDirty();
         }
 
-        // --- 辅助方法 ---
-
-        private void InitProfileEmbeddedEditor(PathProfile profile)
+        private void CacheTransform()
         {
-            if (_profileEmbeddedEditor)
-            {
-                DestroyImmediate(_profileEmbeddedEditor);
-            }
-            _profileEmbeddedEditor = CreateEditor(profile);
+            _lastPosition = _targetCreator.transform.position;
+            _lastRotation = _targetCreator.transform.rotation;
+            _lastScale = _targetCreator.transform.localScale;
         }
 
-        private void InitRecipeEmbeddedEditor(StylizedRoadRecipe recipe)
+        private void SubscribeToProfile(PathProfile profile)
         {
-            if (_recipeEmbeddedEditor)
+            if (profile == null) return;
+
+            _lastSubscribedProfile = profile;
+            _lastSubscribedProfile.ProfileModified += OnProfileModified;
+        }
+
+        private void UnsubscribeFromLastProfile()
+        {
+            if (_lastSubscribedProfile != null)
             {
-                DestroyImmediate(_recipeEmbeddedEditor);
+                _lastSubscribedProfile.ProfileModified -= OnProfileModified;
+                _lastSubscribedProfile = null;
             }
-            _recipeEmbeddedEditor = CreateEditor(recipe);
         }
 
         private void CreateDefaultProfile()
         {
-            // [优化] 使用 EditorUtility.SaveFilePanelInProject 让用户选择保存路径，而不是硬编码。
-            // 这是创建新资产的标准做法，更灵活、更健壮。
+            // [优化] 使用 EditorUtility.SaveFilePanelInProject
             var path = EditorUtility.SaveFilePanelInProject(
                 "创建新的路径配置文件",
                 "New PathProfile.asset",
@@ -443,8 +485,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             if (string.IsNullOrEmpty(path))
             {
-                // 用户取消了保存操作
-                return;
+                return; // 用户取消
             }
 
             var newProfile = CreateInstance<PathProfile>();
@@ -458,35 +499,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             EditorGUIUtility.PingObject(newProfile);
         }
 
-/*
-        private void DrawCoordinateTooltip(PathCreator creator, PathEditorHandles.HandleDrawContext context)
-        {
-            if (creator != null && context.hoveredPathT > -1)
-            {
-                Vector3 worldPos = creator.GetPointAt(context.hoveredPathT);
-                Handles.BeginGUI();
-                Vector2 screen = HandleUtility.WorldToGUIPoint(worldPos);
-
-                // [优化] 使用预定义的常量，避免魔法数字。
-                Rect rect = new Rect(
-                    screen.x + TooltipOffsetX,
-                    screen.y + TooltipOffsetY,
-                    TooltipWidth,
-                    TooltipHeight
-                );
-
-                GUI.Label(rect, $"Pos: {worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2}", EditorStyles.helpBox);
-                Handles.EndGUI();
-            }
-        }
-*/
-
-        // [移除] 下方旧方法不再需要，其功能已整合或被替代。
-        // private void DrawApplyToTerrainUI() { ... }
-        // private void ExecuteOperation(PathTerrainOperation op) { ... }
-        // private void InitProfileReferences(PathProfile profile) { ... }
-
         #endregion
     }
 }
-
+#endif

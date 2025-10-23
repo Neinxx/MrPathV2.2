@@ -4,13 +4,13 @@ using __temp.MrPathV2._2.Runtime.Jobs;
 using Unity.Collections;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Memory
+namespace MrPathV2.Memory
 {
     /// <summary>
     /// 表示一个拥有并负责释放底层 NativeCollection 资源的对象。
     /// </summary>
     /// <typeparam name="TCollection">NativeCollection 类型 (NativeArray / NativeList)</typeparam>
-    public interface IMemoryOwner<out TCollection> : IDisposable
+    public interface IMemoryOwner<TCollection> : IDisposable
     {
         /// <summary>
         /// 获取底层 NativeCollection。
@@ -67,6 +67,7 @@ namespace __temp.MrPathV2._2.Runtime.Memory
             _tracked.Add(owner);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             _allocStats[key] = _allocStats.GetValueOrDefault(key, 0) + 1;
+            // try { Debug.Log($"[UnifiedMemoryManager] Tracked allocation: {key} (count={_allocStats[key]})"); } catch { }
 #endif
         }
 
@@ -75,21 +76,18 @@ namespace __temp.MrPathV2._2.Runtime.Memory
         {
             try
             {
-                if (array.IsCreated)
-                {
-    #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                    MemoryTracker.TrackDeallocation(array);
-    #endif
-                    array.Dispose();
-                }
-            }
-            catch (InvalidOperationException)
-            {
+                bool canDispose = false;
+                try { canDispose = array.IsCreated; } catch { /* already deallocated; treat as disposed */ }
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                // 在开发环境下输出详细信息，发布版本静默处理
-                Debug.LogWarning("UnifiedMemoryManager: Attempted to dispose an already-deallocated NativeArray. This is safe but may indicate duplicate Dispose calls.");
+                if (canDispose)
+                {
+                    try { MemoryTracker.TrackDeallocation(array); } catch { /* tracking best-effort only */ }
+                }
 #endif
-                // 发行版中忽略重复释放以减少噪音
+                if (canDispose)
+                {
+                    try { array.Dispose(); } catch { /* already disposed */ }
+                }
             }
             finally
             {
@@ -101,17 +99,18 @@ namespace __temp.MrPathV2._2.Runtime.Memory
         {
             try
             {
-                if (list.IsCreated)
+                bool canDispose = false;
+                try { canDispose = list.IsCreated; } catch { /* already deallocated */ }
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (canDispose)
                 {
-    #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                    MemoryTracker.TrackDeallocation(list);
-    #endif
-                    list.Dispose();
+                    try { MemoryTracker.TrackDeallocation(list); } catch { /* tracking best-effort only */ }
                 }
-            }
-            catch (InvalidOperationException ex)
-            {
-                Debug.LogWarning($"UnifiedMemoryManager: NativeList already deallocated. {ex.Message}");
+#endif
+                if (canDispose)
+                {
+                    try { list.Dispose(); } catch { /* already disposed */ }
+                }
             }
             finally
             {
@@ -142,9 +141,11 @@ namespace __temp.MrPathV2._2.Runtime.Memory
 
         ~UnifiedMemoryManager()
         {
-            if (_disposed) return;
-            Debug.LogWarning("UnifiedMemoryManager finalizer detected missing Dispose call.");
-            Dispose();
+            if (!_disposed)
+            {
+                Debug.LogWarning("UnifiedMemoryManager finalizer detected missing Dispose call.");
+                Dispose();
+            }
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -174,6 +175,9 @@ namespace __temp.MrPathV2._2.Runtime.Memory
             if (_disposed) return;
             _release(ref _collection);
             _disposed = true;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // try { Debug.Log($"[UnifiedMemoryManager] MemoryOwner<{typeof(TCollection).Name}> disposed."); } catch { }
+#endif
         }
     }
 

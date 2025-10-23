@@ -122,5 +122,18 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
         }
 
         #endregion
+
+        // --- GPU 参数打包：统一接口 ---
+        /// <summary>
+        /// 将当前遮罩的参数打包到通用 GPU DTO（Editor/Runtime 再各自转换为实际 GPU 结构体）。
+        /// 默认实现输出一个“无遮罩”占位，派生类需覆盖并写入各自字段。
+        /// </summary>
+        public virtual void FillGpuParams(ref __temp.MrPathV2._2.Runtime.Core.GpuMaskParamsData dst)
+        {
+            dst.MaskType = 0;            // MASK_TYPE_NONE
+            dst.Strength = 1f;
+            // 通用 UV 参数留给具体遮罩写入（tiling/offset/overallScale/smooth）
+            // 派生类会填充 dst.NoiseParams 或 dst.ShoulderParams 等
+        }
     }
 }

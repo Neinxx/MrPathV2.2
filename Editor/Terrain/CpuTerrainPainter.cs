@@ -1,4 +1,4 @@
-// 文件: Editor/Terrain/CpuTerrainPainter.cs
+
 
 using System;
 using System.Threading;
@@ -29,10 +29,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             CancellationToken token)
         {
             var td = terrain.terrainData;
-             if (td == null) {
-                 Debug.LogError("[CpuTerrainPainter] TerrainData is null.");
-                 return;
-             }
+            if (td == null)
+            {
+                Debug.LogError("[CpuTerrainPainter] TerrainData is null.");
+                return;
+            }
             var resolution = td.alphamapResolution;
             var layers = td.alphamapLayers;
 
@@ -106,17 +107,17 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 ConvertAlphamaps1DTo3D(alphamaps1D, alphamaps3D);
                 td.SetAlphamaps(0, 0, alphamaps3D);
                 terrain.Flush();
-                 EditorUtility.SetDirty(td);
+                EditorUtility.SetDirty(td);
             }
             catch (OperationCanceledException)
             {
-                 Debug.Log($"[CpuTerrainPainter] Operation cancelled.");
-                 throw;
+                Debug.Log($"[CpuTerrainPainter] Operation cancelled.");
+                throw;
             }
-             catch (Exception ex)
+            catch (Exception ex)
             {
-                 Debug.LogError($"[CpuTerrainPainter] Error during execution: {ex.Message}\n{ex.StackTrace}");
-                 throw;
+                Debug.LogError($"[CpuTerrainPainter] Error during execution: {ex.Message}\n{ex.StackTrace}");
+                throw;
             }
             finally
             {
@@ -124,24 +125,25 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 pixelInfoMap.SafeDispose();
             }
         }
-        
-         // --- Data Conversion Helpers ---
+
+        // --- Data Conversion Helpers ---
         private static void ConvertAlphamaps3DTo1D(float[,,] source, NativeArray<float> destination)
         {
-             int height = source.GetLength(0), width = source.GetLength(1), depth = source.GetLength(2);
-             var index = 0;
-             for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var z = 0; z < depth; z++)
-                 destination[index++] = source[y, x, z];
+            int height = source.GetLength(0), width = source.GetLength(1), depth = source.GetLength(2);
+            var index = 0;
+            for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var z = 0; z < depth; z++)
+                        destination[index++] = source[y, x, z];
         }
         private static void ConvertAlphamaps1DTo3D(NativeArray<float> source, float[,,] destination)
         {
-             int height = destination.GetLength(0), width = destination.GetLength(1), depth = destination.GetLength(2);
-             if (!source.IsCreated || source.Length != width * height * depth) {
-                  Debug.LogError("ConvertAlphamaps1DTo3D size mismatch!"); return;
-             }
-             var index = 0;
-             for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var z = 0; z < depth; z++)
-                 destination[y, x, z] = source[index++];
+            int height = destination.GetLength(0), width = destination.GetLength(1), depth = destination.GetLength(2);
+            if (!source.IsCreated || source.Length != width * height * depth)
+            {
+                Debug.LogError("ConvertAlphamaps1DTo3D size mismatch!"); return;
+            }
+            var index = 0;
+            for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var z = 0; z < depth; z++)
+                        destination[y, x, z] = source[index++];
         }
         // -----------------------------
 

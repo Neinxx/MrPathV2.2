@@ -1,37 +1,108 @@
-// 文件路径: MrPathV2/Masks/PerlinNoiseMask.cs
-
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using __temp.MrPathV2._2.Runtime.Core; // for GpuMaskParamsData
 using UnityEngine;
+using Sirenix.OdinInspector;
 
-namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
+namespace MrPathV2
 {
-    [CreateAssetMenu(fileName = "New Perlin Noise Mask", menuName = "MrPathV2/Masks/Perlin Noise Mask")]
+    [CreateAssetMenu(menuName = "MrPath/Blend Masks/Perlin Noise Mask")]
     public class PerlinNoiseMask : ProceduralMaskBase
     {
-        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
-        {
-            // 1. 调用父类的辅助函数，并将 worldWidth 和 pathLength 传递下去
-            float inputX = TransformPosition(horizontalPosition, worldWidth);
-            
-            // 使用TransformPathPosition计算Y轴坐标
-            // 在遮罩评估中，我们假设沿路径的进度为0.5（中点），实际应用中可能需要传递真实的路径进度
-            float pathProgress = 0.5f; // 临时使用中点，实际应该从上下文获取
-            float inputY = TransformPathPosition(pathProgress, pathLength);
-            
-            float noiseValue = Mathf.PerlinNoise(inputX, inputY);
-            
-            float rawValue = noiseValue * strength;
-            return ApplySmoothing(Mathf.Clamp01(rawValue));
-        }
+        [Header("Noise Settings / Scale & Rotation")]
+        [Tooltip("二维噪声的无量纲缩放。小值=图案更大；大值=细节更密。")]
+        [OnValueChanged(nameof(OnNoiseScaleChanged))]
+        public Vector2 noiseScale = new Vector2(1f, 1f);
+
+        [Header("Uniform Scale")]
+        [Tooltip("锁定XY统一缩放，调整X时同步Y。")]
+        [OnValueChanged(nameof(OnUniformScaleToggled))]
+        public bool uniformScale = true;
+
+        [Tooltip("噪声UV的旋转角度（度）")]
+        [Range(-180f, 180f)] public float rotationDeg = 0f;
+
+        [Header("Noise Settings / fBm Detail")]
+        [Tooltip("叠加的噪声层数（fBm Octaves）")]
+        [Range(1, 8)] public int octaves = 1;
+
+        [Tooltip("每层频率的倍增（Lacunarity，通常为2）")]
+        [Range(1f, 4f)] public float lacunarity = 2f;
+
+        [Tooltip("每层振幅的衰减（Gain/Persistence，0..1）")]
+        [Range(0f, 1f)] public float gain = 0.5f;
+
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
-            float inputX = TransformPosition(horizontalPosition, worldWidth);
-            float inputY = TransformPathPosition(pathProgress, pathLength);
+            float u = TransformPosition(horizontalPosition, worldWidth, pathLength);
+            float v = TransformPathPosition(pathProgress, pathLength);
 
-            float noiseValue = Mathf.PerlinNoise(inputX, inputY);
-            float rawValue = noiseValue * strength;
+            Vector2 scale = uniformScale ? new Vector2(noiseScale.x, noiseScale.x) : noiseScale;
+            Vector2 uv = new Vector2(u * Mathf.Max(1e-5f, scale.x), v * Mathf.Max(1e-5f, scale.y));
+            float rad = rotationDeg * Mathf.Deg2Rad;
+            float cos = Mathf.Cos(rad);
+            float sin = Mathf.Sin(rad);
+            Vector2 ruv = new Vector2(uv.x * cos - uv.y * sin, uv.x * sin + uv.y * cos);
+
+            float sx = Mathf.Abs(Mathf.Sin(seed * 12.9898f) * 43758.5453f);
+            float sy = Mathf.Abs(Mathf.Sin(seed * 78.233f) * 12345.678f);
+            Vector2 seedOffset = new Vector2(sx - Mathf.Floor(sx), sy - Mathf.Floor(sy));
+            ruv += seedOffset;
+
+            float amplitude = 1f;
+            float frequency = 1f;
+            float sum = 0f;
+            float norm = 0f;
+            for (int i = 0; i < octaves; i++)
+            {
+                sum += Mathf.PerlinNoise(ruv.x * frequency, ruv.y * frequency) * amplitude;
+                norm += amplitude;
+                frequency *= Mathf.Max(1f, lacunarity);
+                amplitude *= Mathf.Clamp01(gain);
+            }
+            float noise = (norm > 1e-5f) ? (sum / norm) : 0f;
+
+            float rawValue = noise * strength;
             return ApplySmoothing(Mathf.Clamp01(rawValue));
         }
 
-      
+        public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
+        {
+            return Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);
+        }
+
+        public override void FillGpuParams(ref GpuMaskParamsData dst)
+        {
+            dst.MaskType = 2; // MASK_TYPE_NOISE
+            dst.Strength = Mathf.Max(0f, strength);
+        
+            dst.NoiseParams.Strength = Mathf.Max(0f, strength);
+            dst.NoiseParams.Seed = seed;
+            dst.NoiseParams.Tiling = tiling;
+            dst.NoiseParams.Offset = offset;
+            dst.NoiseParams.OverallScale = overallScale;
+            dst.NoiseParams.Smooth = smooth;
+            var scale = uniformScale ? new Vector2(noiseScale.x, noiseScale.x) : noiseScale;
+            dst.NoiseParams.NoiseScale = scale;
+            dst.NoiseParams.RotationRad = rotationDeg * Mathf.Deg2Rad;
+            dst.NoiseParams.Octaves = octaves;
+            dst.NoiseParams.Lacunarity = lacunarity;
+            dst.NoiseParams.Gain = gain;
+            dst.NoiseParams.AlgorithmId = (int)NoiseAlgorithmId.Perlin;
+        }
+
+        private void OnNoiseScaleChanged()
+        {
+            if (uniformScale) noiseScale.y = noiseScale.x;
+        }
+
+        private void OnUniformScaleToggled()
+        {
+            if (uniformScale) noiseScale.y = noiseScale.x;
+        }
+
+        private void OnValidate()
+        {
+            if (uniformScale) noiseScale.y = noiseScale.x;
+        }
     }
 }

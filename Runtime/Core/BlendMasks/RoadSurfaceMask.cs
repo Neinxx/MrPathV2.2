@@ -53,8 +53,13 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
-            // 应用中心偏移
-            float adjustedPosition = horizontalPosition - centerOffset;
+            // 通过 TransformPosition 接入 tiling（频率）与 offset，并在 0..1 范围重复
+            float u = TransformPosition(horizontalPosition, worldWidth, pathLength);
+            float u01 = Mathf.Repeat(u, 1f);
+            float x = u01 * 2f - 1f; // -1..1 域下计算路面形状
+
+            // 应用中心偏移（仍按 -1..1 域）
+            float adjustedPosition = x - centerOffset;
             
             // 计算到中心的距离
             float distanceFromCenter = Mathf.Abs(adjustedPosition);

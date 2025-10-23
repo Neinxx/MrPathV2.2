@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/MrPathV2.2/Editor/Inspectors/PathCreatorEditor.uss?fileID=7433441132597879392&amp;guid=e09f71de0b8d0d842ab980b90f05d9ba&amp;type=3#PathCreatorEditor" />
+    <ui:VisualElement class="rootContainer">
+        <uie:PropertyField name="profileProperty" binding-path="profile" label="路径配置文件 (Profile)" />
+        <uie:PropertyField name="pathDataProperty" binding-path="pathData" label="路径数据" />
+        <ui:VisualElement name="profileMissingWarning" class="warningBox">
+            <ui:Button name="createProfileButton" text="快速创建默认 Profile" />
+        </ui:VisualElement>
+        <ui:IMGUIContainer name="profileEmbeddedContainer" />
+        <ui:IMGUIContainer name="recipeEmbeddedContainer" />
+    </ui:VisualElement>
+</ui:UXML>

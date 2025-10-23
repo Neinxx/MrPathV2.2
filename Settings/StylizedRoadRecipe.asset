@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   masterOpacity: 1
   layers:
-  - name: Layer 1
+  - name: Layer 2
     enabled: 1
     blendMode: 0
     opacity: 1
-    contentLayer: {fileID: 8574412962073106934, guid: e29040e3a32b19348a3d2eaf46b12f03,
+    contentLayer: {fileID: 8574412962073106934, guid: cc3ead48ee23c8a42ade9cd6a20b5c7f,
       type: 2}
     layerMask: {fileID: 11400000, guid: 3da1226d875a1ab44a9f53bae375cfe9, type: 2}
-  width: 7.34
+  width: 5

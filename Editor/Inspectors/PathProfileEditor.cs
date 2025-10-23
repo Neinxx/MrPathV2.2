@@ -4,7 +4,7 @@ using UnityEditor.AnimatedValues;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace Assets.MrPathV2.Editor.Inspectors
 {
     [CustomEditor(typeof(PathProfile))]
     public class PathProfileEditor : UnityEditor.Editor
@@ -32,6 +32,10 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             public static readonly GUIContent ForceHorizontal = new("强制水平", "使道路横截面始终保持水平，不受路径坡度影响。");
             public static readonly GUIContent CrossSectionSegments = new("横截面分段", "预览网格在宽度上的分段数，越高越精细。");
             public static readonly GUIContent ShowPreviewMesh = new("显示预览网格", "在场景视图中实时显示生成的道路网格。");
+            public static readonly GUIContent EnableDepthTest = new("开启深度测试", "开启后预览遵循场景深度（LEqual）；关闭则始终显示在最上层（Always）。");
+            // 新增：不透明预览开关
+            public static readonly GUIContent OpaquePreview = new("不透明预览", "开启后预览为完全不透明，不与地形颜色混合。");
+
             public static readonly GUIContent RoadRecipe = new("风格化道路配方", "定义道路纹理、材质和风格的资产。");
 
             static Styles()
@@ -52,6 +56,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private SerializedProperty _forceHorizontal, _crossSectionSegments;
         private SerializedProperty _showPreviewMesh, _roadRecipe;
         private SerializedProperty _layers;
+        private SerializedProperty _enableDepthTest;
+        // 新增：不透明预览属性
+        private SerializedProperty _opaquePreview;
 
         // Editor specific fields
         private ReorderableList _layerList;
@@ -77,6 +84,9 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             _showPreviewMesh = serializedObject.FindProperty(nameof(PathProfile.showPreviewMesh));
             _roadRecipe = serializedObject.FindProperty(nameof(PathProfile.roadRecipe));
+            _enableDepthTest = serializedObject.FindProperty(nameof(PathProfile.enableDepthTest));
+            // 新增：找到不透明预览属性
+            _opaquePreview = serializedObject.FindProperty(nameof(PathProfile.opaquePreview));
 
             _layers = serializedObject.FindProperty("layers");
             InitializeLayerList();
@@ -156,13 +166,25 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
             DrawSectionHeader(Styles.PreviewHeader);
             EditorGUILayout.PropertyField(_showPreviewMesh, Styles.ShowPreviewMesh);
+            EditorGUILayout.PropertyField(_enableDepthTest, Styles.EnableDepthTest);
+            // 新增：绘制不透明预览开关并在切换时强制刷新 Scene 视图
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(_opaquePreview, Styles.OpaquePreview);
+            bool opaqueChanged = EditorGUI.EndChangeCheck();
+            if (opaqueChanged)
+            {
+                // 立即提交更改并刷新 SceneView，使预览材质在本帧就更新
+                serializedObject.ApplyModifiedProperties();
+                UnityEditor.SceneView.RepaintAll();
+            }
+            // Provide helpful guidance to the user
+            // if (_roadRecipe.objectReferenceValue == null)
+            // {
+            //     EditorGUILayout.HelpBox("请分配一个 StylizedRoadRecipe 以定义道路的视觉风格。", MessageType.Warning);
+            // }
             EditorGUILayout.PropertyField(_roadRecipe, Styles.RoadRecipe);
 
-            // Provide helpful guidance to the user
-            if (_roadRecipe.objectReferenceValue == null)
-            {
-                EditorGUILayout.HelpBox("请分配一个 StylizedRoadRecipe 以定义道路的视觉风格。", MessageType.Info);
-            }
+
         }
 
         private void DrawLayersSettings()

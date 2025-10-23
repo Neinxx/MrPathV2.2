@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using __temp.MrPathV2._2.Runtime.Core;
 using __temp.MrPathV2._2.Runtime.Memory;
+using MrPathV2.Memory;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEditor;
@@ -17,7 +18,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
     public class PreviewLineRenderer : IDisposable
     {
         #region 线条类型定义
-        
+
         public enum LineType
         {
             PathCurve,          // 路径曲线
@@ -35,7 +36,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             public bool dashed;
             public float dashSize;
             public bool antiAliased;
-            
+
             public static LineStyle Default => new LineStyle
             {
                 color = Color.white,
@@ -62,14 +63,14 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private readonly List<LineSegment> _lineSegments;
         private readonly Dictionary<LineType, LineStyle> _defaultStyles;
         private readonly MemoryOwner<NativeList<float3>> _tempPointsOwner;
-        
+
         // 性能优化相关
         private Camera _currentCamera;
         private Plane[] _frustumPlanes;
         private bool _enableFrustumCulling = true;
         private bool _enableDistanceCulling = true;
         private float _maxRenderDistance = 1000f;
-        
+
         // 批量渲染优化
         private readonly Dictionary<LineType, List<LineSegment>> _batchedLines;
         private bool _isDirty = true;
@@ -84,7 +85,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             _defaultStyles = new Dictionary<LineType, LineStyle>();
             _tempPointsOwner = UnifiedMemory.Instance.RentNativeList<float3>(64, Allocator.Persistent);
             _batchedLines = new Dictionary<LineType, List<LineSegment>>();
-            
+
             InitializeDefaultStyles();
             InitializeBatchedLists();
         }
@@ -97,7 +98,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 thickness = 3f,
                 antiAliased = true
             };
-            
+
             _defaultStyles[LineType.ControlLine] = new LineStyle
             {
                 color = new Color(1f, 1f, 1f, 0.4f),
@@ -105,21 +106,21 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 dashed = true,
                 dashSize = 4f
             };
-            
+
             _defaultStyles[LineType.WireframeEdge] = new LineStyle
             {
                 color = new Color(0.5f, 0.5f, 0.5f, 0.6f),
                 thickness = 1f,
                 antiAliased = false
             };
-            
+
             _defaultStyles[LineType.DebugLine] = new LineStyle
             {
                 color = Color.red,
                 thickness = 2f,
                 antiAliased = true
             };
-            
+
             _defaultStyles[LineType.HandleConnection] = new LineStyle
             {
                 color = new Color(1f, 0.8f, 0.2f, 0.7f),
@@ -161,7 +162,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         public void AddLine(Vector3 start, Vector3 end, LineType type, LineStyle? customStyle = null, int priority = 0)
         {
             var style = customStyle ?? GetDefaultStyle(type);
-            
+
             _lineSegments.Add(new LineSegment
             {
                 Start = start,
@@ -170,7 +171,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 Type = type,
                 Priority = priority
             });
-            
+
             _isDirty = true;
         }
 
@@ -180,9 +181,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private void AddPolyLine(Vector3[] points, LineType type, LineStyle? customStyle = null, int priority = 0)
         {
             if (points == null || points.Length < 2) return;
-            
+
             var style = customStyle ?? GetDefaultStyle(type);
-            
+
             for (var i = 0; i < points.Length - 1; i++)
             {
                 _lineSegments.Add(new LineSegment
@@ -194,14 +195,14 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     Priority = priority
                 });
             }
-            
+
             _isDirty = true;
         }
 
         /// <summary>
         /// 添加贝塞尔曲线
         /// </summary>
-        public void AddBezierCurve(Vector3 start, Vector3 end, Vector3 control1, Vector3 control2, 
+        public void AddBezierCurve(Vector3 start, Vector3 end, Vector3 control1, Vector3 control2,
             LineType type, int resolution = 32, LineStyle? customStyle = null, int priority = 0)
         {
             var points = GenerateBezierPoints(start, end, control1, control2, resolution);
@@ -211,11 +212,11 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         /// <summary>
         /// 添加Catmull-Rom样条曲线
         /// </summary>
-        public void AddCatmullRomSpline(Vector3[] controlPoints, LineType type, int resolution = 16, 
+        public void AddCatmullRomSpline(Vector3[] controlPoints, LineType type, int resolution = 16,
             LineStyle? customStyle = null, int priority = 0)
         {
             if (controlPoints == null || controlPoints.Length < 4) return;
-            
+
             var points = GenerateCatmullRomPoints(controlPoints, resolution);
             AddPolyLine(points, type, customStyle, priority);
         }
@@ -250,14 +251,14 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         {
 #if UNITY_EDITOR
             if (_lineSegments.Count == 0) return;
-            
+
             // 更新批次（如果需要）
             if (_isDirty)
             {
                 UpdateBatches();
                 _isDirty = false;
             }
-            
+
             // 按优先级和类型渲染
             foreach (LineType type in Enum.GetValues(typeof(LineType)))
             {
@@ -295,13 +296,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 {
                     batch.Clear();
                 }
-                
+
                 // 按类型分组并排序
                 foreach (var line in _lineSegments.Where(ShouldRenderLine))
                 {
                     _batchedLines[line.Type].Add(line);
                 }
-                
+
                 // 按优先级排序每个批次
                 foreach (var batch in _batchedLines.Values)
                 {
@@ -319,15 +320,15 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 var distance = Vector3.Distance(_currentCamera.transform.position, center);
                 if (distance > _maxRenderDistance) return false;
             }
-            
+
             // 视锥体剔除
             if (_enableFrustumCulling && _currentCamera != null && _frustumPlanes != null)
             {
-                var bounds = new Bounds((line.Start + line.End) * 0.5f, 
+                var bounds = new Bounds((line.Start + line.End) * 0.5f,
                     Vector3.one * Vector3.Distance(line.Start, line.End));
                 if (!GeometryUtility.TestPlanesAABB(_frustumPlanes, bounds)) return false;
             }
-            
+
             return true;
         }
 
@@ -336,7 +337,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 #if UNITY_EDITOR
             var batch = _batchedLines[type];
             if (batch.Count == 0) return;
-            
+
             foreach (var line in batch)
             {
                 RenderSingleLine(line);
@@ -349,7 +350,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 #if UNITY_EDITOR
             var oldColor = Handles.color;
             Handles.color = line.Style.color;
-            
+
             try
             {
                 if (line.Style.dashed)
@@ -375,13 +376,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         private Vector3[] GenerateBezierPoints(Vector3 start, Vector3 end, Vector3 control1, Vector3 control2, int resolution)
         {
             var points = new Vector3[resolution + 1];
-            
+
             for (var i = 0; i <= resolution; i++)
             {
                 var t = (float)i / resolution;
                 points[i] = CalculateBezierPoint(start, control1, control2, end, t);
             }
-            
+
             return points;
         }
 
@@ -392,29 +393,29 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             var uu = u * u;
             var uuu = uu * u;
             var ttt = tt * t;
-            
+
             return uuu * p0 + 3 * uu * t * p1 + 3 * u * tt * p2 + ttt * p3;
         }
 
         private Vector3[] GenerateCatmullRomPoints(Vector3[] controlPoints, int resolution)
         {
             var points = new List<Vector3>();
-            
+
             for (var i = 0; i < controlPoints.Length - 3; i++)
             {
                 for (var j = 0; j < resolution; j++)
                 {
                     var t = (float)j / resolution;
                     var point = CalculateCatmullRomPoint(
-                        controlPoints[i], controlPoints[i + 1], 
+                        controlPoints[i], controlPoints[i + 1],
                         controlPoints[i + 2], controlPoints[i + 3], t);
                     points.Add(point);
                 }
             }
-            
+
             // 添加最后一个点
             points.Add(controlPoints[^2]);
-            
+
             return points.ToArray();
         }
 
@@ -422,7 +423,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         {
             var tt = t * t;
             var ttt = tt * t;
-            
+
             return 0.5f * (
                 2f * p1 +
                 (-p0 + p2) * t +
@@ -438,9 +439,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         public void Dispose()
         {
             _tempPointsOwner?.Dispose();
-            
+
             _lineSegments?.Clear();
-            
+
             foreach (var batch in _batchedLines.Values)
             {
                 batch?.Clear();
@@ -478,7 +479,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             {
                 if (ShouldRenderLine(line)) rendered++;
             }
-            
+
             return (_lineSegments.Count, rendered);
         }
 

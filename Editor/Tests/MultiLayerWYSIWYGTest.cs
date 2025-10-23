@@ -170,7 +170,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
             try
             {
                 // 测试LayerResolver是否会显示4层限制警告
-                var layerMap = LayerResolver.Resolve(_testTerrain, testRecipe);
+                var layerMap = LayerResolver.Resolve(_testTerrain, testRecipe, interactive: false);
                 LogResult($"  - LayerResolver处理了 {layerMap.Count} 层，无错误");
                 return true;
             }

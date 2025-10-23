@@ -1,0 +1,29 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:VisualElement style="padding-left: 5px; padding-right: 5px;">
+        <ui:Label text="核心&#x9;" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
+        <uie:PropertyField binding-path="curveType" label="曲线类型" tooltip="路径插值使用的曲线算法。" />
+        <uie:PropertyField binding-path="generationPrecision" label="生成精度" />
+        <uie:PropertyField binding-path="roadWidth" label="道路宽度" />
+        <ui:Label text="道路剖面 (Cross Section)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
+        <uie:PropertyField binding-path="crossSection" label="剖面形状" />
+        <uie:PropertyField binding-path="falloffWidth" label="衰减宽度" />
+        <uie:PropertyField binding-path="falloffShape" label="衰减形状" />
+        <ui:Label text="地形吸附 (Terrain Snapping)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
+        <uie:PropertyField name="snapToTerrain" binding-path="snapToTerrain" label="启用地形吸附" />
+        <ui:VisualElement name="snapToTerrainGroup" style="margin-left: 15px; margin-bottom: 5px;">
+            <uie:PropertyField binding-path="heightOffset" label="高度偏移" />
+            <uie:PropertyField binding-path="smoothness" label="平滑度" />
+        </ui:VisualElement>
+        <ui:Label text="网格生成 (Mesh Generation)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
+        <uie:PropertyField binding-path="forceHorizontal" label="强制水平" />
+        <uie:PropertyField binding-path="crossSectionSegments" label="剖面分段数" />
+        <ui:Label text="渲染预览 (Preview)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
+        <uie:PropertyField binding-path="showPreviewMesh" label="显示预览网格" />
+        <uie:PropertyField binding-path="enableDepthTest" label="启用深度测试" />
+        <uie:PropertyField name="opaquePreview" binding-path="opaquePreview" label="不透明预览" />
+        <ui:HelpBox name="recipeMissingWarning" text="请分配一个 StylizedRoadRecipe 以定义道路的视觉风格。" message-type="Warning" style="margin-top: 10px;" />
+        <uie:PropertyField name="roadRecipe" binding-path="roadRecipe" label="道路样式" style="margin-bottom: 5px;" />
+        <ui:Label text="自定义渲染图层 (Custom Layers)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
+        <uie:PropertyField binding-path="layers" label="渲染图层" />
+    </ui:VisualElement>
+</ui:UXML>

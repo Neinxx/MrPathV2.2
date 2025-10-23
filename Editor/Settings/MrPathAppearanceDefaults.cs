@@ -18,8 +18,6 @@ namespace __temp.MrPathV2._2.Editor.Settings
         [Tooltip("预览使用的材质模板 (URP Shader)")]
         public Material previewMaterialTemplate;
 
-        [Range(0, 1)]
-        [Tooltip("预览透明度，避免遮挡场景交互")]
-        public float previewAlpha = 0.5f;
+
     }
 }

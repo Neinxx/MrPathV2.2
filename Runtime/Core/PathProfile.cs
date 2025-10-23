@@ -1,5 +1,7 @@
 using System;
+using MrPathV2;
 using UnityEngine;
+
 
 namespace __temp.MrPathV2._2.Runtime.Core
 {
@@ -33,15 +35,21 @@ namespace __temp.MrPathV2._2.Runtime.Core
         [Range(3, 64)] public int crossSectionSegments = 16;
 
         [Header("渲染预览")]
-        [Tooltip("是否在场景中显示预览网格")] public bool showPreviewMesh = true;
+        [Tooltip("是否在场景中显示预览网格")]
+        public bool showPreviewMesh = true;
+        [Tooltip("预览是否进行深度测试：开启时预览遵循场景深度(LEqual)；关闭时始终在最上层(Always)。")]
+        public bool enableDepthTest = false;
+        [Tooltip("不透明预览：开启后预览为完全不透明，不与地形颜色混合。")]
+        public bool opaquePreview = false;
         [Tooltip("拖入 StylizedRoadRecipe 以定义道路的纹理分布与风格")]
+        [RequiredField(ErrorMessage = "请分配一个StylizedRoadRecipe以调配道路风格")]
         public StylizedRoadRecipe roadRecipe;
 
         private const int MIN_SEGMENTS = 3;
         private const int MAX_SEGMENTS = 64;
 
         public event Action ProfileModified;
-        
+
         private StylizedRoadRecipe _subscribedRecipe;
 
         private void OnEnable()

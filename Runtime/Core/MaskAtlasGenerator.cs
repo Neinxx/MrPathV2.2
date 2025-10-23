@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Profiling;
+using MrPathV2;
 
 namespace __temp.MrPathV2._2.Runtime.Core
 {
@@ -47,6 +48,12 @@ namespace __temp.MrPathV2._2.Runtime.Core
             public Vector2 Offset;
             public float OverallScale;
             public float Smooth;
+            public Vector2 NoiseScale;
+            public float RotationRad;
+            public int Octaves;
+            public float Lacunarity;
+            public float Gain;
+            public int AlgorithmId;
             public float Pad1;
         }
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -77,11 +84,11 @@ namespace __temp.MrPathV2._2.Runtime.Core
                 {
                     if (reuse == null || reuse.width != 1 || reuse.height != 1 || reuse.format != TextureFormat.R8)
                     {
-                    #if UNITY_EDITOR
+#if UNITY_EDITOR
                         if (reuse != null) Object.DestroyImmediate(reuse);
-                    #else
+#else
                         if (reuse != null) Object.Destroy(reuse);
-                    #endif
+#endif
                         reuse = new Texture2D(1, 1, TextureFormat.R8, false, true) { wrapMode = TextureWrapMode.Clamp };
                     }
                     reuse.SetPixel(0, 0, Color.white);
@@ -97,11 +104,11 @@ namespace __temp.MrPathV2._2.Runtime.Core
                 bool needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
                 if (needCreate)
                 {
-                #if UNITY_EDITOR
+#if UNITY_EDITOR
                     if (reuse != null) Object.DestroyImmediate(reuse);
-                #else
+#else
                     if (reuse != null) Object.Destroy(reuse);
-                #endif
+#endif
                     reuse = new Texture2D(width, height, TextureFormat.R8, false, true)
                     {
                         wrapMode = TextureWrapMode.Clamp,
@@ -240,63 +247,45 @@ namespace __temp.MrPathV2._2.Runtime.Core
             var gpuMask = new GpuMaskParams { MaskType = 0, Strength = 1.0f };
             if (mask == null) return gpuMask;
 
-            // 保留 tiling 符号并避免零分母
-            static float SafeTilePreservingSign(float t)
-            {
-                float abs = Mathf.Abs(t);
-                if (abs < 0.0001f)
-                {
-                    float s = Mathf.Sign(t);
-                    if (s == 0f) s = 1f;
-                    return 0.0001f * s;
-                }
-                return t;
-            }
+            // 统一从遮罩对象收集参数
+            var dto = new __temp.MrPathV2._2.Runtime.Core.GpuMaskParamsData();
+            mask.FillGpuParams(ref dto);
 
-            // Common fields
-            Vector2 tiling = mask.tiling;
-            tiling.x = SafeTilePreservingSign(tiling.x);
-            tiling.y = SafeTilePreservingSign(tiling.y);
-            Vector2 offset = mask.offset;
-            float overallScale = mask.overallScale;
-            float smooth = mask.smooth;
+            // 映射到运行时 GPU 结构（与 HLSL 对齐）
+            gpuMask.MaskType = dto.MaskType;
+            gpuMask.Strength = dto.Strength;
 
-            if (mask is BlendMasks.ShoulderMask sm)
+            gpuMask.ShoulderParams = new GpuShoulderMaskParams
             {
-                gpuMask.MaskType = 1; // SHOULDER
-                gpuMask.Strength = 1.0f;
-                gpuMask.ShoulderParams = new GpuShoulderMaskParams
-                {
-                    ShoulderWidthRatio = sm.shoulderWidthRatio,
-                    ShoulderStrength = sm.shoulderStrength,
-                    EdgeFalloff = sm.edgeFalloff,
-                    EnableLeftShoulder = sm.enableLeftShoulder ? 1 : 0,
-                    EnableRightShoulder = sm.enableRightShoulder ? 1 : 0,
-                    Tiling = tiling,
-                    Offset = offset,
-                    OverallScale = overallScale,
-                    Smooth = smooth
-                };
-            }
-            else if (mask is BlendMasks.ProceduralMaskBase pmb)
+                ShoulderWidthRatio = dto.ShoulderParams.ShoulderWidthRatio,
+                ShoulderStrength = dto.ShoulderParams.ShoulderStrength,
+                EdgeFalloff = dto.ShoulderParams.EdgeFalloff,
+                EnableLeftShoulder = dto.ShoulderParams.EnableLeftShoulder ? 1 : 0,
+                EnableRightShoulder = dto.ShoulderParams.EnableRightShoulder ? 1 : 0,
+                Tiling = dto.ShoulderParams.Tiling,
+                Offset = dto.ShoulderParams.Offset,
+                OverallScale = dto.ShoulderParams.OverallScale,
+                Smooth = dto.ShoulderParams.Smooth,
+                Pad1 = 0f,
+                Pad2 = 0f
+            };
+
+            gpuMask.NoiseParams = new GpuNoiseMaskParams
             {
-                gpuMask.MaskType = 2; // NOISE
-                gpuMask.Strength = Mathf.Max(0f, pmb.strength);
-                gpuMask.NoiseParams = new GpuNoiseMaskParams
-                {
-                    Strength = Mathf.Max(0f, pmb.strength),
-                    Seed = pmb.seed,
-                    Tiling = tiling,
-                    Offset = offset,
-                    OverallScale = overallScale,
-                    Smooth = smooth
-                };
-            }
-            else if (mask is BlendMasks.GradientMask)
-            {
-                gpuMask.MaskType = 3; // GRADIENT (basic)
-                gpuMask.Strength = 1.0f;
-            }
+                Strength = dto.NoiseParams.Strength,
+                Seed = dto.NoiseParams.Seed,
+                Tiling = dto.NoiseParams.Tiling,
+                Offset = dto.NoiseParams.Offset,
+                OverallScale = dto.NoiseParams.OverallScale,
+                Smooth = dto.NoiseParams.Smooth,
+                NoiseScale = dto.NoiseParams.NoiseScale,
+                RotationRad = dto.NoiseParams.RotationRad,
+                Octaves = dto.NoiseParams.Octaves,
+                Lacunarity = dto.NoiseParams.Lacunarity,
+                Gain = dto.NoiseParams.Gain,
+                AlgorithmId = dto.NoiseParams.AlgorithmId,
+                Pad1 = 0f
+            };
 
             return gpuMask;
         }

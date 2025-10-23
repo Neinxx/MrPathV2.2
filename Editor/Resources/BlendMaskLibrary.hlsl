@@ -1,180 +1,132 @@
-#ifndef BLEND_MASK_LIBRARY_HLSL
-#define BLEND_MASK_LIBRARY_HLSL
+#ifndef BLEND_MASK_LIBRARY_INCLUDED
+#define BLEND_MASK_LIBRARY_INCLUDED
 
-// Mask types
-#define MASK_TYPE_NONE 0
-#define MASK_TYPE_SHOULDER 1
-#define MASK_TYPE_NOISE 2
-#define MASK_TYPE_GRADIENT 3
-
-// Shoulder mask parameters (match C# layout)
-struct GpuShoulderMaskParams
-{
-    float ShoulderWidthRatio;
-    float ShoulderStrength;
-    float EdgeFalloff;
-    int EnableLeftShoulder;
-    int EnableRightShoulder;
-    float2 Tiling;
-    float2 Offset;
-    float OverallScale;
-    float Smooth;
-    float Pad1;
-    float Pad2;
-};
-
-// Noise mask parameters (match C# layout)
-struct GpuNoiseMaskParams
-{
+// 与 C# 侧 RecipeGpuDataManager.cs 的结构对齐
+struct GpuNoiseMaskParams {
     float Strength;
     float Seed;
-    float2 Tiling;
-    float2 Offset;
-    float OverallScale;
-    float Smooth;
-    float Pad1;
+    float2 Tiling;      // 贴图平铺尺寸（米），与 CPU tiling 对齐
+    float2 Offset;      // UV 偏移
+    float OverallScale; // 统一的整体缩放
+    float Smooth;       // 平滑/软化系数
+    float2 NoiseScale;  // 二次细节缩放
+    float RotationRad;  // 弧度
+    int   Octaves;      // fBm 层数
+    float Lacunarity;   // 频率增长系数
+    float Gain;         // 幅度衰减系数
+    int   AlgorithmId;  // 0=Perlin, 1=Simple
+    float Pad1;         // 对齐
 };
 
-// Main mask parameters (match C# layout)
-struct GpuMaskParams
-{
-    int maskType;
-    float strength;
-    float2 padding;
-    GpuShoulderMaskParams shoulderParams;
-    GpuNoiseMaskParams noiseParams;
+struct GpuShoulderMaskParams {
+    float Width;     // 比例值：与道路宽度相乘得到实际肩宽
+    float Softness;  // 软化/边缘过渡系数
+    float Strength;  // 肩部影响强度
+    float Pad;
 };
 
-// Simple noise function (placeholder - replace with proper noise)
-float SimpleNoise(float2 uv)
+struct GpuMaskParams {
+    int   Type;        // MASK_TYPE_*
+    float Strength;    // 顶层遮罩强度
+    GpuNoiseMaskParams Noise;
+    GpuShoulderMaskParams Shoulder;
+};
+
+// 掩码类型常量（需与 C# 保持一致）
+static const int MASK_TYPE_NONE     = 0;
+static const int MASK_TYPE_NOISE    = 1;
+static const int MASK_TYPE_SHOULDER = 2;
+
+// 由 Compute 注入的路径总长度（米）。
+// 在 PaintSplatmapCompute.compute 中通过 SetFloat("_PathLength", ...) 传入。
+extern float _PathLength;
+
+// 根据 CPU 的 TransformPosition/TransformPathPosition 计算统一 UV
+inline float2 ComputeMaskUV(float progress, float signedDistance, float roadWidth, GpuNoiseMaskParams p)
 {
-    return frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453);
-}
+    float halfRoad = max(1e-5, roadWidth * 0.5);
+    float xNorm = clamp(signedDistance / halfRoad, -1.0, 1.0);
+    float u01 = 0.5 * (xNorm + 1.0);
 
-// Perlin-like noise (simplified)
-float PerlinNoise(float2 uv, float scale)
-{
-    uv *= max(1e-5, scale);
-    float2 i = floor(uv);
-    float2 f = frac(uv);
-    
-    float a = SimpleNoise(i);
-    float b = SimpleNoise(i + float2(1.0, 0.0));
-    float c = SimpleNoise(i + float2(0.0, 1.0));
-    float d = SimpleNoise(i + float2(1.0, 1.0));
-    
-    float2 u = f * f * (3.0 - 2.0 * f);
-    
-    float res = lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
-    return res;
-}
-
-// Apply smoothing to mask value
-float ApplySmoothing(float value, float smoothing)
-{
-    return smoothstep(0.0, 1.0, value * (1.0 + smoothing));
-}
-
-// Transform position for mask evaluation
-float2 TransformPosition(float2 worldPos, float2 offset, float rotation)
-{
-    float2 pos = worldPos + offset;
-    
-    if (abs(rotation) > 0.001)
-    {
-        float cosR = cos(rotation);
-        float sinR = sin(rotation);
-        pos = float2(
-            pos.x * cosR - pos.y * sinR,
-            pos.x * sinR + pos.y * cosR
-        );
-    }
-    
-    return pos;
-}
-
-// Transform position along path
-float2 TransformPathPosition(float2 worldPos, float progress, float pathWidth)
-{
-    // Simple transformation - can be enhanced with proper path tangent/normal
-    return worldPos;
-}
-
-// Evaluate shoulder mask using path distance and road width
-float EvaluateShoulderMask(GpuShoulderMaskParams p, float distanceFromPath, float roadWidth)
-{
-    float coreHalfWidth = roadWidth * 0.5;
-    float d = abs(distanceFromPath) - coreHalfWidth;
-    if (d <= 0.0) return 0.0; // inside main road
-
-    float shoulderWidth = max(1e-5, p.ShoulderWidthRatio * roadWidth);
-    if (d <= shoulderWidth) return saturate(p.ShoulderStrength);
-
-    float beyond = d - shoulderWidth;
-    float falloff = 1.0 - saturate(beyond / max(1e-5, p.EdgeFalloff));
-    return saturate(falloff * p.ShoulderStrength);
-}
-
-// Evaluate noise mask with tiling/offset/scale and smoothing
-float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos)
-{
-    // 米制 tiling 语义：tiling 为重复块的物理尺寸（米），允许负值镜像
     float tileX = p.Tiling.x;
     float tileY = p.Tiling.y;
-    float denomX = (abs(tileX) < 1e-5) ? (1e-5 * ((tileX == 0.0) ? 1.0 : sign(tileX))) : tileX;
-    float denomY = (abs(tileY) < 1e-5) ? (1e-5 * ((tileY == 0.0) ? 1.0 : sign(tileY))) : tileY;
+    // 与 CPU TransformPosition/TransformPathPosition 的容差一致（1e-4），并保留符号以支持镜像
+    float denomX = (abs(tileX) < 1e-4) ? (1e-4 * ((tileX == 0.0) ? 1.0 : sign(tileX))) : tileX;
+    float denomY = (abs(tileY) < 1e-4) ? (1e-4 * ((tileY == 0.0) ? 1.0 : sign(tileY))) : tileY;
 
-    float2 uv;
-    uv.x = worldPos.x / denomX + p.Offset.x;
-    uv.y = worldPos.y / denomY + p.Offset.y;
-
-    // 保持与 Runtime/Compute 一致的频率与幅值语义
-    float n = PerlinNoise(uv, 1.0);
-
-    // 先乘强度再乘总体缩放，然后按 smooth 平滑
-    float valuePre = saturate(n * p.Strength) * p.OverallScale;
-    if (p.Smooth <= 1e-5)
-    {
-        return saturate(valuePre);
-    }
-    float edge0 = p.Smooth * 0.5;
-    float edge1 = 1.0 - p.Smooth * 0.5;
-    return saturate(smoothstep(edge0, edge1, valuePre));
+    float u = u01 * (roadWidth / denomX) + p.Offset.x;
+    float v = progress * (max(1e-4, _PathLength) / denomY) + p.Offset.y;
+    return float2(u, v);
 }
 
-// Evaluate gradient mask (based on progress along path)
-float EvaluateGradientMask(float progress, float strength)
+// 噪声工具（置于库内部，供 EvaluateNoise 使用）
+inline float2 rotate2(float2 p, float a){ float s=sin(a), c=cos(a); return float2(c*p.x - s*p.y, s*p.x + c*p.y);} 
+inline float noise_fade(float t){ return t*t*(3.0 - 2.0*t);} 
+inline float hash21(float2 p){ p=frac(p*float2(123.34,345.45)); p+=dot(p,p+34.345); return frac(p.x*p.y);} 
+inline float grad2(float2 ip, float2 f){ float a=hash21(ip)*6.28318530718; float2 g=float2(cos(a),sin(a)); return dot(g,f);} 
+inline float perlin2d(float2 p){ float2 ip=floor(p); float2 f=frac(p); float2 u=float2(noise_fade(f.x),noise_fade(f.y)); float n00=grad2(ip+float2(0,0), f-float2(0,0)); float n10=grad2(ip+float2(1,0), f-float2(1,0)); float n01=grad2(ip+float2(0,1), f-float2(0,1)); float n11=grad2(ip+float2(1,1), f-float2(1,1)); float nx0=lerp(n00,n10,u.x); float nx1=lerp(n01,n11,u.x); return lerp(nx0,nx1,u.y);} 
+inline float sampleBaseNoise(float2 p, int algo){ return (algo==0) ? perlin2d(p) : sin(p.x)*cos(p.y);} 
+inline float fbm2d(float2 p, int octaves, float lacunarity, float gain, int algo){ float amp=0.5; float freq=1.0; float sum=0.0; [loop] for(int i=0;i<octaves;i++){ sum += sampleBaseNoise(p*freq, algo) * amp; freq *= max(lacunarity, 1.0); amp *= saturate(gain);} return sum; }
+
+inline float EvaluateNoise(float progress, float signedDistance, float roadWidth, GpuNoiseMaskParams p)
 {
-    return progress * strength;
+    float2 uv = ComputeMaskUV(progress, signedDistance, roadWidth, p);
+
+    // 综合整体缩放、细节缩放与旋转
+    float2 m = uv * max(p.OverallScale, 1e-6);
+    m = m * float2(max(p.NoiseScale.x,1e-6), max(p.NoiseScale.y,1e-6));
+    m = rotate2(m, p.RotationRad);
+    m += float2(p.Seed*17.0, p.Seed*29.0);
+
+    int oct = max(p.Octaves,1);
+    float n = fbm2d(m, oct, max(p.Lacunarity,1.0), p.Gain, p.AlgorithmId); // [-1,1]
+    float n01 = n*0.5 + 0.5;
+
+    // 平滑
+    float s = saturate(p.Smooth);
+    n01 = lerp(n01, smoothstep(0.0,1.0,n01), s);
+
+    return saturate(n01 * p.Strength);
 }
 
-// Main mask evaluation function (now takes distance & roadWidth)
-float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth)
+// 肩部遮罩：根据与路径的距离（signedDistance）生成两侧肩部影响
+// roadWidth: 道路总宽度（世界单位）；signedDistance: 像素到道路中心线的带符号距离
+inline float EvaluateShoulder(float signedDistance, float roadWidth, GpuShoulderMaskParams p)
 {
-    float maskValue = 1.0;
-    switch (maskParams.maskType)
-    {
-        case MASK_TYPE_SHOULDER:
-        {
-            maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
-            break;
-        }
-        case MASK_TYPE_NOISE:
-        {
-            maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos);
-            break;
-        }
-        case MASK_TYPE_GRADIENT:
-        {
-            maskValue = EvaluateGradientMask(progress, 1.0);
-            break;
-        }
-        case MASK_TYPE_NONE:
-        default:
-            maskValue = 1.0;
-            break;
-    }
-    return saturate(maskValue * maskParams.strength);
+    float halfRoad = max(0.00001, roadWidth * 0.5);
+    // 将传入的比例宽度转为实际宽度
+    float shoulderWidth = max(0.00001, p.Width * roadWidth);
+    // 在道路边缘之外的区域，按 shoulderWidth 制造一个带 Softness 的平台
+    float d = abs(signedDistance);
+    float outside = saturate((d - halfRoad) / max(0.00001, shoulderWidth));
+    // 软化过渡（Softness 越大边缘越柔）
+    float softened = smoothstep(0.0, max(0.00001, p.Softness), outside);
+    return saturate(softened * p.Strength);
 }
 
-#endif // BLEND_MASK_LIBRARY_HLSL
+// 主评估函数（统一坐标）：使用 progress / signedDistance / roadWidth
+inline float EvaluateMask(float progress, float signedDistance, float roadWidth, GpuMaskParams mask)
+{
+    if (mask.Type == MASK_TYPE_NONE)
+        return 1.0;
+
+    float m = 1.0;
+    if (mask.Type == MASK_TYPE_NOISE)
+    {
+        m = EvaluateNoise(progress, signedDistance, roadWidth, mask.Noise);
+    }
+    else if (mask.Type == MASK_TYPE_SHOULDER)
+    {
+        m = EvaluateShoulder(signedDistance, roadWidth, mask.Shoulder);
+    }
+
+    return saturate(m * mask.Strength);
+}
+
+// 兼容旧签名：保持 compute 侧不改动
+inline float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth)
+{
+    return EvaluateMask(progress, distanceFromPath, roadWidth, maskParams);
+}
+
+#endif // BLEND_MASK_LIBRARY_INCLUDED

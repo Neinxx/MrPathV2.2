@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2df02a3cdd971474ba0f9384bf16f9bb, type: 3}
   m_Name: MrPath_ProjectSettings
   m_EditorClassIdentifier: 
-  creationDefaults: {fileID: 11400000, guid: 316c5985f45ccba49a2f0a26565a8bae, type: 2}
-  appearanceDefaults: {fileID: 11400000, guid: 0567ed5b6bd31be429db5fba2077fe70, type: 2}
-  terrainOperations: {fileID: 11400000, guid: 236a4d2eb78d16a40a8a5550b45397ed, type: 2}
-  advancedSettings: {fileID: 11400000, guid: e738d329c6d078241bf0a889b5af48d7, type: 2}
+  creationDefaults: {fileID: 11400000, guid: 47e217325d990eb40ac13de4af7c223a, type: 2}
+  appearanceDefaults: {fileID: 11400000, guid: b7bc73541b50dc04e8f0e841e0f578bb, type: 2}
+  terrainOperations: {fileID: 11400000, guid: 0a0e391cc02ccc54f8b88e87520c3c1b, type: 2}
+  advancedSettings: {fileID: 11400000, guid: f429dc381952df74d99713afebf07eaa, type: 2}
   profiles:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
+  - {fileID: 11400000, guid: a78d4df5d6a6d5f4cbab0848a3b1e700, type: 2}
   roadRecipes:
   - {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}
-  - {fileID: 11400000, guid: 10a135be05e6e9d43841ff22481f5966, type: 2}
