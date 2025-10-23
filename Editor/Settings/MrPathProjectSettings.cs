@@ -24,10 +24,10 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
         [Tooltip("路径默认外观与预览材质配置")] public MrPathAppearanceDefaults appearanceDefaults;
 
-        // [Tooltip("场景视图中UI面板的布局配置")] public MrPathSceneUISettings sceneUISettings; // 假设 UI 设置已移除或合并
+        
         [Tooltip("数据驱动的地形操作列表")] public MrPathTerrainOperations terrainOperations;
 
-        // --- 新增 Advanced Settings 引用 ---
+       
         [Tooltip("高级开发者设置，如地形绘制后端选择、性能调试选项等")] public MrPathAdvancedSettings advancedSettings;
         // ------------------------------------
 
@@ -93,7 +93,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
             if (!settings.advancedSettings)
             {
-                // <-- 添加检查
+                
                 settings.advancedSettings = GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
                 changed = true;
             }
@@ -110,7 +110,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
             return settings;
         }
 
-        // --- LoadExistingSettings, GetToolRootFolder, GetSettingsRootFolder, GetOrCreateSubAsset 保持不变 ---
+        
         private static MrPathProjectSettings LoadExistingSettings()
         {
             var guids = AssetDatabase.FindAssets("l:MrPathCoreAsset t:MrPathProjectSettings");
@@ -163,7 +163,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
             var folder = GetSettingsRootFolder();
             // 子资产通常放在 Settings 文件夹下一层，例如 Settings/Advanced/
             var subFolder =
-                Path.Combine(folder, typeof(T).Name.Replace("MrPath", "").Replace("Settings", "")); // e.g., "Advanced"
+                Path.Combine(folder, typeof(T).Name.Replace("MrPath", "").Replace("Settings", "")); 
             Directory.CreateDirectory(subFolder); // Ensure subfolder exists
             var fullPath = Path.Combine(subFolder, $"{fileName}.asset").Replace("\\", "/");
 

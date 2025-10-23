@@ -54,7 +54,7 @@ float SimpleNoise(float2 uv)
 // Perlin-like noise (simplified)
 float PerlinNoise(float2 uv, float scale)
 {
-    uv *= scale;
+    uv *= max(1e-5, scale);
     float2 i = floor(uv);
     float2 f = frac(uv);
     
@@ -65,7 +65,8 @@ float PerlinNoise(float2 uv, float scale)
     
     float2 u = f * f * (3.0 - 2.0 * f);
     
-    return lerp(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+    float res = lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+    return res;
 }
 
 // Apply smoothing to mask value
@@ -117,10 +118,28 @@ float EvaluateShoulderMask(GpuShoulderMaskParams p, float distanceFromPath, floa
 // Evaluate noise mask with tiling/offset/scale and smoothing
 float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos)
 {
-    float2 uv = (worldPos * p.OverallScale) * p.Tiling + p.Offset + p.Seed;
-    float n = PerlinNoise(uv, max(1e-5, p.OverallScale));
-    n = ApplySmoothing(n, p.Smooth);
-    return saturate(n * p.Strength);
+    // 米制 tiling 语义：tiling 为重复块的物理尺寸（米），允许负值镜像
+    float tileX = p.Tiling.x;
+    float tileY = p.Tiling.y;
+    float denomX = (abs(tileX) < 1e-5) ? (1e-5 * ((tileX == 0.0) ? 1.0 : sign(tileX))) : tileX;
+    float denomY = (abs(tileY) < 1e-5) ? (1e-5 * ((tileY == 0.0) ? 1.0 : sign(tileY))) : tileY;
+
+    float2 uv;
+    uv.x = worldPos.x / denomX + p.Offset.x;
+    uv.y = worldPos.y / denomY + p.Offset.y;
+
+    // 保持与 Runtime/Compute 一致的频率与幅值语义
+    float n = PerlinNoise(uv, 1.0);
+
+    // 先乘强度再乘总体缩放，然后按 smooth 平滑
+    float valuePre = saturate(n * p.Strength) * p.OverallScale;
+    if (p.Smooth <= 1e-5)
+    {
+        return saturate(valuePre);
+    }
+    float edge0 = p.Smooth * 0.5;
+    float edge1 = 1.0 - p.Smooth * 0.5;
+    return saturate(smoothstep(edge0, edge1, valuePre));
 }
 
 // Evaluate gradient mask (based on progress along path)

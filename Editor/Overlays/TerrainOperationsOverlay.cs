@@ -27,6 +27,15 @@ namespace __temp.MrPathV2._2.Editor.Overlays
         private DropdownField _backendDropdown;
         private Toggle _gpuPreviewToggle;
         private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
+        /// <summary>
+        /// 跟踪当前是否有地形操作正在异步执行
+        /// </summary>
+        private bool _isExecutingOperation = false;
+
+        /// <summary>
+        /// 存储所有操作按钮，以便统一启用/禁用
+        /// </summary>
+        private readonly List<Button> _operationButtons = new List<Button>();
 
         public override VisualElement CreatePanelContent()
         {
@@ -80,7 +89,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
         {
             if (_content == null) return;
             _content.Clear();
-
+            _operationButtons.Clear();
             if (_terrainOpsConfig == null)
             {
                 _content.Add(new Label("未找到 Terrain Operations 配置"));
@@ -102,10 +111,15 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             var validOps = ops.Where(op => op != null).OrderBy(op => op.order);
             foreach (var op in validOps)
             {
-                var btn = new ToolbarButton(() => ExecuteOperation(op))
+                string originalText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
+                Button btn = null;
+                // 2. 创建按钮，lambda 捕获 btn 自身，传递给 ExecuteOperation
+                btn = new ToolbarButton(() => ExecuteOperation(op, btn))
                 {
-                    text = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name
+                    text = originalText,
+                    userData = originalText 
                 };
+                btn.SetEnabled(!_isExecutingOperation);
                 btn.AddToClassList("terrain-op-button");
 
                 if (op.icon != null)
@@ -116,6 +130,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 }
 
                 _content.Add(btn);
+                _operationButtons.Add(btn);
             }
         }
 
@@ -156,8 +171,9 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             _ctx = null;
         }
 
-        private void ExecuteOperation(PathTerrainOperation op)
+        private void ExecuteOperation(PathTerrainOperation op, Button clickedButton)
         {
+            if (_isExecutingOperation) return;
             if (_ctx == null) return;
             if (_ctx.Target == null) return;
             if (!op.CanExecute(_ctx.Target)) return;
@@ -181,8 +197,19 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                     cmd.SetPreviewBoundsXZ(new Vector4(b.min.x, b.min.z, b.max.x, b.max.z));
                 }
             }
+            _isExecutingOperation = true;
+            SetOperationButtonsEnabled(false);
+            if (clickedButton != null)
+            {
 
-            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, _ => { });
+                clickedButton.text = "执行中..."; // "优雅" 的部分：提供即时反馈
+                
+            }
+            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, _ =>
+             {
+                 _isExecutingOperation = false;
+                 SetOperationButtonsEnabled(true);
+             });
         }
 
         private static void ShowConfigError()
@@ -193,7 +220,23 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 "确定"
             );
         }
+        /// <summary>
+        /// 统一设置所有地形操作按钮的可用状态，并在启用时恢复其原始文本。
+        /// </summary>
+        /// <param name="enabled">是否启用按钮</param>
+        private void SetOperationButtonsEnabled(bool enabled)
+        {
+            foreach (var btn in _operationButtons)
+            {
+                btn.SetEnabled(enabled);
 
+                // 如果是重新启用，从 userData 恢复原始文本
+                if (enabled && btn.userData is string originalText)
+                {
+                    btn.text = originalText;
+                }
+            }
+        }
         private void RemoveUnusedSplatLayersOnPathIntersectingTerrains()
         {
             var pathRect = GetPathBounds();
@@ -264,7 +307,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 {
                     newSplats[i] = oldSplats[keptIndices[i]];
                 }
-    
+
                 // Step 3: 重建 alphamap（仅保留使用的 layer）
                 var newAlpha = new float[res, res, keptIndices.Count];
                 for (int y = 0; y < res; y++)

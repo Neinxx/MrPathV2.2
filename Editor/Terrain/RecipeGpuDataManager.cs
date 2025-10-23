@@ -185,9 +185,22 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             var gpuMask = new GpuMaskParams { MaskType = 0, Strength = 1.0f };
             if (mask == null) return gpuMask;
 
+            // 保留 tiling 符号并避免零分母
+            float SafeTilePreservingSign(float t)
+            {
+                float abs = Mathf.Abs(t);
+                if (abs < 0.0001f)
+                {
+                    float s = Mathf.Sign(t);
+                    if (s == 0f) s = 1f;
+                    return 0.0001f * s;
+                }
+                return t;
+            }
+
             Vector2 tiling = mask.tiling;
-            tiling.x = Mathf.Max(0.0001f, tiling.x);
-            tiling.y = Mathf.Max(0.0001f, tiling.y);
+            tiling.x = SafeTilePreservingSign(tiling.x);
+            tiling.y = SafeTilePreservingSign(tiling.y);
             Vector2 offset = mask.offset;
             float overallScale = mask.overallScale;
             float smooth = mask.smooth;
@@ -195,7 +208,6 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (mask is ShoulderMask sm)
             {
                 gpuMask.MaskType = 1;
-                // 顶层 Strength 对肩部遮罩设为 1，实际强度由 ShoulderParams 控制
                 gpuMask.Strength = 1.0f;
                 gpuMask.ShoulderParams = new GpuShoulderMaskParams
                 {
@@ -214,7 +226,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             {
                 var pmb = mask as ProceduralMaskBase;
                 gpuMask.MaskType = 2;
-                gpuMask.Strength = pmb?.strength ?? 1.0f; // 统一顶层强度，避免 HLSL 读取到 0
+                gpuMask.Strength = pmb?.strength ?? 1.0f;
                 gpuMask.NoiseParams = new GpuNoiseMaskParams
                 {
                     Strength = pmb?.strength ?? 1.0f,
@@ -225,9 +237,6 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                     Smooth = smooth
                 };
             }
-            // TODO: else if (mask is GradientMask gm) { ... }
-            // TODO: else if (mask is RoadSurfaceMask rsm) { ... }
-            // ...
 
             return gpuMask;
         }
