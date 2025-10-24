@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57b852d8c7abdc24facb2da64b131c00, type: 3}
   m_Name: CleanupTerrainLayersOperation
   m_EditorClassIdentifier: 
-  displayName: CleanUpLayer
+  displayName: CleanupLayers
   icon: {fileID: 0}
-  buttonColor: {r: 0.75, g: 0.75, b: 0.85, a: 1}
+  buttonColor: {r: 1, g: 1, b: 1, a: 1}
   order: 999
   operationId: cleanup_unused_layers

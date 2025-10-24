@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEngine;
 
@@ -31,9 +32,13 @@ namespace __temp.MrPathV2._2.Editor.Settings
         [Tooltip("高级开发者设置，如地形绘制后端选择、性能调试选项等")] public MrPathAdvancedSettings advancedSettings;
         // ------------------------------------
 
+        // 新增：默认风格化道路配方
+        [Tooltip("默认风格化道路配方")] public StylizedRoadRecipe stylizedRoadRecipe;
+
+        // 发现资产集合
         [Tooltip("路径配置文件集合")] public List<PathProfile> profiles = new();
         [Tooltip("道路配方集合")] public List<StylizedRoadRecipe> roadRecipes = new();
-
+        [Tooltip("遮罩资产集合")] public List<BlendMaskBase> masks = new();
 
         /// <summary>
         /// 获取或创建主设置资产的静态方法。
@@ -55,8 +60,8 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
                 settings.terrainOperations = GetOrCreateSubAsset<MrPathTerrainOperations>("MrPath_TerrainOperations");
 
-
-                settings.advancedSettings = GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
+                // AdvancedSettings 可选：不在初始化时自动创建，由用户在 UI 中创建
+                // settings.advancedSettings = GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
                 // ------------------------------------------
 
                 AssetDatabase.CreateAsset(settings, assetPath);
@@ -93,9 +98,9 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
             if (!settings.advancedSettings)
             {
-                
-                settings.advancedSettings = GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
-                changed = true;
+                // AdvancedSettings 可选：不自动创建，保持为空，允许在 UI 中手动创建
+                // settings.advancedSettings = GetOrCreateSubAsset<MrPathAdvancedSettings>("MrPath_Advanced");
+                // changed = true;
             }
 
             if (changed)
@@ -110,8 +115,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
             return settings;
         }
 
-        
-        private static MrPathProjectSettings LoadExistingSettings()
+        internal static MrPathProjectSettings LoadExistingSettings()
         {
             var guids = AssetDatabase.FindAssets("l:MrPathCoreAsset t:MrPathProjectSettings");
             if (guids is { Length: > 1 })

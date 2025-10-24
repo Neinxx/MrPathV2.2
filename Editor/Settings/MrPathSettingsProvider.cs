@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using __temp.MrPathV2._2.Editor.Operations;
 using __temp.MrPathV2._2.Editor.Terrain;
 using __temp.MrPathV2._2.Runtime.Core;
+using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -14,34 +15,28 @@ using Object = UnityEngine.Object;
 
 namespace __temp.MrPathV2._2.Editor.Settings
 {
-    /// <summary>
-    /// 为 MrPath 工具提供一个基于 UIToolkit 的现代设置界面。
-    /// </summary>
     internal class MrPathSettingsProvider : SettingsProvider
     {
         private SerializedObject _settings;
         private Label _titleLabel;
         private string _originalTitleText = "MrPath Settings";
 
-        private MrPathSettingsProvider(string path, SettingsScope scopes)
-            : base(path, scopes)
-        {
-        }
+        private MrPathSettingsProvider(string path, SettingsScope scopes) : base(path, scopes) { }
 
         public override void OnActivate(string searchContext, VisualElement rootElement)
         {
-            _settings = new SerializedObject(MrPathProjectSettings.GetOrCreateSettings());
+            // 自动创建主资产（仅主资产），避免页面空白
+            var settings = MrPathProjectSettings.GetOrCreateSettings();
+            _settings = new SerializedObject(settings);
             rootElement.Clear();
 
             var content = UIResourceLoader.LoadAndCloneByName(nameof(MrPathSettingsProvider));
             rootElement.Add(content);
-
             content.Bind(_settings);
 
             _titleLabel = content.Q<Label>("settings-title");
             if (_titleLabel != null)
             {
-                // 确保原始文本干净（可选）
                 _originalTitleText = _titleLabel.text.Trim();
                 if (!_originalTitleText.EndsWith("Settings"))
                 {
@@ -50,8 +45,11 @@ namespace __temp.MrPathV2._2.Editor.Settings
                 }
             }
 
+            // 默认配置链接
             SetupSettingsLink(content, "creationDefaults", "创建默认值", typeof(MrPathCreationDefaults), _titleLabel);
             SetupSettingsLink(content, "appearanceDefaults", "外观默认值", typeof(MrPathAppearanceDefaults), _titleLabel);
+            // 新增：Stylized Road Recipe
+            SetupSettingsLink(content, "stylizedRoadRecipe", "Stylized Road Recipe", typeof(StylizedRoadRecipe), _titleLabel);
             SetupSettingsLink(content, "terrainOperations", "地形操作", typeof(MrPathTerrainOperations), _titleLabel);
             SetupSettingsLink(content, "advancedSettings", "高级设置", typeof(MrPathAdvancedSettings), _titleLabel);
 
@@ -59,8 +57,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
             scanButton?.RegisterCallback<ClickEvent>(_ => ScanAndFillAllAssets());
         }
 
-        private void SetupSettingsLink(VisualElement root, string propertyName, string mLabel, Type assetType,
-            Label titleLabel)
+        private void SetupSettingsLink(VisualElement root, string propertyName, string mLabel, Type assetType, Label titleLabel)
         {
             var prop = _settings.FindProperty(propertyName);
             if (prop == null)
@@ -72,7 +69,6 @@ namespace __temp.MrPathV2._2.Editor.Settings
             var propertyField = root.Q<PropertyField>(propertyName);
             var sayHi = root.Q<Button>($"{propertyName}-ping");
             var createButton = root.Q<Button>($"{propertyName}-create");
-
             if (propertyField == null || sayHi == null || createButton == null)
             {
                 Debug.LogWarning($"MrPathSettings: 找不到 '{propertyName}' 对应的 UXML 元素。请检查 name 属性。");
@@ -81,33 +77,15 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
             propertyField.label = mLabel;
             UpdateButtons(prop.objectReferenceValue);
-
-            propertyField.RegisterValueChangeCallback(evt =>
-                UpdateButtons(evt.changedProperty.objectReferenceValue));
+            propertyField.RegisterValueChangeCallback(evt => UpdateButtons(evt.changedProperty.objectReferenceValue));
 
             sayHi.clicked += () =>
             {
                 if (titleLabel == null) return;
-
-                string[] greetings = {
-                   
-                    "Good day, sir! ",
-                    "Hello, Mr. ",
-                   
-                };
-
+                string[] greetings = { "Good day, sir! ", "Hello, Mr. " };
                 string greeting = greetings[UnityEngine.Random.Range(0, greetings.Length)];
-                string newFullText = $"{_originalTitleText}: {greeting}";
-
-                _titleLabel.text = newFullText;
-
-
-                _titleLabel.schedule.Execute(() =>
-                {
-                    if (_titleLabel == null) return;
-                    
-                    _titleLabel.text = _originalTitleText;
-                }).StartingIn(3000);
+                _titleLabel.text = $"{_originalTitleText}: {greeting}";
+                _titleLabel.schedule.Execute(() => { if (_titleLabel != null) _titleLabel.text = _originalTitleText; }).StartingIn(3000);
             };
 
             createButton.clicked += () =>
@@ -119,31 +97,20 @@ namespace __temp.MrPathV2._2.Editor.Settings
                     EditorGUIUtility.PingObject(asset);
                     return;
                 }
-
-                // 创建新资产
                 var path = GetSettingsPath();
                 if (string.IsNullOrEmpty(path)) return;
-
-                var typeName = assetType.Name
-                    .Replace("MrPath", "")
-                    .Replace("Settings", "")
-                    .Replace("Defaults", "");
+                var typeName = assetType.Name.Replace("MrPath", "").Replace("Settings", "").Replace("Defaults", "");
                 var assetName = $"MrPath_{typeName}.asset";
                 var fullPath = Path.Combine(path, assetName).Replace("\\", "/");
-
                 var newAsset = ScriptableObject.CreateInstance(assetType);
                 AssetDatabase.CreateAsset(newAsset, fullPath);
                 AssetDatabase.SaveAssets();
-
                 prop.objectReferenceValue = newAsset;
                 _settings.ApplyModifiedProperties();
                 UpdateButtons(newAsset);
-
                 Selection.activeObject = newAsset;
                 EditorGUIUtility.PingObject(newAsset);
             };
-            return;
-
             void UpdateButtons(Object obj)
             {
                 sayHi.SetEnabled(obj);
@@ -160,10 +127,6 @@ namespace __temp.MrPathV2._2.Editor.Settings
             };
         }
 
-        // ----------------------------------------------------------------------
-        // 扫描与工具方法
-        // ----------------------------------------------------------------------
-
         private static string GetSettingsPath() => MrPathProjectSettings.GetSettingsRootFolder();
 
         private void ScanAndFillAllAssets()
@@ -171,12 +134,13 @@ namespace __temp.MrPathV2._2.Editor.Settings
             if (_settings == null)
             {
                 Debug.LogError("_settings 未初始化！");
-                _settings = new SerializedObject(MrPathProjectSettings.GetOrCreateSettings());
+                var existing = MrPathProjectSettings.GetOrCreateSettings();
+                _settings = new SerializedObject(existing);
             }
 
             _settings.Update();
 
-            // 扫描 Road Recipes
+            // 扫描 Road Recipes（仅扫描，不自动创建）
             var recipes = FindAssetsByType<StylizedRoadRecipe>("t:StylizedRoadRecipe");
             UpdateSerializedArray(_settings.FindProperty("roadRecipes"), recipes);
             Debug.Log($"MrPath: 已填充 {recipes.Count} 个道路配方。");
@@ -186,16 +150,18 @@ namespace __temp.MrPathV2._2.Editor.Settings
             UpdateSerializedArray(_settings.FindProperty("profiles"), profiles);
             Debug.Log($"MrPath: 已填充 {profiles.Count} 个路径配置文件。");
 
+            // 扫描 Masks
+            var masks = FindAssetsByType<BlendMaskBase>("t:BlendMaskBase");
+            UpdateSerializedArray(_settings.FindProperty("masks"), masks);
+            Debug.Log($"MrPath: 已填充 {masks.Count} 个遮罩资产。");
+
             // 扫描 Terrain Operations
             var terrainOpsProp = _settings.FindProperty("terrainOperations");
             if (terrainOpsProp.objectReferenceValue is ScriptableObject terrainOpsAsset)
             {
                 var opsSo = new SerializedObject(terrainOpsAsset);
                 var opsArray = opsSo.FindProperty("operations");
-                var ops = FindAssetsByType<PathTerrainOperation>($"t:{nameof(PathTerrainOperation)}")
-                    .OrderBy(op => op.order)
-                    .ToList();
-
+                var ops = FindAssetsByType<PathTerrainOperation>($"t:{nameof(PathTerrainOperation)}").OrderBy(op => op.order).ToList();
                 UpdateSerializedArray(opsArray, ops);
                 opsSo.ApplyModifiedProperties();
                 Debug.Log($"MrPath: 已填充 {ops.Count} 个地形操作。");
@@ -205,16 +171,61 @@ namespace __temp.MrPathV2._2.Editor.Settings
                 Debug.LogWarning("地形操作配置资产丢失，请先创建。");
             }
 
+            // 完整性检查并提示（包含默认 Stylized Road Recipe）
+            ShowIntegrityAndBlessings(recipes, profiles, masks);
+
             _settings.ApplyModifiedProperties();
+        }
+
+        private void ShowIntegrityAndBlessings(List<StylizedRoadRecipe> recipes, List<PathProfile> profiles, List<BlendMaskBase> masks)
+        {
+            var missing = new List<string>();
+            var creation = _settings.FindProperty("creationDefaults").objectReferenceValue;
+            var appearance = _settings.FindProperty("appearanceDefaults").objectReferenceValue;
+            var terrain = _settings.FindProperty("terrainOperations").objectReferenceValue;
+            var advanced = _settings.FindProperty("advancedSettings").objectReferenceValue;
+            var defaultRecipe = _settings.FindProperty("stylizedRoadRecipe").objectReferenceValue;
+
+            if (!creation) missing.Add("创建默认值");
+            if (!appearance) missing.Add("外观默认值");
+            if (!terrain) missing.Add("地形操作");
+            if (!advanced) missing.Add("高级设置");
+            if (!defaultRecipe) missing.Add("Stylized Road Recipe");
+            if (recipes.Count == 0) missing.Add("Road Recipes");
+            if (profiles.Count == 0) missing.Add("Path Profiles");
+            if (masks.Count == 0) missing.Add("Masks");
+
+            if (_titleLabel == null) return;
+
+            if (missing.Count > 0)
+            {
+                var warn = $"⚠ Incomplete resources: {string.Join(", ", missing)}";
+                _titleLabel.text = warn;
+                _titleLabel.style.color = new StyleColor(new Color(0.85f, 0.3f, 0.2f));
+                _titleLabel.schedule.Execute(() =>
+                {
+                    if (_titleLabel == null) return;
+                    _titleLabel.text = _originalTitleText;
+                    _titleLabel.style.color = new StyleColor(new Color(226f / 255f, 152f / 255f, 61f / 255f));
+                }).StartingIn(4000);
+            }
+            else
+            {
+                var bless = " (●'◡'●) Resources are complete! ";
+                _titleLabel.text = bless;
+                _titleLabel.style.color = new StyleColor(new Color(0.25f, 0.65f, 0.35f));
+                _titleLabel.schedule.Execute(() =>
+                {
+                    if (_titleLabel == null) return;
+                    _titleLabel.text = _originalTitleText;
+                    _titleLabel.style.color = new StyleColor(new Color(226f / 255f, 152f / 255f, 61f / 255f));
+                }).StartingIn(3500);
+            }
         }
 
         private static List<T> FindAssetsByType<T>(string filter) where T : ScriptableObject
         {
-            return AssetDatabase.FindAssets(filter)
-                .Select(AssetDatabase.GUIDToAssetPath)
-                .Select(AssetDatabase.LoadAssetAtPath<T>)
-                .Where(asset => asset != null)
-                .ToList();
+            return AssetDatabase.FindAssets(filter).Select(AssetDatabase.GUIDToAssetPath).Select(AssetDatabase.LoadAssetAtPath<T>).Where(asset => asset != null).ToList();
         }
 
         private static void UpdateSerializedArray<T>(SerializedProperty arrayProp, List<T> items) where T : Object

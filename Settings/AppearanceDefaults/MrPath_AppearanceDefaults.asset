@@ -15,4 +15,3 @@ MonoBehaviour:
   defaultPathProfile: {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
   previewMaterialTemplate: {fileID: 2100000, guid: 1dc494d1d43f81943a61eb09f77d2f47,
     type: 2}
-  previewAlpha: 1

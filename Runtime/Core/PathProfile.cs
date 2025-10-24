@@ -41,6 +41,11 @@ namespace __temp.MrPathV2._2.Runtime.Core
         public bool enableDepthTest = false;
         [Tooltip("不透明预览：开启后预览为完全不透明，不与地形颜色混合。")]
         public bool opaquePreview = false;
+
+        [Header("Mask Settings")]
+        [Tooltip("Tiling for the mask, controlling how the mask texture repeats.")]
+        public Vector2 maskTiling = new Vector2(1f, 1f);
+
         [Tooltip("拖入 StylizedRoadRecipe 以定义道路的纹理分布与风格")]
         [RequiredField(ErrorMessage = "请分配一个StylizedRoadRecipe以调配道路风格")]
         public StylizedRoadRecipe roadRecipe;

@@ -5,7 +5,7 @@
 struct GpuNoiseMaskParams {
     float Strength;
     float Seed;
-    float2 Tiling;      // 贴图平铺尺寸（米），与 CPU tiling 对齐
+    float2 Tiling;      // 平铺重复次数（X=横向重复，Y=纵向重复），与 CPU tiling 对齐
     float2 Offset;      // UV 偏移
     float OverallScale; // 统一的整体缩放
     float Smooth;       // 平滑/软化系数
@@ -48,14 +48,15 @@ inline float2 ComputeMaskUV(float progress, float signedDistance, float roadWidt
     float xNorm = clamp(signedDistance / halfRoad, -1.0, 1.0);
     float u01 = 0.5 * (xNorm + 1.0);
 
-    float tileX = p.Tiling.x;
-    float tileY = p.Tiling.y;
+    float repeatX = p.Tiling.x;
+    float repeatY = p.Tiling.y;
     // 与 CPU TransformPosition/TransformPathPosition 的容差一致（1e-4），并保留符号以支持镜像
-    float denomX = (abs(tileX) < 1e-4) ? (1e-4 * ((tileX == 0.0) ? 1.0 : sign(tileX))) : tileX;
-    float denomY = (abs(tileY) < 1e-4) ? (1e-4 * ((tileY == 0.0) ? 1.0 : sign(tileY))) : tileY;
+    float denomX = (abs(repeatX) < 1e-4) ? (1e-4 * ((repeatX == 0.0) ? 1.0 : sign(repeatX))) : repeatX;
+    float denomY = (abs(repeatY) < 1e-4) ? (1e-4 * ((repeatY == 0.0) ? 1.0 : sign(repeatY))) : repeatY;
 
-    float u = u01 * (roadWidth / denomX) + p.Offset.x;
-    float v = progress * (max(1e-4, _PathLength) / denomY) + p.Offset.y;
+    // 重复次数语义：U/V 直接按重复次数累加，不再乘以米制长度
+    float u = u01 * denomX + p.Offset.x;
+    float v = progress * denomY + p.Offset.y;
     return float2(u, v);
 }
 

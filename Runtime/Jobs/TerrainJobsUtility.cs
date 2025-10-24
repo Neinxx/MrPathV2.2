@@ -312,11 +312,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         /// 在 Job 中从 2D MaskAtlas 采样遮罩值。
         /// atlas: 行优先存储，行数 = layerCount * pathSamples，列数 = atlasWidth。
         /// layerIndex: 遮罩层索引 (0-based)
-        /// normalizedDist: 0..1 横向距离 (中心0, 边缘1)
+        /// normalizedDist: 0..1 横向坐标 (左0, 右1，非对称)
         /// pathProgress: 0..1 沿路径的进度 (0=起点,1=终点)
         /// pathSamples: atlas 中纵向采样行数。
+        /// maskThreshold: 遮罩阈值，用于匹配GPU着色器逻辑。
         /// </summary>
-        public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int pathSamples, int layerIndex, float normalizedDist, float pathProgress)
+        public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int pathSamples, int layerIndex, float normalizedDist, float pathProgress, float maskThreshold = 0f)
         {
             if (!atlas.IsCreated || atlas.Length == 0 || atlasWidth <= 0 || pathSamples <= 0)
                 return 0f;
@@ -363,7 +364,11 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var v0 = math.lerp(v00, v10, wx);
             var v1 = math.lerp(v01, v11, wx);
             var v = math.lerp(v0, v1, wy);
-            return v;
+            
+            // 应用遮罩阈值调整，匹配GPU着色器逻辑
+            // mask = saturate((mask - maskThreshold) / max(1e-5, 1.0 - maskThreshold))
+            var thresholded = math.saturate((v - maskThreshold) / math.max(1e-5f, 1.0f - maskThreshold));
+            return thresholded;
         }
 
         public static void NormalizeWeightsKeep(NativeArray<float> alphamaps, int baseIndex, int layerCount, int firstValidSplatIndex)
@@ -397,7 +402,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         // 向后兼容的一维版本：假设 pathSamples==1 ，pathProgress=0.5
         public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int layerIndex, float normalizedDist)
         {
-            return SampleMaskAtlas(atlas, atlasWidth, 1, layerIndex, normalizedDist, 0.5f);
+            return SampleMaskAtlas(atlas, atlasWidth, 1, layerIndex, normalizedDist, 0.5f, 0f);
         }
 
     }

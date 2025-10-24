@@ -276,7 +276,8 @@ Shader "MrPath/PathPreviewSplatMulti"
             {
                 // 拉伸到道路宽度：Across 不再重复，直接使用 0..1
                 float acrossPos01 = saturate(input.uv.x);
-                float across = saturate(abs(acrossPos01 * 2.0 - 1.0) * _AcrossScale);
+                // 修复：去除居中对称的 abs 映射，改为左->右 0..1
+                float across = saturate(acrossPos01 * _AcrossScale);
                 // 沿路径方向仍允许重复控制
                 float pathProgress = saturate(input.uv.y / max(_MeshRepeatAlong, 0.0001));
 

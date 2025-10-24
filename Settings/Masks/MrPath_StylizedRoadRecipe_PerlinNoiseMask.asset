@@ -9,18 +9,18 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
-  m_Name: StylizedRoadRecipe_NoiseMask 3
+  m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
+  m_Name: MrPath_StylizedRoadRecipe_PerlinNoiseMask
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 0.76, y: 0.25}
+  smooth: 0.597
+  tiling: {x: 1, y: 6.88}
   offset: {x: 0, y: 0}
-  overallScale: 2
+  overallScale: 0.72
   strength: 1
   seed: 0
-  noiseScale: {x: 1.43, y: 1.43}
+  noiseScale: {x: 0.59, y: 0.59}
   uniformScale: 1
-  rotationDeg: 180
-  octaves: 5
-  lacunarity: 1.17
-  gain: 0.357
+  rotationDeg: 125
+  octaves: 1
+  lacunarity: 2.26
+  gain: 0.375

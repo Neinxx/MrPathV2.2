@@ -264,7 +264,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 var map = __temp.MrPathV2._2.Editor.Terrain.LayerResolver.Resolve(_targetTerrain, profile.roadRecipe, interactive: false);
                 if (map != null && layers != null)
                 {
-                    for (int i = 0; i < layerCountForIndices; i++)
+                    // 保护：当 layers 为空时不进行索引访问
+                    var safeCount = Mathf.Min(layerCountForIndices, layers.Count);
+                    for (int i = 0; i < safeCount; i++)
                     {
                         var tl = layers[i]?.contentLayer;
                         if (tl && map.TryGetValue(tl, out var idx)) splatIndicesArr[i] = idx;
@@ -358,7 +360,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
         private void ApplyStylized(PathProfile profile)
         {
-            var layer = profile.roadRecipe?.GetLayers()?[0]?.contentLayer;
+            var layersList = profile.roadRecipe?.GetLayers();
+            TerrainLayer layer = (layersList != null && layersList.Count > 0) ? layersList[0]?.contentLayer : null;
             if (layer?.diffuseTexture)
             {
                 _instance.SetTexture(LayerTex, layer.diffuseTexture);

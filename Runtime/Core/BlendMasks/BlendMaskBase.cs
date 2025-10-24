@@ -17,8 +17,8 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
 
         // ---- 通用 UV 参数 ----
         [BoxGroup("UV Settings")]
-        [LabelText("Tiling (X = Width, Y = Length) [m]")]
-        [Tooltip("控制遮罩在道路横向(宽度)与纵向(长度)方向上的平铺尺寸，单位：米。允许负值以实现镜像/翻转效果。")]
+        [LabelText("Tiling (X=横向重复, Y=纵向重复)")]
+        [Tooltip("以重复次数为语义：横向/纵向的重复次数；允许负值实现镜像/翻转。")]
         public Vector2 tiling = new Vector2(2f, 2f);
 
         [BoxGroup("UV Settings")]
@@ -37,15 +37,17 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
         #region Utility Functions
 
         /// <summary>
-        /// 将水平位置 (-1..1) 映射到 0..1 的 U，并应用世界宽度、平铺 (tiling.x) 与 offset.x。
-        /// 支持负 tiling 以产生镜像效果。
+        /// 将水平位置 (-1..1) 映射为以左边缘为原点的 0..1，并按重复次数 tiling.x 与 offset.x 计算 U。
+        /// 支持负 tiling 实现镜像/翻转；缩放与平铺的枢轴为路面网格的左下角。
         /// </summary>
         protected float TransformPosition(float horizontalPosition, float worldWidth)
         {
-            float u = (horizontalPosition + 1f) * 0.5f; // -1..1 => 0..1
-            float denomX = Mathf.Abs(tiling.x) < 1e-4f ? 1e-4f * Mathf.Sign(tiling.x == 0 ? 1f : tiling.x) : tiling.x;
-            float repeatCount = worldWidth / denomX; // 保留符号可实现翻转
-            return u * repeatCount + offset.x;
+            // 以重复次数为语义：-1..1 映射到 0..1（左到右），按 tiling.x 次重复
+            float u01 = (horizontalPosition + 1f) * 0.5f;
+            float repeatX = Mathf.Abs(tiling.x) < 1e-4f 
+                ? 1e-4f * Mathf.Sign(tiling.x == 0 ? 1f : tiling.x) 
+                : tiling.x;
+            return u01 * repeatX + offset.x;
         }
 
         /// <summary>
@@ -57,20 +59,43 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
         }
 
         /// <summary>
-        /// 计算沿路径方向 (0..1) 的 V，并应用路径长度、平铺 (tiling.y) 与 offset.y。
-        /// 支持负 tiling 以产生镜像效果。
+        /// 计算沿路径方向 (0..1) 的 V，并按重复次数 tiling.y 与 offset.y。
+        /// 支持负 tiling 以产生镜像效果；不再乘以路径长度（米）。
         /// </summary>
         protected float TransformPathPosition(float pathProgress, float pathLength)
         {
-            float denomY = Mathf.Abs(tiling.y) < 1e-4f ? 1e-4f * Mathf.Sign(tiling.y == 0 ? 1f : tiling.y) : tiling.y;
-            float repeatCount = pathLength / denomY; // 保留符号可实现翻转
-            return pathProgress * repeatCount + offset.y;
+            // 以重复次数为语义：0..1 路径进度按 tiling.y 次重复，不再乘以路径长度
+            float repeatY = Mathf.Abs(tiling.y) < 1e-4f ? 1e-4f * Mathf.Sign(tiling.y == 0 ? 1f : tiling.y) : tiling.y;
+            return pathProgress * repeatY + offset.y;
         }
 
         /// <summary>
         /// 对遮罩值应用整体缩放（强度）。
         /// </summary>
         protected float ApplyScale(float value) => value * overallScale;
+
+        /// <summary>
+        /// 应用整体缩放与边缘平滑，返回 0..1 区间值。
+        /// </summary>
+        protected float ApplySmoothing(float maskValue)
+        {
+            // 先应用整体缩放
+            maskValue *= overallScale;
+
+            // 无需平滑时直接裁剪
+            if (smooth <= 0f) return Mathf.Clamp01(maskValue);
+
+            // 使用 smoothstep 风格的边缘软化
+            float edge0 = smooth * 0.5f;
+            float edge1 = 1f - smooth * 0.5f;
+
+            if (maskValue <= edge0) return 0f;
+            if (maskValue >= edge1) return 1f;
+
+            float t = (maskValue - edge0) / (edge1 - edge0); // 0..1
+            float smoothed = t * t * (3f - 2f * t);
+            return Mathf.Clamp01(smoothed);
+        }
 
         #endregion
 
@@ -92,33 +117,6 @@ namespace __temp.MrPathV2._2.Runtime.Core.BlendMasks
         public virtual float Evaluate(float horizontalPosition, float worldWidth, float pathLength)
         {
             return Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);
-        }
-
-        #endregion
-
-        #region Smoothing Helper
-
-        /// <summary>
-        /// 对输入值先乘以 overallScale，然后按 smooth 参数做边缘平滑，最终返回 0..1 区间的结果。
-        /// </summary>
-        protected float ApplySmoothing(float maskValue)
-        {
-            // 1. 先应用整体缩放
-            maskValue *= overallScale;
-
-            // 2. 若无需平滑，直接返回裁剪后的值
-            if (smooth <= 0f) return Mathf.Clamp01(maskValue);
-
-            // 3. 使用 smoothstep 进行边缘平滑
-            float edge0 = smooth * 0.5f;
-            float edge1 = 1f - smooth * 0.5f;
-
-            if (maskValue <= edge0) return 0f;
-            if (maskValue >= edge1) return 1f;
-
-            float t = (maskValue - edge0) / (edge1 - edge0); // 0..1
-            float smoothed = t * t * (3f - 2f * t);
-            return Mathf.Clamp01(smoothed);
         }
 
         #endregion

@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: DefaultPathProfile
   m_EditorClassIdentifier: 
   curveType: 1
-  generationPrecision: 0.88
-  roadWidth: 3.84
+  generationPrecision: 0.89
+  roadWidth: 12.5
   crossSection:
     serializedVersion: 2
     m_Curve:
@@ -28,22 +28,13 @@ MonoBehaviour:
       inWeight: 0
       outWeight: 0
     - serializedVersion: 3
-      time: -0.026779175
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 34
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    - serializedVersion: 3
       time: 1
       value: 0
       inSlope: 0
       outSlope: 0
-      tangentMode: 34
+      tangentMode: 0
       weightedMode: 0
-      inWeight: 0.33333334
+      inWeight: 0
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
@@ -57,7 +48,7 @@ MonoBehaviour:
       value: 1
       inSlope: 0
       outSlope: 0
-      tangentMode: 34
+      tangentMode: 0
       weightedMode: 0
       inWeight: 0
       outWeight: 0
@@ -66,19 +57,20 @@ MonoBehaviour:
       value: 0
       inSlope: 0
       outSlope: 0
-      tangentMode: 34
+      tangentMode: 0
       weightedMode: 0
       inWeight: 0
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  snapToTerrain: 0
+  snapToTerrain: 1
   heightOffset: 0
   smoothness: 100
   forceHorizontal: 1
   crossSectionSegments: 3
   showPreviewMesh: 1
-  enableDepthTest: 1
+  enableDepthTest: 0
   opaquePreview: 1
-  roadRecipe: {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}
+  maskTiling: {x: 1, y: 1}
+  roadRecipe: {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}

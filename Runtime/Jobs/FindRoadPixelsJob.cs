@@ -131,7 +131,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var offsetVector = worldPos2D - spinePoint.xz;
             var signedDistance = math.dot(offsetVector, rightVector.xz);
             
-            normalizedDist = math.saturate(math.abs(signedDistance) / halfRoadWidth);
+            normalizedDist = math.saturate(0.5f * (signedDistance / halfRoadWidth + 1f));
             pathProgress = math.saturate((closestSegmentIndex + tClosest) / spineSegmentCount);
 
             return true;

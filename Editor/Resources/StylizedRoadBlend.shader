@@ -76,15 +76,23 @@ Shader "MrPathV2/StylizedRoadBlend"
                 OUT.positionCS = TransformWorldToHClip(worldPos);
                 OUT.uv = IN.uv;
                 OUT.worldUV = worldPos.xz;
+
+                // 新增：计算道路本地UV，基于道路宽度和长度归一化
+                float2 localUV;
+                localUV.x = IN.uv.x / max(_MeshRepeatAcross, 1e-5); // 道路宽度归一化
+                localUV.y = IN.uv.y / max(_MeshRepeatAlong, 1e-5);  // 道路长度归一化
+                OUT.uv = localUV;
+
                 return OUT;
             }
 
             float4 frag (Varyings IN) : SV_Target
             {
-                // 使用 MeshRepeatAcross/Along 控制遮罩重复
-                float acrossU = frac(IN.uv.x * max(_MeshRepeatAcross, 1e-5));
-                float across = saturate(abs(acrossU * 2.0 - 1.0) * _AcrossScale);
-                float pathProgress = saturate(IN.uv.y / max(_MeshRepeatAlong, 1e-5));
+                // 道路本地UV直接使用归一化后的值
+                float across01 = saturate(IN.uv.x);
+                // 统一为左->右 0..1 的 across，去除中心镜像
+                float across = saturate(across01 * _AcrossScale);
+                float pathProgress = saturate(IN.uv.y);
 
                 // 使用新的 2D 采样函数
                 float mask = SampleMaskAtlas2D(
@@ -101,7 +109,6 @@ Shader "MrPathV2/StylizedRoadBlend"
                 float4 prevResult = tex2D(_PrevResultTex, IN.uv);
 
                 // 当 mask 非零时逐渐混合；mask 已通过阈值归一化，值接近 0 时基本透明
-                // float4 prevResult = tex2D(_PrevResultTex, IN.uv); // 已上移
                 float2 layerUV = IN.worldUV * _LayerTiling.xy + _LayerTiling.zw;
                 float4 layerColor = tex2D(_LayerTex, layerUV) * _LayerTint;
 

@@ -33,6 +33,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             public NativeArray<float2> Uvs;
             public NativeArray<float4> Colors;
             public NativeArray<int> Indices;
+            public NativeArray<float> AccumulatedDistances;
             public int Segments;
             public RecipeData Recipe;
             public float2 Tiling;
@@ -47,6 +48,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 Uvs = default;
                 Colors = default;
                 Indices = default;
+                AccumulatedDistances = default;
                 Recipe = default;
                 Tiling = new float2(1, 1);
                 BaseColor = new float4(1, 1, 1, 1);
@@ -89,6 +91,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     Uvs = NativeArrayExtensions.CreateTracked<float2>(totalVertices, allocator);
                     Colors = NativeArrayExtensions.CreateTracked<float4>(totalVertices, allocator);
                     Indices = NativeArrayExtensions.CreateTracked<int>(totalIndices, allocator);
+                    AccumulatedDistances = NativeArrayExtensions.CreateTracked<float>(spineLen, allocator);
 
                     var recipeSo = profile.roadRecipe;
                     Recipe = recipeSo ? RecipeJobsUtility.BakeRecipe(recipeSo, allocator) : RecipeJobsUtility.CreateDefaultRecipe(allocator);
@@ -96,33 +99,18 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     // 计算 UV Tiling，使预览网格与材质保持一致
                     try
                     {
-                        var worldWidth = profile.roadWidth;
-                        var tileSizeX = 1f;
-                        var tileSizeY = 1f;
-                        var firstLayers = profile.roadRecipe?.GetLayers();
-                        if (firstLayers != null && firstLayers.Count > 0)
-                        {
-                            var firstLayer = firstLayers[0];
-                            if (firstLayer != null && firstLayer.contentLayer)
-                            {
-                                var ts = firstLayer.contentLayer.tileSize;
-                                tileSizeX = ts.x != 0 ? ts.x : 1f;
-                                tileSizeY = ts.y != 0 ? ts.y : 1f;
-                            }
-                        }
-                        // X 方向：道路宽度对应的纹理重复次数
-                        var tilingX = worldWidth / tileSizeX;
-
-                        // Y 方向：道路长度对应的纹理重复次数
-                        var pathLength = 0f;
-                        for (var i = 1; i < worldSpine.VertexCount; i++)
-                        {
-                            pathLength += Vector3.Distance(worldSpine.points[i - 1], worldSpine.points[i]);
-                        }
-                        var tilingY = pathLength / tileSizeY;
+                        var tilingX = profile.maskTiling.x;
+                        var tilingY = profile.maskTiling.y;
                         if (tilingY <= 0f) tilingY = 1f;
                         if (tilingX <= 0f) tilingX = 1f;
                         Tiling = new float2(tilingX, tilingY);
+
+                        // 计算累积距离
+                        AccumulatedDistances[0] = 0;
+                        for (var i = 1; i < worldSpine.VertexCount; i++)
+                        {
+                            AccumulatedDistances[i] = AccumulatedDistances[i-1] + Vector3.Distance(worldSpine.points[i - 1], worldSpine.points[i]);
+                        }
                     }
                     catch { /* 安全兜底，保持默认 tiling=(1,1) */ }
 
@@ -141,6 +129,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 Uvs.SafeDispose();
                 Colors.SafeDispose();
                 Indices.SafeDispose();
+                AccumulatedDistances.SafeDispose();
                 Spine.Dispose();
                 Profile.Dispose();
                 Recipe.Dispose();
@@ -178,7 +167,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     Vertices = jd.Vertices,
                     Uvs = jd.Uvs,
                     Segments = jd.Segments,
-                    Tiling = jd.Tiling
+                    Tiling = jd.Tiling,
+                    AccumulatedDistances = jd.AccumulatedDistances
                 };
                 var iJob = new GenerateIndicesJob
                 {

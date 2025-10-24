@@ -15,9 +15,11 @@ MonoBehaviour:
   creationDefaults: {fileID: 11400000, guid: 47e217325d990eb40ac13de4af7c223a, type: 2}
   appearanceDefaults: {fileID: 11400000, guid: b7bc73541b50dc04e8f0e841e0f578bb, type: 2}
   terrainOperations: {fileID: 11400000, guid: 0a0e391cc02ccc54f8b88e87520c3c1b, type: 2}
-  advancedSettings: {fileID: 11400000, guid: f429dc381952df74d99713afebf07eaa, type: 2}
+  advancedSettings: {fileID: 11400000, guid: a0a138b8ab6216d4aa0a9febb52e609b, type: 2}
+  stylizedRoadRecipe: {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
   profiles:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
-  - {fileID: 11400000, guid: a78d4df5d6a6d5f4cbab0848a3b1e700, type: 2}
   roadRecipes:
-  - {fileID: 11400000, guid: 5a35c5f547c136f439a4e88e0c38f45d, type: 2}
+  - {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
+  masks:
+  - {fileID: 11400000, guid: 57bcf2af1267cc847a8705f56de09fd0, type: 2}

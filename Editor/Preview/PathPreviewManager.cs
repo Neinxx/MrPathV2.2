@@ -119,26 +119,8 @@ namespace __temp.MrPathV2._2.Editor.Preview
             float pathLen = ComputeSpineLength(LatestSpine);
             _matMgr.SetPathLength(pathLen > 0f ? pathLen : 100f);
 
-            // 计算 Mesh UV 重复（Across/Along），用于着色器自适应遮罩采样
-            float tileX = 1f, tileY = 1f;
-            var layers = creator.profile.roadRecipe?.GetLayers();
-            if (layers != null)
-            {
-                for (int i = 0; i < layers.Count; i++)
-                {
-                    var tl = layers[i]?.contentLayer;
-                    if (tl != null && tl.diffuseTexture != null)
-                    {
-                        var sz = tl.tileSize;
-                        tileX = Mathf.Approximately(sz.x, 0f) ? 1f : sz.x;
-                        tileY = Mathf.Approximately(sz.y, 0f) ? 1f : sz.y;
-                        break;
-                    }
-                }
-            }
-            var acrossRepeat = Mathf.Max(1e-4f, creator.profile.roadWidth / tileX);
-            var alongRepeat = Mathf.Max(1e-4f, (pathLen > 0f ? pathLen : 1f) / tileY);
-            _matMgr.SetMeshRepeats(acrossRepeat, alongRepeat);
+            // 统一UV语义：网格UV已归一化到0..1，材质重复设为1
+            _matMgr.SetMeshRepeats(1f, 1f);
 
             // 更新材质并刷新缓存
             _matMgr.Update(creator.profile, _template, _alpha);

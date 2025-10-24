@@ -12,7 +12,7 @@
                 <ui:Label class="config-label" />
                 <ui:Box class="control-group">
                     <uie:PropertyField name="creationDefaults" binding-path="creationDefaults" />
-                    <ui:Button name="creationDefaults-create" text="Find" enable-rich-text="true" class="action-button" />
+                    <ui:Button name="creationDefaults-create" enable-rich-text="true" class="action-button" />
                     <ui:Button name="creationDefaults-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
@@ -20,15 +20,23 @@
                 <ui:Label class="config-label" />
                 <ui:Box class="control-group">
                     <uie:PropertyField name="appearanceDefaults" binding-path="appearanceDefaults" />
-                    <ui:Button name="appearanceDefaults-create" text="Find" class="action-button" />
+                    <ui:Button name="appearanceDefaults-create" class="action-button" />
                     <ui:Button name="appearanceDefaults-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
             <ui:Box class="config-row">
                 <ui:Label class="config-label" />
                 <ui:Box class="control-group">
+                    <uie:PropertyField name="stylizedRoadRecipe" binding-path="stylizedRoadRecipe" />
+                    <ui:Button name="stylizedRoadRecipe-create" class="action-button" />
+                    <ui:Button name="stylizedRoadRecipe-ping" text="Hi" class="action-button" />
+                </ui:Box>
+            </ui:Box>
+            <ui:Box class="config-row">
+                <ui:Label class="config-label" />
+                <ui:Box class="control-group">
                     <uie:PropertyField name="terrainOperations" binding-path="terrainOperations" />
-                    <ui:Button name="terrainOperations-create" text="Find" class="action-button" />
+                    <ui:Button name="terrainOperations-create" class="action-button" />
                     <ui:Button name="terrainOperations-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
@@ -36,7 +44,7 @@
                 <ui:Label class="config-label" />
                 <ui:Box class="control-group">
                     <uie:PropertyField name="advancedSettings" binding-path="advancedSettings" />
-                    <ui:Button name="advancedSettings-create" text="Find" class="action-button" />
+                    <ui:Button name="advancedSettings-create" class="action-button" />
                     <ui:Button name="advancedSettings-ping" text="Hi" class="action-button" />
                 </ui:Box>
             </ui:Box>
@@ -48,6 +56,10 @@
             <ui:Box class="asset-group">
                 <ui:Label class="asset-label" style="-unity-text-align: middle-left;" />
                 <uie:PropertyField binding-path="profiles" />
+            </ui:Box>
+            <ui:Box class="asset-group">
+                <ui:Label class="asset-label" style="-unity-text-align: middle-left;" />
+                <uie:PropertyField binding-path="masks" />
             </ui:Box>
         </ui:Box>
     </ui:ScrollView>

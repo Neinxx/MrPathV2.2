@@ -16,6 +16,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
     {
         [ReadOnly] public PathJobsUtility.SpineData Spine;
         [ReadOnly] public PathJobsUtility.ProfileData Profile;
+        [ReadOnly] public NativeArray<float> AccumulatedDistances;
 
         [WriteOnly] public NativeArray<float3> Vertices;
         [WriteOnly] public NativeArray<float2> Uvs;
@@ -42,9 +43,11 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             // 高性能预览：移除截面竖向抬升，保持网格平整
             Vertices[index] = spinePoint + offset;
 
-            // 应用平铺信息到UV
-            var u = t * Tiling.x;
-            var v = ((float)i / math.max(1, (Spine.Length - 1))) * Tiling.y;
+            // 统一UV语义：网格UV直接输出归一化 Across/Along，不再乘平铺次数
+            var u = t; // 0..1 左->右
+            var totalLen = math.max(1e-5f, AccumulatedDistances[Spine.Length - 1]);
+            var progressByDistance = AccumulatedDistances[i] / totalLen; // 0..1 沿路径
+            var v = progressByDistance; // 0..1 起点->终点
             Uvs[index] = new float2(u, v);
         }
     }
@@ -109,7 +112,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             var t = j / (float)(Segments - 1);         // 0..1 左->右
             var signedT = t * 2f - 1f;                  // -1..1 中心为0
-            var normalizedDist = math.saturate(math.abs(signedT)); // 0..1 到边缘
+            var normalizedDist = t;                     // 统一为左->右 0..1（不镜像）
 
             // 新增：计算沿路径的进度 0..1（基于当前脊线索引）
             var segCount = math.max(1, Spine.Length - 1);

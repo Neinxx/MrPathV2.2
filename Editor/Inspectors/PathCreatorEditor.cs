@@ -105,14 +105,12 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         #region GUI 绘制 (UI Toolkit)
 
-        /// <summary>
-        /// [重构] 使用 CreateInspectorGUI 替换 OnInspectorGUI
-        /// </summary>
+
         public override VisualElement CreateInspectorGUI()
         {
-            _rootElement = new VisualElement();
-            //_rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
-            _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
+
+            _rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
+           // var _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
 
 
 
@@ -236,71 +234,103 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
         }
 
+
+
         /// <summary>
-        /// 根据当前 Profile 更新 Inspector UI 的可见性
+        /// 根据当前的 PathProfile 更新嵌套编辑器的UI和实例。
         /// </summary>
         private void UpdateEmbeddedEditorUI(PathProfile currentProfile)
         {
-            // 防御性编程：确保所有引用都不为null
+            // --- 1. 防御性检查 (与你原来的一样) ---
             if (_profileMissingWarning == null || _profileEmbeddedContainer == null || _recipeEmbeddedContainer == null)
             {
-                Debug.LogError("UI元素未正确初始化，请检查UXML加载逻辑");
+                Debug.LogError("UI元素未正确初始化，请检查UXML加载逻辑。");
                 return;
             }
 
-            // 检查当前Profile是否有效
+            // 在更新开始时记录当前状态，有助于调试
+            Debug.Log($"[UpdateEmbeddedEditorUI] 开始更新。当前Profile: {currentProfile?.name ?? "NULL"}");
+
+            // --- 2. 处理 Profile 为 null 的情况 ---
             if (currentProfile == null)
             {
-                // 显示Profile缺失警告
+                // 显示警告，隐藏编辑器容器
                 _profileMissingWarning.style.display = DisplayStyle.Flex;
                 _profileEmbeddedContainer.style.display = DisplayStyle.None;
                 _recipeEmbeddedContainer.style.display = DisplayStyle.None;
 
-                // 确保嵌套编辑器被清理
-                if (_profileEmbeddedEditor != null)
-                {
-                    DestroyImmediate(_profileEmbeddedEditor);
-                    _profileEmbeddedEditor = null;
-                }
-
-                if (_recipeEmbeddedEditor != null)
-                {
-                    DestroyImmediate(_recipeEmbeddedEditor);
-                    _recipeEmbeddedEditor = null;
-                }
+                // 清理所有可能存在的编辑器实例
+                // 辅助方法会处理 null 检查和销毁
+                SyncEmbeddedEditor<UnityEngine.Object>(ref _profileEmbeddedEditor, null, "Profile");
+                SyncEmbeddedEditor<UnityEngine.Object>(ref _recipeEmbeddedEditor, null, "Recipe");
 
                 return;
             }
 
-            // Profile存在的情况
+            // --- 3. 处理 Profile 有效的情况 ---
+
+            // 隐藏警告，显示Profile编辑器
             _profileMissingWarning.style.display = DisplayStyle.None;
             _profileEmbeddedContainer.style.display = DisplayStyle.Flex;
 
-            // 检查Recipe是否存在并设置对应样式
-            bool hasRecipe = currentProfile.roadRecipe != null;
-            _recipeEmbeddedContainer.style.display = hasRecipe ? DisplayStyle.Flex : DisplayStyle.None;
+            // 同步Profile编辑器实例
+            // 这个方法会智能地处理创建、销毁或保留
+            SyncEmbeddedEditor(ref _profileEmbeddedEditor, currentProfile, "Profile");
 
-            // 优化：在Profile变化时更新嵌套编辑器状态
-            if (hasRecipe && _recipeEmbeddedEditor == null)
+            // --- 4. 处理 Recipe 编辑器 ---
+
+            // 获取目标Recipe
+            var targetRecipe = currentProfile.roadRecipe;
+
+            // 同步Recipe编辑器实例
+            SyncEmbeddedEditor(ref _recipeEmbeddedEditor, targetRecipe, "Recipe");
+
+            // 根据Recipe是否存在来显示或隐藏Recipe容器
+            // 这种做法保证了UI状态和编辑器实例状态的一致性
+            _recipeEmbeddedContainer.style.display = (targetRecipe != null) ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        /// <summary>
+        /// 同步一个编辑器实例(editor)以匹配一个目标对象(targetObject)。
+        /// 这个方法会处理所有的生命周期逻辑：创建、销毁、或在匹配时保留。
+        /// </summary>
+        /// <typeparam name="T">目标对象的类型 (必须是 UnityEngine.Object)</typeparam>
+        /// <param name="editor">对要管理的编辑器字段的引用 (例如 _profileEmbeddedEditor)</param>
+        /// <param name="targetObject">编辑器应该显示的目标对象 (如果为null，则会销毁编辑器)</param>
+        /// <param name="editorName">用于调试日志的编辑器名称 (例如 "Profile" 或 "Recipe")</param>
+        private void SyncEmbeddedEditor<T>(ref UnityEditor.Editor editor, T targetObject, string editorName) where T : UnityEngine.Object
+        {
+            // 检查编辑器是否需要更新
+            // 需要更新的条件：
+            // 1. 目标对象存在，但编辑器不存在 (editor == null)
+            // 2. 目标对象存在，编辑器也存在，但编辑器的目标与新目标不匹配 (editor.target != targetObject)
+            // 3. 目标对象为null，但编辑器仍然存在 (editor != null)
+
+            if (editor != null && editor.target == targetObject)
             {
-                // 创建新的Recipe编辑器实例
-                _recipeEmbeddedEditor = CreateEditor(currentProfile.roadRecipe);
-            }
-            else if (!hasRecipe && _recipeEmbeddedEditor != null)
-            {
-                // 销毁旧的Recipe编辑器实例
-                DestroyImmediate(_recipeEmbeddedEditor);
-                _recipeEmbeddedEditor = null;
+                // 状态正确：目标和编辑器都存在且匹配。
+                // (可选) 为详细调试取消注释下一行
+                // Debug.Log($"[{editorName} Editor] 实例已是最新，无需操作。");
+                return;
             }
 
-            // 确保Profile编辑器始终存在
-            if (_profileEmbeddedEditor == null || _profileEmbeddedEditor.target != currentProfile)
+            // --- 如果状态不匹配，则需要执行操作 ---
+
+            // 步骤 A: 如果旧编辑器存在，则销毁它
+            if (editor != null)
             {
-                if (_profileEmbeddedEditor != null)
-                {
-                    DestroyImmediate(_profileEmbeddedEditor);
-                }
-                _profileEmbeddedEditor = CreateEditor(currentProfile);
+                // 添加调试日志，说明销毁原因
+                string oldTargetName = editor.target != null ? editor.target.name : "已失效的目标";
+                Debug.LogWarning($"[{editorName} Editor] 销毁旧实例 (目标: {oldTargetName})。新目标: {targetObject?.name ?? "NULL"}");
+                DestroyImmediate(editor);
+                editor = null; // 立即设为null
+            }
+
+            // 步骤 B: 如果新目标存在，则创建新编辑器
+            if (targetObject != null)
+            {
+                Debug.Log($"[{editorName} Editor] 为目标 '{targetObject.name}' 创建新实例。");
+                editor = UnityEditor.Editor.CreateEditor(targetObject);
             }
         }
 
