@@ -189,10 +189,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             if (baseAlphaIndex < 0 || baseAlphaIndex + AlphamapLayerCount > Alphamaps.Length) return;
             for (var i = 0; i < AlphamapLayerCount; i++) Alphamaps[baseAlphaIndex + i] = 0;
 
-            // 优化：直接进行遮罩采样和混合，避免数组分配
             var anyPainted = false;
             var firstValidSplatIndex = -1;
-            
             for (var i = 0; i < _recipe.Length; i++)
             {
                 var splatIndex = _recipe.TerrainLayerIndices[i];
@@ -208,28 +206,29 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                         _recipe.PathSamples,
                         i,
                         normalizedDist,
-                        pathProgress,
-                        _recipe.MaskThreshold);
+                        pathProgress);
                 }
+
                 else
                 {
                     layerMask = TerrainJobsUtility.EvaluateStrip(_recipe.Strips, _recipe.StripSlices[i],
-                        _recipe.StripResolution, normalizedDist);
+                        _recipe.StripResolution, normalizedDist) * _recipe.Opacities[i];
                 }
 
-                if (layerMask > 1e-6f)
-                {
-                    anyPainted = true;
-                    var pixIdx = baseAlphaIndex + splatIndex;
-                    var baseValue = Alphamaps[pixIdx];
-                    var mode = _recipe.BlendModes[i];
-                    var blended = TerrainJobsUtility.Blend(baseValue, layerMask * _recipe.Opacities[i], mode);
-                    Alphamaps[pixIdx] = blended;
-                }
+                if (layerMask > 1e-6f) anyPainted = true;
+
+                var mode = _recipe.BlendModes[i];
+                var pixIdx = baseAlphaIndex + splatIndex;
+                var baseValue = Alphamaps[pixIdx];
+                var blended = TerrainJobsUtility.Blend(baseValue, layerMask, mode);
+                Alphamaps[pixIdx] = blended;
             }
 
-            // 归一化权重以保持总和为1
-            TerrainJobsUtility.NormalizeWeightsKeep(Alphamaps, baseAlphaIndex, AlphamapLayerCount, firstValidSplatIndex);
+            if (!anyPainted && firstValidSplatIndex >= 0)
+            {
+                Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
+            }
+TerrainJobsUtility.NormalizeWeightsKeep(Alphamaps, baseAlphaIndex, AlphamapLayerCount, firstValidSplatIndex);
         }
     }
 }

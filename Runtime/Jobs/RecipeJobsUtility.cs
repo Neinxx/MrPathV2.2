@@ -32,7 +32,6 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         public readonly int AtlasWidth;
         public readonly int AtlasHeight;
         public readonly int PathSamples;
-        public readonly float MaskThreshold;  // 遮罩阈值，用于匹配GPU着色器逻辑
         public int Length { get; }
 
         public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, float roadWorldLength, Allocator allocator)
@@ -54,9 +53,6 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             PathSamples = 64; // 纵向采样数，可后续做成可配置
             AtlasHeight = math.max(1, Length * PathSamples);
             MaskAtlas = Extensions.NativeArrayExtensions.CreateTracked<float>(AtlasWidth * AtlasHeight, allocator);
-            
-            // 设置遮罩阈值以匹配GPU着色器逻辑（默认0，与预览材质设置一致）
-            MaskThreshold = 0f;
 
             _disposed = false;
 

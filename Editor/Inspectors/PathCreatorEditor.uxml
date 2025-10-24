@@ -6,7 +6,7 @@
         <ui:VisualElement name="profileMissingWarning" class="warningBox">
             <ui:Button name="createProfileButton" text="快速创建默认 Profile" />
         </ui:VisualElement>
-        <ui:IMGUIContainer name="profileEmbeddedContainer" />
-        <ui:IMGUIContainer name="recipeEmbeddedContainer" />
+        <ui:VisualElement name="profileEmbeddedContainer" />
+        <ui:VisualElement name="recipeEmbeddedContainer" />
     </ui:VisualElement>
 </ui:UXML>

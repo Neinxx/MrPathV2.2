@@ -74,45 +74,62 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             if (baseAlphaIndex < 0 || baseAlphaIndex + AlphamapLayerCount > Alphamaps.Length)
                 return;
 
-            var anyPainted = false;
+            for(var l=0; l<AlphamapLayerCount; l++)
+            {
+                Alphamaps[baseAlphaIndex + l] = 0f;
+            }
+
+            var anyLayerPainted = false;
             var firstValidSplatIndex = -1;
             
-            for (var i = 0; i < Recipe.Length; i++)
+            for (var layerIndex = 0; layerIndex < Recipe.Length; layerIndex++)
             {
-                var splatIndex = Recipe.TerrainLayerIndices[i];
-                if (splatIndex < 0 || splatIndex >= AlphamapLayerCount) continue;
-                if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
+                var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
+                if (splatIndex < 0 || splatIndex >= AlphamapLayerCount) 
+                    continue;
+                
+                if (firstValidSplatIndex == -1)
+                    firstValidSplatIndex = splatIndex;
 
                 float maskValue;
+
+                // --- 使用 PathProgress (需要 TerrainJobsUtility.SampleMaskAtlas 支持) ---
                 if (Recipe.MaskAtlas.IsCreated)
                 {
+                    // 假设 SampleMaskAtlas 已更新为接受 pathProgress
                     maskValue = TerrainJobsUtility.SampleMaskAtlas(
                         Recipe.MaskAtlas, Recipe.AtlasWidth,  Recipe.PathSamples,
-                        i, normalizedDist, pathProgress, Recipe.MaskThreshold);
+                        layerIndex, normalizedDist, pathProgress);
                 }
                 else if (Recipe.Strips.IsCreated)
                 {
+                     // Strips (1D) 无法使用 pathProgress
                      maskValue = TerrainJobsUtility.EvaluateStrip(
-                        Recipe.Strips, Recipe.StripSlices[i],
+                        Recipe.Strips, Recipe.StripSlices[layerIndex],
                         Recipe.StripResolution, normalizedDist);
+                     maskValue *= Recipe.Opacities[layerIndex]; // Strips 似乎预乘了 opacity? 检查 RecipeData
                 }
                 else
                 {
-                    maskValue = 1f;
+                    maskValue = 1f * Recipe.Opacities[layerIndex];
                 }
+                // --- 结束 ---
 
                 if (maskValue > Epsilon)
-                {
-                    anyPainted = true;
-                    var alphaMapIndex = baseAlphaIndex + splatIndex;
-                    var currentValue = Alphamaps[alphaMapIndex];
-                    var mode = Recipe.BlendModes[i];
-                    var blended = TerrainJobsUtility.Blend(currentValue, maskValue * Recipe.Opacities[i], mode);
-                    Alphamaps[alphaMapIndex] = blended;
-                }
+                    anyLayerPainted = true;
+
+                var alphaMapIndex = baseAlphaIndex + splatIndex;
+                var currentValue = Alphamaps[alphaMapIndex];
+                var blendedValue = TerrainJobsUtility.Blend(currentValue, maskValue, Recipe.BlendModes[layerIndex]);
+                
+                Alphamaps[alphaMapIndex] = blendedValue;
             }
 
-            // Normalize weights to keep sum=1
+            if (!anyLayerPainted && firstValidSplatIndex >= 0)
+            {
+                Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
+            }
+
             NormalizeAlphaWeights(baseAlphaIndex, firstValidSplatIndex);
         }
 

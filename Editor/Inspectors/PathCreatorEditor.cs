@@ -45,8 +45,10 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private VisualElement _rootElement;
         private VisualElement _profileMissingWarning;
         private Button _createProfileButton;
-        private IMGUIContainer _profileEmbeddedContainer;
-        private IMGUIContainer _recipeEmbeddedContainer;
+        private VisualElement _profileEmbeddedContainer;
+        private VisualElement _recipeEmbeddedContainer;
+        private VisualElement _profileInspectorUI;
+        private IMGUIContainer _recipeInspectorIMGUI;
 
         #endregion
 
@@ -81,24 +83,75 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         private void OnDisable()
         {
-            // [优化] 增加空值检查
-            if (_profileEmbeddedEditor) DestroyImmediate(_profileEmbeddedEditor);
-            if (_recipeEmbeddedEditor) DestroyImmediate(_recipeEmbeddedEditor);
+            // 1. 销毁编辑器实例（安全模式）
+            SafeDestroyEditor(ref _profileEmbeddedEditor);
+            SafeDestroyEditor(ref _recipeEmbeddedEditor);
 
-            _ctx?.Dispose();
-            _ctx = null;
-
-            Undo.undoRedoPerformed -= OnUndoRedo;
-
-            if (_targetCreator)
+            // 2. 清理上下文引用
+            if (_ctx != null)
             {
-                _targetCreator.CurveDefinitionChanged -= OnCurveDefinitionChanged;
-                _targetCreator.AppearanceChanged -= OnAppearanceChanged;
-                _targetCreator.TerrainInteractionChanged -= OnTerrainInteractionChanged;
+                _ctx.Dispose();
+                _ctx = null;
             }
 
-            // 取消订阅 Profile 事件
-            UnsubscribeFromLastProfile();
+            // 3. 取消撤销/重做回调
+            try
+            {
+                Undo.undoRedoPerformed -= OnUndoRedo;
+            }
+            catch (System.ArgumentException e)
+            {
+                Debug.LogWarning($"Undo callback removal failed: {e.Message}");
+            }
+
+            // 4. 清理目标创建器事件
+            if (_targetCreator != null)
+            {
+                try
+                {
+                    _targetCreator.CurveDefinitionChanged -= OnCurveDefinitionChanged;
+                    _targetCreator.AppearanceChanged -= OnAppearanceChanged;
+                    _targetCreator.TerrainInteractionChanged -= OnTerrainInteractionChanged;
+                }
+                catch (System.NullReferenceException e)
+                {
+                    Debug.LogError($"Event unsubscription failed: {e.Message}");
+                }
+            }
+
+            // 5. 取消订阅Profile事件
+            try
+            {
+                UnsubscribeFromLastProfile();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Profile cleanup failed: {e}");
+            }
+
+            // 6. 额外防御：确保所有委托被清除
+            System.GC.Collect();
+        }
+
+        // 安全销毁编辑器的方法
+        private void SafeDestroyEditor(ref UnityEditor.Editor editor)
+        {
+            if (editor != null && editor.target != null)
+            {
+                try
+                {
+                    UnityEngine.Object.DestroyImmediate(editor);
+                    editor = null;
+                }
+                catch (UnityException e)
+                {
+                    Debug.LogWarning($"Editor destroy failed: {e.Message}");
+                }
+            }
+            else if (editor != null)
+            {
+                editor = null;
+            }
         }
 
         #endregion
@@ -110,7 +163,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         {
 
             _rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
-           // var _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
+            // var _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
 
 
 
@@ -123,8 +176,8 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             // --- 查询 UXML 中的元素 ---
             _profileMissingWarning = _rootElement.Q<VisualElement>("profileMissingWarning");
             _createProfileButton = _rootElement.Q<Button>("createProfileButton");
-            _profileEmbeddedContainer = _rootElement.Q<IMGUIContainer>("profileEmbeddedContainer");
-            _recipeEmbeddedContainer = _rootElement.Q<IMGUIContainer>("recipeEmbeddedContainer");
+            _profileEmbeddedContainer = _rootElement.Q<VisualElement>("profileEmbeddedContainer");
+            _recipeEmbeddedContainer = _rootElement.Q<VisualElement>("recipeEmbeddedContainer");
 
             var profileField = _rootElement.Q<PropertyField>("profileProperty"); // UXML 中绑定的字段
 
@@ -136,9 +189,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             // 2. [关键] 监听 Profile 字段的变化，而不是在 OnInspectorGUI 中每帧检查
             profileField.RegisterValueChangeCallback(OnProfilePropertyChanged);
 
-            // 3. 为内嵌编辑器设置 IMGUI 绘制处理器
-            _profileEmbeddedContainer.onGUIHandler = DrawEmbeddedProfileUI;
-            _recipeEmbeddedContainer.onGUIHandler = DrawEmbeddedRecipeUI;
+            // 3. 使用 UI Toolkit 构建内嵌检查器（在 UpdateEmbeddedEditorUI 中完成）
 
             // --- 初始化 UI 状态 ---
             UpdateEmbeddedEditorUI(_targetCreator.profile);
@@ -241,53 +292,103 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         /// </summary>
         private void UpdateEmbeddedEditorUI(PathProfile currentProfile)
         {
-            // --- 1. 防御性检查 (与你原来的一样) ---
-            if (_profileMissingWarning == null || _profileEmbeddedContainer == null || _recipeEmbeddedContainer == null)
+            // 1) 防御性检查：UI 尚未准备好则直接返回
+            if (_rootElement == null || _profileMissingWarning == null || _profileEmbeddedContainer == null || _recipeEmbeddedContainer == null)
             {
-                Debug.LogError("UI元素未正确初始化，请检查UXML加载逻辑。");
                 return;
             }
 
-            // 在更新开始时记录当前状态，有助于调试
-            Debug.Log($"[UpdateEmbeddedEditorUI] 开始更新。当前Profile: {currentProfile?.name ?? "NULL"}");
+            // 2) 每次刷新前先清空容器
+            _profileEmbeddedContainer.Clear();
+            _recipeEmbeddedContainer.Clear();
 
-            // --- 2. 处理 Profile 为 null 的情况 ---
+            // 3) 处理 Profile 为空的情况
             if (currentProfile == null)
             {
-                // 显示警告，隐藏编辑器容器
                 _profileMissingWarning.style.display = DisplayStyle.Flex;
                 _profileEmbeddedContainer.style.display = DisplayStyle.None;
                 _recipeEmbeddedContainer.style.display = DisplayStyle.None;
 
-                // 清理所有可能存在的编辑器实例
-                // 辅助方法会处理 null 检查和销毁
-                SyncEmbeddedEditor<UnityEngine.Object>(ref _profileEmbeddedEditor, null, "Profile");
-                SyncEmbeddedEditor<UnityEngine.Object>(ref _recipeEmbeddedEditor, null, "Recipe");
-
+                SafeDestroyEditor(ref _profileEmbeddedEditor);
+                SafeDestroyEditor(ref _recipeEmbeddedEditor);
                 return;
             }
 
-            // --- 3. 处理 Profile 有效的情况 ---
-
-            // 隐藏警告，显示Profile编辑器
+            // 4) Profile 有效：展示 Profile 容器
             _profileMissingWarning.style.display = DisplayStyle.None;
             _profileEmbeddedContainer.style.display = DisplayStyle.Flex;
 
-            // 同步Profile编辑器实例
-            // 这个方法会智能地处理创建、销毁或保留
-            SyncEmbeddedEditor(ref _profileEmbeddedEditor, currentProfile, "Profile");
+            // 创建或更新 Profile 编辑器
+            if (_profileEmbeddedEditor == null || _profileEmbeddedEditor.target != currentProfile)
+            {
+                SafeDestroyEditor(ref _profileEmbeddedEditor);
+                _profileEmbeddedEditor = UnityEditor.Editor.CreateEditor(currentProfile);
+            }
 
-            // --- 4. 处理 Recipe 编辑器 ---
+            // 尝试使用 UI Toolkit 生成嵌入界面
+            VisualElement profileUI = null;
+            try
+            {
+                profileUI = _profileEmbeddedEditor?.CreateInspectorGUI();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"Profile UITK 嵌入失败，回退 IMGUI: {e.Message}");
+            }
 
-            // 获取目标Recipe
+            if (profileUI != null)
+            {
+                _profileInspectorUI = profileUI;
+                _profileEmbeddedContainer.Add(profileUI);
+            }
+            else
+            {
+                var imgui = new IMGUIContainer(() =>
+                {
+                    if (_profileEmbeddedEditor != null)
+                    {
+                        EditorGUI.BeginChangeCheck();
+                        _profileEmbeddedEditor.OnInspectorGUI();
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            _targetCreator.NotifyProfileModified();
+                        }
+                    }
+                });
+                _profileEmbeddedContainer.Add(imgui);
+            }
+
+            // 5) Recipe：通常为 Odin IMGUI，仅在容器内以 IMGUIContainer 回退
             var targetRecipe = currentProfile.roadRecipe;
-
-            // 同步Recipe编辑器实例
-            SyncEmbeddedEditor(ref _recipeEmbeddedEditor, targetRecipe, "Recipe");
-
-            // 根据Recipe是否存在来显示或隐藏Recipe容器
-            // 这种做法保证了UI状态和编辑器实例状态的一致性
             _recipeEmbeddedContainer.style.display = (targetRecipe != null) ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (targetRecipe != null)
+            {
+                if (_recipeEmbeddedEditor == null || _recipeEmbeddedEditor.target != targetRecipe)
+                {
+                    SafeDestroyEditor(ref _recipeEmbeddedEditor);
+                    _recipeEmbeddedEditor = UnityEditor.Editor.CreateEditor(targetRecipe);
+                }
+
+                var recipeImgui = new IMGUIContainer(() =>
+                {
+                    if (_recipeEmbeddedEditor != null)
+                    {
+                        EditorGUI.BeginChangeCheck();
+                        _recipeEmbeddedEditor.OnInspectorGUI();
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            _targetCreator.NotifyProfileModified();
+                        }
+                    }
+                });
+                _recipeInspectorIMGUI = recipeImgui;
+                _recipeEmbeddedContainer.Add(recipeImgui);
+            }
+            else
+            {
+                SafeDestroyEditor(ref _recipeEmbeddedEditor);
+            }
         }
 
         /// <summary>

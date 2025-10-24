@@ -122,24 +122,29 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
 
             var newHash = CalculateHash(profile, template, previewAlpha);
-            if (newHash == _lastHash && _instance != null) return;
+            // 原先在哈希未变化且已存在实例时直接 return，导致 GPU 预览开关变化无法生效。
+            // 调整为：仅在需要时刷新材质；但无论材质是否刷新，始终执行后续的 GPU 绑定逻辑。
+            bool needMaterialRefresh = newHash != _lastHash || _instance == null;
             _lastHash = newHash;
 
-            if (_instance == null || _instance.shader != template.shader)
+            if (needMaterialRefresh)
             {
-                Clear();
-                _instance = new Material(template) { hideFlags = HideFlags.HideAndDontSave };
-                _flavor = DetectFlavor(_instance.shader);
-            }
+                if (_instance == null || _instance.shader != template.shader)
+                {
+                    Clear();
+                    _instance = new Material(template) { hideFlags = HideFlags.HideAndDontSave };
+                    _flavor = DetectFlavor(_instance.shader);
+                }
 
-            switch (_flavor)
-            {
-                case ShaderFlavor.Splat:
-                    ApplySplat(profile, previewAlpha);
-                    break;
-                case ShaderFlavor.Stylized:
-                    ApplyStylized(profile);
-                    break;
+                switch (_flavor)
+                {
+                    case ShaderFlavor.Splat:
+                        ApplySplat(profile, previewAlpha);
+                        break;
+                    case ShaderFlavor.Stylized:
+                        ApplyStylized(profile);
+                        break;
+                }
             }
 
 #if UNITY_EDITOR

@@ -1,29 +1,34 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
-    <ui:VisualElement style="padding-left: 5px; padding-right: 5px;">
-        <ui:Label text="核心&#x9;" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
-        <uie:PropertyField binding-path="curveType" label="曲线类型" tooltip="路径插值使用的曲线算法。" />
-        <uie:PropertyField binding-path="generationPrecision" label="生成精度" />
-        <uie:PropertyField binding-path="roadWidth" label="道路宽度" />
-        <ui:Label text="道路剖面 (Cross Section)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
-        <uie:PropertyField binding-path="crossSection" label="剖面形状" />
-        <uie:PropertyField binding-path="falloffWidth" label="衰减宽度" />
-        <uie:PropertyField binding-path="falloffShape" label="衰减形状" />
-        <ui:Label text="地形吸附 (Terrain Snapping)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
-        <uie:PropertyField name="snapToTerrain" binding-path="snapToTerrain" label="启用地形吸附" />
-        <ui:VisualElement name="snapToTerrainGroup" style="margin-left: 15px; margin-bottom: 5px;">
-            <uie:PropertyField binding-path="heightOffset" label="高度偏移" />
-            <uie:PropertyField binding-path="smoothness" label="平滑度" />
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
+    <Style src="project://database/Assets/__temp/MrPathV2.2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor" />
+    <ui:VisualElement class="root-container" style="height: 902px; flex-grow: 1;">
+        <ui:VisualElement class="control-panel">
+            <ui:GroupBox name="CoreSettings" class="settings-group">
+                <ui:Label text="Core Settings" class="group-header" />
+                <ui:VisualElement class="field-row">
+                    <uie:EnumField label="Curve Type" binding-path="curveType" name="CurveTypeField" class="compact-field" />
+                    <uie:FloatField label="Mesh Width" binding-path="roadWidth" name="RoadWidthField" class="compact-field" />
+                </ui:VisualElement>
+            </ui:GroupBox>
+            <ui:GroupBox name="CrossSection" class="settings-group">
+                <ui:Label text="Cross Section" class="group-header" />
+                <uie:FloatField label="Edge Width" binding-path="falloffWidth" name="FalloffWidthField" class="wide-field" />
+                <uie:CurveField label="Section Profile" binding-path="crossSection" name="CrossSectionCurveField" class="curve-field" />
+                <uie:CurveField label="Edge Shape" binding-path="falloffShape" name="FalloffShapeCurveField" class="curve-field" />
+            </ui:GroupBox>
+            <ui:GroupBox name="TerrainSnap" class="settings-group" style="flex-grow: 1;">
+                <ui:Toggle label="TerrainSnapping" name="TerrainSnapping" style="flex-shrink: 1; flex-grow: 1;" />
+                <uie:FloatField label="Height Offset" binding-path="heightOffset" name="HeightOffsetField" class="readonly-field" />
+            </ui:GroupBox>
         </ui:VisualElement>
-        <ui:Label text="网格生成 (Mesh Generation)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
-        <uie:PropertyField binding-path="forceHorizontal" label="强制水平" />
-        <uie:PropertyField binding-path="crossSectionSegments" label="剖面分段数" />
-        <ui:Label text="渲染预览 (Preview)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
-        <uie:PropertyField binding-path="showPreviewMesh" label="显示预览网格" />
-        <uie:PropertyField binding-path="enableDepthTest" label="启用深度测试" />
-        <uie:PropertyField name="opaquePreview" binding-path="opaquePreview" label="不透明预览" />
-        <ui:HelpBox name="recipeMissingWarning" text="请分配一个 StylizedRoadRecipe 以定义道路的视觉风格。" message-type="Warning" style="margin-top: 10px;" />
-        <uie:PropertyField name="roadRecipe" binding-path="roadRecipe" label="道路样式" style="margin-bottom: 5px;" />
-        <ui:Label text="自定义渲染图层 (Custom Layers)" style="-unity-font-style: bold; font-size: 13px; margin-top: 10px; margin-bottom: 5px;" />
-        <uie:PropertyField binding-path="layers" label="渲染图层" />
+        <ui:GroupBox name="PreviewSection" class="preview-group">
+            <ui:Label text="Mesh Preview" class="group-header" />
+            <ui:VisualElement class="preview-controls" style="justify-content: space-between; align-items: stretch; overflow: visible; flex-grow: 0; height: 59px; flex-direction: column; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; margin-left: 8px; margin-right: 8px;">
+                <ui:Toggle label="ShowMesh" name="ShowMeshToggle" class="preview-toggle" style="flex-shrink: 1; flex-grow: 1; justify-content: space-around; margin-left: 0; margin-right: 13px;" />
+                <ui:Toggle label="DepthTest" name="EnableDepthTestToggle" value="false" class="preview-toggle" style="flex-shrink: 1; flex-grow: 1; position: relative; justify-content: flex-start; margin-right: 13px; margin-left: 0; align-items: stretch;" />
+                <ui:Toggle label="Snapping" name="SnappingToggle" value="false" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: space-around; flex-wrap: nowrap; flex-direction: row; margin-right: 13px; padding-right: 0; align-items: stretch; opacity: 1; overflow: visible; margin-left: 0;" />
+            </ui:VisualElement>
+            <uie:ObjectField label="Recipe" binding-path="roadRecipe" name="RecipeField" class="object-field" />
+            <ui:VisualElement name="preview-content" class="preview-content" />
+        </ui:GroupBox>
     </ui:VisualElement>
 </ui:UXML>

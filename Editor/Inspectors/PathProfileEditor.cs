@@ -1,216 +1,320 @@
-using __temp.MrPathV2._2.Runtime.Core;
-using UnityEditor;
-using UnityEditor.AnimatedValues;
-using UnityEditorInternal;
 using UnityEngine;
+using UnityEditor;
+using UnityEngine.UIElements;
+using System.Collections;
+using __temp.MrPathV2._2.Runtime.Core; // 确保引用了 PathProfile
+using UnityEditor.UIElements;
+using __temp.MrPathV2._2.Editor; // 确保引用了 UIResourceLoader
+using System.Linq;
+using Unity.EditorCoroutines.Editor;
+using System;
+using Unity.Collections; // 用于 Min/Max
 
-namespace Assets.MrPathV2.Editor.Inspectors
+[CustomEditor(typeof(PathProfile))]
+public class PathProfileEditor : UnityEditor.Editor
 {
-    [CustomEditor(typeof(PathProfile))]
-    public class PathProfileEditor : UnityEditor.Editor
+    // --- UI Toolkit 元素引用 (仅保留需要交互的) ---
+    private Toggle _snappingToggle;
+    private FloatField _heightOffsetField;
+    private SliderInt _smoothnessSlider;
+    private Toggle _showMeshToggle;
+    private Toggle _enableDepthTestToggle;
+    private ObjectField _recipeField;
+    private VisualElement _previewContent; // 用于添加预览图和 Recipe 编辑器
+
+    // --- 内嵌 Recipe 编辑器 ---
+    private IMGUIContainer _recipeContainer;
+    private Editor _recipeEditor;
+    private VisualElement _rootElement;
+
+    // --- 预览相关 ---
+    private Texture2D _previewTexture;
+    private Image _previewImage;
+    private EditorCoroutine _animationCoroutine; // 使用 EditorCoroutine 类型
+    private float _currentOpacity = 1f;
+    private const float FadeDuration = 0.2f; // 稍快一点的动画
+
+    // --- UXML 资源 ---
+    // 保持 UXML/USS 文件名与类名一致是好习惯
+    // private VisualTreeAsset _visualTree;
+    // private StyleSheet _styleSheet; // 如果 USS 在 UXML 中引用了，这里就不需要了
+
+    public override VisualElement CreateInspectorGUI()
     {
-        // Static inner class for styles and content caching (Professional Practice)
-        private static class Styles
+        Debug.Log("[PathProfileEditor] Loaded UXML template.");
+        // 1. 加载 UXML 模板
+        // 假设 UIResourceLoader 能正确加载与类名同名的 uxml
+        VisualElement root = UIResourceLoader.LoadAndClone<PathProfileEditor>();
+
+        if (root == null)
         {
-            public static readonly GUIStyle SectionHeaderStyle;
-            public static readonly GUIContent CoreSettingsHeader = new("核心设置 (Core Settings)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent CrossSectionHeader = new("道路剖面 (Cross Section)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent TerrainSnappingHeader = new("地形吸附 (Terrain Snapping)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent MeshGenerationHeader = new("网格生成 (Mesh Generation)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent PreviewHeader = new("渲染预览 (Preview)", EditorGUIUtility.IconContent("settings").image);
-            public static readonly GUIContent LayersHeader = new("自定义渲染图层 (Custom Layers)", EditorGUIUtility.IconContent("settings").image);
+            Debug.LogError("[PathProfileEditor] Failed to load UXML template.");
+            return new Label("Error loading UI. Check UXML file and UIResourceLoader.");
+        }
+        _rootElement = root;
+        // 2. 查询必要的控件 (使用 UXML 中定义的 name)
+        //    注意: 查询名称应与 UXML 中的 name="" 属性匹配
+        _snappingToggle = root.Q<Toggle>("SnappingToggle");
+        _heightOffsetField = root.Q<FloatField>("HeightOffsetField");
+        _smoothnessSlider = root.Q<SliderInt>("SmoothnessSlider");
+        _showMeshToggle = root.Q<Toggle>("ShowMeshToggle");
+        _enableDepthTestToggle = root.Q<Toggle>("EnableDepthTestToggle");
+        _recipeField = root.Q<ObjectField>("RecipeField");
+        _previewContent = root.Q<VisualElement>("preview-content");
 
-            public static readonly GUIContent CurveType = new("曲线类型", "路径插值使用的曲线算法。");
-            public static readonly GUIContent GenerationPrecision = new("生成精度", "数值越小，曲线越平滑，但计算成本越高。");
-            public static readonly GUIContent RoadWidth = new("道路宽度", "道路主体的总宽度。");
-            public static readonly GUIContent CrossSectionCurve = new("剖面曲线", "定义道路横截面的形状。X轴[-1, 1]代表从左到右，Y轴代表相对高度。");
-            public static readonly GUIContent FalloffWidth = new("边缘宽度", "道路边缘与地形融合的过渡带宽度。");
-            public static readonly GUIContent FalloffShape = new("边缘形状", "定义边缘过渡的形状。X轴[0, 1]从道路边缘到末端，Y轴[0, 1]代表混合权重。");
-            public static readonly GUIContent SnapToTerrain = new("启用地形吸附", "使路径点自动贴合下方地形。");
-            public static readonly GUIContent HeightOffset = new("高度偏移", "路径在地形上方的高度。");
-            public static readonly GUIContent Smoothness = new("平滑强度", "对吸附后的路径高度进行平滑处理的迭代次数。");
-            public static readonly GUIContent ForceHorizontal = new("强制水平", "使道路横截面始终保持水平，不受路径坡度影响。");
-            public static readonly GUIContent CrossSectionSegments = new("横截面分段", "预览网格在宽度上的分段数，越高越精细。");
-            public static readonly GUIContent ShowPreviewMesh = new("显示预览网格", "在场景视图中实时显示生成的道路网格。");
-            public static readonly GUIContent EnableDepthTest = new("开启深度测试", "开启后预览遵循场景深度（LEqual）；关闭则始终显示在最上层（Always）。");
-            // 新增：不透明预览开关
-            public static readonly GUIContent OpaquePreview = new("不透明预览", "开启后预览为完全不透明，不与地形颜色混合。");
+        // 简单验证查询结果
+        if (!ValidateQueriedControls())
+        {
+            // 即使部分查询失败，也继续绑定，核心绑定可能仍然有效
+            Debug.LogWarning("[PathProfileEditor] Some UI elements could not be found. Check UXML names.");
+        }
 
-            public static readonly GUIContent RoadRecipe = new("风格化道路配方", "定义道路纹理、材质和风格的资产。");
+        // 3. 核心：将 SerializedObject 绑定到 VisualElement 树
+        //    这会自动将 UXML 中带有 binding-path 的控件与 SerializedProperty 关联
+        root.Bind(serializedObject);
 
-            static Styles()
+        // 4. 设置 ObjectField 类型 (如果在 UXML 中未指定)
+        if (_recipeField != null)
+        {
+            _recipeField.objectType = typeof(StylizedRoadRecipe);
+            _recipeField.allowSceneObjects = false; // 通常 ScriptableObject 不允许场景引用
+        }
+
+        SetupEventHandlers(); // 第一步：绑定事件
+        InitializePreview(); // 第二步：初始化预览
+        InitializeRecipeEditor(); // 第三步：初始化 Recipe 编辑器
+        InitializeControlStates(); // 第四步：设置初始状态（此时事件已绑定，状态变化可触发回调）
+
+        return root;
+    }
+
+    // 验证通过 name 查询的控件是否存在
+    private bool ValidateQueriedControls()
+    {
+        bool allValid = _snappingToggle != null && _heightOffsetField != null &&
+                    _smoothnessSlider != null && _showMeshToggle != null && _enableDepthTestToggle != null &&
+                    _recipeField != null && _previewContent != null;
+        if (!allValid)
+        {
+            // 打印具体哪个控件为 null
+            if (_snappingToggle == null) Debug.LogError("SnappingToggle not found!");
+            if (_heightOffsetField == null) Debug.LogError("HeightOffsetField not found!");
+            // 其他控件同理...
+        }
+        return allValid;
+    }
+
+    private void SetupEventHandlers()
+    {
+        // --- 地形吸附联动：直接使用 _snappingToggle（已在 CreateInspectorGUI 中查询）---
+        _snappingToggle?.RegisterValueChangedCallback(evt =>
+        {
+            Debug.Log($"Snapping enabled: {evt.newValue}"); // 新增日志
+            bool enabled = evt.newValue;
+            _heightOffsetField?.SetEnabled(enabled);
+            _smoothnessSlider?.SetEnabled(enabled);
+            RefreshSceneView();
+        });
+
+        // --- Recipe 更改时更新内嵌编辑器：直接使用 _recipeField ---
+        _recipeField?.RegisterValueChangedCallback(evt =>
+        {
+            UpdateRecipeEditor(evt.newValue as StylizedRoadRecipe);
+            RefreshSceneView();
+        });
+
+        // --- 预览开关动画：直接使用 _showMeshToggle ---
+        _showMeshToggle?.RegisterValueChangedCallback(evt =>
+        {
+            if (_animationCoroutine != null)
             {
-                SectionHeaderStyle = new GUIStyle(EditorStyles.helpBox)
-                {
-                    padding = new RectOffset(10, 10, 4, 4),
-                    margin = new RectOffset(0, 0, 8, 0),
-                    fontStyle = FontStyle.Bold
-                };
+                EditorCoroutineUtility.StopCoroutine(_animationCoroutine);
+                _animationCoroutine = null;
             }
+            _animationCoroutine = EditorCoroutineUtility.StartCoroutine(FadePreview(evt.newValue ? 1f : 0f), this);
+            RefreshSceneView();
+        });
+
+        // --- 监听其他控件变化：基于 _rootElement 查询（此时 _rootElement 已初始化）---
+        _rootElement.Q<EnumField>("CurveTypeField")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<FloatField>("RoadWidthField")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<SliderInt>("CrossSectionSegmentsSlider")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<FloatField>("FalloffWidthField")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<CurveField>("CrossSectionCurveField")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<CurveField>("FalloffShapeCurveField")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        // 无需重复查询 HeightOffset 和 SmoothnessSlider，直接用已有变量（若需监听其变化）
+        _heightOffsetField?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _smoothnessSlider?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<Toggle>("EnableDepthTestToggle")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+        _rootElement.Q<Toggle>("AlphaPreviewToggle")?.RegisterValueChangedCallback(_ => RefreshSceneView());
+    }
+
+
+    // 根据绑定后的初始值设置控件状态
+    private void InitializeControlStates()
+    {
+        // 确保控件已查询到
+        if (_snappingToggle != null)
+        {
+            // 直接读取当前值来设置依赖控件的状态
+            bool isSnappingEnabled = _snappingToggle.value;
+            _heightOffsetField?.SetEnabled(isSnappingEnabled);
+            _smoothnessSlider?.SetEnabled(isSnappingEnabled);
         }
 
-        // Serialized Properties
-        private SerializedProperty _curveType, _generationPrecision, _roadWidth;
-        private SerializedProperty _crossSection, _falloffWidth, _falloffShape;
-        private SerializedProperty _snapToTerrain, _heightOffset, _smoothness;
-        private SerializedProperty _forceHorizontal, _crossSectionSegments;
-        private SerializedProperty _showPreviewMesh, _roadRecipe;
-        private SerializedProperty _layers;
-        private SerializedProperty _enableDepthTest;
-        // 新增：不透明预览属性
-        private SerializedProperty _opaquePreview;
-
-        // Editor specific fields
-        private ReorderableList _layerList;
-        private AnimBool _snapToTerrainFade;
-
-        private void OnEnable()
+        // 设置预览初始透明度
+        if (_showMeshToggle != null && _previewImage != null)
         {
-            // Cache property references
-            _curveType = serializedObject.FindProperty(nameof(PathProfile.curveType));
-            _generationPrecision = serializedObject.FindProperty(nameof(PathProfile.generationPrecision));
-            _roadWidth = serializedObject.FindProperty(nameof(PathProfile.roadWidth));
-
-            _crossSection = serializedObject.FindProperty(nameof(PathProfile.crossSection));
-            _falloffWidth = serializedObject.FindProperty(nameof(PathProfile.falloffWidth));
-            _falloffShape = serializedObject.FindProperty(nameof(PathProfile.falloffShape));
-
-            _snapToTerrain = serializedObject.FindProperty(nameof(PathProfile.snapToTerrain));
-            _heightOffset = serializedObject.FindProperty(nameof(PathProfile.heightOffset));
-            _smoothness = serializedObject.FindProperty(nameof(PathProfile.smoothness));
-
-            _forceHorizontal = serializedObject.FindProperty(nameof(PathProfile.forceHorizontal));
-            _crossSectionSegments = serializedObject.FindProperty(nameof(PathProfile.crossSectionSegments));
-
-            _showPreviewMesh = serializedObject.FindProperty(nameof(PathProfile.showPreviewMesh));
-            _roadRecipe = serializedObject.FindProperty(nameof(PathProfile.roadRecipe));
-            _enableDepthTest = serializedObject.FindProperty(nameof(PathProfile.enableDepthTest));
-            // 新增：找到不透明预览属性
-            _opaquePreview = serializedObject.FindProperty(nameof(PathProfile.opaquePreview));
-
-            _layers = serializedObject.FindProperty("layers");
-            InitializeLayerList();
-
-            // Initialize AnimBool for smooth fade group
-            _snapToTerrainFade = new AnimBool(_snapToTerrain.boolValue);
-            _snapToTerrainFade.valueChanged.AddListener(Repaint);
-        }
-
-        private void OnDisable()
-        {
-            _snapToTerrainFade.valueChanged.RemoveListener(Repaint);
-        }
-
-        public override void OnInspectorGUI()
-        {
-            serializedObject.Update();
-
-            // Set animation target
-            _snapToTerrainFade.target = _snapToTerrain.boolValue;
-
-            DrawCoreSettings();
-            DrawCrossSectionSettings();
-            DrawTerrainSnappingSettings();
-            DrawMeshGenerationSettings();
-            DrawPreviewSettings();
-            DrawLayersSettings();
-
-            serializedObject.ApplyModifiedProperties();
-        }
-
-        private void DrawSectionHeader(GUIContent label)
-        {
-            EditorGUILayout.LabelField(label, Styles.SectionHeaderStyle);
-        }
-
-        private void DrawCoreSettings()
-        {
-            DrawSectionHeader(Styles.CoreSettingsHeader);
-            EditorGUILayout.PropertyField(_curveType, Styles.CurveType);
-            EditorGUILayout.PropertyField(_generationPrecision, Styles.GenerationPrecision);
-            EditorGUILayout.PropertyField(_roadWidth, Styles.RoadWidth);
-        }
-
-        private void DrawCrossSectionSettings()
-        {
-            DrawSectionHeader(Styles.CrossSectionHeader);
-            EditorGUILayout.PropertyField(_crossSection, Styles.CrossSectionCurve);
-            EditorGUILayout.PropertyField(_falloffWidth, Styles.FalloffWidth);
-            EditorGUILayout.PropertyField(_falloffShape, Styles.FalloffShape);
-        }
-
-        private void DrawTerrainSnappingSettings()
-        {
-            DrawSectionHeader(Styles.TerrainSnappingHeader);
-            EditorGUILayout.PropertyField(_snapToTerrain, Styles.SnapToTerrain);
-
-
-            if (EditorGUILayout.BeginFadeGroup(_snapToTerrainFade.faded))
-            {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(_heightOffset, Styles.HeightOffset);
-                EditorGUILayout.PropertyField(_smoothness, Styles.Smoothness);
-                EditorGUI.indentLevel--;
-            }
-            EditorGUILayout.EndFadeGroup();
-        }
-
-        private void DrawMeshGenerationSettings()
-        {
-            DrawSectionHeader(Styles.MeshGenerationHeader);
-            EditorGUILayout.PropertyField(_forceHorizontal, Styles.ForceHorizontal);
-            EditorGUILayout.PropertyField(_crossSectionSegments, Styles.CrossSectionSegments);
-        }
-
-        private void DrawPreviewSettings()
-        {
-            DrawSectionHeader(Styles.PreviewHeader);
-            EditorGUILayout.PropertyField(_showPreviewMesh, Styles.ShowPreviewMesh);
-            EditorGUILayout.PropertyField(_enableDepthTest, Styles.EnableDepthTest);
-            // 新增：绘制不透明预览开关并在切换时强制刷新 Scene 视图
-            EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(_opaquePreview, Styles.OpaquePreview);
-            bool opaqueChanged = EditorGUI.EndChangeCheck();
-            if (opaqueChanged)
-            {
-                // 立即提交更改并刷新 SceneView，使预览材质在本帧就更新
-                serializedObject.ApplyModifiedProperties();
-                UnityEditor.SceneView.RepaintAll();
-            }
-            // Provide helpful guidance to the user
-            // if (_roadRecipe.objectReferenceValue == null)
-            // {
-            //     EditorGUILayout.HelpBox("请分配一个 StylizedRoadRecipe 以定义道路的视觉风格。", MessageType.Warning);
-            // }
-            EditorGUILayout.PropertyField(_roadRecipe, Styles.RoadRecipe);
-
-
-        }
-
-        private void DrawLayersSettings()
-        {
-            if (_layers == null) return;
-
-            DrawSectionHeader(Styles.LayersHeader);
-            _layerList.DoLayoutList();
-        }
-
-        private void InitializeLayerList()
-        {
-            if (_layers == null) return;
-
-            _layerList = new ReorderableList(serializedObject, _layers, true, true, true, true)
-            {
-                drawHeaderCallback = rect => EditorGUI.LabelField(rect, "路径渲染图层 (Path Render Layers)"),
-                drawElementCallback = (rect, index, _, _) =>
-                {
-                    var element = _layers.GetArrayElementAtIndex(index);
-                    rect.y += 2;
-                    rect.height = EditorGUIUtility.singleLineHeight;
-                    EditorGUI.PropertyField(rect, element, GUIContent.none, true);
-                },
-                elementHeightCallback = index => EditorGUI.GetPropertyHeight(_layers.GetArrayElementAtIndex(index), true) + 4
-            };
+            _currentOpacity = _showMeshToggle.value ? 1f : 0f;
+            _previewImage.style.opacity = _currentOpacity;
+            if (_currentOpacity > 0.5f) RefreshSceneView(); // 如果初始可见，则生成预览
         }
     }
+
+    // 初始化 Recipe 编辑器 (基于 SerializedProperty 的当前值)
+    private void InitializeRecipeEditor()
+    {
+        var recipeProp = serializedObject.FindProperty("roadRecipe");
+        if (recipeProp != null)
+        {
+            UpdateRecipeEditor(recipeProp.objectReferenceValue as StylizedRoadRecipe);
+        }
+    }
+
+    // 更新 Recipe 编辑器 (与之前版本类似，但更健壮)
+    private void UpdateRecipeEditor(StylizedRoadRecipe recipe)
+    {
+        // 安全销毁旧编辑器
+        if (_recipeEditor != null)
+        {
+            DestroyImmediate(_recipeEditor); // 使用 Object.DestroyImmediate
+            _recipeEditor = null;
+        }
+        // 安全移除旧容器
+        _recipeContainer?.RemoveFromHierarchy(); // 使用 RemoveFromHierarchy
+        _recipeContainer = null;
+
+        if (recipe != null && _previewContent != null)
+        {
+            _recipeEditor = Editor.CreateEditor(recipe);
+            if (_recipeEditor != null)
+            {
+                _recipeContainer = new IMGUIContainer(() =>
+                {
+                    // 增加 target 检查
+                    if (_recipeEditor != null && _recipeEditor.target != null)
+                    {
+                        EditorGUI.BeginChangeCheck();
+                        EditorGUILayout.LabelField("Stylized Road Recipe", EditorStyles.boldLabel); // 添加标题
+                        _recipeEditor.OnInspectorGUI();
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            // 内嵌编辑器变化，也需要刷新预览和场景
+                            RefreshSceneView();
+                            // 可选: 通知 PathProfile 更新 (如果 Profile 依赖 Recipe 内部数据)
+                            // (target as PathProfile)?.SendMessage("OnValidate", SendMessageOptions.DontRequireReceiver);
+                        }
+                    }
+                })
+                { style = { marginTop = 10 } }; // 加点间距
+                _previewContent.Add(_recipeContainer);
+            }
+            else
+            {
+                Debug.LogError($"[PathProfileEditor] Failed to create editor for Recipe: {recipe.name}");
+            }
+        }
+    }
+
+    // --- 预览初始化与更新 ---
+    private void InitializePreview()
+    {
+        // 确保 _previewContent 已查询成功
+        if (_previewContent == null) return;
+
+        _previewTexture = new Texture2D(256, 32, TextureFormat.RGBA32, false) { name = "PathProfilePreview" };
+        _previewImage = new Image
+        {
+            image = _previewTexture,
+            scaleMode = ScaleMode.StretchToFill,
+            style = {
+                 width = Length.Percent(100),
+                 height = 32,
+                 marginTop = 5,
+                 marginBottom = 5,
+                 // 初始透明度在 InitializeControlStates 中设置
+             }
+        };
+        // 将 Image 添加到 preview-content 容器
+        _previewContent.Add(_previewImage);
+
+        // 注意：初始预览生成推迟到 InitializeControlStates 中，
+        // 因为需要等待 _showMeshToggle 的值确定
+    }
+
+    // 刷新预览纹理和场景视图
+
+
+    // 仅刷新场景视图 (用于 Show/Hide 切换等不改变纹理的情况)
+    private void RefreshSceneView()
+    {
+        SceneView.RepaintAll();
+    }
+
+
+
+
+    // --- 预览淡入淡出动画 ---
+    private IEnumerator FadePreview(float targetOpacity)
+    {
+        float startTime = Time.realtimeSinceStartup;
+        float startOpacity = _currentOpacity;
+        bool needsRefresh = targetOpacity > 0.5f && startOpacity <= 0.5f; // 是否从隐藏变为可见
+
+        while (Time.realtimeSinceStartup - startTime < FadeDuration)
+        {
+            // 使用 EaseInOut 效果
+            float t = (Time.realtimeSinceStartup - startTime) / FadeDuration;
+            t = t * t * (3f - 2f * t); // Smoothstep
+            _currentOpacity = Mathf.Lerp(startOpacity, targetOpacity, t);
+            if (_previewImage != null) _previewImage.style.opacity = _currentOpacity;
+            yield return null;
+        }
+
+        _currentOpacity = targetOpacity;
+        if (_previewImage != null) _previewImage.style.opacity = _currentOpacity;
+
+        // 如果是从隐藏变为可见，动画结束后再刷新一次预览图
+        if (needsRefresh)
+        {
+            RefreshSceneView();
+        }
+        _animationCoroutine = null; // 标记协程结束
+    }
+
+    // --- 清理 ---
+    private void OnDisable()
+    {
+        // 停止协程
+        if (_animationCoroutine != null)
+        {
+            EditorCoroutineUtility.StopCoroutine(_animationCoroutine);
+            _animationCoroutine = null;
+        }
+
+        // 安全销毁编辑器和纹理
+        if (_recipeEditor != null)
+        {
+            UnityEngine.Object.DestroyImmediate(_recipeEditor);
+            _recipeEditor = null;
+        }
+        if (_previewTexture != null)
+        {
+            UnityEngine.Object.DestroyImmediate(_previewTexture);
+            _previewTexture = null;
+        }
+    }
+
+
 }
+   

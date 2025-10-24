@@ -12,15 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
   m_Name: MrPath_StylizedRoadRecipe_PerlinNoiseMask
   m_EditorClassIdentifier: 
-  smooth: 0.597
-  tiling: {x: 1, y: 6.88}
-  offset: {x: 0, y: 0}
-  overallScale: 0.72
+  smooth: 0
+  tiling: {x: 3.42, y: 66.29}
+  offset: {x: 2.46, y: 0}
+  overallScale: 2
   strength: 1
-  seed: 0
-  noiseScale: {x: 0.59, y: 0.59}
+  seed: 11.92
+  noiseScale: {x: 4.16, y: 4.16}
   uniformScale: 1
-  rotationDeg: 125
-  octaves: 1
-  lacunarity: 2.26
-  gain: 0.375
+  rotationDeg: -31
+  octaves: 2
+  lacunarity: 1.37
+  gain: 0.23
