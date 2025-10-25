@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     public abstract class TerrainCommandBase
     {
@@ -42,7 +42,7 @@ namespace MrPathV2._2.Editor.Terrain
             }
             catch (OperationCanceledException)
             {
-                Debug.Log($"[Mr.Path] 用户取消了 {GetCommandName()} 操作。");
+                ErrorHandler.LogInfo($"[Mr.Path] 用户取消了 {GetCommandName()} 操作。");
             }
         }
 

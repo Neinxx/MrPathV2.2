@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Settings
+namespace MrPathV2.Editor.Settings
 {
     /// <summary>
     ///     MrPath 工具所有配置资产的根引用和导航中心。
@@ -14,7 +14,7 @@ namespace MrPathV2._2.Editor.Settings
     public class MrPathProjectSettings : ScriptableObject
     {
         // 定义了主设置文件的唯一、标准路径（保留作向后兼容的最终兜底）
-        private const string KSettingsPath = "Assets/MrPathV2.2/Settings/MrPath_ProjectSettings.asset";
+        private const string KSettingsPath = "Assets/MrPathV2/Settings/MrPath_ProjectSettings.asset";
 
         // 文件名常量；文件夹通过 GetSettingsRootFolder() 动态决定
         private const string KSettingsFileName = "MrPath_ProjectSettings.asset";
@@ -159,7 +159,7 @@ namespace MrPathV2._2.Editor.Settings
 
             // Fallback if script not found (shouldn't happen)
             Debug.LogError("[MrPath] Could not determine tool root folder dynamically. Falling back to default.");
-            return "Assets/MrPathV2.2"; // Adjust if your default path differs
+            return "Assets/MrPathV2"; // Adjust if your default path differs
         }
 
         public static string GetSettingsRootFolder() => Path.Combine(GetToolRootFolder(), "Settings").Replace("\\", "/");

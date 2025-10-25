@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using MrPathV2._2.Runtime.Memory;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     Native Collection内存管理器，提供统一的内存分配、跟踪和释放机制

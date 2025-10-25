@@ -1,13 +1,13 @@
 using System.IO;
-using MrPathV2._2.Editor.Settings;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Settings;
-using MrPathV2._2.Runtime.Strategies;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Settings;
+using MrPathV2.Runtime.Strategies;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace MrPathV2._2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     //  将策略管理功能（创建、同步）直接集成到此资产的编辑器中。
 
@@ -139,7 +139,7 @@ namespace MrPathV2._2.Editor.Inspectors
             // 确保注册表资产存在
             var registryPath = Path.Combine(GetDynamicResourcesPath(), "PathStrategyRegistry.asset").Replace("\\", "/");
             var registry = AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(registryPath);
-            if (registry == null)
+            if (!registry)
             {
                 registry = CreateInstance<PathStrategyRegistry>();
                 Directory.CreateDirectory(Path.GetDirectoryName(registryPath) ?? string.Empty);

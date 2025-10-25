@@ -1,15 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 // add near top
 
-namespace MrPathV2._2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     将 StylizedRoadRecipe 的数据烘焙为 Job 友好的结构。
@@ -178,15 +179,15 @@ namespace MrPathV2._2.Runtime.Jobs
             if (_disposed) return;
             _disposed = true;
 
-            if (TerrainLayerIndices.IsCreated) TerrainLayerIndices.Dispose();
-            if (BlendModes.IsCreated) BlendModes.Dispose();
-            if (Opacities.IsCreated) Opacities.Dispose();
-            if (Strips.IsCreated) Strips.Dispose();
-            if (StripSlices.IsCreated) StripSlices.Dispose();
-            if (GradientKeys.IsCreated) GradientKeys.Dispose();
-            if (GradientKeySlices.IsCreated) GradientKeySlices.Dispose();
-            if (MaskLut256.IsCreated) MaskLut256.Dispose();
-            if (MaskAtlas.IsCreated) MaskAtlas.Dispose();
+            TerrainLayerIndices.SafeDispose();
+            BlendModes.SafeDispose();
+            Opacities.SafeDispose();
+            Strips.SafeDispose();
+            StripSlices.SafeDispose();
+            GradientKeys.SafeDispose();
+            GradientKeySlices.SafeDispose();
+            MaskLut256.SafeDispose();
+            MaskAtlas.SafeDispose();
         }
     }
 

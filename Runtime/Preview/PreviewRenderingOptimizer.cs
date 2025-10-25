@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MrPathV2._2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     预览渲染优化器：提供批量渲染、GPU实例化和渲染状态缓存
@@ -50,7 +50,7 @@ namespace MrPathV2._2.Runtime.Preview
         /// </summary>
         public void AddRenderItem(Mesh mesh, Material material, Matrix4x4 matrix, Color color = default)
         {
-            if (mesh == null || material == null) return;
+            if (!mesh || !material) return;
 
             // 查找或创建批次
             var batchIndex = FindOrCreateBatch(mesh, material);
@@ -180,7 +180,7 @@ namespace MrPathV2._2.Runtime.Preview
                 _frustumPlanesValid = false;
             }
 
-            if (!_frustumPlanesValid && camera != null)
+            if (!_frustumPlanesValid && camera)
             {
                 _frustumPlanes = GeometryUtility.CalculateFrustumPlanes(camera);
                 _frustumPlanesValid = true;
@@ -192,7 +192,7 @@ namespace MrPathV2._2.Runtime.Preview
         /// </summary>
         private int PerformFrustumCulling(RenderBatch batch)
         {
-            if (_frustumPlanes == null || batch.Mesh == null)
+            if (_frustumPlanes == null || !batch.Mesh)
             {
                 return batch.Count;
             }
@@ -224,7 +224,7 @@ namespace MrPathV2._2.Runtime.Preview
         /// <summary>
         ///     变换边界框到世界空间
         /// </summary>
-        private Bounds TransformBounds(Bounds localBounds, Matrix4x4 transform)
+        private static Bounds TransformBounds(Bounds localBounds, Matrix4x4 transform)
         {
             var center = transform.MultiplyPoint3x4(localBounds.center);
             var extents = localBounds.extents;

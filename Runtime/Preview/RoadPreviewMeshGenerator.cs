@@ -1,14 +1,14 @@
 using System;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Jobs;
-using MrPathV2._2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace MrPathV2._2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     负责生成道路预览网格数据的纯 Job 调度器，仅负责数据计算，不涉及 Mesh 对象或渲染。
@@ -31,6 +31,7 @@ namespace MrPathV2._2.Runtime.Preview
         // 保留占位以防后续需要显式资源管理器。
         // private readonly JobResourceManager _resourceMgr = new JobResourceManager();
         private JobData? _jobData;
+        private bool _disposed;
 
         public GenerationState State { get; private set; } = GenerationState.Idle;
 
@@ -38,20 +39,17 @@ namespace MrPathV2._2.Runtime.Preview
         public NativeArray<float2> UVs => _jobData?.Uvs ?? default;
         public NativeArray<float4> Colors => _jobData?.Colors ?? default;
         public NativeArray<int> Indices => _jobData?.Indices ?? default;
-        public int VertexCount => Vertices.IsCreated ? Vertices.Length : 0;
-        public int IndexCount => Indices.IsCreated ? Indices.Length : 0;
 
         public void Dispose()
         {
+            if (_disposed) return;
             DisposeJob();
-            DisposeJob();
-            DisposeJob();
-            // _memMgr no longer used after deprecation of NativeCollectionManager
-            DisposeJob();
+            _disposed = true;
         }
 
         public bool Start(PathSpine spine, PathProfile profile)
         {
+            if (_disposed) return false;
             DisposeJob();
             _jobData = new JobData(spine, profile, Allocator.Persistent);
             if (!_jobData.Value.IsValid)
@@ -98,7 +96,7 @@ namespace MrPathV2._2.Runtime.Preview
             }
             catch (Exception ex)
             {
-                Debug.LogError($"RoadPreviewMeshGenerator 调度失败: {ex.Message}");
+                ErrorHandler.LogError($"RoadPreviewMeshGenerator 调度失败: {ex.Message}");
                 State = GenerationState.Failed;
                 DisposeJob();
                 return false;
@@ -130,7 +128,7 @@ namespace MrPathV2._2.Runtime.Preview
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"RoadPreviewMeshGenerator 强制完成失败: {ex.Message}");
+                    ErrorHandler.LogError($"RoadPreviewMeshGenerator 强制完成失败: {ex.Message}");
                     State = GenerationState.Failed;
                     DisposeJob();
                     return false;
@@ -151,17 +149,23 @@ namespace MrPathV2._2.Runtime.Preview
             State = GenerationState.Idle;
         }
 
+        public void Release()
+        {
+            if (_disposed) return;
+            DisposeJob();
+        }
+
         private struct JobData : IDisposable
         {
             public PathJobsUtility.SpineData Spine;
-            public PathJobsUtility.ProfileData Profile;
+            public readonly PathJobsUtility.ProfileData Profile;
             public NativeArray<float3> Vertices;
             public readonly NativeArray<float2> Uvs;
             public NativeArray<float4> Colors;
             public NativeArray<int> Indices;
             public readonly NativeArray<float> AccumulatedDistances;
             public readonly int Segments;
-            public RecipeData Recipe;
+            public readonly RecipeData Recipe;
             public readonly float2 Tiling;
             public readonly float4 BaseColor;
             public bool IsValid;
@@ -181,7 +185,7 @@ namespace MrPathV2._2.Runtime.Preview
 
                 // 默认最小分段数，保证基本形态，两侧+中线
                 Segments = 2;
-                if (profile != null)
+                if (profile)
                 {
                     // 允许用户在 PathProfile 中配置更高分段数，但做安全上限，防止误设导致性能问题
                     const int maxSegments = 64;
@@ -189,7 +193,7 @@ namespace MrPathV2._2.Runtime.Preview
                 }
                 IsValid = false;
 
-                if (profile == null || worldSpine.VertexCount < 2)
+                if (!profile || worldSpine.VertexCount < 2)
                     return;
 
                 try
@@ -246,7 +250,7 @@ namespace MrPathV2._2.Runtime.Preview
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"RoadPreviewMeshGenerator.JobData 创建失败: {ex.Message}");
+                    ErrorHandler.LogError($"RoadPreviewMeshGenerator.JobData 创建失败: {ex.Message}");
                     Dispose();
                 }
             }
@@ -258,9 +262,9 @@ namespace MrPathV2._2.Runtime.Preview
                 Colors.SafeDispose();
                 Indices.SafeDispose();
                 AccumulatedDistances.SafeDispose();
-                Spine.Dispose();
-                Profile.Dispose();
-                Recipe.Dispose();
+                Spine.SafeDispose();
+                Profile.SafeDispose();
+                Recipe.SafeDispose();
                 IsValid = false;
             }
         }

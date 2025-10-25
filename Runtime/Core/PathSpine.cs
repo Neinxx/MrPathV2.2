@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【最终纯净版】路径骨架数据结构。

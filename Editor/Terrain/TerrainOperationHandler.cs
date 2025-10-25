@@ -1,12 +1,12 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
     ///     地形操作处理器：统一管理地形命令的执行、进度显示、错误处理和取消操作。
@@ -45,7 +45,7 @@ namespace MrPathV2._2.Editor.Terrain
         {
             if (command == null)
             {
-                Debug.LogError("[TerrainOperationHandler] 命令不能为空");
+                ErrorHandler.LogError("[TerrainOperationHandler] 命令不能为空");
                 return;
             }
 
@@ -54,7 +54,7 @@ namespace MrPathV2._2.Editor.Terrain
             // 检查是否已有同类操作在执行
             if (_asyncManager.IsOperationActive(operationId))
             {
-                Debug.LogWarning($"[TerrainOperationHandler] 操作 '{operationId}' 已在执行中");
+                ErrorHandler.LogWarning($"[TerrainOperationHandler] 操作 '{operationId}' 已在执行中");
                 return;
             }
 
@@ -85,7 +85,7 @@ namespace MrPathV2._2.Editor.Terrain
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[TerrainOperationHandler] 执行 {operationId} 失败: {ex.Message}\n{ex.StackTrace}");
+                ErrorHandler.LogError($"[TerrainOperationHandler] 执行 {operationId} 失败: {ex.Message}\n{ex.StackTrace}");
                 EditorUtility.DisplayDialog("执行失败", $"操作 {operationId} 失败，详情请查看控制台日志。", "确定");
             }
             finally
@@ -119,7 +119,7 @@ namespace MrPathV2._2.Editor.Terrain
             }
 
             // 保持向后兼容
-            if (_cts != null && !_cts.IsCancellationRequested) _cts.Cancel();
+            if (_cts is { IsCancellationRequested: false }) _cts.Cancel();
         }
 
         /// <summary>

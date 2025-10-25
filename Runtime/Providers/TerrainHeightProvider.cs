@@ -3,13 +3,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2._2.Runtime.Interfaces;
-using MrPathV2._2.Runtime.Memory;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using UnityEngine;
 
 // NEW: access UnifiedMemory and MemoryOwner
-namespace MrPathV2._2.Runtime.Providers
+namespace MrPathV2.Runtime.Providers
 {
     public class TerrainHeightProvider : IHeightProvider
     {
@@ -77,85 +77,132 @@ namespace MrPathV2._2.Runtime.Providers
         /// </summary>
         private void EnsureCacheIsUpToDate()
         {
-            // 检测地形集合变化（新增/删除/替换），必要时自动使缓存失效
+            // 提前返回：如果不需要更新缓存则直接返回
+            if (!ShouldUpdateCache())
+                return;
+        
+            // 执行缓存更新流程
+            CleanupOldCache();
+            InitializeNewCache();
+        }
+        
+        /// <summary>
+        /// 检查是否需要更新缓存
+        /// </summary>
+        /// <returns>是否需要更新缓存</returns>
+        private bool ShouldUpdateCache()
+        {
+            // 如果当前标记为脏数据，则需要更新
+            if (_mIsDirty)
+                return true;
+        
+            // 检查地形集合是否发生变化
+            return HasTerrainSetChanged();
+        }
+        
+        /// <summary>
+        /// 检查地形集合是否发生变化（新增/删除/替换）
+        /// </summary>
+        /// <returns>地形集合是否发生变化</returns>
+        private bool HasTerrainSetChanged()
+        {
             var activeTerrains = Terrain.activeTerrains;
-            if (!_mIsDirty)
+            
+            // 如果当前没有地形而缓存中有地形，或者当前有地形而缓存中没有地形
+            if (activeTerrains == null || activeTerrains.Length == 0)
+                return _mTerrainCaches.Count > 0;
+        
+            // 如果地形数量不一致
+            if (activeTerrains.Length != _mTerrainCaches.Count)
+                return true;
+        
+            // 检查每个地形的数据是否一致
+            for (var i = 0; i < activeTerrains.Length; i++)
             {
-                var terrainSetChanged = false;
-                if (activeTerrains == null || activeTerrains.Length == 0)
+                if (activeTerrains[i].terrainData != _mTerrainCaches[i].Data)
                 {
-                    terrainSetChanged = _mTerrainCaches.Count > 0;
+                    return true;
                 }
-                else
-                {
-                    if (activeTerrains.Length != _mTerrainCaches.Count) terrainSetChanged = true;
-                    else
-                    {
-                        for (var i = 0; i < activeTerrains.Length; i++)
-                        {
-                            if (activeTerrains[i].terrainData != _mTerrainCaches[i].Data)
-                            {
-                                terrainSetChanged = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (!terrainSetChanged) return; // 数据新鲜且集合未变
-                _mIsDirty = true; // 集合发生变化，强制重建
             }
-
-            // 清理旧的缓存
+        
+            return false;
+        }
+        
+        /// <summary>
+        /// 清理旧的缓存数据
+        /// </summary>
+        private void CleanupOldCache()
+        {
             UnsubscribeAllTerrainData();
+            
             foreach (var cache in _mTerrainCaches)
             {
                 cache.Dispose();
             }
+            
             _mTerrainCaches.Clear();
-
+        }
+        
+        /// <summary>
+        /// 初始化新的缓存数据
+        /// </summary>
+        private void InitializeNewCache()
+        {
+            var activeTerrains = Terrain.activeTerrains;
+            
+            // 如果没有活动地形，标记为未初始化并返回
             if (activeTerrains == null || activeTerrains.Length == 0)
             {
                 _mIsInitialized = false;
-                _mIsDirty = false; // 清理完毕，标记为“干净”
+                _mIsDirty = false;
                 return;
             }
-
+        
+            // 为每个地形创建缓存
             foreach (var terrain in activeTerrains)
             {
-                var data = terrain.terrainData;
-                var position = terrain.GetPosition();
-                var size = data.size;
-
-                var heights2D = data.GetHeights(0, 0, data.heightmapResolution, data.heightmapResolution);
-                var owner = UnifiedMemory.Instance.RentNativeArray<float>(heights2D.Length, Allocator.Persistent);
-                var heightsNative = owner.Collection;
-
-                for (var y = 0; y < data.heightmapResolution; y++)
-                {
-                    for (var x = 0; x < data.heightmapResolution; x++)
-                    {
-                        heightsNative[y * data.heightmapResolution + x] = heights2D[y, x];
-                    }
-                }
-
-                _mTerrainCaches.Add(new TerrainCache
-                {
-                    Terrain = terrain,
-                    Data = data,
-                    Bounds = new Rect(position.x, position.z, size.x, size.z),
-                    HeightsOwner = owner,
-                    Resolution = data.heightmapResolution,
-                    Position = position,
-                    Size = size
-
-                });
-
-                // 订阅地形数据的高度变更事件，任何高度改动均标记缓存为脏
-                SubscribeTerrainData(data);
+                CreateTerrainCache(terrain);
             }
-
+        
             _mIsInitialized = true;
-            _mIsDirty = false; // 重建完毕，标记为“干净”
+            _mIsDirty = false;
+        }
+        
+        /// <summary>
+        /// 为单个地形创建缓存
+        /// </summary>
+        /// <param name="terrain">地形对象</param>
+        private void CreateTerrainCache(Terrain terrain)
+        {
+            var data = terrain.terrainData;
+            var position = terrain.GetPosition();
+            var size = data.size;
+        
+            var heights2D = data.GetHeights(0, 0, data.heightmapResolution, data.heightmapResolution);
+            var owner = UnifiedMemory.Instance.RentNativeArray<float>(heights2D.Length, Allocator.Persistent);
+            var heightsNative = owner.Collection;
+        
+            for (var y = 0; y < data.heightmapResolution; y++)
+            {
+                for (var x = 0; x < data.heightmapResolution; x++)
+                {
+                    heightsNative[y * data.heightmapResolution + x] = heights2D[y, x];
+                }
+            }
+        
+            _mTerrainCaches.Add(new TerrainCache
+            {
+                Terrain = terrain,
+                Data = data,
+                Bounds = new Rect(position.x, position.z, size.x, size.z),
+                HeightsOwner = owner,
+                Resolution = data.heightmapResolution,
+                Position = position,
+                Size = size
+            });
+        
+            // 订阅地形数据的高度变更事件
+            SubscribeTerrainData(data);
         }
 
         private TerrainCache? FindCacheForPosition(Vector3 worldPos)

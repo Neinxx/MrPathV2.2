@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Interfaces
+namespace MrPathV2.Runtime.Interfaces
 {
 
     /// <summary>

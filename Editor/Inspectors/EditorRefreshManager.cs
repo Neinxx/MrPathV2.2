@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
     ///     编辑器刷新管理器，提供更鲁棒地刷新机制
@@ -55,7 +57,7 @@ namespace MrPathV2._2.Editor.Inspectors
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"Editor refresh failed for key '{key}': {ex.Message}");
+                    ErrorHandler.LogError($"Editor refresh failed for key '{key}': {ex.Message}");
                 }
                 return;
             }
@@ -80,7 +82,7 @@ namespace MrPathV2._2.Editor.Inspectors
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Editor refresh failed for key '{key}': {ex.Message}");
+                ErrorHandler.LogError($"Editor refresh failed for key '{key}': {ex.Message}");
             }
         }
 
@@ -125,9 +127,8 @@ namespace MrPathV2._2.Editor.Inspectors
             var keysToProcess = new List<string>();
 
             // 找出可以执行的待执行操作
-            foreach (var kvp in _pendingRefreshActions)
+            foreach (var key in _pendingRefreshActions.Select(kvp => kvp.Key))
             {
-                var key = kvp.Key;
                 if (_lastRefreshTimes.TryGetValue(key, out var lastTime))
                 {
                     if (currentTime - lastTime >= _minRefreshInterval)
@@ -153,7 +154,7 @@ namespace MrPathV2._2.Editor.Inspectors
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"Pending editor refresh failed for key '{key}': {ex.Message}");
+                        ErrorHandler.LogError($"Pending editor  refresh failed for key '{key}': {ex.Message}");
                     }
                     finally
                     {
@@ -167,7 +168,7 @@ namespace MrPathV2._2.Editor.Inspectors
         {
             if (!_disposed)
             {
-                Debug.LogWarning("EditorRefreshManager was not properly disposed!");
+                ErrorHandler.LogWarning("EditorRefreshManager was not properly disposed!");
                 Dispose();
             }
         }

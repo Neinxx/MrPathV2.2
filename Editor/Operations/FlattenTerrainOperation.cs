@@ -1,9 +1,9 @@
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Operations
+namespace MrPathV2.Editor.Operations
 {
     /// <summary>
     ///     压平地形操作定义

@@ -1,10 +1,10 @@
 using System;
-using MrPathV2._2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
-namespace MrPathV2._2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     基于 <see cref="RoadPreviewMeshGenerator" /> 的轻量级预览网格控制器。
@@ -16,7 +16,7 @@ namespace MrPathV2._2.Runtime.Preview
     public sealed class GeneratorPreviewMeshController : IDisposable
     {
 
-        public enum MeshGenerationState
+        private enum MeshGenerationState
         {
             Idle,
             Generating,
@@ -26,6 +26,7 @@ namespace MrPathV2._2.Runtime.Preview
 
         private readonly RoadPreviewMeshGenerator _meshGenerator;
         private readonly TempIndicesManager _tempIndicesManager;
+        private bool _disposed;
 
         public GeneratorPreviewMeshController()
         {
@@ -49,13 +50,15 @@ namespace MrPathV2._2.Runtime.Preview
 
         public void Dispose()
         {
+            if (_disposed) return;
             _meshGenerator?.Dispose();
             _tempIndicesManager?.Dispose();
-            if (PreviewMesh != null)
+            if (PreviewMesh)
             {
                 Object.DestroyImmediate(PreviewMesh);
                 PreviewMesh = null;
             }
+            _disposed = true;
         }
 
         private bool ApplyMeshData()
@@ -74,7 +77,7 @@ namespace MrPathV2._2.Runtime.Preview
 
             if (!vertices.IsCreated || !indices.IsCreated || vertices.Length == 0 || indices.Length == 0)
             {
-                Debug.LogError($"[GeneratorPreviewMeshController] Invalid mesh data - verticesCreated={vertices.IsCreated}, indicesCreated={indices.IsCreated}, vertexCount={vertices.Length}, indexCount={indices.Length}");
+                ErrorHandler.LogError($"[GeneratorPreviewMeshController] Invalid mesh data  - verticesCreated={vertices.IsCreated}, indicesCreated={indices.IsCreated}, vertexCount={vertices.Length}, indexCount={indices.Length}");
                 State = MeshGenerationState.Failed;
                 return false;
             }
@@ -132,7 +135,7 @@ namespace MrPathV2._2.Runtime.Preview
             }
             catch (Exception ex)
             {
-                Debug.LogError($"GeneratorPreviewMeshController 应用网格数据失败: {ex.Message}");
+                ErrorHandler.LogError($"GeneratorPreviewMeshController 应用网格数据失败: {ex.Message}");
                 State = MeshGenerationState.Failed;
                 return false;
             }
@@ -140,10 +143,7 @@ namespace MrPathV2._2.Runtime.Preview
 
         private void DisposeCurrentJob()
         {
-            if (_meshGenerator != null)
-            {
-                _meshGenerator.ForceComplete();
-            }
+            _meshGenerator?.Release();
         }
 
         #region API 与旧 PreviewMeshController 保持一致

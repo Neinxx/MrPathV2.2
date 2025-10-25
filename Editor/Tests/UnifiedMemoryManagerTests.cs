@@ -1,8 +1,8 @@
-using MrPathV2._2.Runtime.Memory;
+using MrPathV2.Runtime.Memory;
 using NUnit.Framework;
 using Unity.Collections;
 
-namespace MrPathV2._2.Editor.Tests
+namespace MrPathV2.Editor.Tests
 {
     /// <summary>
     ///     单元测试：验证 UnifiedMemoryManager 的分配、释放与集中清理逻辑。

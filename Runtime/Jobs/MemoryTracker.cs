@@ -6,7 +6,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     内存跟踪器：监控NativeArray分配和释放，检测内存泄漏
@@ -73,13 +73,19 @@ namespace MrPathV2._2.Runtime.Jobs
         /// <param name="array">要释放的数组</param>
         public static unsafe void TrackDeallocation<T>(NativeArray<T> array) where T : struct
         {
-            if (!array.IsCreated) return;
-
-            var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
-            if (SActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
+            try
             {
-                Interlocked.Increment(ref _sTotalDeallocations);
-                Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
+                if (!array.IsCreated) return;
+                var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
+                if (SActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
+                {
+                    Interlocked.Increment(ref _sTotalDeallocations);
+                    Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
+                }
+            }
+            catch
+            {
+                // 已被 Unity 标记为释放的数组在获取指针时会抛出异常，忽略即可
             }
         }
 
@@ -117,13 +123,19 @@ namespace MrPathV2._2.Runtime.Jobs
         /// <param name="list">要释放的列表</param>
         public static unsafe void TrackDeallocation<T>(NativeList<T> list) where T : unmanaged
         {
-            if (!list.IsCreated) return;
-
-            var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
-            if (SActiveAllocations.TryRemove((IntPtr)ptr, out var info))
+            try
             {
-                Interlocked.Increment(ref _sTotalDeallocations);
-                Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
+                if (!list.IsCreated) return;
+                var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
+                if (SActiveAllocations.TryRemove((IntPtr)ptr, out var info))
+                {
+                    Interlocked.Increment(ref _sTotalDeallocations);
+                    Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
+                }
+            }
+            catch
+            {
+                // 已被 Unity 标记为释放的列表在获取指针时会抛出异常，忽略即可
             }
         }
 

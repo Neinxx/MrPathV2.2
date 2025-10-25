@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq; // 用于 .ToArray()
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-namespace MrPathV2._2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     错误级别枚举
@@ -27,7 +28,7 @@ namespace MrPathV2._2.Runtime.Core
         public string message;
         public string context;
         public Object source;
-        public DateTime timestamp;
+        public DateTime Timestamp;
         public string stackTrace;
 
         public ErrorInfo(ErrorLevel level, string message, string context = null, Object source = null)
@@ -36,7 +37,8 @@ namespace MrPathV2._2.Runtime.Core
             this.message = message;
             this.context = context;
             this.source = source;
-            timestamp = DateTime.Now;
+            Timestamp = DateTime.Now;
+            // 优化：只在真正需要时才获取慢速的堆栈跟踪
             stackTrace = level >= ErrorLevel.Error ? Environment.StackTrace : null;
         }
 
@@ -54,8 +56,35 @@ namespace MrPathV2._2.Runtime.Core
     /// </summary>
     public static class ErrorHandler
     {
-        private static readonly Queue<ErrorInfo> _errorHistory = new Queue<ErrorInfo>();
-        private static readonly int MaxHistorySize = 100;
+        private const int MaxHistorySize = 100;
+        private static readonly Queue<ErrorInfo> ErrorHistory = new Queue<ErrorInfo>();
+
+        // --- 新增：最佳实践 ---
+
+        /// <summary>
+        ///     [新增] 错误处理的总开关。
+        ///     如果设为 false，所有日志调用都将被立即忽略。
+        /// </summary>
+        public static bool IsEnabled { get; set; } = true;
+
+        /// <summary>
+        ///     [新增] 要记录的最低错误级别。
+        ///     默认为 Info（记录所有内容）。
+        ///     如果设为 Error，则 Info 和 Warning 将被忽略。
+        /// </summary>
+        public static ErrorLevel MinLogLevel { get; set; } = ErrorLevel.Info;
+
+        /// <summary>
+        ///     [新增] 用于 O(1) 计数的数组。
+        /// </summary>
+        private static readonly int[] ErrorCounts = new int[Enum.GetValues(typeof(ErrorLevel)).Length];
+
+        /// <summary>
+        ///     [新增] 用于线程安全的锁对象。
+        /// </summary>
+        private static readonly object HistoryLock = new object();
+
+        // -------------------------
 
         /// <summary>
         ///     错误发生时的事件
@@ -65,11 +94,11 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     记录信息级别的消息
         /// </summary>
-        /// <param name="message">消息内容</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
         public static void LogInfo(string message, string context = null, Object source = null)
         {
+            // 优化：在创建任何对象或执行任何操作之前，先检查开关和级别
+            if (!IsEnabled || ErrorLevel.Info < MinLogLevel) return;
+
             var errorInfo = new ErrorInfo(ErrorLevel.Info, message, context, source);
             ProcessError(errorInfo);
         }
@@ -77,11 +106,10 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     记录警告级别的消息
         /// </summary>
-        /// <param name="message">消息内容</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
         public static void LogWarning(string message, string context = null, Object source = null)
         {
+            if (!IsEnabled || ErrorLevel.Warning < MinLogLevel) return;
+
             var errorInfo = new ErrorInfo(ErrorLevel.Warning, message, context, source);
             ProcessError(errorInfo);
         }
@@ -89,11 +117,10 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     记录错误级别的消息
         /// </summary>
-        /// <param name="message">消息内容</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
         public static void LogError(string message, string context = null, Object source = null)
         {
+            if (!IsEnabled || ErrorLevel.Error < MinLogLevel) return;
+
             var errorInfo = new ErrorInfo(ErrorLevel.Error, message, context, source);
             ProcessError(errorInfo);
         }
@@ -101,11 +128,10 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     记录严重错误级别的消息
         /// </summary>
-        /// <param name="message">消息内容</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
         public static void LogCritical(string message, string context = null, Object source = null)
         {
+            if (!IsEnabled || ErrorLevel.Critical < MinLogLevel) return;
+
             var errorInfo = new ErrorInfo(ErrorLevel.Critical, message, context, source);
             ProcessError(errorInfo);
         }
@@ -113,14 +139,15 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     记录异常
         /// </summary>
-        /// <param name="exception">异常对象</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
         public static void LogException(Exception exception, string context = null, Object source = null)
         {
+            // 异常总是至少为 Error 级别
+            if (!IsEnabled || ErrorLevel.Error < MinLogLevel) return;
+
             var message = $"Exception: {exception.Message}";
             var errorInfo = new ErrorInfo(ErrorLevel.Error, message, context, source)
             {
+                // 优化：使用异常中已有的堆栈跟踪，而不是 Environment.StackTrace
                 stackTrace = exception.StackTrace
             };
             ProcessError(errorInfo);
@@ -129,16 +156,17 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     处理错误信息
         /// </summary>
-        /// <param name="errorInfo">错误信息</param>
         private static void ProcessError(ErrorInfo errorInfo)
         {
-            // 添加到历史记录
+            // 注意：开关检查已移至公共 Log... 方法中，以获得更好的性能
+
+            // 添加到历史记录 (内部已加锁)
             AddToHistory(errorInfo);
 
-            // 输出到Unity控制台
+            // 输出到Unity控制台 (Debug.Log 本身是线程安全的)
             LogToUnityConsole(errorInfo);
 
-            // 触发事件通知
+            // 触发事件通知 (在锁之外触发，防止死锁)
             try
             {
                 OnError?.Invoke(errorInfo);
@@ -150,7 +178,7 @@ namespace MrPathV2._2.Runtime.Core
             }
 
 #if UNITY_EDITOR
-            // 编辑器下的特殊处理
+            // 编辑器下的特殊处理 (内部已处理线程安全)
             HandleEditorError(errorInfo);
 #endif
         }
@@ -158,22 +186,26 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     添加到错误历史记录
         /// </summary>
-        /// <param name="errorInfo">错误信息</param>
         private static void AddToHistory(ErrorInfo errorInfo)
         {
-            _errorHistory.Enqueue(errorInfo);
-
-            // 保持历史记录大小限制
-            while (_errorHistory.Count > MaxHistorySize)
+            // 优化：添加线程安全锁
+            lock (HistoryLock)
             {
-                _errorHistory.Dequeue();
+                ErrorHistory.Enqueue(errorInfo);
+                ErrorCounts[(int)errorInfo.level]++; // 优化：O(1) 计数
+
+                // 保持历史记录大小限制
+                while (ErrorHistory.Count > MaxHistorySize)
+                {
+                    var removedInfo = ErrorHistory.Dequeue();
+                    ErrorCounts[(int)removedInfo.level]--; // 优化：O(1) 计数
+                }
             }
         }
 
         /// <summary>
         ///     输出到Unity控制台
         /// </summary>
-        /// <param name="errorInfo">错误信息</param>
         private static void LogToUnityConsole(ErrorInfo errorInfo)
         {
             var message = errorInfo.ToString();
@@ -197,17 +229,20 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     编辑器下的错误处理
         /// </summary>
-        /// <param name="errorInfo">错误信息</param>
         private static void HandleEditorError(ErrorInfo errorInfo)
         {
-            // 严重错误时显示对话框
             if (errorInfo.level == ErrorLevel.Critical)
             {
-                EditorUtility.DisplayDialog(
-                    "MrPath Critical Error",
-                    errorInfo.message,
-                    "OK"
-                );
+                // [修正] 使用 EditorApplication.delayCall
+                // 确保在下一次编辑器 update 时在主线程上安全地调用弹窗
+                EditorApplication.delayCall += () =>
+                {
+                    EditorUtility.DisplayDialog(
+                        "MrPath Critical Error",
+                        errorInfo.message,
+                        "OK"
+                    );
+                };
             }
         }
 #endif
@@ -215,64 +250,74 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     获取错误历史记录
         /// </summary>
-        /// <returns>错误历史记录数组</returns>
-        public static ErrorInfo[] GetErrorHistory() => _errorHistory.ToArray();
+        public static ErrorInfo[] GetErrorHistory()
+        {
+            // 优化：添加线程安全锁
+            lock (HistoryLock)
+            {
+                return ErrorHistory.ToArray();
+            }
+        }
 
         /// <summary>
         ///     清除错误历史记录
         /// </summary>
         public static void ClearHistory()
         {
-            _errorHistory.Clear();
+            // 优化：添加线程安全锁
+            lock (HistoryLock)
+            {
+                ErrorHistory.Clear();
+                // 优化：重置 O(1) 计数器
+                Array.Clear(ErrorCounts, 0, ErrorCounts.Length);
+            }
         }
 
         /// <summary>
-        ///     获取指定级别的错误数量
+        ///     获取指定级别的错误数量 (O(1) 操作)
         /// </summary>
-        /// <param name="level">错误级别</param>
-        /// <returns>错误数量</returns>
         public static int GetErrorCount(ErrorLevel level)
         {
-            var count = 0;
-            foreach (var error in _errorHistory)
+            // 优化：使用 O(1) 计数器并添加锁
+            lock (HistoryLock)
             {
-                if (error.level == level)
-                    count++;
+                return ErrorCounts[(int)level];
             }
-            return count;
         }
 
         /// <summary>
-        ///     检查是否有指定级别或更高级别的错误
+        ///     检查是否有指定级别或更高级别的错误 (近 O(1) 操作)
         /// </summary>
-        /// <param name="minLevel">最小错误级别</param>
-        /// <returns>如果有错误返回true</returns>
         public static bool HasErrors(ErrorLevel minLevel = ErrorLevel.Error)
         {
-            foreach (var error in _errorHistory)
+            // 优化：迭代计数器数组（非常快），而不是整个历史队列
+            lock (HistoryLock)
             {
-                if (error.level >= minLevel)
-                    return true;
+                // 从最小级别开始检查到最高级别
+                for (int i = (int)minLevel; i < ErrorCounts.Length; i++)
+                {
+                    if (ErrorCounts[i] > 0)
+                        return true;
+                }
+                return false;
             }
-            return false;
         }
 
         /// <summary>
         ///     安全执行操作，捕获并记录异常
         /// </summary>
-        /// <param name="action">要执行的操作</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
-        /// <returns>操作是否成功执行</returns>
         public static bool SafeExecute(Action action, string context = null, Object source = null)
         {
             try
             {
+                // 即使 IsEnabled = false，SafeExecute 也应该执行
+                // 它的主要职责是“安全执行”，而不是“日志记录”
                 action?.Invoke();
                 return true;
             }
             catch (Exception ex)
             {
+                // LogException 内部会检查 IsEnabled 和 MinLogLevel
                 LogException(ex, context, source);
                 return false;
             }
@@ -281,12 +326,6 @@ namespace MrPathV2._2.Runtime.Core
         /// <summary>
         ///     安全执行带返回值的操作，捕获并记录异常
         /// </summary>
-        /// <typeparam name="T">返回值类型</typeparam>
-        /// <param name="func">要执行的函数</param>
-        /// <param name="defaultValue">异常时的默认返回值</param>
-        /// <param name="context">上下文信息</param>
-        /// <param name="source">源对象</param>
-        /// <returns>函数返回值或默认值</returns>
         public static T SafeExecute<T>(Func<T> func, T defaultValue = default, string context = null, Object source = null)
         {
             try
@@ -302,13 +341,10 @@ namespace MrPathV2._2.Runtime.Core
     }
 
     /// <summary>
-    ///     错误处理扩展方法
+    ///     错误处理扩展方法 (保持不变)
     /// </summary>
     public static class ErrorHandlerExtensions
     {
-        /// <summary>
-        ///     为UnityEngine.Object添加错误记录扩展方法
-        /// </summary>
         public static void LogInfo(this Object obj, string message, string context = null)
         {
             ErrorHandler.LogInfo(message, context, obj);

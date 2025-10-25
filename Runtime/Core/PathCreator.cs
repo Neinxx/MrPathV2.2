@@ -1,12 +1,11 @@
-// PathCreator.cs
 
 using System;
 using System.Collections.Generic;
-using MrPathV2._2.Runtime.Components;
-using MrPathV2._2.Runtime.Settings;
+using MrPathV2.Runtime.Components;
+using MrPathV2.Runtime.Settings;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【最终步：终极执行者】
@@ -44,21 +43,21 @@ namespace MrPathV2._2.Runtime.Core
         {
             get
             {
-                if (profile == null)
+                if (!profile)
                 {
                     this.LogWarning("Profile is null. Please assign a PathProfile.", "PathCreator");
                     return null;
                 }
 
                 var registry = PathStrategyRegistry.Instance;
-                if (registry == null)
+                if (!registry)
                 {
                     this.LogError("PathStrategyRegistry instance is null. Please ensure the registry asset exists in Resources folder.", "PathCreator");
                     return null;
                 }
 
                 var strategy = registry.GetStrategy(profile.curveType);
-                if (strategy == null)
+                if (!strategy)
                 {
                     this.LogWarning($"No strategy found for curve type '{profile.curveType}'. Please configure the strategy in PathStrategyRegistry.", "PathCreator");
                 }
@@ -70,11 +69,9 @@ namespace MrPathV2._2.Runtime.Core
         private void Awake()
         {
             // 确保pathData在运行时不为null
-            if (pathData == null)
-            {
-                pathData = new PathData();
-                this.LogWarning("PathData was null, created new instance.", "PathCreator");
-            }
+            if (pathData != null) return;
+            pathData = new PathData();
+            this.LogWarning("PathData was null, created new instance.", "PathCreator");
         }
 
         /// <summary>
@@ -84,10 +81,7 @@ namespace MrPathV2._2.Runtime.Core
         private void OnValidate()
         {
             // 确保pathData不为null
-            if (pathData == null)
-            {
-                pathData = new PathData();
-            }
+            pathData ??= new PathData();
 
             // 保证中心点位于第一个节点
             EnsurePivotAtFirstPoint();
@@ -98,50 +92,32 @@ namespace MrPathV2._2.Runtime.Core
         public event Action<PathChangeCommand> PathModified;
         public event Action CurveDefinitionChanged;
         public event Action AppearanceChanged;
-        public event Action TerrainInteractionChanged;
 
-        public PathStrategy GetCurrentStratgy() => CurrentStrategy;
 
         /// <summary>
         ///     验证组件状态是否有效
         /// </summary>
         public bool IsValidState()
         {
-            if (pathData == null)
-            {
-                this.LogError("PathData is null. This should not happen.", "PathCreator");
-                return false;
-            }
+            if (pathData != null) return profile;
+            this.LogError("PathData is null. This should not happen.", "PathCreator");
+            return false;
 
-            if (profile == null)
-            {
-                // this.LogWarning("PathProfile is not assigned.", "PathCreator");
-                return false;
-            }
-
-            return true;
+            // this.LogWarning("PathProfile is not assigned.", "PathCreator");
         }
 
         private void EnsurePivotAtFirstPoint()
         {
             if (pathData == null || pathData.KnotCount == 0) return;
 
-            // 当前第一个节点的本地坐标
             var firstLocal = pathData.GetPosition(0);
-            if (firstLocal != Vector3.zero)
-            {
-                // 需要将 transform 移动到世界空间的第一个节点位置
-                var worldFirst = transform.TransformPoint(firstLocal);
+            if (firstLocal == Vector3.zero) return;
 
-                var deltaWorld = worldFirst - transform.position;
+            // 将物体移动到第一个节点的世界位置
+            transform.position += transform.TransformVector(firstLocal);
 
-                // 将 transform.position 移动到 worldFirst
-                transform.position = worldFirst;
-
-                // 将所有路径点整体平移相反方向，使得第一个点本地坐标为零
-                var deltaLocal = -firstLocal;
-                pathData.ShiftAllPositions(deltaLocal);
-            }
+            // 将所有路径点反向偏移，使第一个点回到原点
+            pathData.ShiftAllPositions(-firstLocal);
         }
 
         #region Public API (供编辑器或其他脚本调用)
@@ -168,7 +144,7 @@ namespace MrPathV2._2.Runtime.Core
             }
 
             var strategy = CurrentStrategy;
-            if (strategy != null && NumPoints > 0)
+            if (strategy && NumPoints > 0)
             {
                 return ErrorHandler.SafeExecute(() =>
                 {
@@ -176,15 +152,12 @@ namespace MrPathV2._2.Runtime.Core
                     var localPoint = strategy.GetPointAt(t, pathData);
 
                     // 验证返回的点是否有效
-                    if (float.IsNaN(localPoint.x) || float.IsNaN(localPoint.y) || float.IsNaN(localPoint.z) ||
-                        float.IsInfinity(localPoint.x) || float.IsInfinity(localPoint.y) || float.IsInfinity(localPoint.z))
-                    {
-                        this.LogWarning($"Strategy returned invalid point {localPoint} for t={t}. Using fallback.", "PathCreator");
-                        return transform.position;
-                    }
+                    if (!float.IsNaN(localPoint.x) && !float.IsNaN(localPoint.y) && !float.IsNaN(localPoint.z) &&
+                        !float.IsInfinity(localPoint.x) && !float.IsInfinity(localPoint.y) && !float.IsInfinity(localPoint.z)) return transform.TransformPoint(localPoint);
+                    this.LogWarning($"Strategy returned invalid point {localPoint} for t={t}. Using fallback.", "PathCreator");
+                    return transform.position;
 
                     // 2. 在这里，由 PathCreator 亲自完成到世界空间的转换
-                    return transform.TransformPoint(localPoint);
                 }, transform.position, "PathCreator.GetPointAt", this);
             }
             return transform.position;
@@ -212,7 +185,7 @@ namespace MrPathV2._2.Runtime.Core
             }
 
             var strategy = CurrentStrategy;
-            if (strategy != null && NumPoints > 0)
+            if (strategy && NumPoints > 0)
             {
                 return ErrorHandler.SafeExecute(() =>
                 {
@@ -220,14 +193,11 @@ namespace MrPathV2._2.Runtime.Core
                     var localPoint = strategy.GetPointAt(t, pathData);
 
                     // 验证返回的点是否有效
-                    if (float.IsNaN(localPoint.x) || float.IsNaN(localPoint.y) || float.IsNaN(localPoint.z) ||
-                        float.IsInfinity(localPoint.x) || float.IsInfinity(localPoint.y) || float.IsInfinity(localPoint.z))
-                    {
-                        this.LogWarning($"Strategy returned invalid local point {localPoint} for t={t}. Using fallback.", "PathCreator");
-                        return Vector3.zero;
-                    }
+                    if (!float.IsNaN(localPoint.x) && !float.IsNaN(localPoint.y) && !float.IsNaN(localPoint.z) &&
+                        !float.IsInfinity(localPoint.x) && !float.IsInfinity(localPoint.y) && !float.IsInfinity(localPoint.z)) return localPoint;
+                    this.LogWarning($"Strategy returned invalid local point {localPoint} for t={t}. Using fallback.", "PathCreator");
+                    return Vector3.zero;
 
-                    return localPoint;
                 }, Vector3.zero, "PathCreator.GetPointAtLocal", this);
             }
             return Vector3.zero;
@@ -262,19 +232,21 @@ namespace MrPathV2._2.Runtime.Core
                 // 2. 将此敕令作为"事件"，广播给所有关心此变化的系统
                 PathModified?.Invoke(command);
 
-                // 根据命令类型触发更具体的事件
-                if (command is AddPointCommand || command is MovePointCommand || command is InsertPointCommand || command is DeletePointCommand || command is ClearPointsCommand)
+                switch (command)
                 {
-                    CurveDefinitionChanged?.Invoke();
-                }
-                else if (command is BatchCommand)
-                {
+                    // 根据命令类型触发更具体的事件
+                    case AddPointCommand:
+                    case MovePointCommand:
+                    case InsertPointCommand:
+                    case DeletePointCommand:
+                    case ClearPointsCommand:
                     // batch命令，保守地认为曲线定义可能变化
-                    CurveDefinitionChanged?.Invoke();
-                }
-                else
-                {
-                    AppearanceChanged?.Invoke();
+                    case BatchCommand:
+                        CurveDefinitionChanged?.Invoke();
+                        break;
+                    default:
+                        AppearanceChanged?.Invoke();
+                        break;
                 }
             }, "PathCreator.ExecuteCommand", this);
         }

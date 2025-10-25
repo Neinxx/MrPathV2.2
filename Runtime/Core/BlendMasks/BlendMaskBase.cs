@@ -1,8 +1,8 @@
-using MrPathV2._2.Runtime.Core.Gpu;
+using MrPathV2.Runtime.Core.Gpu;
 using Sirenix.OdinInspector;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     所有遮罩类型的基类，提供通用的 UV 变换、平滑及整体缩放等功能。

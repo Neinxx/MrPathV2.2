@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using MrPathV2._2.Runtime.Core.BlendMasks;
-using MrPathV2._2.Runtime.Jobs;
+using MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Jobs;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     统一 CPU/GPU/Terrain 三端的混合与采样逻辑，确保所见即所得。

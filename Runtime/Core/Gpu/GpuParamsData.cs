@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Core.Gpu
+namespace MrPathV2.Runtime.Core.Gpu
 {
     /// <summary>
     ///     运行时侧用于打包遮罩参数的通用数据结构。Editor/Runtime 可将其拷贝到各自的 GPU 结构体。

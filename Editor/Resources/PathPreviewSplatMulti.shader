@@ -302,24 +302,60 @@ Shader "MrPath/PathPreviewSplatMulti"
                 half4 finalColor = half4(0, 0, 0, 0);
 
                 int maxLayers = min(_LayerCount, 16);
-                for(int i = 0; i < maxLayers; i++)
+
+                // 若使用 GPU 权重，则先收集所有层权重并进行全局归一化，确保与最终地形结果一致
+                if (_UseSplatWeights > 0.5)
                 {
-                    // 从 GPU 权重或 MaskAtlas 采样
-                    float weight = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
-                    if(weight < 0.0004) continue;
+                    float weights[16];
+                    float total = 0.0;
+                    for (int i = 0; i < maxLayers; i++)
+                    {
+                        float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
+                        weights[i] = w;
+                        total += w;
+                    }
 
-                    float2 layerTiling = GetLayerTiling(i);
-                    float2 layerUV = input.worldUV * layerTiling;
-                    half4  layerColor = SampleLayerTexture(i, layerUV);
+                    float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
 
-                    // 仅透明度受 mask 影响，颜色保持原值
-                    layerColor.a *= weight;
+                    for (int i = 0; i < maxLayers; i++)
+                    {
+                        float weight = (invTotal > 0.0) ? saturate(weights[i] * invTotal) : 0.0;
+                        if (weight < 0.0004) continue;
 
-                    float layerOpacity = GetLayerOpacity(i);
-                    float blendMode = GetLayerBlendMode(i);
-                    float blendOpacity = layerOpacity;
+                        float2 layerTiling = GetLayerTiling(i);
+                        float2 layerUV = input.worldUV * layerTiling;
+                        half4  layerColor = SampleLayerTexture(i, layerUV);
 
-                    finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                        // 仅透明度受归一化后的 mask 影响，颜色保持原值
+                        layerColor.a *= weight;
+
+                        float layerOpacity = GetLayerOpacity(i);
+                        float blendMode = GetLayerBlendMode(i);
+                        float blendOpacity = layerOpacity;
+
+                        finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                    }
+                }
+                else
+                {
+                    // 未使用 GPU 权重时，保持原逻辑（直接使用遮罩采样值，不进行跨层归一化）
+                    for (int i = 0; i < maxLayers; i++)
+                    {
+                        float weight = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
+                        if (weight < 0.0004) continue;
+
+                        float2 layerTiling = GetLayerTiling(i);
+                        float2 layerUV = input.worldUV * layerTiling;
+                        half4  layerColor = SampleLayerTexture(i, layerUV);
+
+                        layerColor.a *= weight;
+
+                        float layerOpacity = GetLayerOpacity(i);
+                        float blendMode = GetLayerBlendMode(i);
+                        float blendOpacity = layerOpacity;
+
+                        finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                    }
                 }
 
                 // 使用颜色强度驱动透明度；全黑像素输出全透明

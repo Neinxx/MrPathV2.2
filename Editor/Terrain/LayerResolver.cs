@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using MrPathV2._2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
     ///     解析 StylizedRoadRecipe 中的 TerrainLayer，并与目标 Terrain 进行比对。
@@ -73,6 +73,143 @@ namespace MrPathV2._2.Editor.Terrain
             }
 
             return result;
+        }
+
+        /// <summary>
+        ///     确保配方中的图层都存在于地形，并返回完整映射（非交互模式）
+        /// </summary>
+        public static Dictionary<TerrainLayer, int> ResolveEnsurePresent(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        {
+            // 提前返回：检查输入参数有效性
+            if (!IsInputValid(terrain, recipe))
+            {
+                return new Dictionary<TerrainLayer, int>();
+            }
+
+            var td = terrain.terrainData;
+            var layers = new List<TerrainLayer>(td.terrainLayers ?? Array.Empty<TerrainLayer>());
+
+            // 获取现有图层映射
+            var result = GetExistingLayerMapping(layers);
+
+            // 确保配方图层存在
+            EnsureRecipeLayersPresent(recipe, layers, result, td);
+
+            return result;
+        }
+
+        /// <summary>
+        ///     检查输入参数是否有效
+        /// </summary>
+        private static bool IsInputValid(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        {
+            return terrain &&
+                   terrain.terrainData &&
+                   recipe;
+        }
+
+        /// <summary>
+        ///     获取现有图层映射
+        /// </summary>
+        private static Dictionary<TerrainLayer, int> GetExistingLayerMapping(List<TerrainLayer> layers)
+        {
+            var result = new Dictionary<TerrainLayer, int>();
+
+            for (var i = 0; i < layers.Count; i++)
+            {
+                var layer = layers[i];
+                if (layer)
+                {
+                    result.TryAdd(layer, i);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     确保配方图层存在
+        /// </summary>
+        private static void EnsureRecipeLayersPresent(
+            StylizedRoadRecipe recipe, 
+            List<TerrainLayer> layers, 
+            Dictionary<TerrainLayer, int> result, 
+            TerrainData td)
+        {
+            foreach (var roadLayer in recipe.GetLayers())
+            {
+                // 提前返回：检查图层有效性
+                if (!IsRoadLayerValid(roadLayer))
+                {
+                    continue;
+                }
+
+                var terrainLayer = roadLayer.contentLayer;
+
+                // 提前返回：图层已存在
+                if (result.ContainsKey(terrainLayer))
+                {
+                    continue;
+                }
+
+                // 添加缺失图层
+                AddMissingLayer(terrainLayer, layers, result, td);
+            }
+        }
+
+        /// <summary>
+        ///     检查道路图层是否有效
+        /// </summary>
+        private static bool IsRoadLayerValid(RoadLayer roadLayer)
+        {
+            return roadLayer != null && roadLayer.contentLayer;
+        }
+
+        /// <summary>
+        ///     添加缺失图层
+        /// </summary>
+        private static void AddMissingLayer(
+            TerrainLayer terrainLayer, 
+            List<TerrainLayer> layers, 
+            Dictionary<TerrainLayer, int> result, 
+            TerrainData td)
+        {
+            Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
+
+            // 寻找可用的插入位置
+            var insertIndex = FindAvailableSlot(layers);
+
+            // 插入或添加图层
+            if (insertIndex >= 0)
+            {
+                layers[insertIndex] = terrainLayer;
+            }
+            else
+            {
+                layers.Add(terrainLayer);
+                insertIndex = layers.Count - 1;
+            }
+
+            // 更新地形数据
+            td.terrainLayers = layers.ToArray();
+
+            // 更新映射结果
+            result[terrainLayer] = insertIndex;
+        }
+
+        /// <summary>
+        ///     寻找可用的图层槽位
+        /// </summary>
+        private static int FindAvailableSlot(List<TerrainLayer> layers)
+        {
+            for (var i = 0; i < layers.Count; i++)
+            {
+                if (!layers[i])
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
     }
 }

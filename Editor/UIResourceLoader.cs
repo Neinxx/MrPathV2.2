@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 // using System.Linq; // <-- 不再需要
 
-namespace MrPathV2._2.Editor
+namespace MrPathV2.Editor
 {
     /// <summary>
     ///     自动加载与指定类型同名的 .uxml 和 .uss 资源。
@@ -34,7 +34,7 @@ namespace MrPathV2._2.Editor
         {
             var type = typeof(T);
             var uxml = LoadUxml(type);
-            if (uxml == null)
+            if (!uxml)
             {
                 Debug.LogError($"[UIResourceLoader] Failed to load .uxml for type: {type.Name}");
                 return new Label($"[Missing UXML: {type.Name}.uxml]");
@@ -45,7 +45,7 @@ namespace MrPathV2._2.Editor
             if (autoApplyUss)
             {
                 var uss = LoadUss(type);
-                if (uss != null)
+                if (uss)
                 {
                     root.styleSheets.Add(uss);
                 }
@@ -126,7 +126,7 @@ namespace MrPathV2._2.Editor
             // [优化] Step 1: 健壮地获取脚本目录
             string scriptDir = null;
             var scriptAsset = FindMonoScriptForType(ownerType);
-            if (scriptAsset != null)
+            if (scriptAsset)
             {
                 scriptDir = Path.GetDirectoryName(AssetDatabase.GetAssetPath(scriptAsset));
             }
@@ -166,14 +166,14 @@ namespace MrPathV2._2.Editor
             foreach (var path in sameDirPaths)
             {
                 var asset = AssetDatabase.LoadAssetAtPath<T>(path);
-                if (asset != null) return asset;
+                if (asset) return asset;
             }
 
             // Step 5: 回退到加载其他目录的资源
             foreach (var path in otherPaths)
             {
                 var asset = AssetDatabase.LoadAssetAtPath<T>(path);
-                if (asset != null) return asset;
+                if (asset) return asset;
             }
 
             return null;
@@ -186,7 +186,7 @@ namespace MrPathV2._2.Editor
         public static VisualElement LoadAndCloneByName(string className, bool autoApplyUss = true)
         {
             var uxml = LoadUxmlByName(className);
-            if (uxml == null)
+            if (!uxml)
             {
                 Debug.LogError($"[UIResourceLoader] Failed to load .uxml for class: {className}");
                 return new Label($"[Missing UXML: {className}.uxml]");
@@ -196,7 +196,7 @@ namespace MrPathV2._2.Editor
 
             if (!autoApplyUss) return root;
             var uss = LoadUssByName(className);
-            if (uss != null)
+            if (uss)
                 root.styleSheets.Add(uss);
 
             return root;

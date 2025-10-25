@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2._2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 // 保留以兼容可能的 Task 用法（若不需要可后续移除）
 
-namespace MrPathV2._2.Runtime.Settings
+namespace MrPathV2.Runtime.Settings
 {
     /// <summary>
     ///     路径策略注册中心：负责管理CurveType与PathStrategy的映射关系
@@ -162,10 +162,22 @@ namespace MrPathV2._2.Runtime.Settings
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <returns>对应的路径策略，若未找到则返回null</returns>
+        // 添加一个字段用于跟踪已警告过的曲线类型，避免重复输出相同警告
+        private HashSet<CurveType> _loggedMissingStrategies = new HashSet<CurveType>();
+
         public PathStrategy GetStrategy(CurveType type)
         {
+            // 快速路径：缓存存在且包含有效策略时直接返回
+            if (_strategyCache != null &&
+                _strategyCache.TryGetValue(type, out var strategy) &&
+                strategy)
+            {
+                return strategy;
+            }
+
             return ErrorHandler.SafeExecute(() =>
             {
+                // 初始化缓存（仅在首次需要时）
                 if (_strategyCache == null)
                 {
                     ErrorHandler.LogWarning("Strategy cache is null, attempting to reinitialize.", "PathStrategyRegistry");
@@ -178,19 +190,23 @@ namespace MrPathV2._2.Runtime.Settings
                     }
                 }
 
-                if (_strategyCache.TryGetValue(type, out var strategy))
+                // 再次检查缓存（初始化后可能已有值）
+                if (_strategyCache.TryGetValue(type, out strategy))
                 {
-                    if (strategy == null)
-                    {
-                        ErrorHandler.LogWarning($"Cached strategy for type '{type}' is null, removing from cache.", "PathStrategyRegistry");
-                        _strategyCache.Remove(type);
-                        return null;
-                    }
-                    return strategy;
+                    if (strategy)
+                        return strategy;
+
+                    // 移除无效缓存项（只做一次）
+                    _strategyCache.Remove(type);
                 }
 
-                // 未配置时返回 null，由上层 UI 与调用方负责提示与阻止
-                ErrorHandler.LogWarning($"No strategy found for curve type '{type}'. Please configure it in the registry.", "PathStrategyRegistry");
+                // 只对每种缺失类型警告一次，减少日志开销
+                if (!_loggedMissingStrategies.Contains(type))
+                {
+                    ErrorHandler.LogWarning($"No strategy found for curve type '{type}'. Please configure it in the registry.", "PathStrategyRegistry");
+                    _loggedMissingStrategies.Add(type);
+                }
+
                 return null;
             }, null, "PathStrategyRegistry.GetStrategy");
         }
@@ -200,7 +216,7 @@ namespace MrPathV2._2.Runtime.Settings
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <returns>如果有可用策略返回true，否则返回false</returns>
-        public bool HasStrategy(CurveType type) => GetStrategy(type) != null;
+        public bool HasStrategy(CurveType type) => GetStrategy(type);
 
         /// <summary>
         ///     获取所有已配置的曲线类型
@@ -287,11 +303,9 @@ namespace MrPathV2._2.Runtime.Settings
 
                 foreach (var curveType in allCurveTypes)
                 {
-                    if (!HasStrategy(curveType))
-                    {
-                        ErrorHandler.LogWarning($"Missing strategy for curve type '{curveType}'.", "PathStrategyRegistry");
-                        isValid = false;
-                    }
+                    if (HasStrategy(curveType)) continue;
+                    ErrorHandler.LogWarning($"Missing strategy for curve type '{curveType}'.", "PathStrategyRegistry");
+                    isValid = false;
                 }
 
                 return isValid;

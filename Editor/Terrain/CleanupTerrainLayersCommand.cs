@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
     ///     清理受路径影响的地形中未使用的 Splat 图层。
@@ -19,86 +19,196 @@ namespace MrPathV2._2.Editor.Terrain
 
         public override string GetCommandName() => "CleanupTerrainLayers";
 
+        /// <summary>
+        ///     处理地形清理，采用提前返回风格和单一职责原则
+        /// </summary>
         protected override Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token)
         {
-            var totalRemovedLayers = 0;
-            const float threshold = 1e-4f; // 判断“非零”的最小值
+            var totalRemovedLayers = ProcessAllTerrains(terrains, token);
+            ShowCompletionMessage(totalRemovedLayers);
+            
+            return Task.CompletedTask;
+        }
 
+        /// <summary>
+        ///     处理所有地形，返回移除的图层总数
+        /// </summary>
+        private int ProcessAllTerrains(List<UnityEngine.Terrain> terrains, CancellationToken token)
+        {
+            var totalRemovedLayers = 0;
+            
             foreach (var terrain in terrains)
             {
                 token.ThrowIfCancellationRequested();
-                var td = terrain.terrainData;
-                if (td == null || td.alphamapLayers <= 0 || td.terrainLayers == null)
-                    continue;
-
-                var res = td.alphamapResolution;
-                var oldLayerCount = td.alphamapLayers;
-                var oldAlpha = td.GetAlphamaps(0, 0, res, res);
-                var oldSplats = td.terrainLayers;
-
-                // Step 1: 检查每个 layer 是否被使用（在整个 alphamap 范围内）
-                var keptIndices = new List<int>();
-                for (var l = 0; l < oldLayerCount; l++)
-                {
-                    var isUsed = false;
-                    for (var y = 0; y < res && !isUsed; y++)
-                    {
-                        for (var x = 0; x < res && !isUsed; x++)
-                        {
-                            if (oldAlpha[y, x, l] > threshold)
-                            {
-                                isUsed = true;
-                            }
-                        }
-                    }
-
-                    if (isUsed)
-                    {
-                        keptIndices.Add(l);
-                    }
-                }
-
-                var removedCount = oldLayerCount - keptIndices.Count;
-                if (removedCount <= 0)
-                    continue; // 无未使用层，跳过
-
-                // Step 2: 重建 splatPrototypes
-                var newSplats = new TerrainLayer[keptIndices.Count];
-                for (var i = 0; i < keptIndices.Count; i++)
-                {
-                    newSplats[i] = oldSplats[keptIndices[i]];
-                }
-
-                // Step 3: 重建 alphamap（仅保留使用的 layer）
-                var newAlpha = new float[res, res, keptIndices.Count];
-                for (var y = 0; y < res; y++)
-                {
-                    for (var x = 0; x < res; x++)
-                    {
-                        for (var i = 0; i < keptIndices.Count; i++)
-                        {
-                            newAlpha[y, x, i] = oldAlpha[y, x, keptIndices[i]];
-                        }
-                    }
-                }
-
-                // Step 4: 应用新数据
-                td.terrainLayers = newSplats;
-                td.SetAlphamaps(0, 0, newAlpha);
-                EditorUtility.SetDirty(td);
-
+                
+                var removedCount = ProcessSingleTerrain(terrain);
                 totalRemovedLayers += removedCount;
-                Debug.Log($"[CleanupTerrainLayers] Terrain '{terrain.name}' 移除了 {removedCount} 个未使用的 Splat 层");
+            }
+            
+            return totalRemovedLayers;
+        }
+
+        /// <summary>
+        ///     处理单个地形，返回移除的图层数量
+        /// </summary>
+        private int ProcessSingleTerrain(UnityEngine.Terrain terrain)
+        {
+            // 提前返回：检查地形数据有效性
+            var terrainData = terrain.terrainData;
+            if (!IsTerrainDataValid(terrainData))
+            {
+                return 0;
             }
 
-            var msg = totalRemovedLayers > 0
-                ? $"✅ 已从受路径影响的 Terrain 中移除 {totalRemovedLayers} 个未使用图层"
-                : "🚧 未发现未使用的图层（受路径影响的地形）";
+            // 获取地形数据
+            var resolution = terrainData.alphamapResolution;
+            var oldAlphaMaps = terrainData.GetAlphamaps(0, 0, resolution, resolution);
+            var oldTerrainLayers = terrainData.terrainLayers;
+            
+            // 查找需要保留的图层索引
+            var keptIndices = FindUsedLayerIndices(oldAlphaMaps, resolution, terrainData.alphamapLayers);
+            
+            // 提前返回：没有需要移除的图层
+            var removedCount = terrainData.alphamapLayers - keptIndices.Count;
+            if (removedCount <= 0)
+            {
+                return 0;
+            }
 
-            Debug.Log($"[CleanupTerrainLayers] {msg}");
-            SceneView.lastActiveSceneView?.ShowNotification(new GUIContent(msg));
+            // 重建地形数据
+            RebuildTerrainData(terrainData, oldTerrainLayers, oldAlphaMaps, keptIndices, resolution);
+            
+            // 记录日志
+            LogTerrainCleanup(terrain.name, removedCount);
+            
+            return removedCount;
+        }
 
-            return Task.CompletedTask;
+        /// <summary>
+        ///     检查地形数据是否有效
+        /// </summary>
+        private static bool IsTerrainDataValid(TerrainData terrainData)
+        {
+            return terrainData != null && 
+                   terrainData.alphamapLayers > 0 && 
+                   terrainData.terrainLayers != null;
+        }
+
+        /// <summary>
+        ///     查找被使用的图层索引
+        /// </summary>
+        private List<int> FindUsedLayerIndices(float[,,] alphaMaps, int resolution, int layerCount)
+        {
+            const float threshold = 1e-4f; // 判断"非零"的最小值
+            var keptIndices = new List<int>();
+
+            for (var layerIndex = 0; layerIndex < layerCount; layerIndex++)
+            {
+                if (IsLayerUsed(alphaMaps, resolution, layerIndex, threshold))
+                {
+                    keptIndices.Add(layerIndex);
+                }
+            }
+
+            return keptIndices;
+        }
+
+        /// <summary>
+        ///     检查图层是否被使用
+        /// </summary>
+        private static bool IsLayerUsed(float[,,] alphaMaps, int resolution, int layerIndex, float threshold)
+        {
+            for (var y = 0; y < resolution; y++)
+            {
+                for (var x = 0; x < resolution; x++)
+                {
+                    if (alphaMaps[y, x, layerIndex] > threshold)
+                    {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        ///     重建地形数据
+        /// </summary>
+        private static void RebuildTerrainData(
+            TerrainData terrainData, 
+            TerrainLayer[] oldTerrainLayers, 
+            float[,,] oldAlphaMaps, 
+            List<int> keptIndices, 
+            int resolution)
+        {
+            // 重建地形图层
+            var newTerrainLayers = CreateNewTerrainLayers(oldTerrainLayers, keptIndices);
+            
+            // 重建Alpha贴图
+            var newAlphaMaps = CreateNewAlphaMaps(oldAlphaMaps, keptIndices, resolution);
+            
+            // 应用新数据
+            terrainData.terrainLayers = newTerrainLayers;
+            terrainData.SetAlphamaps(0, 0, newAlphaMaps);
+            EditorUtility.SetDirty(terrainData);
+        }
+
+        /// <summary>
+        ///     创建新的地形图层数组
+        /// </summary>
+        private static TerrainLayer[] CreateNewTerrainLayers(TerrainLayer[] oldTerrainLayers, List<int> keptIndices)
+        {
+            var newTerrainLayers = new TerrainLayer[keptIndices.Count];
+            
+            for (var i = 0; i < keptIndices.Count; i++)
+            {
+                newTerrainLayers[i] = oldTerrainLayers[keptIndices[i]];
+            }
+            
+            return newTerrainLayers;
+        }
+
+        /// <summary>
+        ///     创建新的Alpha贴图数组
+        /// </summary>
+        private static float[,,] CreateNewAlphaMaps(float[,,] oldAlphaMaps, List<int> keptIndices, int resolution)
+        {
+            var newAlphaMaps = new float[resolution, resolution, keptIndices.Count];
+            
+            for (var y = 0; y < resolution; y++)
+            {
+                for (var x = 0; x < resolution; x++)
+                {
+                    for (var i = 0; i < keptIndices.Count; i++)
+                    {
+                        newAlphaMaps[y, x, i] = oldAlphaMaps[y, x, keptIndices[i]];
+                    }
+                }
+            }
+            
+            return newAlphaMaps;
+        }
+
+        /// <summary>
+        ///     记录地形清理日志
+        /// </summary>
+        private static void LogTerrainCleanup(string terrainName, int removedCount)
+        {
+            ErrorHandler.LogInfo($"[CleanupTerrainLayers] Terrain '{terrainName}' 移除了 {removedCount} 个未使用的 Splat 层");
+        }
+
+        /// <summary>
+        ///     显示完成消息
+        /// </summary>
+        private static void ShowCompletionMessage(int totalRemovedLayers)
+        {
+            var message = totalRemovedLayers > 0
+                ? $" 已从受路径影响的 Terrain 中移除 {totalRemovedLayers} 个未使用图层"
+                : " 未发现未使用的图层（受路径影响的地形）";
+
+            ErrorHandler.LogInfo($"[CleanupTerrainLayers] {message}");
+            SceneView.lastActiveSceneView?.ShowNotification(new GUIContent(message));
         }
     }
 }

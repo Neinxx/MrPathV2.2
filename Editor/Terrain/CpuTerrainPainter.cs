@@ -1,17 +1,17 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2._2.Runtime.Jobs;
-using MrPathV2._2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 // <-- 确保 using
-using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     public class CpuTerrainPainter : ITerrainPainter
     {
@@ -45,7 +45,6 @@ namespace MrPathV2._2.Editor.Terrain
             var numPixelsY = coverageMax.y - coverageMin.y + 1;
             var totalPixelsInBounds = numPixelsX * numPixelsY;
 
-            JobHandle combinedHandle = default;
             NativeArray<RoadPixelInfo> pixelInfoMap = default;
 
             if (!recipeData.IsCreated)
@@ -57,6 +56,7 @@ namespace MrPathV2._2.Editor.Terrain
 
             try
             {
+                JobHandle combinedHandle;
                 if (totalPixelsInBounds > 0)
                 {
                     pixelInfoMap = NativeArrayExtensions.CreateTracked<RoadPixelInfo>(totalPixelsInBounds, Allocator.TempJob);

@@ -1,9 +1,9 @@
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
-using MrPathV2._2.Runtime.Preview;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Preview;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Preview
+namespace MrPathV2.Editor.Preview
 {
     /// <summary>
     ///     默认预览生成器实现，直接使用PreviewMeshController作为底层实现

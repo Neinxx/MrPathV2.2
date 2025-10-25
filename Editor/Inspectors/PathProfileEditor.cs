@@ -1,4 +1,4 @@
-using MrPathV2._2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -8,23 +8,17 @@ using objiect = UnityEngine.Object;
 // 确保引用了 UIResourceLoader
 // 引入刷新管理器
 
-namespace MrPathV2._2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
 
     [CustomEditor(typeof(PathProfile))]
     public class PathProfileEditor : UnityEditor.Editor
     {
-        private CurveField _crossSectionCurveField;
-        private SliderInt _crossSectionSegmentsField;
 
         private StylizedRoadRecipe _currentRecipeRef;
 
         // 从 SetupEventHandlers 移入的
-        private EnumField _curveTypeField;
         private Toggle _enableDepthTestToggle;
-        private CurveField _falloffShapeCurveField;
-        private FloatField _falloffWidthField;
-        private Toggle _forceHorizontalToggle;
         // --- UI Toolkit 元素引用 ---
 
         // 在 CreateInspectorGUI 中查询的
@@ -126,19 +120,19 @@ namespace MrPathV2._2.Editor.Inspectors
             _smoothnessSlider = _rootElement.Q<SliderInt>("SmoothnessField");
             _showMeshToggle = _rootElement.Q<Toggle>("ShowMeshToggleField");
             _opaquePreviewToggle = _rootElement.Q<Toggle>("OpaquePreviewToggleField");
-            _forceHorizontalToggle = _rootElement.Q<Toggle>("ForceHorizontalField");
+            _rootElement.Q<Toggle>("ForceHorizontalField");
             _enableDepthTestToggle = _rootElement.Q<Toggle>("EnableDepthTestToggleField");
             _snappingToggle = _rootElement.Q<Toggle>("SnappingToggleField");
             _recipeField = _rootElement.Q<ObjectField>("RecipeField");
             _previewContent = _rootElement.Q<VisualElement>("preview-content");
 
             // 从原 SetupEventHandlers 中移入的查询
-            _curveTypeField = _rootElement.Q<EnumField>("CurveTypeField");
+            _rootElement.Q<EnumField>("CurveTypeField");
             _meshWidthField = _rootElement.Q<FloatField>("MeshWithField");
-            _crossSectionSegmentsField = _rootElement.Q<SliderInt>("CrossSectionSegmentsField");
-            _falloffWidthField = _rootElement.Q<FloatField>("FalloffWidthField");
-            _crossSectionCurveField = _rootElement.Q<CurveField>("CrossSectionCurveField");
-            _falloffShapeCurveField = _rootElement.Q<CurveField>("FalloffShapeCurveField");
+            _rootElement.Q<SliderInt>("CrossSectionSegmentsField");
+            _rootElement.Q<FloatField>("FalloffWidthField");
+            _rootElement.Q<CurveField>("CrossSectionCurveField");
+            _rootElement.Q<CurveField>("FalloffShapeCurveField");
         }
 
         /// <summary>
@@ -246,13 +240,13 @@ namespace MrPathV2._2.Editor.Inspectors
         // 更新 Recipe 编辑器 (避免重复创建，稳健刷新)
         private void UpdateRecipeEditor(StylizedRoadRecipe recipe)
         {
-            if (_currentRecipeRef == recipe && _recipeEditor != null && _recipeContainer != null)
+            if (_currentRecipeRef == recipe && _recipeEditor && _recipeContainer != null)
             {
                 return; // 无变化，跳过
             }
             _currentRecipeRef = recipe;
 
-            if (_recipeEditor != null)
+            if (_recipeEditor)
             {
                 DestroyImmediate(_recipeEditor);
                 _recipeEditor = null;
@@ -260,18 +254,18 @@ namespace MrPathV2._2.Editor.Inspectors
             _recipeContainer?.RemoveFromHierarchy();
             _recipeContainer = null;
 
-            if (recipe == null || _previewContent == null) return;
+            if (!recipe || _previewContent == null) return;
 
             _recipeEditor = CreateEditor(recipe);
-            if (_recipeEditor == null)
+            if (!_recipeEditor)
             {
-                Debug.LogError($"[PathProfileEditor] Failed to create editor for Recipe: {recipe?.name}");
+                Debug.LogError($"[PathProfileEditor] Failed to create editor for Recipe: {recipe.name}");
                 return;
             }
 
             _recipeContainer = new IMGUIContainer(() =>
             {
-                if (_recipeEditor != null && _recipeEditor.target != null)
+                if (_recipeEditor && _recipeEditor.target)
                 {
                     EditorGUILayout.LabelField("Stylized Road Recipe", EditorStyles.boldLabel);
                     _recipeEditor.OnInspectorGUI();

@@ -1,12 +1,12 @@
 // 文件: Editor/Settings/MrPathAdvancedSettings.cs
 
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Strategies;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Strategies;
 using UnityEngine;
 // 确保可以访问 PaintTerrainCommand (如果 PaintingBackend 枚举定义在那里)
 // ReSharper disable GrammarMistakeInComment
 
-namespace MrPathV2._2.Editor.Settings // Or Editor.Settings
+namespace MrPathV2.Editor.Settings // Or Editor.Settings
 {
     /// <summary>
     ///     将工厂注入、策略覆盖等不常用但重要的设置隔离存放。

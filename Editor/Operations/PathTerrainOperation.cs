@@ -1,9 +1,9 @@
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Operations
+namespace MrPathV2.Editor.Operations
 {
     /// <summary>
     ///     数据驱动的地形操作定义。遵循开闭：新增操作只需新增资产。

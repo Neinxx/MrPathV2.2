@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
     ///     全局 GPU 预览缓存：在「实时预览」模式下保存每个 Terrain 的 RenderTexture（alphamap 纹理数组）。
@@ -38,15 +38,13 @@ namespace MrPathV2._2.Editor.Terrain
             var id = terrain.GetInstanceID();
             if (TerrainPreviewMap.TryGetValue(id, out var existing) && existing != null)
             {
-                if (existing != rt)
+                if (existing == rt) return;
+                if (existing)
                 {
-                    if (existing)
-                    {
-                        existing.Release();
-                        Object.DestroyImmediate(existing);
-                    }
-                    TerrainPreviewMap[id] = rt;
+                    existing.Release();
+                    Object.DestroyImmediate(existing);
                 }
+                TerrainPreviewMap[id] = rt;
             }
             else
             {
@@ -59,7 +57,7 @@ namespace MrPathV2._2.Editor.Terrain
         /// </summary>
         public static bool TryGet(UnityEngine.Terrain terrain, out RenderTexture rt)
         {
-            if (terrain == null)
+            if (!terrain)
             {
                 rt = null;
                 return false;
@@ -68,24 +66,9 @@ namespace MrPathV2._2.Editor.Terrain
         }
 
         /// <summary>
-        ///     删除并释放指定 Terrain 的预览 RT。
-        /// </summary>
-        public static void Clear(UnityEngine.Terrain terrain)
-        {
-            if (terrain == null) return;
-            var id = terrain.GetInstanceID();
-            if (TerrainPreviewMap.TryGetValue(id, out var rt) && rt)
-            {
-                rt.Release();
-                Object.DestroyImmediate(rt);
-            }
-            TerrainPreviewMap.Remove(id);
-        }
-
-        /// <summary>
         ///     释放所有缓存。
         /// </summary>
-        public static void ClearAll()
+        private static void ClearAll()
         {
             foreach (var kvp in TerrainPreviewMap)
             {

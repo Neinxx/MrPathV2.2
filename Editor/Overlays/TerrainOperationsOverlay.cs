@@ -1,21 +1,22 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2._2.Editor.Inspectors;
-using MrPathV2._2.Editor.Operations;
-using MrPathV2._2.Editor.Preview;
-using MrPathV2._2.Editor.Settings;
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Settings;
+using MrPathV2.Editor.Inspectors;
+using MrPathV2.Editor.Operations;
+using MrPathV2.Editor.Preview;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Settings;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace MrPathV2._2.Editor.Overlays
+namespace MrPathV2.Editor.Overlays
 {
-    [Overlay(typeof(SceneView), "MrPath.TerrainOperationsOverlay", "Modife Terrain Operations")]
+    [Overlay(typeof(SceneView), "MrPath.TerrainOperationsOverlay", "Modify Terrain Operations")]
     public class TerrainOperationsOverlay : Overlay
     {
 
@@ -64,7 +65,7 @@ namespace MrPathV2._2.Editor.Overlays
             _content = _root.Q<VisualElement>(ElOperationsContainer);
 
             InitializeBackendDropdown(); // <--- 更改：方法现在只负责注册回调和设置初始值
-            InitializeGpuPreviewToggleFromUXML(); // <--- 更改：新方法，用于绑定 UXML 中的 Toggle
+            InitializeGpuPreviewToggleFromUxml(); // <--- 更改：新方法，用于绑定 UXML 中的 Toggle
 
             // <--- 更改：移除了手动删除 "refreshButton" 的代码
             // var staleRefreshBtn = _root.Q<Button>("refreshButton");
@@ -108,11 +109,11 @@ namespace MrPathV2._2.Editor.Overlays
         }
 
         // <--- 更改：重命名并简化了 GpuPreviewToggle 的初始化
-        private void InitializeGpuPreviewToggleFromUXML()
+        private void InitializeGpuPreviewToggleFromUxml()
         {
             if (_gpuPreviewToggle == null)
             {
-                Debug.LogWarning("TerrainOperationsOverlay: 未在 UXML 中找到 'gpuPreviewToggle' 元素。");
+                ErrorHandler.LogWarning("TerrainOperationsOverlay: 未在 UXML 中找到 'gpuPreviewToggle' 元素。");
                 return;
             }
 
@@ -132,55 +133,109 @@ namespace MrPathV2._2.Editor.Overlays
         }
 
 
-        private void RefreshContent()
-        {
+      /// <summary>
+/// 刷新地形操作按钮的UI内容。
+/// 这是一个高层协调器，不处理具体的按钮创建逻辑。
+/// </summary>
+private void RefreshContent()
+{
+    // 1. 守卫条款 (Guard Clause)
+    if (_content == null) return;
 
-            if (_content == null) return;
-            _content.Clear();
-            _operationButtons.Clear();
-            if (_terrainOpsConfig == null)
-            {
-                _content.Add(new Label("未找到 Terrain Operations 配置"));
-                return;
-            }
+    _content.Clear();
+    _operationButtons.Clear();
 
-            var ops = _terrainOpsConfig.operations;
-            if (ops == null || ops.Length == 0)
-            {
-                var btn = new Button(() => SettingsService.OpenProjectSettings("Project/MrPath"))
-                {
-                    text = "配置地形操作"
-                };
-                btn.AddToClassList("unity-toolbar-button");
-                _content.Add(btn);
-                return;
-            }
+    // 2. 提前返回：处理配置丢失
+    if (_terrainOpsConfig == null)
+    {
+        _content.Add(new Label("未找到 Terrain Operations 配置"));
+        return;
+    }
 
-            var validOps = ops.Where(op => op != null).OrderBy(op => op.order);
-            foreach (var op in validOps)
-            {
-                var originalText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
-                Button btn = null;
-                // 2. 创建按钮，lambda 捕获 btn 自身，传递给 ExecuteOperation
-                btn = new ToolbarButton(() => ExecuteOperation(op, btn))
-                {
-                    text = originalText,
-                    userData = originalText
-                };
-                btn.SetEnabled(!_isExecutingOperation);
-                btn.AddToClassList("terrain-op-button");
+    var ops = _terrainOpsConfig.operations;
 
-                if (op.icon != null)
-                {
-                    btn.style.backgroundImage = new StyleBackground(op.icon);
-                    var color = op.buttonColor != default ? op.buttonColor : Color.white;
-                    btn.style.unityBackgroundImageTintColor = new StyleColor(color);
-                }
+    // 3. 提前返回：处理配置为空
+    if (ops == null || ops.Length == 0)
+    {
+        _content.Add(CreateConfigRedirectButton());
+        return;
+    }
 
-                _content.Add(btn);
-                _operationButtons.Add(btn);
-            }
-        }
+    // 4. 核心逻辑：生成并添加操作按钮
+
+    // 使用 LINQ 将“数据”转换为“UI元素”
+    // 这比 foreach 循环更具声明性（更“优雅”）
+    var newButtons = ops
+        .Where(op => op) // 过滤掉 null 的 op
+        .OrderBy(op => op.order)  // 按 order 排序
+        .Select(CreateOperationButton) // 使用工厂方法创建按钮
+        .ToList();
+
+    // 5. 将创建好的按钮批量添加到 UI 和跟踪列表
+
+    // 跟踪按钮
+    _operationButtons.AddRange(newButtons);
+
+    // 将按钮添加到 VisualElement 层次结构中
+    foreach (var btn in newButtons)
+    {
+        _content.Add(btn);
+    }
+}
+
+/// <summary>
+/// (工厂方法) 创建一个跳转到项目设置的按钮。
+/// </summary>
+private static Button CreateConfigRedirectButton()
+{
+    var btn = new Button(() => SettingsService.OpenProjectSettings("Project/MrPath"))
+    {
+        text = "配置地形操作"
+    };
+    btn.AddToClassList("unity-toolbar-button");
+    return btn;
+}
+
+/// <summary>
+/// (工厂方法) 根据 TerrainOperation 配置创建一个新的 ToolbarButton。
+/// </summary>
+private Button CreateOperationButton(PathTerrainOperation op)
+{
+    var buttonText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
+
+    // 1. 创建按钮实例
+    var btn = new ToolbarButton
+    {
+        text = buttonText,
+        userData = buttonText
+    };
+
+    // 2. 注册回调
+    //   (使用 RegisterCallback 比在构造函数中用 lambda 捕获 btn 自身更清晰)
+    btn.RegisterCallback<ClickEvent>(_ => ExecuteOperation(op, btn));
+
+    // 3. 设置初始状态
+    btn.SetEnabled(!_isExecutingOperation);
+    btn.AddToClassList("terrain-op-button");
+
+    // 4. 应用动态样式
+    ApplyOperationStyles(btn, op);
+
+    return btn;
+}
+
+/// <summary>
+/// (辅助方法) 将 op 上的动态样式（图标、颜色）应用到按钮上。
+/// </summary>
+private static void ApplyOperationStyles(Button btn, PathTerrainOperation op)
+{
+    if (op.icon == null) return;
+    // 性能：直接操作 style 属性比创建 StyleBackground 更高效
+    btn.style.backgroundImage = op.icon;
+
+    var color = op.buttonColor != default ? op.buttonColor : Color.white;
+    btn.style.unityBackgroundImageTintColor = color;
+}
 
         private void OnSelectionChanged()
         {
@@ -219,47 +274,129 @@ namespace MrPathV2._2.Editor.Overlays
             _ctx = null;
         }
 
-        private void ExecuteOperation(PathTerrainOperation op, Button clickedButton)
+        /// <summary>
+/// 异步执行一个地形操作，并管理UI状态。
+/// </summary>
+private async void ExecuteOperation(PathTerrainOperation op, Button clickedButton)
+{
+    try
+    {
+        // 1. 守卫条款 (Guard Clauses) - 快速前置检查
+        if (!CanExecuteOperation(op))
         {
-            if (_isExecutingOperation) return;
-            if (_ctx == null) return;
-            if (_ctx.Target == null) return;
-            if (!op.CanExecute(_ctx.Target)) return;
-
-            var profile = _ctx.Target.profile;
-            if (profile == null || PathStrategyRegistry.Instance.GetStrategy(profile.curveType) == null)
-            {
-                ShowConfigError();
-                return;
-            }
-
-            var cmd = op.CreateCommand(_ctx.Target, _ctx.HeightProvider);
-            if (cmd == null) return;
-
-            var previewMesh = _ctx.PreviewGenerator?.PreviewMesh;
-            if (previewMesh != null)
-            {
-                var b = previewMesh.bounds;
-                if (b.size.x > 0 && b.size.z > 0)
-                {
-                    cmd.SetPreviewBoundsXZ(new Vector4(b.min.x, b.min.z, b.max.x, b.max.z));
-                }
-            }
-
-            _ = _ctx.TerrainHandler.ExecuteAsync(cmd, isApplying =>
-            {
-                _isExecutingOperation = isApplying;
-                SetOperationButtonsEnabled(!isApplying);
-
-                // <--- 更改：简化了回调逻辑
-                // SetOperationButtonsEnabled(true) 会自动恢复所有按钮的原始文本。
-                // 我们只需要在 "isApplying" 时设置 "执行中..." 文本即可。
-                if (clickedButton != null && isApplying)
-                {
-                    clickedButton.text = "执行中...";
-                }
-            });
+            return;
         }
+
+        // 2. 异步操作的 try/catch/finally 封装
+        //    这是 async void 事件处理程序的关键模式
+        try
+        {
+            // 3. 设置UI为"执行中"状态
+            SetUIStateExecuting(clickedButton);
+
+            // 4. 创建命令
+            var cmd = op.CreateCommand(_ctx.Target, _ctx.HeightProvider);
+            if (cmd == null) return; // 如果命令无效，finally 块会正确恢复UI
+
+            // 5. (已提取) 附加预览边界
+            if (TryGetPreviewBoundsXZ(out var previewBounds))
+            {
+                cmd.SetPreviewBoundsXZ(previewBounds);
+            }
+
+            // 6. 执行核心异步逻辑
+            await _ctx.TerrainHandler.ExecuteAsync(cmd, null);
+        }
+        catch (Exception e)
+        {
+            // 捕获异步执行中的所有异常
+            // 使用 LogException 而不是 Log 来保留完整的堆栈跟踪
+            ErrorHandler.LogException(e);
+        }
+        finally
+        {
+            // 7. (已提取) 无论成功还是失败，都恢复UI状态
+            RestoreUIState(clickedButton);
+        }
+    }
+    catch (Exception e)
+    {
+        ErrorHandler.LogException(e);
+    }
+}
+
+/// <summary>
+/// (辅助方法) 检查所有前置条件是否满足。
+/// </summary>
+private bool CanExecuteOperation(PathTerrainOperation op)
+{
+    // 快速检查
+    if (_isExecutingOperation || _ctx == null || !_ctx.Target || !op.CanExecute(_ctx.Target))
+    {
+        return false;
+    }
+
+    // 稍慢的配置检查
+    var profile = _ctx.Target.profile;
+    if (profile && PathStrategyRegistry.Instance.GetStrategy(profile.curveType) != null) return true;
+    ShowConfigError();
+    return false;
+
+}
+
+/// <summary>
+/// (辅助方法) 封装所有“开始执行”的UI状态变更。
+/// </summary>
+private void SetUIStateExecuting(Button clickedButton)
+{
+    _isExecutingOperation = true;
+    if (clickedButton != null)
+    {
+        clickedButton.text = "执行中...";
+    }
+    SetOperationButtonsEnabled(false);
+}
+
+/// <summary>
+/// (辅助方法) 封装所有“恢复UI”的状态变更。
+/// </summary>
+private void RestoreUIState(Button clickedButton)
+{
+    _isExecutingOperation = false;
+    SetOperationButtonsEnabled(true);
+
+    // [BUG FIX] 从 userData 恢复原始文本
+    // (假设在 RefreshContent 中已将原始文本存入 userData)
+    if (clickedButton is { userData: string originalText })
+    {
+        clickedButton.text = originalText;
+    }
+}
+
+/// <summary>
+/// (辅助方法) 尝试获取预览网格的2D边界。
+/// </summary>
+private bool TryGetPreviewBoundsXZ(out Vector4 bounds)
+{
+    bounds = Vector4.zero;
+
+    // 检查 Unity 对象时应使用 '== null'
+    if (_ctx.PreviewGenerator == null) return false;
+
+    var previewMesh = _ctx.PreviewGenerator.PreviewMesh;
+    if (previewMesh == null) return false;
+
+    var b = previewMesh.bounds;
+
+    // 使用明确的 > 0 检查，可读性比属性模式稍好
+    if (b.size.x > 0 && b.size.z > 0)
+    {
+        bounds = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
+        return true;
+    }
+
+    return false;
+}
 
         private static void ShowConfigError()
         {

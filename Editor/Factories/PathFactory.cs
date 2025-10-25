@@ -1,9 +1,9 @@
-using MrPathV2._2.Editor.Settings;
-using MrPathV2._2.Runtime.Core;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Factories
+namespace MrPathV2.Editor.Factories
 {
     /// <summary>
     ///     路径创建工厂，负责创建配置完整的路径对象

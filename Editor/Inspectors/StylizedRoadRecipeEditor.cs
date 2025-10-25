@@ -1,14 +1,14 @@
 using System;
 using System.IO;
 using System.Linq;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
 using Sirenix.OdinInspector.Editor;
 using Sirenix.Utilities.Editor;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
     public class StylizedRoadRecipeEditor : OdinEditor
@@ -89,7 +89,7 @@ namespace MrPathV2._2.Editor.Inspectors
 
         private void CheckForChanges()
         {
-            if (_recipe == null) return;
+            if (!_recipe) return;
             var currentHash = ComputeRecipeHash(_recipe);
             if (currentHash == _lastRecipeHash) return;
 
@@ -101,7 +101,7 @@ namespace MrPathV2._2.Editor.Inspectors
 
         private static int ComputeRecipeHash(StylizedRoadRecipe recipe)
         {
-            if (recipe == null) return 0;
+            if (!recipe) return 0;
 
             unchecked
             {
@@ -115,7 +115,7 @@ namespace MrPathV2._2.Editor.Inspectors
                     hash = hash * 23 + layer.blendMode.GetHashCode();
                     hash = hash * 23 + (layer.contentLayer ? layer.contentLayer.GetInstanceID() : 0);
 
-                    if (layer.layerMask != null)
+                    if (layer.layerMask)
                     {
                         var maskJson = JsonUtility.ToJson(layer.layerMask);
                         hash = hash * 23 + maskJson.GetHashCode();
@@ -139,7 +139,7 @@ namespace MrPathV2._2.Editor.Inspectors
         {
             if (maskType == null || !maskType.IsSubclassOf(typeof(BlendMaskBase)))
             {
-                Debug.LogError($"无效的遮罩类型: {maskType?.Name}");
+                ErrorHandler.LogError($"无效的遮罩类型: {maskType?.Name}");
                 return;
             }
 
@@ -157,7 +157,7 @@ namespace MrPathV2._2.Editor.Inspectors
             AssetDatabase.CreateAsset(newMask, uniquePath);
             AssetDatabase.SaveAssets();
             EditorGUIUtility.PingObject(newMask);
-            Debug.Log($"MrPath: 已创建新的{displayName}资产: {uniquePath}");
+            ErrorHandler.LogInfo($"MrPath: 已创建新的{displayName}资产: {uniquePath}");
         }
 
         private static string GetMaskTypeDisplayName(Type type)

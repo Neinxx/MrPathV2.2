@@ -2,7 +2,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Components
+namespace MrPathV2.Runtime.Components
 {
     /// <summary>
     ///     标记字段为必填项的特性，为空时会在Inspector中显示错误提示

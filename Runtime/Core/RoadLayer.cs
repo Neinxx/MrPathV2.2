@@ -1,11 +1,11 @@
 using System;
-using MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core.BlendMasks;
 using Sirenix.OdinInspector;
 using UnityEngine;
 // 确保 using 正确
 // ... (其他 using) ...
 
-namespace MrPathV2._2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     [Serializable]
     public class RoadLayer

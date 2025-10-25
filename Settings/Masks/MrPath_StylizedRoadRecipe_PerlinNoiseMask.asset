@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   smooth: 1
   tiling: {x: 3.4, y: 113.9}
-  offset: {x: 2.46, y: 0}
+  offset: {x: 16, y: 0}
   overallScale: 1.03
   strength: 1
   seed: 37.4

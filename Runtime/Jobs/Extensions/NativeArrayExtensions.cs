@@ -1,10 +1,10 @@
 using System;
-using MrPathV2._2.Runtime.Memory;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Jobs.Extensions
+namespace MrPathV2.Runtime.Jobs.Extensions
 {
     /// <summary>
     ///     NativeArray扩展方法，提供内存跟踪和安全释放功能
@@ -52,15 +52,23 @@ namespace MrPathV2._2.Runtime.Jobs.Extensions
 
             try
             {
-                #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                MemoryTracker.TrackDeallocation(array);
-                #endif
-
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                try
+                {
+                    MemoryTracker.TrackDeallocation(array);
+                }
+                catch
+                {
+                    // 指针访问失败意味着已被外部释放，忽略即可
+                }
+#endif
                 array.Dispose();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"释放NativeArray时发生错误: {ex.Message}");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"释放NativeArray时发生异常(可能已释放): {ex.Message}");
+#endif
             }
         }
 
@@ -75,15 +83,23 @@ namespace MrPathV2._2.Runtime.Jobs.Extensions
 
             try
             {
-                #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                MemoryTracker.TrackDeallocation(list);
-                #endif
-
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                try
+                {
+                    MemoryTracker.TrackDeallocation(list);
+                }
+                catch
+                {
+                    // 指针访问失败意味着已被外部释放，忽略即可
+                }
+#endif
                 list.Dispose();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"释放NativeList时发生错误: {ex.Message}");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"释放NativeList时发生异常(可能已释放): {ex.Message}");
+#endif
             }
         }
 

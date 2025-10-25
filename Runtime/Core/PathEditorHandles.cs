@@ -1,12 +1,12 @@
 // PathEditorHandles.cs
 
-using MrPathV2._2.Runtime.Interfaces;
-using MrPathV2._2.Runtime.Preview;
-using MrPathV2._2.Runtime.Settings;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Settings;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【最终定稿 • 天之纲领】

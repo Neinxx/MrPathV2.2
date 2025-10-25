@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Core;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
 #if UNITY_EDITOR
-using EditorGpuPreviewCache = MrPathV2._2.Editor.Terrain.GpuPreviewCache;
+using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
 #endif
 
-namespace MrPathV2._2.Editor.Preview
+namespace MrPathV2.Editor.Preview
 {
 
     /// <summary>
@@ -56,6 +56,7 @@ namespace MrPathV2._2.Editor.Preview
 
         // 新增：记录路径长度供构建 MaskAtlas 使用
         private float _pathLength = -1f;
+        private bool _disposed;
 
         public Material Current { get; private set; }
 
@@ -64,7 +65,7 @@ namespace MrPathV2._2.Editor.Preview
             if (_dirty)
             {
                 _cachedList.Clear();
-                if (Current != null) _cachedList.Add(Current);
+                if (Current) _cachedList.Add(Current);
                 _dirty = false;
             }
             return _cachedList;
@@ -72,7 +73,7 @@ namespace MrPathV2._2.Editor.Preview
 
 #if UNITY_EDITOR
         /// <summary>
-        ///     设置当前预览所关联的 Terrain（用于从 <see cref="GpuPreviewCache" /> 获取缓存的 alphamap RenderTextureArray）
+        ///     设置当前预览所关联的 Terrain（用于从 <see cref="Gpu Preview Cache" /> 获取缓存的 alphamap RenderTextureArray）
         /// </summary>
         /// <param name="terrain">目标 Terrain</param>
         public void SetTargetTerrain(UnityEngine.Terrain terrain)
@@ -89,7 +90,7 @@ namespace MrPathV2._2.Editor.Preview
 
         public void SetMeshRepeats(float across, float along)
         {
-            if (Current == null) return;
+            if (!Current) return;
             if (Current.HasProperty(MeshRepeatAcrossId)) Current.SetFloat(MeshRepeatAcrossId, Mathf.Max(1e-4f, across));
             if (Current.HasProperty(MeshRepeatAlongId)) Current.SetFloat(MeshRepeatAlongId, Mathf.Max(1e-4f, along));
         }
@@ -97,75 +98,30 @@ namespace MrPathV2._2.Editor.Preview
         // 恢复 Update 方法（被前一次编辑移除），保持材质刷新与GPU绑定逻辑
         public void Update(PathProfile profile, Material template, float previewAlpha)
         {
-            if (profile == null || template == null)
+            if (_disposed) return;
+            if (!profile || !template)
             {
                 Clear();
                 return;
             }
 
             var newHash = CalculateHash(profile, template, previewAlpha);
-            // 原先在哈希未变化且已存在实例时直接 return，导致 GPU 预览开关变化无法生效。
-            // 调整为：仅在需要时刷新材质；但无论材质是否刷新，始终执行后续的 GPU 绑定逻辑。
-            var needMaterialRefresh = newHash != _lastHash || Current == null;
+            var needRefresh = newHash != _lastHash || Current == null;
             _lastHash = newHash;
 
-            if (needMaterialRefresh)
+            if (needRefresh)
             {
-                if (Current == null || Current.shader != template.shader)
-                {
-                    Clear();
-                    Current = new Material(template)
-                    {
-                        hideFlags = HideFlags.HideAndDontSave
-                    };
-                    _flavor = DetectFlavor(Current.shader);
-                }
-
-                switch (_flavor)
-                {
-                    case ShaderFlavor.Splat:
-                        ApplySplat(profile, previewAlpha);
-                        break;
-                    case ShaderFlavor.Stylized:
-                        ApplyStylized(profile);
-                        break;
-                }
+                EnsureMaterial(template);
+                RefreshMaterial(profile, previewAlpha);
             }
 
 #if UNITY_EDITOR
-            // Editor-only GPU preview binding with graceful fallback
-            if (Current && Current.HasProperty(SplatWeightsID))
-            {
-                if (EnableGpuPreview && _targetTerrain &&
-                    EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt != null)
-                {
-                    // Bind cached alphamap array for GPU blending
-                    Current.SetTexture(SplatWeightsID, rt);
-                    Current.SetInt(UseSplatWeightsID, 1);
-
-                    var td = _targetTerrain.terrainData;
-                    if (td)
-                    {
-                        var tpos = _targetTerrain.GetPosition();
-                        Current.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
-                        Current.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
-                        Current.SetVector(AlphamapResolutionID, new Vector4(td.alphamapResolution, td.alphamapResolution, 0f, 0f));
-                    }
-
-                    Debug.Log($"[PreviewMaterialManager] GPU Preview enabled - binding cached RT for terrain {_targetTerrain.name}");
-                }
-                else
-                {
-                    // Disable GPU weights usage; shader will fallback to mask atlas path
-                    Current.SetInt(UseSplatWeightsID, 0);
-                    Current.SetTexture(SplatWeightsID, null);
-                    Debug.Log($"[PreviewMaterialManager] GPU Preview disabled or no cached RT - falling back to mask atlas. EnableGpuPreview: {EnableGpuPreview}, HasTerrain: {_targetTerrain != null}");
-                }
-            }
+            TryBindGpuPreview(profile);
 #endif
 
             _dirty = true;
         }
+
 
         private void ApplySplat(PathProfile profile, float alpha)
         {
@@ -209,7 +165,7 @@ namespace MrPathV2._2.Editor.Preview
                 }
 
 
-                if (layer == null)
+                if (!layer)
                 {
                     // 当内容纹理与遮罩均为空时，使用默认白纹理占位，继续处理后续图层
                     tilingVec = Vector4.one;
@@ -217,7 +173,7 @@ namespace MrPathV2._2.Editor.Preview
                 }
 
                 // 现在确定layer不为null，检查diffuseTexture
-                if (layer != null && layer.diffuseTexture != null)
+                if (layer && layer.diffuseTexture)
                 {
                     // 使用CalcLayerTiling计算值
                     var t = PreviewPipelineUtility.CalcLayerTiling(profile.roadWidth, layer);
@@ -251,7 +207,8 @@ namespace MrPathV2._2.Editor.Preview
             for (var i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
             if (EnableGpuPreview && _targetTerrain && profile.roadRecipe)
             {
-                var map = LayerResolver.Resolve(_targetTerrain, profile.roadRecipe, false);
+                // 统一配置：GPU 预览下确保 Terrain 中存在所有配方图层，避免映射缺失导致权重采样为0
+                var map = LayerResolver.ResolveEnsurePresent(_targetTerrain, profile.roadRecipe);
                 if (map != null && layers != null)
                 {
                     // 保护：当 layers 为空时不进行索引访问
@@ -488,21 +445,95 @@ namespace MrPathV2._2.Editor.Preview
                 return hash;
             }
         }
-        public void Dispose() => Clear();
+        public void Dispose()
+        {
+            if (_disposed) return;
+            Clear();
+            _disposed = true;
+        }
         private void Clear()
+        {
+            ReleaseMaterial();
+            ReleaseMaskAtlas();
+            _dirty = true;
+        }
+
+        private void ReleaseMaterial()
         {
             if (Current != null)
             {
                 Object.DestroyImmediate(Current);
                 Current = null;
             }
+        }
+
+        private void ReleaseMaskAtlas()
+        {
             if (_maskAtlas != null)
             {
                 Object.DestroyImmediate(_maskAtlas);
                 _maskAtlas = null;
             }
-            _dirty = true;
         }
+
+        private bool EnsureMaterial(Material template)
+        {
+            if (!template) return false;
+            if (!Current || Current.shader != template.shader)
+            {
+                ReleaseMaterial();
+                Current = new Material(template)
+                {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                _flavor = DetectFlavor(Current.shader);
+                return true;
+            }
+            return false;
+        }
+
+        private void RefreshMaterial(PathProfile profile, float previewAlpha)
+        {
+            switch (_flavor)
+            {
+                case ShaderFlavor.Splat:
+                    ApplySplat(profile, previewAlpha);
+                    break;
+                case ShaderFlavor.Stylized:
+                    ApplyStylized(profile);
+                    break;
+                default:
+                    ApplySplat(profile, previewAlpha);
+                    break;
+            }
+        }
+
+#if UNITY_EDITOR
+        private void TryBindGpuPreview(PathProfile profile)
+        {
+            if (!Current || !Current.HasProperty(SplatWeightsID)) return;
+
+            if (EnableGpuPreview && _targetTerrain && EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt != null)
+            {
+                Current.SetTexture(SplatWeightsID, rt);
+                Current.SetInt(UseSplatWeightsID, 1);
+
+                var td = _targetTerrain.terrainData;
+                if (td)
+                {
+                    var tpos = _targetTerrain.GetPosition();
+                    Current.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
+                    Current.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
+                    Current.SetVector(AlphamapResolutionID, new Vector4(td.alphamapResolution, td.alphamapResolution, 0f, 0f));
+                }
+            }
+            else
+            {
+                Current.SetInt(UseSplatWeightsID, 0);
+                Current.SetTexture(SplatWeightsID, null);
+            }
+        }
+#endif
 
         #endregion
     }

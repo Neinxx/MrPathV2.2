@@ -1,9 +1,9 @@
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Operations
+namespace MrPathV2.Editor.Operations
 {
     /// <summary>
     ///     "清理未使用图层" 的外部操作资产。用于在 Overlay 中生成按钮并创建命令执行。

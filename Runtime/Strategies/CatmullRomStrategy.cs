@@ -1,9 +1,9 @@
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Preview;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Strategies
+namespace MrPathV2.Runtime.Strategies
 {
     /// <summary>
     ///     Defines the mathematical and editor behavior for a Catmull-Rom spline path.

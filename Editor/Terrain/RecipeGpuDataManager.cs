@@ -4,9 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Core.BlendMasks;
-using MrPathV2._2.Runtime.Core.Gpu;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core.Gpu;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -14,7 +14,7 @@ using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 // For Exception
 
-namespace MrPathV2._2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     // --- GpuDataStructures (与 HLSL BlendMaskLibrary.hlsl 保持一致) ---
     [StructLayout(LayoutKind.Sequential)]
@@ -262,7 +262,7 @@ namespace MrPathV2._2.Editor.Terrain
                     Graphics.ConvertTexture(srcTex, 0, TerrainTextureArray, i);
                     if (mipCount > 1)
                     {
-                        Debug.LogWarning(
+                        ErrorHandler.LogWarning(
                             $"[RecipeGpuDataManager] '{srcTex.name}' target format {targetFormat} cannot use staging RT; converted base level only. Mipmaps skipped.");
                     }
 
@@ -293,7 +293,7 @@ namespace MrPathV2._2.Editor.Terrain
             Graphics.ExecuteCommandBuffer(cmd);
             cmd.Release();
 
-            Debug.Log(
+            ErrorHandler.LogInfo(
                 $"Created texture array with {validTextures.Count} textures ({width}x{height}, {targetFormat}). Excluded {_cachedTextures.Count - validTextures.Count} incompatible textures.");
         }
 
@@ -363,7 +363,7 @@ namespace MrPathV2._2.Editor.Terrain
             }
         }
 
-        private int CalculateMaskHash(BlendMaskBase mask)
+        private static int CalculateMaskHash(BlendMaskBase mask)
         {
             if (mask == null) return 0;
             try
@@ -427,35 +427,6 @@ namespace MrPathV2._2.Editor.Terrain
         }
 #endif
 
-        private void CopyTextureSliceCrunchSafe(Texture2D src, int sliceIndex, int mipCount, GraphicsFormat format)
-        {
-            var useMip = mipCount > 1;
-            var desc = new RenderTextureDescriptor(src.width, src.height, format, 0)
-            {
-                dimension = TextureDimension.Tex2D,
-                useMipMap = useMip,
-                autoGenerateMips = false
-            };
-            var rt = RenderTexture.GetTemporary(desc);
-            try
-            {
-                Graphics.Blit(src, rt);
-                if (useMip)
-                {
-                    rt.GenerateMips();
-                }
-
-                for (var mip = 0; mip < mipCount; mip++)
-                {
-                    Graphics.CopyTexture(rt, 0, mip, TerrainTextureArray, sliceIndex, mip);
-                }
-            }
-            finally
-            {
-                RenderTexture.ReleaseTemporary(rt);
-            }
-        }
-
         private void EnsureStagingRt(int width, int height, GraphicsFormat format, bool useMip)
         {
             if (_stagingRt != null)
@@ -480,107 +451,222 @@ namespace MrPathV2._2.Editor.Terrain
         }
 
 
+        /// <summary>
+        ///     更新GPU数据，采用提前返回风格和Unity最佳实践
+        /// </summary>
         public bool UpdateData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> layerMap)
         {
+            // 提前返回：处理空配方情况
             if (recipe == null)
             {
                 ReleaseBuffers();
                 return _lastRecipe != null;
             }
 
+            // 提前返回：检查是否需要完全重建
+            if (ShouldRebuildGpuData(recipe, layerMap))
+            {
+                return RebuildGpuData(recipe, layerMap);
+            }
+
+            // 仅更新splat索引映射（优化路径）
+            return UpdateSplatIndicesOnly(recipe, layerMap);
+        }
+
+        /// <summary>
+        ///     检查是否需要完全重建GPU数据
+        /// </summary>
+        private bool ShouldRebuildGpuData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> layerMap)
+        {
             var newHash = CalculateRecipeDeepHash(recipe);
             var layerMapHash = HashLayerMap(layerMap);
 
-            var recipeUnchanged = newHash == _lastRecipeHash && _lastRecipe == recipe;
-            if (recipeUnchanged && !CheckMaskParametersChanged(recipe))
-            {
-                if (_cachedLayerParams.Count > 0)
-                {
-                    // 仅刷新 splat 索引映射，不重建纹理数组
-                    for (int i = 0, j = 0; i < recipe.GetLayers().Count; i++)
-                    {
-                        var layer = recipe.GetLayers()[i];
-                        if (!layer.enabled || layer.contentLayer == null || layer.contentLayer.diffuseTexture == null)
-                            continue;
-                        var splatIndex = -1;
-                        if (layerMap != null && layerMap.TryGetValue(layer.contentLayer, out var si))
-                            splatIndex = si;
-                        var p = _cachedLayerParams[j];
-                        p.TerrainLayerSplatIndex = splatIndex;
-                        _cachedLayerParams[j] = p;
-                        j++;
-                    }
+            // 配方或遮罩发生变化时需要重建
+            var recipeChanged = newHash != _lastRecipeHash || _lastRecipe != recipe;
+            var maskChanged = CheckMaskParametersChanged(recipe);
+            
+            // 缓存为空时也需要重建
+            var cacheEmpty = _cachedLayerParams.Count == 0;
+            
+            return recipeChanged || maskChanged || cacheEmpty;
+        }
 
-                    _lastLayerMapHash = layerMapHash;
-                    if (LayerParamsBuffer == null || !LayerParamsBuffer.IsValid())
-                    {
-                        UpdateComputeBuffer();
-                    }
-                    else
-                    {
-                        LayerParamsBuffer.SetData(_cachedLayerParams, 0, 0, ActiveLayerCount);
-                    }
-
-                    return true;
-                }
-            }
-
-            Debug.Log("[RecipeGpuDataManager] Recipe or mask changed, rebuilding GPU buffers.");
+        /// <summary>
+        ///     完全重建GPU数据
+        /// </summary>
+        private bool RebuildGpuData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> layerMap)
+        {
+            ErrorHandler.LogInfo("[RecipeGpuDataManager] Recipe or mask changed, rebuilding GPU buffers.");
+            
+            // 更新缓存状态
+            var newHash = CalculateRecipeDeepHash(recipe);
+            var layerMapHash = HashLayerMap(layerMap);
+            
             _lastRecipe = recipe;
             _lastRecipeHash = newHash;
             _lastLayerMapHash = layerMapHash;
 
+            // 清理旧数据
             _cachedLayerParams.Clear();
             _cachedTextures.Clear();
             _maskInstanceIdToHash.Clear();
 
+            // 处理所有启用的图层
+            ProcessEnabledLayers(recipe, layerMap);
+
+            // 更新GPU资源
+            UpdateTextureArray();
+            UpdateComputeBuffer();
+
+            return true;
+        }
+
+        /// <summary>
+        ///     仅更新splat索引映射（优化路径）
+        /// </summary>
+        private bool UpdateSplatIndicesOnly(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> layerMap)
+        {
+            var layerMapHash = HashLayerMap(layerMap);
+            
+            // 更新splat索引
+            for (int i = 0, j = 0; i < recipe.GetLayers().Count; i++)
+            {
+                var layer = recipe.GetLayers()[i];
+                
+                // 跳过无效图层
+                if (!IsLayerValid(layer)) continue;
+                
+                // 获取splat索引
+                var splatIndex = GetSplatIndex(layer, layerMap);
+                
+                // 更新GPU参数
+                var p = _cachedLayerParams[j];
+                p.TerrainLayerSplatIndex = splatIndex;
+                _cachedLayerParams[j] = p;
+                j++;
+            }
+
+            _lastLayerMapHash = layerMapHash;
+            
+            // 更新计算缓冲区
+            if (LayerParamsBuffer == null || !LayerParamsBuffer.IsValid())
+            {
+                UpdateComputeBuffer();
+            }
+            else
+            {
+                LayerParamsBuffer.SetData(_cachedLayerParams, 0, 0, ActiveLayerCount);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        ///     处理所有启用的图层
+        /// </summary>
+        private void ProcessEnabledLayers(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> layerMap)
+        {
             var textureIndexCounter = 0;
             var textureToIndex = new Dictionary<Texture2D, int>();
 
             foreach (var layer in recipe.GetLayers())
             {
-                if (!layer.enabled || layer.contentLayer == null || layer.contentLayer.diffuseTexture == null) continue;
+                // 跳过无效图层
+                if (!IsLayerValid(layer)) continue;
 
-                var diffuseTex = layer.contentLayer.diffuseTexture;
-                if (!textureToIndex.TryGetValue(diffuseTex, out var texIndex))
-                {
-                    texIndex = textureIndexCounter++;
-                    textureToIndex.Add(diffuseTex, texIndex);
-                    _cachedTextures.Add(diffuseTex);
-                }
-
-                var splatIndex = -1;
-                if (layerMap != null && layerMap.TryGetValue(layer.contentLayer, out var si))
-                    splatIndex = si;
-
-                var activeMask = layer.layerMask;
-                var packedMask = PackMaskParams(activeMask);
-                if (activeMask != null)
-                {
-                    _maskInstanceIdToHash[activeMask.GetInstanceID()] = CalculateMaskHash(activeMask);
-                }
-
-                var gpuParams = new GpuBlendLayerParams
-                {
-                    BlendMode = (int)layer.blendMode,
-                    Opacity = layer.opacity * recipe.masterOpacity,
-                    TextureIndex = texIndex,
-                    TerrainLayerSplatIndex = splatIndex,
-                    TilingOffset = new Vector4(
-                        layer.contentLayer.tileSize.x != 0 ? layer.contentLayer.tileSize.x : 1f,
-                        layer.contentLayer.tileSize.y != 0 ? layer.contentLayer.tileSize.y : 1f,
-                        layer.contentLayer.tileOffset.x,
-                        layer.contentLayer.tileOffset.y),
-                    TintColor = Color.white,
-                    MaskParams = packedMask
-                };
+                // 处理纹理索引
+                var texIndex = GetOrCreateTextureIndex(layer.contentLayer.diffuseTexture, textureToIndex, ref textureIndexCounter);
+                
+                // 获取splat索引
+                var splatIndex = GetSplatIndex(layer, layerMap);
+                
+                // 处理遮罩
+                var packedMask = ProcessMask(layer.layerMask);
+                
+                // 创建GPU参数
+                var gpuParams = CreateGpuLayerParams(layer, recipe, texIndex, splatIndex, packedMask);
                 _cachedLayerParams.Add(gpuParams);
             }
+        }
 
-            UpdateTextureArray();
-            UpdateComputeBuffer();
+        /// <summary>
+        ///     检查图层是否有效
+        /// </summary>
+        private static bool IsLayerValid(RoadLayer layer)
+        {
+            return layer.enabled && 
+                   layer.contentLayer != null && 
+                   layer.contentLayer.diffuseTexture != null;
+        }
 
-            return true;
+        /// <summary>
+        ///     获取或创建纹理索引
+        /// </summary>
+        private int GetOrCreateTextureIndex(Texture2D diffuseTex, Dictionary<Texture2D, int> textureToIndex, ref int textureIndexCounter)
+        {
+            if (textureToIndex.TryGetValue(diffuseTex, out var texIndex))
+            {
+                return texIndex;
+            }
+
+            texIndex = textureIndexCounter++;
+            textureToIndex.Add(diffuseTex, texIndex);
+            _cachedTextures.Add(diffuseTex);
+            
+            return texIndex;
+        }
+
+        /// <summary>
+        ///     获取splat索引
+        /// </summary>
+        private static int GetSplatIndex(RoadLayer layer, Dictionary<TerrainLayer, int> layerMap)
+        {
+            if (layerMap != null && layerMap.TryGetValue(layer.contentLayer, out var splatIndex))
+            {
+                return splatIndex;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        ///     处理遮罩参数
+        /// </summary>
+        private GpuMaskParams ProcessMask(BlendMaskBase activeMask)
+        {
+            var packedMask = PackMaskParams(activeMask);
+            
+            if (activeMask != null)
+            {
+                _maskInstanceIdToHash[activeMask.GetInstanceID()] = CalculateMaskHash(activeMask);
+            }
+            
+            return packedMask;
+        }
+
+        /// <summary>
+        ///     创建GPU图层参数
+        /// </summary>
+        private static GpuBlendLayerParams CreateGpuLayerParams(
+            RoadLayer layer,
+            StylizedRoadRecipe recipe, 
+            int texIndex, 
+            int splatIndex, 
+            GpuMaskParams packedMask)
+        {
+            return new GpuBlendLayerParams
+            {
+                BlendMode = (int)layer.blendMode,
+                Opacity = layer.opacity * recipe.masterOpacity,
+                TextureIndex = texIndex,
+                TerrainLayerSplatIndex = splatIndex,
+                TilingOffset = new Vector4(
+                    layer.contentLayer.tileSize.x != 0 ? layer.contentLayer.tileSize.x : 1f,
+                    layer.contentLayer.tileSize.y != 0 ? layer.contentLayer.tileSize.y : 1f,
+                    layer.contentLayer.tileOffset.x,
+                    layer.contentLayer.tileOffset.y),
+                TintColor = Color.white,
+                MaskParams = packedMask
+            };
         }
     }
 

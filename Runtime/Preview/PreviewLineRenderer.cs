@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Memory;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     预览线条渲染器 - 统一管理所有预览相关的线条绘制
-    ///     应用最佳实践：职责分离、性能优化、可扩展设计
+    ///     应用最佳实践：职责分离、性能 优化、可扩展设计
     /// </summary>
     public class PreviewLineRenderer : IDisposable
     {

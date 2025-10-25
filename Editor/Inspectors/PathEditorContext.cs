@@ -1,15 +1,15 @@
 using System;
-using MrPathV2._2.Editor.Input;
-using MrPathV2._2.Editor.Preview;
-using MrPathV2._2.Editor.Settings;
-using MrPathV2._2.Editor.Terrain;
-using MrPathV2._2.Runtime.Core;
-using MrPathV2._2.Runtime.Interfaces;
-using MrPathV2._2.Runtime.Providers;
+using MrPathV2.Editor.Input;
+using MrPathV2.Editor.Preview;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Providers;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2._2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
     ///     路径编辑器上下文，封装编辑器依赖项并提供统一的访问接口
@@ -23,6 +23,9 @@ namespace MrPathV2._2.Editor.Inspectors
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             _refreshManager = new EditorRefreshManager();
+#if UNITY_EDITOR
+            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+#endif
             InitializeDependencies();
         }
 
@@ -65,6 +68,10 @@ namespace MrPathV2._2.Editor.Inspectors
             MaterialManager?.Dispose();
             TerrainHandler?.Dispose();
             _refreshManager?.Dispose();
+
+#if UNITY_EDITOR
+            AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+#endif
 
             // 清空引用
             PreviewManager = null;
@@ -218,5 +225,18 @@ namespace MrPathV2._2.Editor.Inspectors
             HoveredSegmentIdx = context.hoveredSegmentIndex;
             IsDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
         }
+#if UNITY_EDITOR
+        private void OnBeforeAssemblyReload()
+        {
+            try
+            {
+                _refreshManager?.Dispose();
+            }
+            catch
+            {
+                // ignore cleanup errors
+            }
+        }
+#endif
     }
 }
