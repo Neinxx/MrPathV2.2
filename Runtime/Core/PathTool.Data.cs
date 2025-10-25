@@ -22,6 +22,6 @@ namespace MrPathV2.Runtime.Core
 
     #endregion
 
-    // 旧版 BlendMask/LayerBlendRecipe/PathLayer 数据结构已废弃并移除。
+
 
 }

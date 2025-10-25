@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace MrPathV2.Runtime.Core
 {
@@ -8,15 +9,16 @@ namespace MrPathV2.Runtime.Core
     /// </summary>
     public class PathLengthUsageExample : MonoBehaviour
     {
+        [FormerlySerializedAs("Creator")]
         [Header("路径创建器引用")]
-        public PathCreator Creator;
+        public PathCreator creator;
 
         [Header("路径长度信息")]
         [SerializeField] private float roadWorldLength;
 
         private void Start()
         {
-            if (Creator != null)
+            if (creator != null)
             {
                 UpdatePathLength();
             }
@@ -27,14 +29,14 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         private void OnDrawGizmosSelected()
         {
-            if (Creator != null)
+            if (creator != null)
             {
-                var length = Creator.GetPathLength();
+                var length = creator.GetPathLength();
 
                 // 在路径起点显示长度信息
-                if (Creator.NumPoints > 0)
+                if (creator.NumPoints > 0)
                 {
-                    var startPos = Creator.GetPointAt(0f);
+                    var startPos = creator.GetPointAt(0f);
 
 #if UNITY_EDITOR
                     Handles.Label(startPos + Vector3.up * 2f,
@@ -49,9 +51,9 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         private void OnValidate()
         {
-            if (Creator != null && Application.isPlaying)
+            if (creator != null && Application.isPlaying)
             {
-                roadWorldLength = Creator.GetPathLength();
+                roadWorldLength = creator.GetPathLength();
             }
         }
 
@@ -61,14 +63,14 @@ namespace MrPathV2.Runtime.Core
         [ContextMenu("更新路径长度")]
         public void UpdatePathLength()
         {
-            if (Creator == null)
+            if (creator == null)
             {
                 Debug.LogWarning("Creator引用为空，请先分配PathCreator组件");
                 return;
             }
 
             // 获取道路长度
-            roadWorldLength = Creator.GetPathLength();
+            roadWorldLength = creator.GetPathLength();
 
             Debug.Log($"道路总长度: {roadWorldLength:F2} 米");
         }

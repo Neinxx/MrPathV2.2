@@ -23,15 +23,15 @@ namespace MrPathV2.Runtime.Core
 
             for (var i = 0; i < spine.VertexCount; i++)
             {
-                var p = new float2(spine.points[i].x, spine.points[i].z);
+                var p = new float2(spine.Points[i].x, spine.Points[i].z);
 
                 var dirToPrev = i > 0
-                    ? math.normalize(p - new float2(spine.points[i - 1].x, spine.points[i - 1].z))
-                    : math.normalize(new float2(spine.tangents[i].x, spine.tangents[i].z));
+                    ? math.normalize(p - new float2(spine.Points[i - 1].x, spine.Points[i - 1].z))
+                    : math.normalize(new float2(spine.Tangents[i].x, spine.Tangents[i].z));
 
                 var dirToNext = i < spine.VertexCount - 1
-                    ? math.normalize(new float2(spine.points[i + 1].x, spine.points[i + 1].z) - p)
-                    : math.normalize(new float2(spine.tangents[i].x, spine.tangents[i].z));
+                    ? math.normalize(new float2(spine.Points[i + 1].x, spine.Points[i + 1].z) - p)
+                    : math.normalize(new float2(spine.Tangents[i].x, spine.Tangents[i].z));
 
                 var tangent = math.normalize(dirToPrev + dirToNext);
                 var miter = new float2(-tangent.y, tangent.x);

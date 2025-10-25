@@ -239,7 +239,7 @@ namespace MrPathV2.Runtime.Preview
                         AccumulatedDistances[0] = 0;
                         for (var i = 1; i < worldSpine.VertexCount; i++)
                         {
-                            AccumulatedDistances[i] = AccumulatedDistances[i - 1] + Vector3.Distance(worldSpine.points[i - 1], worldSpine.points[i]);
+                            AccumulatedDistances[i] = AccumulatedDistances[i - 1] + Vector3.Distance(worldSpine.Points[i - 1], worldSpine.Points[i]);
                         }
                     }
                     catch

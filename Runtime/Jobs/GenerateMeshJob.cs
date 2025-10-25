@@ -103,55 +103,113 @@ namespace MrPathV2.Runtime.Jobs
 
         [WriteOnly] public NativeArray<float4> Colors; // RGBA 权重
 
-        public void Execute(int index)
+       public void Execute(int index)
+{
+    // 参数验证
+    if (!ValidateInput(index))
+        return;
+
+    // 计算索引和参数
+    var (i, j, t, signedT, normalizedDist, pathProgress) = CalculateParameters(index);
+
+    // 执行纹理混合
+    var (r, g, b, a) = PerformTextureBlending(normalizedDist, pathProgress);
+
+    // 设置最终颜色
+    Colors[index] = new float4(r, g, b, a) * BaseColor;
+}
+
+/// <summary>
+/// 验证输入参数是否有效
+/// </summary>
+/// <param name="index">当前处理的索引</param>
+/// <returns>参数是否有效</returns>
+private bool ValidateInput(int index)
+{
+    if (Spine.Length < 2 || Segments < 2)
+        return false;
+
+    var i = index / Segments;
+    if (i < 0 || i >= Spine.Length)
+        return false;
+
+    return true;
+}
+
+/// <summary>
+/// 计算所需的参数
+/// </summary>
+/// <param name="index">当前处理的索引</param>
+/// <returns>计算得到的参数元组</returns>
+private (int i, int j, float t, float signedT, float normalizedDist, float pathProgress) CalculateParameters(int index)
+{
+    var i = index / Segments;
+    var j = index % Segments;
+
+    var t = j / (float)(Segments - 1); // 0..1 左->右
+    var signedT = t * 2f - 1f; // -1..1 中心为0
+    var normalizedDist = t; // 统一为左->右 0..1（不镜像）
+
+    // 新增：计算沿路径的进度 0..1（基于当前脊线索引）
+    var segCount = math.max(1, Spine.Length - 1);
+    var pathProgress = math.saturate(i / (float)segCount);
+
+    return (i, j, t, signedT, normalizedDist, pathProgress);
+}
+
+/// <summary>
+/// 执行纹理混合计算
+/// </summary>
+/// <param name="normalizedDist">标准化距离</param>
+/// <param name="pathProgress">路径进度</param>
+/// <returns>RGBA颜色值</returns>
+private (float r, float g, float b, float a) PerformTextureBlending(float normalizedDist, float pathProgress)
+{
+    float r = 0f, g = 0f, b = 0f, a = 0f;
+    var layerCount = math.min(4, Recipe.Length);
+
+    for (var k = 0; k < layerCount; k++)
+    {
+        float layerMask = GetLayerMask(k, normalizedDist, pathProgress);
+        var blendMode = Recipe.BlendModes[k];
+
+        switch (k)
         {
-            if (Spine.Length < 2 || Segments < 2) return;
-            var i = index / Segments;
-            var j = index % Segments;
-            if (i < 0 || i >= Spine.Length) return;
-
-            var t = j / (float)(Segments - 1); // 0..1 左->右
-            var signedT = t * 2f - 1f; // -1..1 中心为0
-            var normalizedDist = t; // 统一为左->右 0..1（不镜像）
-
-            // 新增：计算沿路径的进度 0..1（基于当前脊线索引）
-            var segCount = math.max(1, Spine.Length - 1);
-            var pathProgress = math.saturate(i / (float)segCount);
-
-            // 只取前4层作为预览（RGBA），其余层忽略
-            float r = 0f, g = 0f, b = 0f, a = 0f;
-            var layerCount = math.min(4, Recipe.Length);
-            for (var k = 0; k < layerCount; k++)
-            {
-                float layerMask;
-                if (Recipe.MaskAtlas.IsCreated)
-                {
-                    // 使用 2D Mask Atlas 采样，支持沿路径变化
-                    layerMask = TerrainJobsUtility.SampleMaskAtlas(
-                        Recipe.MaskAtlas,
-                        Recipe.AtlasWidth,
-                        Recipe.PathSamples,
-                        k,
-                        normalizedDist,
-                        pathProgress);
-                }
-
-                else
-                {
-                    layerMask = TerrainJobsUtility.EvaluateStrip(Recipe.Strips, Recipe.StripSlices[k], Recipe.StripResolution, normalizedDist) * Recipe.Opacities[k];
-                }
-                var blendMode = Recipe.BlendModes[k];
-                switch (k)
-                {
-                    case 0: r = TerrainJobsUtility.Blend(r, layerMask, blendMode); break;
-                    case 1: g = TerrainJobsUtility.Blend(g, layerMask, blendMode); break;
-                    case 2: b = TerrainJobsUtility.Blend(b, layerMask, blendMode); break;
-                    case 3: a = TerrainJobsUtility.Blend(a, layerMask, blendMode); break;
-                }
-            }
-
-            // 不再在顶点阶段归一化，保持 LUT 的 original opacity 信息
-            Colors[index] = new float4(r, g, b, a) * BaseColor;
+            case 0: r = TerrainJobsUtility.Blend(r, layerMask, blendMode); break;
+            case 1: g = TerrainJobsUtility.Blend(g, layerMask, blendMode); break;
+            case 2: b = TerrainJobsUtility.Blend(b, layerMask, blendMode); break;
+            case 3: a = TerrainJobsUtility.Blend(a, layerMask, blendMode); break;
         }
+    }
+
+    return (r, g, b, a);
+}
+
+/// <summary>
+/// 获取图层遮罩值
+/// </summary>
+/// <param name="layerIndex">图层索引</param>
+/// <param name="normalizedDist">标准化距离</param>
+/// <param name="pathProgress">路径进度</param>
+/// <returns>图层遮罩值</returns>
+private float GetLayerMask(int layerIndex, float normalizedDist, float pathProgress)
+{
+    if (Recipe.MaskAtlas.IsCreated)
+    {
+        // 使用 2D Mask Atlas 采样，支持沿路径变化
+        return TerrainJobsUtility.SampleMaskAtlas(
+            Recipe.MaskAtlas,
+            Recipe.AtlasWidth,
+            Recipe.PathSamples,
+            layerIndex,
+            normalizedDist,
+            pathProgress);
+    }
+    else
+    {
+        return TerrainJobsUtility.EvaluateStrip(Recipe.Strips, Recipe.StripSlices[layerIndex], Recipe.StripResolution, normalizedDist) * Recipe.Opacities[layerIndex];
+    }
+}
+
     }
 }

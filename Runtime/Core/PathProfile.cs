@@ -8,8 +8,8 @@ namespace MrPathV2.Runtime.Core
     public class PathProfile : ScriptableObject
     {
 
-        private const int MIN_SEGMENTS = 3;
-        private const int MAX_SEGMENTS = 64;
+        private const int MinSegments = 3;
+        private const int MaxSegments = 64;
         [Header("核心设置")]
         public CurveType curveType = CurveType.Bezier;
         [Range(0.1f, 10f)] public float generationPrecision = 1f;
@@ -67,7 +67,7 @@ namespace MrPathV2.Runtime.Core
         private void OnValidate()
         {
             // 保证生成参数与曲线端点处于安全范围
-            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MIN_SEGMENTS, MAX_SEGMENTS);
+            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MinSegments, MaxSegments);
             roadWidth = Mathf.Max(0.01f, roadWidth);
             falloffWidth = Mathf.Max(0f, falloffWidth);
 

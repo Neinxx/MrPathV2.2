@@ -27,7 +27,7 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         public static void Draw(ref HandleDrawContext context)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             if (creator == null || creator.profile == null || creator.pathData.KnotCount == 0) return;
 
             var camera = SceneView.currentDrawingSceneView.camera;
@@ -57,10 +57,10 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         public static void DrawHandle(Vector3 localPos, int flatIndex, HandleStyle style, ref HandleDrawContext context, Camera camera)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             var worldPos = creator.transform.TransformPoint(localPos);
 
-            var isHovered = flatIndex == context.hoveredPointIndex;
+            var isHovered = flatIndex == context.HoveredPointIndex;
 
             // --- 【【【 最终核心修正：斩断旧因果 】】】 ---
 
@@ -68,7 +68,7 @@ namespace MrPathV2.Runtime.Core
 
             // 2. (正确代码) 安全地从注册中心获取当前法则，并从中取得悬停样式
             var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
-            if (currentStrategy == null || currentStrategy.drawingStyle == null)
+            if (!currentStrategy || currentStrategy.drawingStyle == null)
             {
                 // 如果获取不到法则或样式，绘制一个默认的红色错误提示Handle，防止后续代码报错
                 Handles.color = Color.red;
@@ -98,9 +98,9 @@ namespace MrPathV2.Runtime.Core
 
                 // 编辑器在创建命令之前决定是否需要地形吸附
                 var finalPos = newWorldPos;
-                if (creator.profile != null && creator.profile.snapToTerrain && context.heightProvider != null)
+                if (creator.profile && creator.profile.snapToTerrain && context.HeightProvider != null)
                 {
-                    finalPos.y = context.heightProvider.GetHeight(finalPos);
+                    finalPos.y = context.HeightProvider.GetHeight(finalPos);
                 }
 
                 // 纯命令：仅记录最终位置数据
@@ -116,14 +116,14 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         public struct HandleDrawContext
         {
-            public PathCreator creator;
-            public IHeightProvider heightProvider;
-            public PathSpine? latestSpine;
-            public bool isDragging;
-            public int hoveredPointIndex; // 扁平化索引
-            public int hoveredSegmentIndex;
-            public float hoveredPathT;
-            public PreviewLineRenderer lineRenderer; // 线条渲染器
+            public PathCreator Creator;
+            public IHeightProvider HeightProvider;
+            public PathSpine? LatestSpine;
+            public bool IsDragging;
+            public int HoveredPointIndex; // 扁平化索引
+            public int HoveredSegmentIndex;
+            public float HoveredPathT;
+            public PreviewLineRenderer LineRenderer; // 线条渲染器
         }
 
         #endregion
@@ -132,33 +132,33 @@ namespace MrPathV2.Runtime.Core
 
         private static void UpdateHoverState(ref HandleDrawContext context, PathStrategy strategy)
         {
-            if (context.isDragging) return;
+            if (context.IsDragging) return;
 
             // 先重置点悬停状态，防止上一帧遗留
-            context.hoveredPointIndex = -1;
+            context.HoveredPointIndex = -1;
 
             // 将“哪个点被悬停”的复杂判断，完全交给法则自己去处理
             strategy.UpdatePointHover(ref context);
 
-            if (context.hoveredPointIndex == -1)
+            if (context.HoveredPointIndex == -1)
             {
                 // 如果没有点被悬停，才进行“线”的悬停检测
                 UpdatePathHover(ref context);
             }
             else
             {
-                context.hoveredSegmentIndex = -1;
-                context.hoveredPathT = -1;
+                context.HoveredSegmentIndex = -1;
+                context.HoveredPathT = -1;
             }
         }
 
         private static void UpdatePathHover(ref HandleDrawContext context)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             if (creator == null) return;
 
-            context.hoveredSegmentIndex = -1;
-            context.hoveredPathT = -1;
+            context.HoveredSegmentIndex = -1;
+            context.HoveredPathT = -1;
 
             // 采用细分采样进行屏幕空间点距检测，以提升各种视角下的命中率
             // 与 CatmullRomStrategy 中的绘制分辨率保持一致或略高，保证交互顺滑
@@ -180,8 +180,8 @@ namespace MrPathV2.Runtime.Core
 
                     if ((guiPoint - mousePos).sqrMagnitude < pickThresholdSqr)
                     {
-                        context.hoveredSegmentIndex = seg;
-                        context.hoveredPathT = t;
+                        context.HoveredSegmentIndex = seg;
+                        context.HoveredPathT = t;
                         return;
                     }
                 }
@@ -191,9 +191,9 @@ namespace MrPathV2.Runtime.Core
         private static void DrawInsertionPreviewHandle(ref HandleDrawContext context, Camera camera, PathDrawingStyle style)
         {
             var e = Event.current;
-            if (e.shift && !e.control && context.hoveredPathT > -1)
+            if (e.shift && !e.control && context.HoveredPathT > -1)
             {
-                var previewPos = context.creator.GetPointAt(context.hoveredPathT);
+                var previewPos = context.Creator.GetPointAt(context.HoveredPathT);
                 var handleSize = HandleUtility.GetHandleSize(previewPos);
                 var previewStyle = style.insertionPreviewStyle;
 

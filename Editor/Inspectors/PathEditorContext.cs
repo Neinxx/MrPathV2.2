@@ -210,19 +210,19 @@ namespace MrPathV2.Editor.Inspectors
 
         public PathEditorHandles.HandleDrawContext CreateHandleContext() => new PathEditorHandles.HandleDrawContext
         {
-            creator = Target,
-            heightProvider = HeightProvider,
-            latestSpine = PreviewManager?.LatestSpine,
-            isDragging = IsDraggingHandle,
-            hoveredPointIndex = HoveredPointIdx,
-            hoveredSegmentIndex = HoveredSegmentIdx,
-            lineRenderer = PreviewManager?.GetSharedLineRenderer()
+            Creator = Target,
+            HeightProvider = HeightProvider,
+            LatestSpine = PreviewManager?.LatestSpine,
+            IsDragging = IsDraggingHandle,
+            HoveredPointIndex = HoveredPointIdx,
+            HoveredSegmentIndex = HoveredSegmentIdx,
+            LineRenderer = PreviewManager?.GetSharedLineRenderer()
         };
 
         public void UpdateHoverState(PathEditorHandles.HandleDrawContext context)
         {
-            HoveredPointIdx = context.hoveredPointIndex;
-            HoveredSegmentIdx = context.hoveredSegmentIndex;
+            HoveredPointIdx = context.HoveredPointIndex;
+            HoveredSegmentIdx = context.HoveredSegmentIndex;
             IsDraggingHandle = Event.current.type == EventType.MouseDrag && Event.current.button == 0 && GUIUtility.hotControl != 0;
         }
 #if UNITY_EDITOR

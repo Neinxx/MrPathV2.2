@@ -97,10 +97,10 @@ namespace MrPathV2.Editor.Terrain
         private Bounds GetProjectedSpineBounds(PathSpine spine)
         {
             if (spine.VertexCount == 0) return new Bounds();
-            var pathBounds = new Bounds(spine.points[0], Vector3.zero);
+            var pathBounds = new Bounds(spine.Points[0], Vector3.zero);
             for (var i = 1; i < spine.VertexCount; i++)
             {
-                pathBounds.Encapsulate(spine.points[i]);
+                pathBounds.Encapsulate(spine.Points[i]);
             }
             var maxExtent = Creator.profile != null ? Creator.profile.roadWidth / 2f + Creator.profile.falloffWidth : 0;
             pathBounds.Expand(new Vector3(maxExtent * 2, 0, maxExtent * 2));
@@ -120,7 +120,7 @@ namespace MrPathV2.Editor.Terrain
             float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
             for (var i = 0; i < spine.VertexCount; i++)
             {
-                var p = spine.points[i];
+                var p = spine.Points[i];
                 minX = Mathf.Min(minX, p.x - halfWidth);
                 minZ = Mathf.Min(minZ, p.z - halfWidth);
                 maxX = Mathf.Max(maxX, p.x + halfWidth);

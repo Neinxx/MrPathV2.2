@@ -11,7 +11,7 @@ namespace MrPathV2.Runtime.Core
     /// </summary>
     public class AsyncOperationManager : IDisposable
     {
-        private const int DEFAULT_TIMEOUT_SECONDS = 30;
+        private const int DefaultTimeoutSeconds = 30;
         private readonly Dictionary<string, CancellationTokenSource> _activeTasks;
         private readonly object _lock = new object();
 
@@ -104,7 +104,7 @@ namespace MrPathV2.Runtime.Core
             try
             {
                 // 设置超时
-                var operationTimeout = timeout ?? TimeSpan.FromSeconds(DEFAULT_TIMEOUT_SECONDS);
+                var operationTimeout = timeout ?? TimeSpan.FromSeconds(DefaultTimeoutSeconds);
                 if (_operationTimeouts.ContainsKey(operationId))
                 {
                     operationTimeout = _operationTimeouts[operationId];

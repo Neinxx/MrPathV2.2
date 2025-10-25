@@ -12,11 +12,8 @@ namespace MrPathV2.Runtime.Jobs
 {
     public static class PathJobsUtility
     {
-        public static SpineData CreateSpineData(PathSpine spine, Allocator allocator) => new SpineData(spine, allocator);
 
-        public static ProfileData CreateProfileData(PathProfile profile, Allocator allocator) => new ProfileData(profile, allocator);
 
-        // ... SpineData 结构体保持不变 ...
         public struct SpineData : IDisposable
         {
             public NativeArray<float3> Points;
@@ -34,9 +31,9 @@ namespace MrPathV2.Runtime.Jobs
 
                 for (var i = 0; i < spine.VertexCount; i++)
                 {
-                    Points[i] = spine.points[i];
-                    Tangents[i] = spine.tangents[i];
-                    Normals[i] = spine.surfaceNormals[i];
+                    Points[i] = spine.Points[i];
+                    Tangents[i] = spine.Tangents[i];
+                    Normals[i] = spine.SurfaceNormals[i];
                 }
             }
 
@@ -51,9 +48,9 @@ namespace MrPathV2.Runtime.Jobs
 
         public struct ProfileData : IDisposable
         {
-            [ReadOnly] public float RoadWidth;
-            [ReadOnly] public float FalloffWidth;
-            [ReadOnly] public bool ForceHorizontal;
+            [ReadOnly] public readonly float RoadWidth;
+            [ReadOnly] public readonly float FalloffWidth;
+            [ReadOnly] public readonly bool ForceHorizontal;
             [ReadOnly] public int CrossSectionSegments;
 
             private NativeArray<float> _bakedCrossSection;

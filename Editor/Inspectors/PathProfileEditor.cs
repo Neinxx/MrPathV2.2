@@ -76,13 +76,13 @@ namespace MrPathV2.Editor.Inspectors
 
         public override VisualElement CreateInspectorGUI()
         {
-            Debug.Log("[PathProfileEditor] Loaded UXML template.");
+          //  Debug.Log("[PathProfileEditor] Loaded UXML template.");
 
             // 1. 加载 UXML 模板
             var root = UIResourceLoader.LoadAndClone<PathProfileEditor>();
             if (root == null)
             {
-                Debug.LogError("[PathProfileEditor] Failed to load UXML template.");
+                ErrorHandler.LogError("[PathProfileEditor]  Failed to load UXML template.");
                 return new Label("Error loading UI. Check UXML file and UIResourceLoader.");
             }
             _rootElement = root;
@@ -259,7 +259,7 @@ namespace MrPathV2.Editor.Inspectors
             _recipeEditor = CreateEditor(recipe);
             if (!_recipeEditor)
             {
-                Debug.LogError($"[PathProfileEditor] Failed to create editor for Recipe: {recipe.name}");
+                ErrorHandler.LogError($"[PathProfileEditor] Failed to create editor for Recipe: {recipe.name}");
                 return;
             }
 

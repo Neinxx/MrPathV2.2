@@ -36,7 +36,7 @@ namespace MrPathV2.Runtime.Core
             float pathLength = 100f,
             int baseResolution = 256)
         {
-            using (ProfilingMarkers.MaskAtlasGenerator_Build.Auto())
+            using (ProfilingMarkers.MaskAtlasGeneratorBuild.Auto())
             {
                 if (layers == null || layers.Count == 0)
                 {
@@ -115,8 +115,8 @@ namespace MrPathV2.Runtime.Core
             var opacities = new float[layerCount];
             for (var i = 0; i < layerCount; i++)
             {
-                maskParams[i] = PackMaskParams(layers[i].mask);
-                opacities[i] = Mathf.Clamp01(layers[i].opacity);
+                maskParams[i] = PackMaskParams(layers[i].Mask);
+                opacities[i] = Mathf.Clamp01(layers[i].Opacity);
             }
 
             var maskBuf = new ComputeBuffer(layerCount, Marshal.SizeOf(typeof(GpuMaskParams)), ComputeBufferType.Structured);
@@ -180,8 +180,8 @@ namespace MrPathV2.Runtime.Core
             for (var li = 0; li < layerCount; li++)
             {
                 var layer = layers[li];
-                if (layer.opacity <= 0f) continue;
-                var opacity = Mathf.Clamp01(layer.opacity);
+                if (layer.Opacity <= 0f) continue;
+                var opacity = Mathf.Clamp01(layer.Opacity);
 
                 for (var py = 0; py < pathSamples; py++)
                 {
@@ -192,7 +192,7 @@ namespace MrPathV2.Runtime.Core
                     {
                         var across = atlasWidth > 1 ? x / (float)(atlasWidth - 1) : 0f;
                         var posAcross = across * 2f - 1f;
-                        var w = PreviewPipelineUtility.EvaluateMask(posAcross, pathProgress, worldWidth, pathLength, layer.mask);
+                        var w = PreviewPipelineUtility.EvaluateMask(posAcross, pathProgress, worldWidth, pathLength, layer.Mask);
                         w = Mathf.Clamp01(w * opacity);
                         var idx = rowIndex * atlasWidth + x;
                         pixels[idx] = new Color32((byte)Mathf.RoundToInt(w * 255f), 0, 0, 255);

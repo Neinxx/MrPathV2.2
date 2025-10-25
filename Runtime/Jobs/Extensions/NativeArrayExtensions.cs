@@ -64,10 +64,10 @@ namespace MrPathV2.Runtime.Jobs.Extensions
 #endif
                 array.Dispose();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"释放NativeArray时发生异常(可能已释放): {ex.Message}");
+              //  Debug.LogWarning($"释放NativeArray时发生异常(可能已释放): {ex.Message}");
 #endif
             }
         }

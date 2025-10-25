@@ -1,23 +1,28 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace MrPathV2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "PoolConfig", menuName = "MrPathV2/Pool Config", order = 0)]
     public class PoolConfig : ScriptableObject
     {
+        [FormerlySerializedAs("_maxPoolSize")]
         [SerializeField]
-        private int _maxPoolSize = 64;
+        private int maxPoolSize = 64;
+        [FormerlySerializedAs("_minArraySize")]
         [SerializeField]
-        private int _minArraySize = 16;
+        private int minArraySize = 16;
+        [FormerlySerializedAs("_maxArraySize")]
         [SerializeField]
-        private int _maxArraySize = 1024 * 1024;
+        private int maxArraySize = 1024 * 1024;
+        [FormerlySerializedAs("_clearOnReturn")]
         [SerializeField]
-        private bool _clearOnReturn = true;
+        private bool clearOnReturn = true;
 
-        public int MaxPoolSize => _maxPoolSize;
-        public int MinArraySize => _minArraySize;
-        public int MaxArraySize => _maxArraySize;
-        public bool ClearOnReturn => _clearOnReturn;
+        public int MaxPoolSize => maxPoolSize;
+        public int MinArraySize => minArraySize;
+        public int MaxArraySize => maxArraySize;
+        public bool ClearOnReturn => clearOnReturn;
     }
 
     public interface ITrimable

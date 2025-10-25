@@ -14,22 +14,22 @@ namespace MrPathV2.Runtime.Core
         /// <summary>
         ///     骨架上所有点的位置（已吸附地形）。
         /// </summary>
-        public readonly Vector3[] points;
+        public readonly Vector3[] Points;
 
         /// <summary>
         ///     骨架上每个点处的切线方向（前进方向）。
         /// </summary>
-        public readonly Vector3[] tangents;
+        public readonly Vector3[] Tangents;
 
         /// <summary>
         ///     骨架上每个点下方的地形表面法线（上方向）。
         /// </summary>
-        public readonly Vector3[] surfaceNormals;
+        public readonly Vector3[] SurfaceNormals;
 
         /// <summary>
         ///     骨架上每个点对应的归一化时间戳（0到1）。
         /// </summary>
-        public readonly float[] timestamps;
+        public readonly float[] Timestamps;
 
         #endregion
 
@@ -38,17 +38,17 @@ namespace MrPathV2.Runtime.Core
         /// <summary>
         ///     骨架中的顶点总数。
         /// </summary>
-        public readonly int VertexCount => points?.Length ?? 0;
+        public readonly int VertexCount => Points?.Length ?? 0;
 
         /// <summary>
         ///     唯一的构造函数，用于创建一个完整的路径骨架实例。
         /// </summary>
         public PathSpine(Vector3[] points, Vector3[] tangents, Vector3[] surfaceNormals, float[] timestamps)
         {
-            this.points = points;
-            this.tangents = tangents;
-            this.surfaceNormals = surfaceNormals;
-            this.timestamps = timestamps;
+            this.Points = points;
+            this.Tangents = tangents;
+            this.SurfaceNormals = surfaceNormals;
+            this.Timestamps = timestamps;
         }
 
         #endregion

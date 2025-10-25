@@ -530,12 +530,12 @@ namespace MrPathV2.Editor.Inspectors
         private void CleanupPreviewLines()
         {
             var context = _ctx.CreateHandleContext();
-            if (context.lineRenderer == null) return;
+            if (context.LineRenderer == null) return;
 
             var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType);
 
             // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
-            context.lineRenderer.Clear(currentStrategy is BezierStrategy
+            context.LineRenderer.Clear(currentStrategy is BezierStrategy
                 ? PreviewLineRenderer.LineType.PathCurve
                 // 如果当前不是贝塞尔曲线策略，则清除上一帧可能遗留的贝塞尔控制线
                 : PreviewLineRenderer.LineType.ControlLine);
@@ -554,7 +554,7 @@ namespace MrPathV2.Editor.Inspectors
             }
 
             _ctx.UpdateHoverState(context);
-            _ctx.InputHandler.HandleInputEvents(currentEvent, _targetCreator, context.hoveredPathT, context.hoveredPointIndex);
+            _ctx.InputHandler.HandleInputEvents(currentEvent, _targetCreator, context.HoveredPathT, context.HoveredPointIndex);
         }
 
         private void HandleSceneRepainting(Event currentEvent)

@@ -49,7 +49,7 @@ namespace MrPathV2.Runtime.Jobs
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"释放资源时发生错误: {ex.Message}");
+                        ErrorHandler.LogError($"释放资源时发生错误: {ex.Message}");
                     }
                 }
             }
@@ -125,15 +125,6 @@ namespace MrPathV2.Runtime.Jobs
             var owner = UnifiedMemory.Instance.RentNativeList<T>(initialCapacity, allocator);
             _resources.Add(owner);
             return owner.Collection;
-        }
-
-        /// <summary>
-        ///     注册JobHandle以便统一管理
-        /// </summary>
-        public void RegisterJobHandle(JobHandle handle)
-        {
-            ThrowIfDisposed();
-            _jobHandles.Add(handle);
         }
 
         /// <summary>

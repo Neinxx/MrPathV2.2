@@ -301,7 +301,7 @@ namespace MrPathV2.Runtime.Preview
 
         private void UpdateBatches()
         {
-            using (ProfilingMarkers.PreviewLineRenderer_Update.Auto())
+            using (ProfilingMarkers.PreviewLineRendererUpdate.Auto())
             {
                 // 清空批次
                 foreach (var batch in _batchedLines.Values)

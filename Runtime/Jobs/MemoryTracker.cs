@@ -16,17 +16,12 @@ namespace MrPathV2.Runtime.Jobs
     {
         private static readonly ConcurrentDictionary<IntPtr, AllocationInfo> SActiveAllocations = new ConcurrentDictionary<IntPtr, AllocationInfo>();
 
-        private static long _sTotalAllocations;
-        private static long _sTotalDeallocations;
-        private static long _sTotalBytesAllocated;
-        private static long _sTotalBytesFreed;
-        private static long _sPeakActiveAllocations;
-        private static long _sPeakMemoryUsage;
-
-        /// <summary>
-        ///     获取当前活跃分配数量
-        /// </summary>
-        public static int ActiveAllocationCount => SActiveAllocations.Count;
+        private static long m_STotalAllocations;
+        private static long m_STotalDeallocations;
+        private static long m_STotalBytesAllocated;
+        private static long m_STotalBytesFreed;
+        private static long m_SPeakActiveAllocations;
+        private static long m_SPeakMemoryUsage;
 
         /// <summary>
         ///     跟踪NativeArray分配
@@ -52,18 +47,18 @@ namespace MrPathV2.Runtime.Jobs
             SActiveAllocations.TryAdd(new IntPtr(ptr), info);
 
             // 更新统计信息
-            Interlocked.Increment(ref _sTotalAllocations);
-            Interlocked.Add(ref _sTotalBytesAllocated, info.TotalBytes);
+            Interlocked.Increment(ref m_STotalAllocations);
+            Interlocked.Add(ref m_STotalBytesAllocated, info.TotalBytes);
 
             // 更新峰值统计
             var currentActive = SActiveAllocations.Count;
             var currentMemory = GetCurrentMemoryUsage();
 
-            if (currentActive > _sPeakActiveAllocations)
-                Interlocked.Exchange(ref _sPeakActiveAllocations, currentActive);
+            if (currentActive > m_SPeakActiveAllocations)
+                Interlocked.Exchange(ref m_SPeakActiveAllocations, currentActive);
 
-            if (currentMemory > _sPeakMemoryUsage)
-                Interlocked.Exchange(ref _sPeakMemoryUsage, currentMemory);
+            if (currentMemory > m_SPeakMemoryUsage)
+                Interlocked.Exchange(ref m_SPeakMemoryUsage, currentMemory);
         }
 
         /// <summary>
@@ -79,41 +74,14 @@ namespace MrPathV2.Runtime.Jobs
                 var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
                 if (SActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
                 {
-                    Interlocked.Increment(ref _sTotalDeallocations);
-                    Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
+                    Interlocked.Increment(ref m_STotalDeallocations);
+                    Interlocked.Add(ref m_STotalBytesFreed, info.TotalBytes);
                 }
             }
             catch
             {
                 // 已被 Unity 标记为释放的数组在获取指针时会抛出异常，忽略即可
             }
-        }
-
-        /// <summary>
-        ///     跟踪NativeList分配
-        /// </summary>
-        /// <typeparam name="T">元素类型</typeparam>
-        /// <param name="list">分配的列表</param>
-        /// <param name="allocator">分配器类型</param>
-        public static unsafe void TrackAllocation<T>(NativeList<T> list, Allocator allocator) where T : unmanaged
-        {
-            if (!list.IsCreated) return;
-
-            var info = new AllocationInfo
-            {
-                TypeName = $"NativeList<{typeof(T).Name}>",
-                ElementCount = list.Capacity,
-                ElementSize = UnsafeUtility.SizeOf<T>(),
-                AllocatorType = allocator,
-                AllocationTime = DateTime.Now,
-                StackTrace = Application.isEditor ? Environment.StackTrace : "N/A"
-            };
-
-            var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
-            SActiveAllocations.TryAdd((IntPtr)ptr, info);
-
-            Interlocked.Increment(ref _sTotalAllocations);
-            Interlocked.Add(ref _sTotalBytesAllocated, info.TotalBytes);
         }
 
         /// <summary>
@@ -129,8 +97,8 @@ namespace MrPathV2.Runtime.Jobs
                 var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
                 if (SActiveAllocations.TryRemove((IntPtr)ptr, out var info))
                 {
-                    Interlocked.Increment(ref _sTotalDeallocations);
-                    Interlocked.Add(ref _sTotalBytesFreed, info.TotalBytes);
+                    Interlocked.Increment(ref m_STotalDeallocations);
+                    Interlocked.Add(ref m_STotalBytesFreed, info.TotalBytes);
                 }
             }
             catch
@@ -158,14 +126,14 @@ namespace MrPathV2.Runtime.Jobs
         public static MemoryStats GetMemoryStats() => new MemoryStats
         {
             ActiveAllocations = SActiveAllocations.Count,
-            TotalAllocations = _sTotalAllocations,
-            TotalDeallocations = _sTotalDeallocations,
+            TotalAllocations = m_STotalAllocations,
+            TotalDeallocations = m_STotalDeallocations,
             CurrentMemoryUsage = GetCurrentMemoryUsage(),
-            TotalBytesAllocated = _sTotalBytesAllocated,
-            TotalBytesFreed = _sTotalBytesFreed,
-            PeakActiveAllocations = _sPeakActiveAllocations,
-            PeakMemoryUsage = _sPeakMemoryUsage,
-            PotentialLeaks = _sTotalAllocations - _sTotalDeallocations
+            TotalBytesAllocated = m_STotalBytesAllocated,
+            TotalBytesFreed = m_STotalBytesFreed,
+            PeakActiveAllocations = m_SPeakActiveAllocations,
+            PeakMemoryUsage = m_SPeakMemoryUsage,
+            PotentialLeaks = m_STotalAllocations - m_STotalDeallocations
         };
 
         /// <summary>
@@ -275,12 +243,12 @@ namespace MrPathV2.Runtime.Jobs
         public static void ResetStats()
         {
             SActiveAllocations.Clear();
-            _sTotalAllocations = 0;
-            _sTotalDeallocations = 0;
-            _sTotalBytesAllocated = 0;
-            _sTotalBytesFreed = 0;
-            _sPeakActiveAllocations = 0;
-            _sPeakMemoryUsage = 0;
+            m_STotalAllocations = 0;
+            m_STotalDeallocations = 0;
+            m_STotalBytesAllocated = 0;
+            m_STotalBytesFreed = 0;
+            m_SPeakActiveAllocations = 0;
+            m_SPeakMemoryUsage = 0;
         }
 
         /// <summary>

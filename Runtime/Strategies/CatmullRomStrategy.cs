@@ -83,14 +83,14 @@ namespace MrPathV2.Runtime.Strategies
 
         public override void UpdatePointHover(ref PathEditorHandles.HandleDrawContext context)
         {
-            for (var i = 0; i < context.creator.NumPoints; i++)
+            for (var i = 0; i < context.Creator.NumPoints; i++)
             {
-                var worldPos = context.creator.transform.TransformPoint(context.creator.pathData.GetPosition(i));
+                var worldPos = context.Creator.transform.TransformPoint(context.Creator.pathData.GetPosition(i));
                 var handleRadius = HandleUtility.GetHandleSize(worldPos) * drawingStyle.knotStyle.size;
 
                 if (HandleUtility.DistanceToCircle(worldPos, handleRadius) == 0)
                 {
-                    context.hoveredPointIndex = i;
+                    context.HoveredPointIndex = i;
                     return;
                 }
             }
@@ -98,8 +98,8 @@ namespace MrPathV2.Runtime.Strategies
 
         private void DrawCurve(ref PathEditorHandles.HandleDrawContext context)
         {
-            var creator = context.creator;
-            var lineRenderer = context.lineRenderer;
+            var creator = context.Creator;
+            var lineRenderer = context.LineRenderer;
             var shouldDispose = false;
 
             if (lineRenderer == null)
@@ -121,7 +121,7 @@ namespace MrPathV2.Runtime.Strategies
                 {
                     var curveStyle = new PreviewLineRenderer.LineStyle
                     {
-                        color = i == context.hoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor,
+                        color = i == context.HoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor,
                         thickness = drawingStyle.curveThickness,
                         antiAliased = true
                     };
@@ -161,9 +161,9 @@ namespace MrPathV2.Runtime.Strategies
 
         private void DrawPointHandles(ref PathEditorHandles.HandleDrawContext context, Camera camera)
         {
-            for (var i = 0; i < context.creator.NumPoints; i++)
+            for (var i = 0; i < context.Creator.NumPoints; i++)
             {
-                var localPos = context.creator.pathData.GetPosition(i);
+                var localPos = context.Creator.pathData.GetPosition(i);
                 PathEditorHandles.DrawHandle(localPos, i, drawingStyle.knotStyle, ref context, camera);
             }
         }

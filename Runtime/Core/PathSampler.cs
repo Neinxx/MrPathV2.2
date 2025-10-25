@@ -8,12 +8,12 @@ namespace MrPathV2.Runtime.Core
 {
     public static class PathSampler
     {
-        private const float MIN_POINT_DISTANCE_SQUARED = 0.0001f;
+        private const float MinPointDistanceSquared = 0.0001f;
 
 
         public static PathSpine SamplePath(PathCreator creator, IHeightProvider heightProvider)
         {
-            using (ProfilingMarkers.PathSampler_SamplePath.Auto())
+            using (ProfilingMarkers.PathSamplerSamplePath.Auto())
             {
                 if (creator == null || creator.profile == null) return new PathSpine();
 
@@ -44,7 +44,7 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         private static PathSpine DrapeSpineOnTerrain(PathSpine localSpine, Transform owner, IHeightProvider heightProvider, PathProfile profile)
         {
-            using (ProfilingMarkers.PathSampler_DrapeSpineOnTerrain.Auto())
+            using (ProfilingMarkers.PathSamplerDrapeSpineOnTerrain.Auto())
             {
                 var pointCount = localSpine.VertexCount;
                 var worldPoints = new Vector3[pointCount];
@@ -55,7 +55,7 @@ namespace MrPathV2.Runtime.Core
                 // --- 步骤 0: 转换到世界空间并采样地形 ---
                 for (var i = 0; i < pointCount; i++)
                 {
-                    worldPoints[i] = owner.TransformPoint(localSpine.points[i]);
+                    worldPoints[i] = owner.TransformPoint(localSpine.Points[i]);
                     terrainHeights[i] = heightProvider.GetHeight(worldPoints[i]);
                     pathAverageHeight += worldPoints[i].y;
                     terrainAverageHeight += terrainHeights[i];
@@ -121,7 +121,7 @@ namespace MrPathV2.Runtime.Core
                 var worldTangents = RecalculateTangentsFromPoints(worldPoints);
                 var worldNormals = GetSurfaceNormals(worldPoints, heightProvider);
 
-                return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.timestamps);
+                return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.Timestamps);
             }
         }
 
@@ -176,34 +176,34 @@ namespace MrPathV2.Runtime.Core
             var worldNormals = new Vector3[localSpine.VertexCount];
             for (var i = 0; i < localSpine.VertexCount; i++)
             {
-                worldPoints[i] = owner.TransformPoint(localSpine.points[i]);
-                worldTangents[i] = owner.TransformDirection(localSpine.tangents[i]).normalized;
-                worldNormals[i] = owner.TransformDirection(localSpine.surfaceNormals[i]).normalized;
+                worldPoints[i] = owner.TransformPoint(localSpine.Points[i]);
+                worldTangents[i] = owner.TransformDirection(localSpine.Tangents[i]).normalized;
+                worldNormals[i] = owner.TransformDirection(localSpine.SurfaceNormals[i]).normalized;
             }
-            return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.timestamps);
+            return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.Timestamps);
         }
         private static PathSpine PurifySpine(PathSpine sourceSpine)
         {
             if (sourceSpine.VertexCount < 2) return sourceSpine;
             var cleanPoints = new List<Vector3>
             {
-                sourceSpine.points[0]
+                sourceSpine.Points[0]
             };
             var cleanTimestamps = new List<float>
             {
-                sourceSpine.timestamps[0]
+                sourceSpine.Timestamps[0]
             };
             var cleanNormals = new List<Vector3>
             {
-                sourceSpine.surfaceNormals[0]
+                sourceSpine.SurfaceNormals[0]
             };
             for (var i = 1; i < sourceSpine.VertexCount; i++)
             {
-                if ((sourceSpine.points[i] - cleanPoints[cleanPoints.Count - 1]).sqrMagnitude > MIN_POINT_DISTANCE_SQUARED)
+                if ((sourceSpine.Points[i] - cleanPoints[cleanPoints.Count - 1]).sqrMagnitude > MinPointDistanceSquared)
                 {
-                    cleanPoints.Add(sourceSpine.points[i]);
-                    cleanTimestamps.Add(sourceSpine.timestamps[i]);
-                    cleanNormals.Add(sourceSpine.surfaceNormals[i]);
+                    cleanPoints.Add(sourceSpine.Points[i]);
+                    cleanTimestamps.Add(sourceSpine.Timestamps[i]);
+                    cleanNormals.Add(sourceSpine.SurfaceNormals[i]);
                 }
             }
             if (cleanPoints.Count < 2) return new PathSpine();

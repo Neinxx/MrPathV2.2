@@ -51,23 +51,23 @@ namespace MrPathV2.Runtime.Core
         /// </summary>
         public struct PreviewLayerInfo
         {
-            public Texture2D texture;
-            public Vector2 tiling; // 缩放
-            public Vector2 offset; // 偏移（可选，默认 0）
-            public Color tint; // 颜色调整（可选，默认 white）
-            public float opacity; // 0..1
-            public BlendMode blendMode; // 与 PathTool.Data.BlendMode 保持一致
-            public BlendMaskBase mask; // 可为 null
+            public Texture2D Texture;
+            public Vector2 Tiling; // 缩放
+            public Vector2 Offset; // 偏移（可选，默认 0）
+            public Color Tint; // 颜色调整（可选，默认 white）
+            public readonly float Opacity; // 0..1
+            public BlendMode BlendMode; // 与 PathTool.Data.BlendMode 保持一致
+            public readonly BlendMaskBase Mask; // 可为 null
 
             public PreviewLayerInfo(Texture2D tex, Vector2 tiling, Vector2 offset, Color tint, float opacity, BlendMode blend, BlendMaskBase m)
             {
-                texture = tex;
-                this.tiling = tiling;
-                this.offset = offset;
-                this.tint = tint;
-                this.opacity = opacity;
-                blendMode = blend;
-                mask = m;
+                Texture = tex;
+                Tiling = tiling;
+                Offset = offset;
+                Tint = tint;
+                Opacity = opacity;
+                BlendMode = blend;
+                Mask = m;
             }
         }
     }

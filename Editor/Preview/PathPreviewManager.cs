@@ -224,7 +224,7 @@ namespace MrPathV2.Editor.Preview
         {
             if (!spine.HasValue || spine.Value.VertexCount < 2) return 0f;
             var len = 0f;
-            var pts = spine.Value.points;
+            var pts = spine.Value.Points;
             for (var i = 1; i < pts.Length; i++)
             {
                 len += Vector3.Distance(pts[i - 1], pts[i]);

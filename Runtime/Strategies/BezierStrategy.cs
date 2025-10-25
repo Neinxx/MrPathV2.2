@@ -112,7 +112,7 @@ namespace MrPathV2.Runtime.Strategies
 
         public override void UpdatePointHover(ref PathEditorHandles.HandleDrawContext context)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             var knotRadius = drawingStyle != null && drawingStyle.knotStyle != null ? drawingStyle.knotStyle.size : 0.1f;
             var tangentRadius = drawingStyle != null && drawingStyle.tangentStyle != null ? drawingStyle.tangentStyle.size : 0.1f;
             // Bézier法则的悬停检测需要检查主节点和所有切线控制点
@@ -137,11 +137,11 @@ namespace MrPathV2.Runtime.Strategies
 
         private bool CheckHandleHover(Vector3 localPos, int flatIndex, float radius, ref PathEditorHandles.HandleDrawContext context)
         {
-            var worldPos = context.creator.transform.TransformPoint(localPos);
+            var worldPos = context.Creator.transform.TransformPoint(localPos);
             var handleRadius = HandleUtility.GetHandleSize(worldPos) * radius;
             if (HandleUtility.DistanceToCircle(worldPos, handleRadius) == 0)
             {
-                context.hoveredPointIndex = flatIndex;
+                context.HoveredPointIndex = flatIndex;
                 return true;
             }
             return false;
@@ -149,10 +149,10 @@ namespace MrPathV2.Runtime.Strategies
 
         private void DrawCurve(ref PathEditorHandles.HandleDrawContext context)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             for (var i = 0; i < creator.NumSegments; i++)
             {
-                Handles.color = i == context.hoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor;
+                Handles.color = i == context.HoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor;
                 var knot1 = creator.pathData.GetKnot(i);
                 var knot2 = creator.pathData.GetKnot(i + 1);
                 var pStart = creator.transform.TransformPoint(knot1.Position);
@@ -165,13 +165,13 @@ namespace MrPathV2.Runtime.Strategies
 
         private void DrawControlLines(ref PathEditorHandles.HandleDrawContext context)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             PreviewLineRenderer lineRenderer;
             bool shouldDispose;
 
-            if (context.lineRenderer != null)
+            if (context.LineRenderer != null)
             {
-                lineRenderer = context.lineRenderer;
+                lineRenderer = context.LineRenderer;
                 shouldDispose = false;
             }
             else
@@ -231,7 +231,7 @@ namespace MrPathV2.Runtime.Strategies
 #if UNITY_EDITOR
         private void DrawPointHandles(ref PathEditorHandles.HandleDrawContext context, Camera camera)
         {
-            var creator = context.creator;
+            var creator = context.Creator;
             for (var i = 0; i < creator.NumPoints; i++)
             {
                 var knot = creator.pathData.GetKnot(i);

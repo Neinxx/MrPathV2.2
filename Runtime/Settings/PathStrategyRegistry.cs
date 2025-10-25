@@ -17,8 +17,8 @@ namespace MrPathV2.Runtime.Settings
     [CreateAssetMenu(fileName = "PathStrategyRegistry", menuName = "MrPath/Path Strategy Registry", order = 100)]
     public class PathStrategyRegistry : ScriptableObject
     {
-        private static PathStrategyRegistry _instance;
-        private static bool _initializationAttempted;
+        private static PathStrategyRegistry m_Instance;
+        private static bool m_InitializationAttempted;
 
         [FormerlySerializedAs("_strategyEntries")]
         [Header("策略映射配置")]
@@ -35,11 +35,11 @@ namespace MrPathV2.Runtime.Settings
         {
             get
             {
-                if (!_instance && !_initializationAttempted)
+                if (!m_Instance && !m_InitializationAttempted)
                 {
                     InitializeInstance();
                 }
-                return _instance;
+                return m_Instance;
             }
         }
 
@@ -48,9 +48,9 @@ namespace MrPathV2.Runtime.Settings
             ErrorHandler.SafeExecute(() =>
             {
                 // 防止资源重新加载时实例丢失
-                if (_instance == null)
+                if (!m_Instance)
                 {
-                    _instance = this;
+                    m_Instance = this;
                 }
 
                 InitializeCache();
@@ -71,40 +71,67 @@ namespace MrPathV2.Runtime.Settings
         /// </summary>
         private static void InitializeInstance()
         {
-            _initializationAttempted = true;
+            m_InitializationAttempted = true;
 
             ErrorHandler.SafeExecute(() =>
             {
-                // 使用 Resources 同步加载作为唯一初始化路径。
-                _instance = Resources.Load<PathStrategyRegistry>("PathStrategyRegistry");
+                // 尝试通过Resources加载实例
+                m_Instance = LoadFromResources();
+                
+                // 如果Resources加载失败，尝试在编辑器中查找
+                if (!m_Instance)
+                {
+                    m_Instance = FindInEditor();
+                }
 
-                // 编辑器下尝试查找现有资源
-#if UNITY_EDITOR
-                if (!_instance)
-                {
-                    var guids = AssetDatabase.FindAssets($"t:{nameof(PathStrategyRegistry)}");
-                    if (guids?.Length > 0)
-                    {
-                        var path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                        if (!string.IsNullOrEmpty(path))
-                        {
-                            _instance = AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(path);
-                        }
-                    }
-                }
-#endif
-
-                // 未找到资产则保持为 null，由调用方处理提示与阻止。
-                if (_instance)
-                {
-                    // 初始化缓存
-                    _instance.InitializeCache();
-                }
-                else
-                {
-                    ErrorHandler.LogError("Failed to load PathStrategyRegistry asset. Please ensure it exists in a Resources folder or create one using the menu: Assets > Create > MrPath > Path Strategy Registry", "PathStrategyRegistry");
-                }
+                // 处理加载结果
+                HandleLoadResult();
             }, "PathStrategyRegistry.InitializeInstance");
+        }
+        
+        /// <summary>
+        /// 从Resources目录加载PathStrategyRegistry实例
+        /// </summary>
+        /// <returns>加载的实例，如果失败则返回null</returns>
+        private static PathStrategyRegistry LoadFromResources()
+        {
+            return Resources.Load<PathStrategyRegistry>("PathStrategyRegistry");
+        }
+        
+        /// <summary>
+        /// 在编辑器中查找PathStrategyRegistry实例
+        /// </summary>
+        /// <returns>找到的实例，如果失败或不在编辑器中则返回null</returns>
+        private static PathStrategyRegistry FindInEditor()
+        {
+        #if UNITY_EDITOR
+            var guids = AssetDatabase.FindAssets($"t:{nameof(PathStrategyRegistry)}");
+            if (guids?.Length > 0)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                if (!string.IsNullOrEmpty(path))
+                {
+                    return AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(path);
+                }
+            }
+        #endif
+            return null;
+        }
+        
+        /// <summary>
+        /// 处理加载结果
+        /// </summary>
+        private static void HandleLoadResult()
+        {
+            if (m_Instance)
+            {
+                // 初始化缓存
+                m_Instance.InitializeCache();
+            }
+            else
+            {
+                ErrorHandler.LogError("Failed to load PathStrategyRegistry asset. Please ensure it exists in a Resources folder or create one using the menu: Assets > Create > MrPath > Path Strategy Registry", "PathStrategyRegistry");
+            }
         }
 
         /// <summary>
@@ -115,42 +142,19 @@ namespace MrPathV2.Runtime.Settings
             ErrorHandler.SafeExecute(() =>
             {
                 _strategyCache = new Dictionary<CurveType, PathStrategy>();
-
+                
+                // 提前返回：如果策略条目为空，初始化空列表并返回
                 if (strategyEntries == null)
                 {
-                    ErrorHandler.LogWarning("Strategy entries list is null, initializing empty list.", "PathStrategyRegistry");
-                    strategyEntries = new List<StrategyEntry>();
+                    InitializeEmptyStrategyEntries();
                     return;
                 }
 
-                var duplicateTypes = new HashSet<CurveType>();
-                var processedTypes = new HashSet<CurveType>();
-
-                foreach (var entry in strategyEntries)
-                {
-                    if (!entry.IsValid)
-                    {
-                        ErrorHandler.LogWarning($"Invalid strategy entry for curve type '{entry.type}' - strategy is null.", "PathStrategyRegistry");
-                        continue;
-                    }
-
-                    if (processedTypes.Contains(entry.type))
-                    {
-                        duplicateTypes.Add(entry.type);
-                        ErrorHandler.LogWarning($"Duplicate strategy entry found for curve type '{entry.type}'. Only the first valid entry will be used.", "PathStrategyRegistry");
-                        continue;
-                    }
-
-                    ErrorHandler.SafeExecute(() =>
-                        {
-                            EnsureDefaultStyle(entry.strategy);
-                            _strategyCache[entry.type] = entry.strategy;
-                            processedTypes.Add(entry.type);
-                        }, $"PathStrategyRegistry.InitializeCache.ProcessEntry({entry.type})");
-                }
+                // 处理策略条目
+                ProcessStrategyEntries();
 
                 // 报告缓存初始化结果
-                ErrorHandler.LogInfo($"Cache initialized with {_strategyCache.Count} strategies.", "PathStrategyRegistry");
+                LogInitializationResult();
 
                 // 验证配置完整性
                 ValidateConfiguration();
@@ -158,57 +162,200 @@ namespace MrPathV2.Runtime.Settings
         }
 
         /// <summary>
+        /// 初始化空的策略条目列表
+        /// </summary>
+        private void InitializeEmptyStrategyEntries()
+        {
+            ErrorHandler.LogWarning("Strategy entries list is null, initializing empty list.", "PathStrategyRegistry");
+            strategyEntries = new List<StrategyEntry>();
+        }
+
+        /// <summary>
+        /// 处理策略条目列表
+        /// </summary>
+        private void ProcessStrategyEntries()
+        {
+            var duplicateTypes = new HashSet<CurveType>();
+            var processedTypes = new HashSet<CurveType>();
+        
+            foreach (var entry in strategyEntries)
+            {
+                // 跳过无效条目
+                if (!ValidateEntry(entry, processedTypes, duplicateTypes))
+                    continue;
+        
+                // 处理有效条目
+                ProcessValidEntry(entry, processedTypes);
+            }
+        }
+
+        /// <summary>
+        /// 验证条目是否有效
+        /// </summary>
+        /// <param name="entry">策略条目</param>
+        /// <param name="processedTypes">已处理的类型集合</param>
+        /// <param name="duplicateTypes">重复的类型集合</param>
+        /// <returns>条目是否有效</returns>
+        private static bool ValidateEntry(StrategyEntry entry, HashSet<CurveType> processedTypes, HashSet<CurveType> duplicateTypes)
+        {
+            // 检查条目是否有效
+            if (!entry.IsValid)
+            {
+                ErrorHandler.LogWarning($"Invalid strategy entry for curve type '{entry.type}' - strategy is null.", "PathStrategyRegistry");
+                return false;
+            }
+        
+            // 检查是否已处理过该类型
+            if (processedTypes.Contains(entry.type))
+            {
+                duplicateTypes.Add(entry.type);
+                ErrorHandler.LogWarning($"Duplicate strategy entry found for curve type '{entry.type}'. Only the first valid entry will be used.", "PathStrategyRegistry");
+                return false;
+            }
+        
+            return true;
+        }
+
+        /// <summary>
+        /// 处理有效的策略条目
+        /// </summary>
+        /// <param name="entry">策略条目</param>
+        /// <param name="processedTypes">已处理的类型集合</param>
+        private void ProcessValidEntry(StrategyEntry entry, HashSet<CurveType> processedTypes)
+        {
+            ErrorHandler.SafeExecute(() =>
+            {
+                EnsureDefaultStyle(entry.strategy);
+                _strategyCache[entry.type] = entry.strategy;
+                processedTypes.Add(entry.type);
+            }, $"PathStrategyRegistry.InitializeCache.ProcessEntry({entry.type})");
+        }
+
+        /// <summary>
+        /// 记录初始化结果
+        /// </summary>
+        private void LogInitializationResult()
+        {
+            //ErrorHandler.LogInfo($"Cache initialized with {_strategyCache.Count} strategies.", "PathStrategyRegistry");
+            if(_strategyCache.Count == 0)
+            {
+                ErrorHandler.LogWarning("No valid strategy entries found. Check the strategyEntries list in the inspector.", "PathStrategyRegistry");
+            }
+        }
+
+        /// <summary>
         ///     获取指定曲线类型的策略
         /// </summary>
-        /// <param name="type">曲线类型</param>
         /// <returns>对应的路径策略，若未找到则返回null</returns>
         // 添加一个字段用于跟踪已警告过的曲线类型，避免重复输出相同警告
-        private HashSet<CurveType> _loggedMissingStrategies = new HashSet<CurveType>();
+        private readonly HashSet<CurveType> _loggedMissingStrategies = new HashSet<CurveType>();
 
         public PathStrategy GetStrategy(CurveType type)
         {
             // 快速路径：缓存存在且包含有效策略时直接返回
-            if (_strategyCache != null &&
-                _strategyCache.TryGetValue(type, out var strategy) &&
-                strategy)
+            if (TryGetCachedStrategy(type, out var cachedStrategy))
             {
-                return strategy;
+                return cachedStrategy;
             }
 
             return ErrorHandler.SafeExecute(() =>
             {
-                // 初始化缓存（仅在首次需要时）
-                if (_strategyCache == null)
+                // 确保缓存已初始化
+                if (!EnsureCacheInitialized())
                 {
-                    ErrorHandler.LogWarning("Strategy cache is null, attempting to reinitialize.", "PathStrategyRegistry");
-                    InitializeCache();
-
-                    if (_strategyCache == null)
-                    {
-                        ErrorHandler.LogError("Failed to initialize strategy cache.", "PathStrategyRegistry");
-                        return null;
-                    }
+                    return null;
                 }
 
-                // 再次检查缓存（初始化后可能已有值）
-                if (_strategyCache.TryGetValue(type, out strategy))
+                // 尝试从缓存获取策略
+                if (TryGetStrategyFromCache(type, out var strategy))
                 {
-                    if (strategy)
-                        return strategy;
-
-                    // 移除无效缓存项（只做一次）
-                    _strategyCache.Remove(type);
+                    return strategy;
                 }
 
-                // 只对每种缺失类型警告一次，减少日志开销
-                if (!_loggedMissingStrategies.Contains(type))
-                {
-                    ErrorHandler.LogWarning($"No strategy found for curve type '{type}'. Please configure it in the registry.", "PathStrategyRegistry");
-                    _loggedMissingStrategies.Add(type);
-                }
+                // 记录缺失的策略
+                LogMissingStrategy(type);
 
                 return null;
             }, null, "PathStrategyRegistry.GetStrategy");
+        }
+
+        /// <summary>
+        /// 尝试从缓存中获取策略
+        /// </summary>
+        /// <param name="type">曲线类型</param>
+        /// <param name="strategy">获取到的策略</param>
+        /// <returns>是否成功获取策略</returns>
+        private bool TryGetCachedStrategy(CurveType type, out PathStrategy strategy)
+        {
+            strategy = null;
+            
+            if (_strategyCache != null &&
+                _strategyCache.TryGetValue(type, out strategy) &&
+                strategy)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 确保缓存已初始化
+        /// </summary>
+        /// <returns>缓存是否初始化成功</returns>
+        private bool EnsureCacheInitialized()
+        {
+            // 如果缓存为空，尝试初始化
+            if (_strategyCache == null)
+            {
+                ErrorHandler.LogWarning("Strategy cache is null, attempting to reinitialize.", "PathStrategyRegistry");
+                InitializeCache();
+
+                if (_strategyCache == null)
+                {
+                    ErrorHandler.LogError("Failed to initialize strategy cache.", "PathStrategyRegistry");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 尝试从缓存中获取策略
+        /// </summary>
+        /// <param name="type">曲线类型</param>
+        /// <param name="strategy">获取到的策略</param>
+        /// <returns>是否成功获取策略</returns>
+        private bool TryGetStrategyFromCache(CurveType type, out PathStrategy strategy)
+        {
+            strategy = null;
+            
+            // 再次检查缓存（初始化后可能已有值）
+            if (_strategyCache.TryGetValue(type, out strategy))
+            {
+                if (strategy)
+                    return true;
+
+                // 移除无效缓存项（只做一次）
+                _strategyCache.Remove(type);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 记录缺失的策略
+        /// </summary>
+        /// <param name="type">曲线类型</param>
+        private void LogMissingStrategy(CurveType type)
+        {
+            // 只对每种缺失类型警告一次，减少日志开销
+            if (!_loggedMissingStrategies.Contains(type))
+            {
+                ErrorHandler.LogWarning($"No strategy found for curve type '{type}'. Please configure it in the registry.", "PathStrategyRegistry");
+                _loggedMissingStrategies.Add(type);
+            }
         }
 
         /// <summary>
@@ -216,7 +363,7 @@ namespace MrPathV2.Runtime.Settings
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <returns>如果有可用策略返回true，否则返回false</returns>
-        public bool HasStrategy(CurveType type) => GetStrategy(type);
+        private bool HasStrategy(CurveType type) => GetStrategy(type);
 
         /// <summary>
         ///     获取所有已配置的曲线类型
@@ -238,11 +385,11 @@ namespace MrPathV2.Runtime.Settings
         /// <summary>
         ///     确保策略拥有默认样式
         /// </summary>
-        private void EnsureDefaultStyle(PathStrategy strategy)
+        private static void EnsureDefaultStyle(PathStrategy strategy)
         {
-            if (strategy == null)
+            if (!strategy)
             {
-                Debug.LogWarning("[PathStrategyRegistry] Cannot ensure default style for null strategy.");
+                ErrorHandler.LogWarning("[PathStrategyRegistry] Cannot ensure default style for null strategy.");
                 return;
             }
 
@@ -280,7 +427,7 @@ namespace MrPathV2.Runtime.Settings
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[PathStrategyRegistry] Exception while ensuring default style for strategy '{strategy.name}': {ex.Message}");
+                ErrorHandler.LogError($"[PathStrategyRegistry] Exception while ensuring default style for strategy '{strategy.name}': {ex.Message}");
             }
         }
 

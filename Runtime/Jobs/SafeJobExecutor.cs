@@ -19,7 +19,7 @@ namespace MrPathV2.Runtime.Jobs
         private static readonly ProfilerMarker SJobCompleteMarker = new ProfilerMarker("SafeJobExecutor.Complete");
         private static readonly ProfilerMarker SJobWaitMarker = new ProfilerMarker("SafeJobExecutor.Wait");
 
-        private static JobExecutionStats _sStats;
+        private static JobExecutionStats m_SStats;
 
         private bool _disposed;
 
@@ -237,14 +237,14 @@ namespace MrPathV2.Runtime.Jobs
         /// <summary>
         ///     获取Job执行统计信息
         /// </summary>
-        public static JobExecutionStats GetExecutionStats() => _sStats;
+        public static JobExecutionStats GetExecutionStats() => m_SStats;
 
         /// <summary>
         ///     重置统计信息
         /// </summary>
         public static void ResetStats()
         {
-            _sStats = new JobExecutionStats();
+            m_SStats = new JobExecutionStats();
         }
 
         /// <summary>
