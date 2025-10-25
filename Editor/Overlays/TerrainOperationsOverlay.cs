@@ -87,8 +87,8 @@ namespace MrPathV2.Editor.Overlays
             _backendDropdown.choices = BackendChoices.ToList();
 
             var backend = _projectSettings?.advancedSettings?.paintingBackend ??
-                          PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
-            _backendDropdown.index = backend == PaintTerrainCommand.PaintingBackend.GPU_Compute ? 1 : 0;
+                          PaintTerrainCommand.PaintingBackend.CPUJobTwoPass;
+            _backendDropdown.index = backend == PaintTerrainCommand.PaintingBackend.GPUCompute ? 1 : 0;
 
             _backendDropdown.UnregisterValueChangedCallback(OnBackendChanged);
             _backendDropdown.RegisterValueChangedCallback(OnBackendChanged);
@@ -97,8 +97,8 @@ namespace MrPathV2.Editor.Overlays
         private void OnBackendChanged(ChangeEvent<string> evt)
         {
             var newBackend = evt.newValue == "GPU"
-                ? PaintTerrainCommand.PaintingBackend.GPU_Compute
-                : PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass;
+                ? PaintTerrainCommand.PaintingBackend.GPUCompute
+                : PaintTerrainCommand.PaintingBackend.CPUJobTwoPass;
 
             var advanced = _projectSettings != null ? _projectSettings.advancedSettings : null;
             if (advanced == null || advanced.paintingBackend == newBackend) return;

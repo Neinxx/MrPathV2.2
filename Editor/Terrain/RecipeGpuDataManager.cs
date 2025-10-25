@@ -206,14 +206,14 @@ namespace MrPathV2.Editor.Terrain
             }
 
             // Decide target array format: prefer original when renderable; otherwise fall back to uncompressed RGBA8
-            var srcIsSRGB = GraphicsFormatUtility.IsSRGBFormat(srcCommonFormat);
+            var srcIsSrgb = GraphicsFormatUtility.IsSRGBFormat(srcCommonFormat);
             var srcIsCompressed =
                 GraphicsFormatUtility.IsCompressedFormat(srcCommonFormat);
             var srcRenderable = SystemInfo.IsFormatSupported(srcCommonFormat, FormatUsage.Render);
             var targetFormat = srcCommonFormat;
             if (srcIsCompressed || !srcRenderable)
             {
-                targetFormat = srcIsSRGB ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
+                targetFormat = srcIsSrgb ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
             }
 
             // Staging RT can only be created for renderable formats; use mips only when we can stage

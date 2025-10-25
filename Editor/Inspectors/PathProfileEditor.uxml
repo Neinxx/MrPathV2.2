@@ -7,40 +7,39 @@
             </ui:VisualElement>
             <ui:GroupBox name="CoreSettings" class="settings-group" style="justify-content: space-around; flex-shrink: 1; flex-basis: auto; flex-grow: 1; max-height: 120px; min-height: 110px;">
                 <ui:Label text="Core Settings" class="group-header" />
-                <ui:VisualElement class="field-row" style="flex-direction: column;">
-                    <uie:EnumField label="CurveType" value="Center" name="CurveTypeField" binding-path="curveType" />
-                    <uie:FloatField label="Mesh Width" binding-path="meshWith" name="MeshWithField" class="compact-field" style="flex-shrink: 1;" />
+                <ui:VisualElement class="field-row" style="flex-direction: column; padding-left: 0; padding-right: 0;">
+                    <uie:EnumField label="CurveType" value="Center" name="CurveTypeField" binding-path="curveType" style="padding-left: 9px; padding-right: 6px; margin-bottom: 4px; margin-left: 5px; margin-right: 5px;" />
+                    <uie:FloatField label="Mesh Width" binding-path="meshWith" name="MeshWithField" class="compact-field" style="flex-shrink: 1; padding-left: 9px; padding-right: 6px;" />
                 </ui:VisualElement>
                 <ui:VisualElement name="CurveTypeField" />
             </ui:GroupBox>
             <ui:GroupBox name="CrossSection" class="settings-group" style="flex-shrink: 1; height: 130px; flex-grow: 1; overflow: visible; align-items: stretch; justify-content: space-around; flex-basis: auto; min-height: 120px; max-height: 130px;">
                 <ui:Label text="Cross Section" class="group-header" />
-                <uie:FloatField label="Edge Width" binding-path="falloffWidth" name="FalloffWidthField" class="wide-field" style="flex-shrink: 1;" />
-                <uie:CurveField label="Section Profile" binding-path="crossSection" name="CrossSectionCurveField" class="wide-field" style="height: 20px; flex-shrink: 1;" />
-                <uie:CurveField label="Edge Shape" binding-path="falloffShape" name="FalloffShapeCurveField" class="wide-field" style="height: 20px; flex-shrink: 1;" />
+                <uie:FloatField label="Edge Width" binding-path="falloffWidth" name="FalloffWidthField" class="wide-field" style="flex-shrink: 1; margin-bottom: 4px; margin-top: 1px; margin-left: 5px; margin-right: 5px;" />
+                <uie:CurveField label="Section Profile" binding-path="crossSection" name="CrossSectionCurveField" class="wide-field" style="height: 20px; flex-shrink: 1; margin-bottom: 4px; margin-top: 1px; margin-left: 5px; margin-right: 5px;" />
+                <uie:CurveField label="Edge Shape" binding-path="falloffShape" name="FalloffShapeCurveField" class="wide-field" style="height: 20px; flex-shrink: 1; margin-bottom: 1px; margin-top: 4px; margin-left: 5px; margin-right: 5px;" />
             </ui:GroupBox>
             <ui:GroupBox name="TerrainSnap" class="settings-group" style="flex-grow: 1; flex-shrink: 1; justify-content: space-around; flex-basis: auto; height: auto; min-height: 97px; max-height: none;">
                 <ui:Label text="Terrain" class="group-header" />
-                <ui:Toggle label="TerrainSnapping" name="SnappingToggleField" binding-path="terrainSnapping" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; height: 16px; padding-left: 12px; padding-right: 9px; margin-top: 0; margin-bottom: 6px;" />
-                <uie:FloatField label="Height Offset" binding-path="heightOffset" name="HeightOffsetField" class="readonly-field" style="margin-bottom: 6px;" />
-                <ui:SliderInt picking-mode="Ignore" label="Smoothness" value="42" high-value="100" name="SmoothnessField" binding-path="smoothness" style="padding-left: 9px; padding-right: 6px;" />
+                <ui:Toggle label="TerrainSnapping" name="SnappingToggleField" binding-path="terrainSnapping" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; height: 16px; padding-left: 9px; padding-right: 6px; margin-top: 4px; margin-bottom: 1px; margin-left: 5px; margin-right: 5px;" />
+                <uie:FloatField label="Height Offset" binding-path="heightOffset" name="HeightOffsetField" style="margin-bottom: 1px; padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-top: 4px;" />
+                <ui:SliderInt picking-mode="Ignore" label="Smoothness" value="42" high-value="100" name="SmoothnessField" binding-path="smoothness" style="padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-bottom: 4px;" />
             </ui:GroupBox>
             <ui:GroupBox name="MeshSettings" class="settings-group" style="flex-grow: 1; flex-shrink: 1; justify-content: space-around; flex-basis: auto; height: auto; min-height: 97px; max-height: none;">
                 <ui:Label text="Mesh Settings" class="group-header" />
-                <ui:Toggle label="ForceHorizontal" name="ForceHorizontalField" binding-path="forceHorizontal" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; height: 16px; padding-left: 12px; padding-right: 9px; margin-top: 0; margin-bottom: 6px;" />
-                <ui:SliderInt label="CrossSectionSegments" high-value="100" name="CrossSectionSegmentsField" binding-path="crossSectionSegments" style="padding-left: 9px; padding-right: 6px;" />
+                <ui:Toggle label="ForceHorizontal" name="ForceHorizontalField" binding-path="forceHorizontal" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; height: 16px; padding-left: 9px; padding-right: 6px; margin-top: 1px; margin-bottom: 4px; margin-left: 5px; margin-right: 5px;" />
+                <ui:SliderInt label="CrossSectionSegments" high-value="100" name="CrossSectionSegmentsField" binding-path="crossSectionSegments" style="padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-bottom: 4px;" />
+            </ui:GroupBox>
+            <ui:GroupBox name="MeshPreview" class="settings-group" style="flex-grow: 1; flex-shrink: 1; justify-content: space-around; flex-basis: auto; height: auto; min-height: 97px; max-height: none;">
+                <ui:Label text="Mesh Preview" class="group-header" />
+                <ui:Toggle label="ShowPreviewMesh" name="ShowMeshToggleField" binding-path="showPreviewMesh" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: center; margin-left: 5px; margin-right: 5px; align-items: center; margin-top: 1px; margin-bottom: 4px;" />
+                <ui:Toggle label="EnableDepthTest" name="EnableDepthTestToggleField" value="false" binding-path="enableDepthTest" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; position: relative; justify-content: flex-start; margin-right: 5px; margin-left: 5px; align-items: stretch; margin-top: 1px; margin-bottom: 4px; flex-direction: row;" />
+                <ui:Toggle label="EpaquePreview" name="OpaquePreviewToggleField" value="false" binding-path="opaquePreview" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: space-around; flex-wrap: nowrap; flex-direction: row; margin-right: 5px; padding-right: 6px; align-items: stretch; opacity: 1; overflow: visible; margin-left: 5px; margin-top: 1px; margin-bottom: 4px;" />
             </ui:GroupBox>
         </ui:VisualElement>
         <ui:GroupBox name="PreviewSection" class="preview-group" style="flex-grow: 1; flex-shrink: 1; align-items: stretch; background-color: rgba(35, 35, 35, 0.42); flex-direction: column; justify-content: flex-start;">
-            <ui:Label text="Mesh Preview" class="group-header" />
-            <ui:VisualElement class="preview-controls" style="justify-content: space-between; align-items: flex-start; overflow: visible; flex-grow: 1; height: 59px; flex-direction: column; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; margin-left: 8px; margin-right: 8px; max-height: 65px; min-height: 57px; -unity-text-align: upper-left; flex-wrap: nowrap;">
-                <ui:Toggle label="ShowPreviewMesh" name="ShowMeshToggleField" binding-path="showPreviewMesh" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: center; margin-left: 0; margin-right: 13px; align-items: center;" />
-                <ui:Toggle label="EnableDepthTest" name="EnableDepthTestToggleField" value="false" binding-path="enableDepthTest" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; position: relative; justify-content: flex-start; margin-right: 13px; margin-left: 0; align-items: stretch;" />
-                <ui:Toggle label="EpaquePreview" name="OpaquePreviewToggleField" value="false" binding-path="opaquePreview" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: space-around; flex-wrap: nowrap; flex-direction: row; margin-right: 13px; padding-right: 0; align-items: stretch; opacity: 1; overflow: visible; margin-left: 0;" />
-            </ui:VisualElement>
-            <uie:ObjectField label="StylizedRoadRecipe" binding-path="roadRecipe" name="RecipeField" class="object-field" />
-            <ui:VisualElement name="preview-content" class="preview-content" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.1); min-height: auto;" />
+            <uie:ObjectField label="StylizedRoadRecipe" binding-path="roadRecipe" name="RecipeField" class="object-field" style="margin-top: 1px; margin-bottom: 4px;" />
+            <ui:VisualElement name="preview-content" class="preview-content" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0); min-height: auto;" />
         </ui:GroupBox>
     </ui:VisualElement>
-    <ui:SliderInt label="SliderInt" value="42" high-value="100" />
 </ui:UXML>

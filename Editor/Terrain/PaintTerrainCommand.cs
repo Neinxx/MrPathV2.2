@@ -25,8 +25,8 @@ namespace MrPathV2.Editor.Terrain
 
         public enum PaintingBackend
         {
-            CPU_Job_TwoPass,
-            GPU_Compute
+            CPUJobTwoPass,
+            GPUCompute
         }
 
         #endregion
@@ -110,7 +110,7 @@ namespace MrPathV2.Editor.Terrain
         /// </summary>
         private PaintingBackend SelectPaintingBackend()
         {
-            var backend = PaintingBackend.CPU_Job_TwoPass; // 默认
+            var backend = PaintingBackend.CPUJobTwoPass; // 默认
             var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
 
             // 检查高级设置
@@ -124,10 +124,10 @@ namespace MrPathV2.Editor.Terrain
             }
 
             // 检查GPU支持
-            if (backend == PaintingBackend.GPU_Compute && !SystemInfo.supportsComputeShaders)
+            if (backend == PaintingBackend.GPUCompute && !SystemInfo.supportsComputeShaders)
             {
                 Debug.LogWarning("[PaintTerrainCommand] Compute Shaders not supported. Falling back to CPU Job backend.");
-                backend = PaintingBackend.CPU_Job_TwoPass;
+                backend = PaintingBackend.CPUJobTwoPass;
             }
 
             Debug.Log($"[PaintTerrainCommand] Using backend: {backend}");
@@ -172,7 +172,7 @@ namespace MrPathV2.Editor.Terrain
 
             var backendData = new BackendData();
 
-            if (backend == PaintingBackend.CPU_Job_TwoPass)
+            if (backend == PaintingBackend.CPUJobTwoPass)
             {
                 backendData.CpuRecipeDataMap = await PrepareCpuRecipeDataAsync(terrains, token);
             }
@@ -293,7 +293,7 @@ namespace MrPathV2.Editor.Terrain
             RecipeData cpuRecipeData = default;
             RecipeGpuDataManager gpuDataManager = null;
 
-            if (backend == PaintingBackend.CPU_Job_TwoPass)
+            if (backend == PaintingBackend.CPUJobTwoPass)
             {
                 // 获取CPU配方数据
                 if (backendData.CpuRecipeDataMap == null || !backendData.CpuRecipeDataMap.TryGetValue(terrain, out cpuRecipeData) || !cpuRecipeData.IsCreated)

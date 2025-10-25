@@ -30,7 +30,7 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         [Tooltip("选择地形纹理绘制的后端：\n" +
                  "CPU_Job_TwoPass: 兼容性好，性能优于旧版 Job，但仍受 CPU 限制。\n" +
                  "GPU_Compute: 速度最快，利用 GPU 加速，但需要 Compute Shader 支持且可能对显卡有要求。")]
-        public PaintTerrainCommand.PaintingBackend paintingBackend = PaintTerrainCommand.PaintingBackend.CPU_Job_TwoPass; // 默认使用 CPU
+        public PaintTerrainCommand.PaintingBackend paintingBackend = PaintTerrainCommand.PaintingBackend.CPUJobTwoPass; // 默认使用 CPU
 
         [Header("性能与调试")]
         [Tooltip("启用内存跟踪器 (MemoryTracker)，会带来少量性能开销，建议仅在开发或调试时开启。")]
