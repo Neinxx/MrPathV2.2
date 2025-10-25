@@ -4,24 +4,24 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     /// <summary>
-    /// 异步操作管理器：提供统一的异步操作管理、取消令牌支持和资源清理
+    ///     异步操作管理器：提供统一的异步操作管理、取消令牌支持和资源清理
     /// </summary>
     public class AsyncOperationManager : IDisposable
     {
+        private const int DEFAULT_TIMEOUT_SECONDS = 30;
         private readonly Dictionary<string, CancellationTokenSource> _activeTasks;
-        private readonly Dictionary<string, TaskCompletionSource<bool>> _taskCompletions;
         private readonly object _lock = new object();
-        private bool _disposed = false;
 
-        // 全局取消令牌源
-        private CancellationTokenSource _globalCancellationSource;
-        
         // 操作超时设置
         private readonly Dictionary<string, TimeSpan> _operationTimeouts;
-        private const int DEFAULT_TIMEOUT_SECONDS = 30;
+        private readonly Dictionary<string, TaskCompletionSource<bool>> _taskCompletions;
+        private bool _disposed;
+
+        // 全局取消令牌源
+        private readonly CancellationTokenSource _globalCancellationSource;
 
         public AsyncOperationManager()
         {
@@ -31,8 +31,43 @@ namespace __temp.MrPathV2._2.Runtime.Core
             _globalCancellationSource = new CancellationTokenSource();
         }
 
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            // 取消所有活动操作
+            CancelAllOperations();
+
+            // 等待短时间让操作有机会清理
+            Task.Delay(100).Wait();
+
+            lock (_lock)
+            {
+                // 清理所有资源
+                foreach (var cts in _activeTasks.Values)
+                {
+                    cts?.Dispose();
+                }
+                _activeTasks.Clear();
+
+                foreach (var tcs in _taskCompletions.Values)
+                {
+                    if (!tcs.Task.IsCompleted)
+                    {
+                        tcs.SetCanceled();
+                    }
+                }
+                _taskCompletions.Clear();
+
+                _operationTimeouts.Clear();
+            }
+
+            _globalCancellationSource?.Dispose();
+            _disposed = true;
+        }
+
         /// <summary>
-        /// 执行异步操作，支持取消和超时
+        ///     执行异步操作，支持取消和超时
         /// </summary>
         /// <param name="operationId">操作唯一标识符</param>
         /// <param name="operation">要执行的异步操作</param>
@@ -79,7 +114,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
                 // 执行操作
                 await operation(cts.Token);
-                
+
                 // 操作成功完成
                 tcs.SetResult(true);
                 return true;
@@ -104,7 +139,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 取消指定操作
+        ///     取消指定操作
         /// </summary>
         /// <param name="operationId">操作ID</param>
         /// <returns>是否成功取消</returns>
@@ -124,7 +159,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 取消所有活动操作
+        ///     取消所有活动操作
         /// </summary>
         public void CancelAllOperations()
         {
@@ -134,13 +169,13 @@ namespace __temp.MrPathV2._2.Runtime.Core
                 {
                     kvp.Value.Cancel();
                 }
-                
-       //         Debug.Log($"[AsyncOperationManager] 已请求取消所有活动操作 ({_activeTasks.Count} 个)");
+
+                //         Debug.Log($"[AsyncOperationManager] 已请求取消所有活动操作 ({_activeTasks.Count} 个)");
             }
         }
 
         /// <summary>
-        /// 检查操作是否正在执行
+        ///     检查操作是否正在执行
         /// </summary>
         /// <param name="operationId">操作ID</param>
         /// <returns>是否正在执行</returns>
@@ -153,7 +188,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 获取所有活动操作的ID列表
+        ///     获取所有活动操作的ID列表
         /// </summary>
         /// <returns>活动操作ID列表</returns>
         public string[] GetActiveOperationIds()
@@ -167,7 +202,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 等待指定操作完成
+        ///     等待指定操作完成
         /// </summary>
         /// <param name="operationId">操作ID</param>
         /// <param name="timeout">等待超时时间</param>
@@ -175,7 +210,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         public async Task<bool> WaitForOperationAsync(string operationId, TimeSpan? timeout = null)
         {
             TaskCompletionSource<bool> tcs;
-            
+
             lock (_lock)
             {
                 if (!_taskCompletions.TryGetValue(operationId, out tcs))
@@ -195,17 +230,11 @@ namespace __temp.MrPathV2._2.Runtime.Core
                         {
                             return await tcs.Task;
                         }
-                        else
-                        {
-                            Debug.LogWarning($"[AsyncOperationManager] 等待操作 '{operationId}' 超时");
-                            return false;
-                        }
+                        Debug.LogWarning($"[AsyncOperationManager] 等待操作 '{operationId}' 超时");
+                        return false;
                     }
                 }
-                else
-                {
-                    return await tcs.Task;
-                }
+                return await tcs.Task;
             }
             catch (Exception ex)
             {
@@ -215,7 +244,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 设置操作的默认超时时间
+        ///     设置操作的默认超时时间
         /// </summary>
         /// <param name="operationId">操作ID</param>
         /// <param name="timeout">超时时间</param>
@@ -228,7 +257,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 获取操作统计信息
+        ///     获取操作统计信息
         /// </summary>
         /// <returns>操作统计信息</returns>
         public OperationStats GetOperationStats()
@@ -245,7 +274,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 清理指定操作的资源
+        ///     清理指定操作的资源
         /// </summary>
         /// <param name="operationId">操作ID</param>
         private void CleanupOperation(string operationId)
@@ -264,14 +293,14 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 清理已完成的操作
+        ///     清理已完成的操作
         /// </summary>
         public void CleanupCompletedOperations()
         {
             lock (_lock)
             {
                 var completedOperations = new List<string>();
-                
+
                 foreach (var kvp in _taskCompletions)
                 {
                     if (kvp.Value.Task.IsCompleted)
@@ -292,43 +321,8 @@ namespace __temp.MrPathV2._2.Runtime.Core
             }
         }
 
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            // 取消所有活动操作
-            CancelAllOperations();
-
-            // 等待短时间让操作有机会清理
-            Task.Delay(100).Wait();
-
-            lock (_lock)
-            {
-                // 清理所有资源
-                foreach (var cts in _activeTasks.Values)
-                {
-                    cts?.Dispose();
-                }
-                _activeTasks.Clear();
-
-                foreach (var tcs in _taskCompletions.Values)
-                {
-                    if (!tcs.Task.IsCompleted)
-                    {
-                        tcs.SetCanceled();
-                    }
-                }
-                _taskCompletions.Clear();
-
-                _operationTimeouts.Clear();
-            }
-
-            _globalCancellationSource?.Dispose();
-            _disposed = true;
-        }
-
         /// <summary>
-        /// 操作统计信息
+        ///     操作统计信息
         /// </summary>
         public struct OperationStats
         {

@@ -1,16 +1,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEngine;
 
-
-namespace __temp.MrPathV2._2.Editor.Settings
+namespace MrPathV2._2.Editor.Settings
 {
     /// <summary>
-    /// MrPath 工具所有配置资产的根引用和导航中心。
+    ///     MrPath 工具所有配置资产的根引用和导航中心。
     /// </summary>
     public class MrPathProjectSettings : ScriptableObject
     {
@@ -25,10 +24,10 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
         [Tooltip("路径默认外观与预览材质配置")] public MrPathAppearanceDefaults appearanceDefaults;
 
-        
+
         [Tooltip("数据驱动的地形操作列表")] public MrPathTerrainOperations terrainOperations;
 
-       
+
         [Tooltip("高级开发者设置，如地形绘制后端选择、性能调试选项等")] public MrPathAdvancedSettings advancedSettings;
         // ------------------------------------
 
@@ -36,12 +35,12 @@ namespace __temp.MrPathV2._2.Editor.Settings
         [Tooltip("默认风格化道路配方")] public StylizedRoadRecipe stylizedRoadRecipe;
 
         // 发现资产集合
-        [Tooltip("路径配置文件集合")] public List<PathProfile> profiles = new();
-        [Tooltip("道路配方集合")] public List<StylizedRoadRecipe> roadRecipes = new();
-        [Tooltip("遮罩资产集合")] public List<BlendMaskBase> masks = new();
+        [Tooltip("路径配置文件集合")] public List<PathProfile> profiles = new List<PathProfile>();
+        [Tooltip("道路配方集合")] public List<StylizedRoadRecipe> roadRecipes = new List<StylizedRoadRecipe>();
+        [Tooltip("遮罩资产集合")] public List<BlendMaskBase> masks = new List<BlendMaskBase>();
 
         /// <summary>
-        /// 获取或创建主设置资产的静态方法。
+        ///     获取或创建主设置资产的静态方法。
         /// </summary>
         internal static MrPathProjectSettings GetOrCreateSettings()
         {
@@ -51,7 +50,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
                 settings = CreateInstance<MrPathProjectSettings>();
                 var folder = GetSettingsRootFolder();
                 Directory.CreateDirectory(folder);
-                var assetPath = Path.Combine(folder, KSettingsFileName).Replace("\\", "/"); 
+                var assetPath = Path.Combine(folder, KSettingsFileName).Replace("\\", "/");
 
                 // --- 自动创建并关联所有子配置 ---
                 settings.creationDefaults = GetOrCreateSubAsset<MrPathCreationDefaults>("MrPath_CreationDefaults");
@@ -66,16 +65,22 @@ namespace __temp.MrPathV2._2.Editor.Settings
 
                 AssetDatabase.CreateAsset(settings, assetPath);
                 AssetDatabase.SaveAssets();
-                AssetDatabase.SetLabels(settings, new[] { "MrPathCoreAsset" }); // 创建后立即添加标签
+                AssetDatabase.SetLabels(settings, new[]
+                {
+                    "MrPathCoreAsset"
+                }); // 创建后立即添加标签
                 Debug.Log($"[MrPath] Created new Project Settings asset at: {assetPath}");
             }
             // 确保现有资产也有标签
             else if (AssetDatabase.GetLabels(settings).All(l => l != "MrPathCoreAsset"))
             {
-                AssetDatabase.SetLabels(settings, new[] { "MrPathCoreAsset" });
+                AssetDatabase.SetLabels(settings, new[]
+                {
+                    "MrPathCoreAsset"
+                });
             }
 
-         
+
             var changed = false;
             if (!settings.creationDefaults)
             {
@@ -157,17 +162,14 @@ namespace __temp.MrPathV2._2.Editor.Settings
             return "Assets/MrPathV2.2"; // Adjust if your default path differs
         }
 
-        public static string GetSettingsRootFolder()
-        {
-            return Path.Combine(GetToolRootFolder(), "Settings").Replace("\\", "/");
-        }
+        public static string GetSettingsRootFolder() => Path.Combine(GetToolRootFolder(), "Settings").Replace("\\", "/");
 
         private static T GetOrCreateSubAsset<T>(string fileName) where T : ScriptableObject
         {
             var folder = GetSettingsRootFolder();
             // 子资产通常放在 Settings 文件夹下一层，例如 Settings/Advanced/
             var subFolder =
-                Path.Combine(folder, typeof(T).Name.Replace("MrPath", "").Replace("Settings", "")); 
+                Path.Combine(folder, typeof(T).Name.Replace("MrPath", "").Replace("Settings", ""));
             Directory.CreateDirectory(subFolder); // Ensure subfolder exists
             var fullPath = Path.Combine(subFolder, $"{fileName}.asset").Replace("\\", "/");
 

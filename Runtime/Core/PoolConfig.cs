@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "PoolConfig", menuName = "MrPathV2/Pool Config", order = 0)]
     public class PoolConfig : ScriptableObject

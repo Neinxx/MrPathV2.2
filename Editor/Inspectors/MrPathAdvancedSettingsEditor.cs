@@ -1,17 +1,16 @@
-
 using System.IO;
-using __temp.MrPathV2._2.Editor.Settings;
-using __temp.MrPathV2._2.Runtime.Settings;
-using __temp.MrPathV2._2.Runtime.Strategies;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Editor.Settings;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Settings;
+using MrPathV2._2.Runtime.Strategies;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace MrPathV2._2.Editor.Inspectors
 {
     //  将策略管理功能（创建、同步）直接集成到此资产的编辑器中。
-  
+
     [CustomEditor(typeof(MrPathAdvancedSettings))]
     public class MrPathAdvancedSettingsEditor : UnityEditor.Editor
     {
@@ -27,12 +26,19 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             root.Add(defaultInspector);
 
             // 分隔
-            root.Add(new VisualElement { style = { height = 10 } });
+            root.Add(new VisualElement
+            {
+                style =
+                {
+                    height = 10
+                }
+            });
 
             // 标题
             root.Add(new Label("策略管理工具")
             {
-                style = {
+                style =
+                {
                     unityFontStyleAndWeight = FontStyle.Bold,
                     unityTextAlign = TextAnchor.MiddleLeft,
                     marginBottom = 4
@@ -58,7 +64,10 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             root.Add(box);
 
             // 按钮：创建默认策略
-            var createBtn = new Button(CreateDefaultStrategies) { text = "创建默认策略资产" };
+            var createBtn = new Button(CreateDefaultStrategies)
+            {
+                text = "创建默认策略资产"
+            };
             box.Add(createBtn);
 
             // 按钮：打开策略文件夹
@@ -76,21 +85,18 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             {
                 SyncOverridesToRegistry();
                 EditorUtility.DisplayDialog("同步完成", "已将当前指定的策略资产同步到 PathStrategyRegistry。", "确定");
-            }) { text = "同步策略到注册表" };
+            })
+            {
+                text = "同步策略到注册表"
+            };
             box.Add(syncBtn);
 
             return root;
         }
 
-        private string GetDynamicStrategiesPath()
-        {
-            return Path.Combine(MrPathProjectSettings.GetSettingsRootFolder(), "Strategies").Replace("\\", "/");
-        }
+        private string GetDynamicStrategiesPath() => Path.Combine(MrPathProjectSettings.GetSettingsRootFolder(), "Strategies").Replace("\\", "/");
 
-        private string GetDynamicResourcesPath()
-        {
-            return Path.Combine(MrPathProjectSettings.GetSettingsRootFolder(), "Resources").Replace("\\", "/");
-        }
+        private string GetDynamicResourcesPath() => Path.Combine(MrPathProjectSettings.GetSettingsRootFolder(), "Resources").Replace("\\", "/");
 
         private void CreateDefaultStrategies()
         {
@@ -156,7 +162,8 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             // 清空并重新填充
             listProp.arraySize = 0;
-            void AddEntry(int index, __temp.MrPathV2._2.Runtime.Core.CurveType type, PathStrategy strategy)
+
+            void AddEntry(int index, CurveType type, PathStrategy strategy)
             {
                 if (strategy == null) return;
                 listProp.InsertArrayElementAtIndex(index);
@@ -165,14 +172,14 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 element.FindPropertyRelative("strategy").objectReferenceValue = strategy;
             }
 
-            int idx = 0;
+            var idx = 0;
             if (settings.bezierStrategy)
             {
-                AddEntry(idx++, __temp.MrPathV2._2.Runtime.Core.CurveType.Bezier, settings.bezierStrategy);
+                AddEntry(idx++, CurveType.Bezier, settings.bezierStrategy);
             }
             if (settings.catmullRomStrategy)
             {
-                AddEntry(idx++, __temp.MrPathV2._2.Runtime.Core.CurveType.CatmullRom, settings.catmullRomStrategy);
+                AddEntry(idx++, CurveType.CatmullRom, settings.catmullRomStrategy);
             }
 
             so.ApplyModifiedProperties();

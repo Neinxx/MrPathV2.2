@@ -2,32 +2,32 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-// using System.Linq; // <-- 不再需要
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
+// using System.Linq; // <-- 不再需要
 
-namespace __temp.MrPathV2._2.Editor
+namespace MrPathV2._2.Editor
 {
     /// <summary>
-    /// 自动加载与指定类型同名的 .uxml 和 .uss 资源。
-    /// 要求：C# 类名、.uxml 文件名、.uss 文件名三者完全一致（不含扩展名）。
-    /// 示例：TerrainOperationsOverlay.cs → TerrainOperationsOverlay.uxml + .uss
-    /// 
-    /// [优化版] 使用缓存 + 同目录优先策略，查找更健壮、更高效。
+    ///     自动加载与指定类型同名的 .uxml 和 .uss 资源。
+    ///     要求：C# 类名、.uxml 文件名、.uss 文件名三者完全一致（不含扩展名）。
+    ///     示例：TerrainOperationsOverlay.cs → TerrainOperationsOverlay.uxml + .uss
+    ///     [优化版] 使用缓存 + 同目录优先策略，查找更健壮、更高效。
     /// </summary>
-    internal static class UIResourceLoader
+    static class UIResourceLoader
     {
-        private static readonly Dictionary<string, VisualTreeAsset> UxmlCache = new();
-        private static readonly Dictionary<string, StyleSheet> USSCache = new();
+        private static readonly Dictionary<string, VisualTreeAsset> UxmlCache = new Dictionary<string, VisualTreeAsset>();
+        private static readonly Dictionary<string, StyleSheet> USSCache = new Dictionary<string, StyleSheet>();
 
         /// <summary>
-        /// [优化] 为 MonoScript 查找添加缓存，避免重复的 AssetDatabase 查询
+        ///     [优化] 为 MonoScript 查找添加缓存，避免重复的 AssetDatabase 查询
         /// </summary>
-        private static readonly Dictionary<Type, MonoScript> ScriptCache = new();
+        private static readonly Dictionary<Type, MonoScript> ScriptCache = new Dictionary<Type, MonoScript>();
 
         /// <summary>
-        /// 加载与 <typeparamref name="T"/> 同名的 .uxml 文件，并可选自动应用同名 .uss。
+        ///     加载与 <typeparamref name="T" /> 同名的 .uxml 文件，并可选自动应用同名 .uss。
         /// </summary>
         /// <remarks>公共 API 保持不变</remarks>
         public static VisualElement LoadAndClone<T>(bool autoApplyUss = true) where T : class
@@ -56,7 +56,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// 加载与指定类型同名的 .uxml 资源（带缓存）
+        ///     加载与指定类型同名的 .uxml 资源（带缓存）
         /// </summary>
         /// <remarks>公共 API 保持不变</remarks>
         public static VisualTreeAsset LoadUxml(Type type)
@@ -73,7 +73,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// 加载与指定类型同名的 .uss 资源（带缓存）
+        ///     加载与指定类型同名的 .uss 资源（带缓存）
         /// </summary>
         /// <remarks>公共 API 保持不变</remarks>
         public static StyleSheet LoadUss(Type type)
@@ -90,7 +90,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// [优化] 健壮地查找任何类型（MonoBehaviour, ScriptableObject, EditorWindow...）
+        ///     [优化] 健壮地查找任何类型（MonoBehaviour, ScriptableObject, EditorWindow...）
         /// </summary>
         private static MonoScript FindMonoScriptForType(Type type)
         {
@@ -116,12 +116,12 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// [优化] 通用资源查找：
-        /// 1. 查找脚本路径更健壮。
-        /// 2. 资源类型过滤器更准确 (t:StyleSheet)。
-        /// 3. 只迭代 guids 一次，性能更高。
+        ///     [优化] 通用资源查找：
+        ///     1. 查找脚本路径更健壮。
+        ///     2. 资源类型过滤器更准确 (t:StyleSheet)。
+        ///     3. 只迭代 guids 一次，性能更高。
         /// </summary>
-        private static T FindAsset<T>(string fileName, Type ownerType) where T : UnityEngine.Object
+        private static T FindAsset<T>(string fileName, Type ownerType) where T : Object
         {
             // [优化] Step 1: 健壮地获取脚本目录
             string scriptDir = null;
@@ -180,7 +180,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// 仅根据类名加载同名 UXML/USS，不尝试获取脚本目录。
+        ///     仅根据类名加载同名 UXML/USS，不尝试获取脚本目录。
         /// </summary>
         /// <remarks>公共 API 保持不变</remarks>
         public static VisualElement LoadAndCloneByName(string className, bool autoApplyUss = true)
@@ -203,7 +203,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// [优化] 添加了缓存
+        ///     [优化] 添加了缓存
         /// </summary>
         private static VisualTreeAsset LoadUxmlByName(string className)
         {
@@ -220,7 +220,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// [优化] 添加了缓存，并修复了类型过滤器
+        ///     [优化] 添加了缓存，并修复了类型过滤器
         /// </summary>
         private static StyleSheet LoadUssByName(string className)
         {
@@ -238,7 +238,7 @@ namespace __temp.MrPathV2._2.Editor
         }
 
         /// <summary>
-        /// 清除缓存（用于 Domain Reload 或测试）
+        ///     清除缓存（用于 Domain Reload 或测试）
         /// </summary>
         /// <remarks>公共 API 保持不变</remarks>
         public static void ClearCache()

@@ -1,11 +1,11 @@
-using __temp.MrPathV2._2.Runtime.Memory;
+using MrPathV2._2.Runtime.Memory;
 using NUnit.Framework;
 using Unity.Collections;
 
-namespace __temp.MrPathV2._2.Editor.Tests
+namespace MrPathV2._2.Editor.Tests
 {
     /// <summary>
-    /// 单元测试：验证 UnifiedMemoryManager 的分配、释放与集中清理逻辑。
+    ///     单元测试：验证 UnifiedMemoryManager 的分配、释放与集中清理逻辑。
     /// </summary>
     public class UnifiedMemoryManagerTests
     {
@@ -44,14 +44,14 @@ namespace __temp.MrPathV2._2.Editor.Tests
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             var manager = UnifiedMemory.Instance;
-            manager.AllocationStats.TryGetValue("NativeArray<int>", out int before);
+            manager.AllocationStats.TryGetValue("NativeArray<int>", out var before);
             var owner = manager.RentNativeArray<int>(4, Allocator.Persistent);
-            manager.AllocationStats.TryGetValue("NativeArray<int>", out int afterAlloc);
-            
+            manager.AllocationStats.TryGetValue("NativeArray<int>", out var afterAlloc);
+
             Assert.AreEqual(before + 1, afterAlloc, "分配后统计应增加");
 
             manager.ForceCleanup();
-            manager.AllocationStats.TryGetValue("NativeArray<int>", out int afterCleanup);
+            manager.AllocationStats.TryGetValue("NativeArray<int>", out var afterCleanup);
             Assert.AreEqual(afterAlloc, afterCleanup, "ForceCleanup 不会改变已分配计数，但资源应被释放");
             Assert.IsFalse(owner.Collection.IsCreated);
 #endif

@@ -1,30 +1,25 @@
 // PathCreator.cs
 
 using System;
-using __temp.MrPathV2._2.Runtime.Settings;
-using MrPathV2;
+using System.Collections.Generic;
+using MrPathV2._2.Runtime.Components;
+using MrPathV2._2.Runtime.Settings;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     /// <summary>
-    /// 【最终步：终极执行者】
-    /// 
-    /// 这是我们新架构的核心驱动者。它的职责被简化到了极致，从而变得异常强大和稳固。
-    /// - 它持有"数据容器"(PathData)。
-    /// - 它引用"配置文件"(PathProfile)来了解用户的意图。
-    /// - 它通过"注册中心"(PathStrategyRegistry)来获取正确的"法则"(PathStrategy)。
-    /// - 它将数据和法则结合，完成所有路径操作。
-    /// 
-    /// 注意，这个类中不再有任何复杂的切换逻辑。大道至简。
+    ///     【最终步：终极执行者】
+    ///     这是我们新架构的核心驱动者。它的职责被简化到了极致，从而变得异常强大和稳固。
+    ///     - 它持有"数据容器"(PathData)。
+    ///     - 它引用"配置文件"(PathProfile)来了解用户的意图。
+    ///     - 它通过"注册中心"(PathStrategyRegistry)来获取正确的"法则"(PathStrategy)。
+    ///     - 它将数据和法则结合，完成所有路径操作。
+    ///     注意，这个类中不再有任何复杂的切换逻辑。大道至简。
     /// </summary>
     [DisallowMultipleComponent]
     public class PathCreator : MonoBehaviour
     {
-        public event System.Action<PathChangeCommand> PathModified;
-        public event System.Action CurveDefinitionChanged;
-        public event System.Action AppearanceChanged;
-        public event System.Action TerrainInteractionChanged;
 
         [Tooltip("决定路径一切外观与行为的剖面资产")]
         [RequiredField(ErrorMessage = "请分配一个PathProfile以定义路径属性")]
@@ -32,18 +27,18 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
         [Tooltip("路径的核心数据容器")]
         [SerializeField]
-        public PathData pathData = new();
-
-        public int NumPoints => pathData?.KnotCount ?? 0;
-        public int NumSegments => pathData?.SegmentCount ?? 0;
+        public PathData pathData = new PathData();
 
         // --- 新增：用于跟踪已订阅的 Profile，并在其修改时回调 ---
         [NonSerialized]
         private PathProfile _subscribedProfile;
 
+        public int NumPoints => pathData?.KnotCount ?? 0;
+        public int NumSegments => pathData?.SegmentCount ?? 0;
+
         /// <summary>
-        /// 一个便捷的私有属性，用于获取当前应执行的"法则"。
-        /// 这是连接用户选择和底层逻辑的桥梁。
+        ///     一个便捷的私有属性，用于获取当前应执行的"法则"。
+        ///     这是连接用户选择和底层逻辑的桥梁。
         /// </summary>
         private PathStrategy CurrentStrategy
         {
@@ -72,13 +67,43 @@ namespace __temp.MrPathV2._2.Runtime.Core
             }
         }
 
-        public PathStrategy GetCurrentStratgy()
+        private void Awake()
         {
-            return CurrentStrategy;
+            // 确保pathData在运行时不为null
+            if (pathData == null)
+            {
+                pathData = new PathData();
+                this.LogWarning("PathData was null, created new instance.", "PathCreator");
+            }
         }
 
         /// <summary>
-        /// 验证组件状态是否有效
+        ///     当Inspector中的值发生变化时调用。
+        ///     我们在这里简单地触发一个事件，让关心变化的系统（如编辑器UI）知道需要刷新。
+        /// </summary>
+        private void OnValidate()
+        {
+            // 确保pathData不为null
+            if (pathData == null)
+            {
+                pathData = new PathData();
+            }
+
+            // 保证中心点位于第一个节点
+            EnsurePivotAtFirstPoint();
+
+            // 仅触发外观变化事件，避免重采样
+            AppearanceChanged?.Invoke();
+        }
+        public event Action<PathChangeCommand> PathModified;
+        public event Action CurveDefinitionChanged;
+        public event Action AppearanceChanged;
+        public event Action TerrainInteractionChanged;
+
+        public PathStrategy GetCurrentStratgy() => CurrentStrategy;
+
+        /// <summary>
+        ///     验证组件状态是否有效
         /// </summary>
         public bool IsValidState()
         {
@@ -97,61 +122,33 @@ namespace __temp.MrPathV2._2.Runtime.Core
             return true;
         }
 
-        /// <summary>
-        /// 当Inspector中的值发生变化时调用。
-        /// 我们在这里简单地触发一个事件，让关心变化的系统（如编辑器UI）知道需要刷新。
-        /// </summary>
-        private void OnValidate()
-        {
-            // 确保pathData不为null
-            if (pathData == null)
-            {
-                pathData = new PathData();
-            }
-
-            // 保证中心点位于第一个节点
-            EnsurePivotAtFirstPoint();
-
-            // 仅触发外观变化事件，避免重采样
-            AppearanceChanged?.Invoke();
-        }
-
         private void EnsurePivotAtFirstPoint()
         {
             if (pathData == null || pathData.KnotCount == 0) return;
 
             // 当前第一个节点的本地坐标
-            Vector3 firstLocal = pathData.GetPosition(0);
+            var firstLocal = pathData.GetPosition(0);
             if (firstLocal != Vector3.zero)
             {
                 // 需要将 transform 移动到世界空间的第一个节点位置
-                Vector3 worldFirst = transform.TransformPoint(firstLocal);
+                var worldFirst = transform.TransformPoint(firstLocal);
 
-                Vector3 deltaWorld = worldFirst - transform.position;
+                var deltaWorld = worldFirst - transform.position;
 
                 // 将 transform.position 移动到 worldFirst
                 transform.position = worldFirst;
 
                 // 将所有路径点整体平移相反方向，使得第一个点本地坐标为零
-                Vector3 deltaLocal = -firstLocal;
+                var deltaLocal = -firstLocal;
                 pathData.ShiftAllPositions(deltaLocal);
             }
         }
 
-        private void Awake()
-        {
-            // 确保pathData在运行时不为null
-            if (pathData == null)
-            {
-                pathData = new PathData();
-                this.LogWarning("PathData was null, created new instance.", "PathCreator");
-            }
-        }
-
         #region Public API (供编辑器或其他脚本调用)
+
         /// <summary>
-        /// 【已修正】获取曲线上某一点的世界坐标。
-        /// 这是坐标转换的唯一出口。
+        ///     【已修正】获取曲线上某一点的世界坐标。
+        ///     这是坐标转换的唯一出口。
         /// </summary>
         public Vector3 GetPointAt(float t)
         {
@@ -176,7 +173,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
                 return ErrorHandler.SafeExecute(() =>
                 {
                     // 1. 从策略层获取纯粹的、未经转换的"本地坐标"
-                    Vector3 localPoint = strategy.GetPointAt(t, pathData);
+                    var localPoint = strategy.GetPointAt(t, pathData);
 
                     // 验证返回的点是否有效
                     if (float.IsNaN(localPoint.x) || float.IsNaN(localPoint.y) || float.IsNaN(localPoint.z) ||
@@ -194,8 +191,8 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 【已修正】获取曲线上某一点的本地坐标。
-        /// 这个方法现在变得极其高效，因为它直接返回策略层的计算结果。
+        ///     【已修正】获取曲线上某一点的本地坐标。
+        ///     这个方法现在变得极其高效，因为它直接返回策略层的计算结果。
         /// </summary>
         public Vector3 GetPointAtLocal(float t)
         {
@@ -220,7 +217,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
                 return ErrorHandler.SafeExecute(() =>
                 {
                     // 直接返回策略层在本地空间计算的结果，没有任何多余转换
-                    Vector3 localPoint = strategy.GetPointAt(t, pathData);
+                    var localPoint = strategy.GetPointAt(t, pathData);
 
                     // 验证返回的点是否有效
                     if (float.IsNaN(localPoint.x) || float.IsNaN(localPoint.y) || float.IsNaN(localPoint.z) ||
@@ -237,8 +234,8 @@ namespace __temp.MrPathV2._2.Runtime.Core
         }
 
         /// <summary>
-        /// 统一的敕令执行入口。
-        /// 所有对路径的修改，都必须通过此方法。
+        ///     统一的敕令执行入口。
+        ///     所有对路径的修改，都必须通过此方法。
         /// </summary>
         public void ExecuteCommand(PathChangeCommand command)
         {
@@ -293,8 +290,8 @@ namespace __temp.MrPathV2._2.Runtime.Core
             }, "PathCreator.NotifyProfileModified", this);
         }
         /// <summary>
-        /// 获取路径的总长度（世界坐标系）
-        /// 直接利用PathSampler中已计算的totalPathDistance，避免重复计算
+        ///     获取路径的总长度（世界坐标系）
+        ///     直接利用PathSampler中已计算的totalPathDistance，避免重复计算
         /// </summary>
         /// <returns>路径的总长度（米）</returns>
         public float GetPathLength()
@@ -305,34 +302,34 @@ namespace __temp.MrPathV2._2.Runtime.Core
             }
 
             // 使用与PathSampler相同的精度
-            float precision = profile?.generationPrecision ?? 1f;
+            var precision = profile?.generationPrecision ?? 1f;
 
             // 直接调用PathSampler的逻辑来获取totalPathDistance
             return GetTotalPathDistanceFromSampler(precision);
         }
 
         /// <summary>
-        /// 从PathSampler获取总路径距离，复用其内部的累积距离计算
+        ///     从PathSampler获取总路径距离，复用其内部的累积距离计算
         /// </summary>
         private float GetTotalPathDistanceFromSampler(float spacing)
         {
             if (NumPoints < 2) return 0f;
 
             // 复用PathSampler.GenerateEquidistantPoints的逻辑
-            var cumulativeDistances = new System.Collections.Generic.List<float>();
-            Vector3 lastSampledPoint = GetPointAtLocal(0);
+            var cumulativeDistances = new List<float>();
+            var lastSampledPoint = GetPointAtLocal(0);
             cumulativeDistances.Add(0);
 
-            float distanceSinceLastSample = 0f;
-            Vector3 previousFineStepPoint = lastSampledPoint;
+            var distanceSinceLastSample = 0f;
+            var previousFineStepPoint = lastSampledPoint;
 
             // 使用与PathSampler相同的采样步长逻辑
-            float step = Mathf.Max(1f / (NumSegments * 20f), 0.01f);
+            var step = Mathf.Max(1f / (NumSegments * 20f), 0.01f);
 
-            for (float t = step; t <= NumSegments; t += step)
+            for (var t = step; t <= NumSegments; t += step)
             {
-                Vector3 currentFineStepPoint = GetPointAtLocal(t);
-                float segmentLength = Vector3.Distance(previousFineStepPoint, currentFineStepPoint);
+                var currentFineStepPoint = GetPointAtLocal(t);
+                var segmentLength = Vector3.Distance(previousFineStepPoint, currentFineStepPoint);
 
                 if (segmentLength < 0.0001f) continue;
 
@@ -340,7 +337,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
                 while (distanceSinceLastSample >= spacing)
                 {
-                    float overshoot = distanceSinceLastSample - spacing;
+                    var overshoot = distanceSinceLastSample - spacing;
                     cumulativeDistances.Add(cumulativeDistances[cumulativeDistances.Count - 1] + spacing);
                     distanceSinceLastSample = overshoot;
                 }
@@ -349,11 +346,11 @@ namespace __temp.MrPathV2._2.Runtime.Core
             }
 
             // 获取totalPathDistance（累积距离的最后一个值）
-            float totalPathDistance = cumulativeDistances.Count > 1 ? cumulativeDistances[cumulativeDistances.Count - 1] : 0f;
+            var totalPathDistance = cumulativeDistances.Count > 1 ? cumulativeDistances[cumulativeDistances.Count - 1] : 0f;
 
             // 转换到世界坐标系
-            Vector3 worldScale = transform.lossyScale;
-            float averageScale = (worldScale.x + worldScale.z) / 2f;
+            var worldScale = transform.lossyScale;
+            var averageScale = (worldScale.x + worldScale.z) / 2f;
 
             return totalPathDistance * averageScale;
         }

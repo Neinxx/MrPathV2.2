@@ -5,11 +5,11 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// 并行生成顶点与UV（固定容量，避免 Add 扩容）。
-    /// 顶点索引映射：index -> (i=row, j=col)，其中 row=i= index/segments, col=j= index%segments。
+    ///     并行生成顶点与UV（固定容量，避免 Add 扩容）。
+    ///     顶点索引映射：index -> (i=row, j=col)，其中 row=i= index/segments, col=j= index%segments。
     /// </summary>
     [BurstCompile]
     public struct GenerateVerticesJob : IJobParallelFor
@@ -53,9 +53,9 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
     }
 
     /// <summary>
-    /// 并行生成索引缓冲（固定容量）。
-    /// 四边形索引映射：quadIndex -> (i=row, j=col)，其中 row=i=quadIndex/(segments-1), col=j=quadIndex%(segments-1)。
-    /// 每个四边形写入6个三角索引到 indices[quadIndex*6..quadIndex*6+5]。
+    ///     并行生成索引缓冲（固定容量）。
+    ///     四边形索引映射：quadIndex -> (i=row, j=col)，其中 row=i=quadIndex/(segments-1), col=j=quadIndex%(segments-1)。
+    ///     每个四边形写入6个三角索引到 indices[quadIndex*6..quadIndex*6+5]。
     /// </summary>
     [BurstCompile]
     public struct GenerateIndicesJob : IJobParallelFor
@@ -91,7 +91,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
     }
 
     /// <summary>
-    /// 并行生成顶点颜色（RGBA最多4层），使用 Strip + Blend 算法与地形路径一致。
+    ///     并行生成顶点颜色（RGBA最多4层），使用 Strip + Blend 算法与地形路径一致。
     /// </summary>
     [BurstCompile]
     public struct GenerateVertexColorsJob : IJobParallelFor
@@ -110,9 +110,9 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var j = index % Segments;
             if (i < 0 || i >= Spine.Length) return;
 
-            var t = j / (float)(Segments - 1);         // 0..1 左->右
-            var signedT = t * 2f - 1f;                  // -1..1 中心为0
-            var normalizedDist = t;                     // 统一为左->右 0..1（不镜像）
+            var t = j / (float)(Segments - 1); // 0..1 左->右
+            var signedT = t * 2f - 1f; // -1..1 中心为0
+            var normalizedDist = t; // 统一为左->右 0..1（不镜像）
 
             // 新增：计算沿路径的进度 0..1（基于当前脊线索引）
             var segCount = math.max(1, Spine.Length - 1);

@@ -1,32 +1,23 @@
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2._2.Editor.Inspectors;
-using __temp.MrPathV2._2.Editor.Operations;
-using __temp.MrPathV2._2.Editor.Settings;
-using __temp.MrPathV2._2.Editor.Terrain;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Preview;
-using __temp.MrPathV2._2.Runtime.Settings;
-
+using MrPathV2._2.Editor.Inspectors;
+using MrPathV2._2.Editor.Operations;
+using MrPathV2._2.Editor.Preview;
+using MrPathV2._2.Editor.Settings;
+using MrPathV2._2.Editor.Terrain;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Settings;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-
-namespace __temp.MrPathV2._2.Editor.Overlays
+namespace MrPathV2._2.Editor.Overlays
 {
-    [Overlay(typeof(SceneView), id: "MrPath.TerrainOperationsOverlay", displayName: "Modife Terrain Operations")]
+    [Overlay(typeof(SceneView), "MrPath.TerrainOperationsOverlay", "Modife Terrain Operations")]
     public class TerrainOperationsOverlay : Overlay
     {
-        private PathEditorContext _ctx;
-        private MrPathTerrainOperations _terrainOpsConfig;
-        private MrPathProjectSettings _projectSettings;
-        private VisualElement _root;
-        private VisualElement _content;
-        private DropdownField _backendDropdown;
-        private Toggle _gpuPreviewToggle;
 
         private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
 
@@ -35,17 +26,27 @@ namespace __temp.MrPathV2._2.Editor.Overlays
         private const string ElOperationsContainer = "operationsContainer";
         private const string ElGpuPreviewToggle = "gpuPreviewToggle";
 
-        private static readonly string[] BackendChoices = { "CPU", "GPU" };
+        private static readonly string[] BackendChoices =
+        {
+            "CPU", "GPU"
+        };
 
         /// <summary>
-        /// 跟踪当前是否有地形操作正在异步执行
-        /// </summary>
-        private bool _isExecutingOperation = false;
-
-        /// <summary>
-        /// 存储所有操作按钮，以便统一启用/禁用
+        ///     存储所有操作按钮，以便统一启用/禁用
         /// </summary>
         private readonly List<Button> _operationButtons = new List<Button>();
+        private DropdownField _backendDropdown;
+        private VisualElement _content;
+        private PathEditorContext _ctx;
+        private Toggle _gpuPreviewToggle;
+
+        /// <summary>
+        ///     跟踪当前是否有地形操作正在异步执行
+        /// </summary>
+        private bool _isExecutingOperation;
+        private MrPathProjectSettings _projectSettings;
+        private VisualElement _root;
+        private MrPathTerrainOperations _terrainOpsConfig;
 
         public override VisualElement CreatePanelContent()
         {
@@ -123,7 +124,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 EditorPrefs.SetBool(GpuPreviewPrefKey, evt.newValue);
 
                 // Force SceneView to refresh so the preview updates immediately
-                UnityEditor.SceneView.RepaintAll();
+                SceneView.RepaintAll();
             });
 
             // 初始同步
@@ -158,7 +159,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
             var validOps = ops.Where(op => op != null).OrderBy(op => op.order);
             foreach (var op in validOps)
             {
-                string originalText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
+                var originalText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
                 Button btn = null;
                 // 2. 创建按钮，lambda 捕获 btn 自身，传递给 ExecuteOperation
                 btn = new ToolbarButton(() => ExecuteOperation(op, btn))
@@ -270,7 +271,7 @@ namespace __temp.MrPathV2._2.Editor.Overlays
         }
 
         /// <summary>
-        /// 统一设置所有地形操作按钮的可用状态，并在启用时恢复其原始文本。
+        ///     统一设置所有地形操作按钮的可用状态，并在启用时恢复其原始文本。
         /// </summary>
         /// <param name="enabled">是否启用按钮</param>
         private void SetOperationButtonsEnabled(bool enabled)
@@ -286,7 +287,6 @@ namespace __temp.MrPathV2._2.Editor.Overlays
                 }
             }
         }
-
 
 
         public void OnDisable()

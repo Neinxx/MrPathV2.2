@@ -1,12 +1,12 @@
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Preview;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Strategies
+namespace MrPathV2._2.Runtime.Strategies
 {
     /// <summary>
-    /// 【最终圆满版 • 千变万化之法】
+    ///     【最终圆满版 • 千变万化之法】
     /// </summary>
     [CreateAssetMenu(fileName = "BezierStrategy", menuName = "MrPath/Strategies/Bezier")]
     public class BezierStrategy : PathStrategy
@@ -18,7 +18,6 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
 
         #region 数学法则实现
 
-       
         public override Vector3 GetPointAt(float t, PathData data)
         {
             // --- 修正后的守护逻辑 ---
@@ -26,26 +25,26 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
             if (data.SegmentCount == 0) return data.GetPosition(0);
 
             // --- 核心计算逻辑 (保持不变) ---
-            int segmentIndex = Mathf.Clamp(Mathf.FloorToInt(t), 0, data.SegmentCount - 1);
-            float localT = t - segmentIndex;
+            var segmentIndex = Mathf.Clamp(Mathf.FloorToInt(t), 0, data.SegmentCount - 1);
+            var localT = t - segmentIndex;
 
-            PathData.Knot startKnot = data.GetKnot(segmentIndex);
-            PathData.Knot endKnot = data.GetKnot(segmentIndex + 1);
+            var startKnot = data.GetKnot(segmentIndex);
+            var endKnot = data.GetKnot(segmentIndex + 1);
 
             // --- 【【【 最关键的修正 】】】 ---
             // 所有的点现在都在纯粹的本地空间中定义
             // p1 和 p2 是控制点，它们的位置是锚点位置加上其相对的切线向量
-            Vector3 p0 = startKnot.Position;
-            Vector3 p1 = startKnot.Position + startKnot.TangentOut; // 使用相对切线
-            Vector3 p2 = endKnot.Position + endKnot.TangentIn;     // 使用相对切线
-            Vector3 p3 = endKnot.Position;
+            var p0 = startKnot.Position;
+            var p1 = startKnot.Position + startKnot.TangentOut; // 使用相对切线
+            var p2 = endKnot.Position + endKnot.TangentIn; // 使用相对切线
+            var p3 = endKnot.Position;
 
             // --- 贝塞尔曲线公式 (保持不变) ---
-            float u = 1 - localT;
-            float tSq = localT * localT;
-            float uSq = u * u;
+            var u = 1 - localT;
+            var tSq = localT * localT;
+            var uSq = u * u;
 
-            Vector3 point = (uSq * u * p0) + (3 * uSq * localT * p1) + (3 * u * tSq * p2) + (tSq * localT * p3);
+            var point = uSq * u * p0 + 3 * uSq * localT * p1 + 3 * u * tSq * p2 + tSq * localT * p3;
 
             // --- 最终返回：纯粹的本地坐标 ---
             return point;
@@ -53,23 +52,23 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
 
         public override void AddSegment(Vector3 newPointWorldPos, PathData data, Transform owner)
         {
-            Vector3 newPos = owner.InverseTransformPoint(newPointWorldPos);
+            var newPos = owner.InverseTransformPoint(newPointWorldPos);
             if (data.KnotCount == 0)
             {
                 data.AddKnot(newPos, Vector3.zero, Vector3.zero);
                 return;
             }
-            int lastIndex = data.KnotCount - 1;
-            Vector3 lastPos = data.GetPosition(lastIndex);
-            Vector3 offset = (newPos - lastPos) * defaultTangentScale;
+            var lastIndex = data.KnotCount - 1;
+            var lastPos = data.GetPosition(lastIndex);
+            var offset = (newPos - lastPos) * defaultTangentScale;
             data.MoveTangentOut(lastIndex, offset);
             data.AddKnot(newPos, -offset, Vector3.zero);
         }
 
         public override void MovePoint(int flatIndex, Vector3 newPointWorldPos, PathData data, Transform owner)
         {
-            Vector3 newLocalPos = owner.InverseTransformPoint(newPointWorldPos);
-            DecodeIndex(flatIndex, out int knotIndex, out int pointType);
+            var newLocalPos = owner.InverseTransformPoint(newPointWorldPos);
+            DecodeIndex(flatIndex, out var knotIndex, out var pointType);
             if (knotIndex < 0 || knotIndex >= data.KnotCount) return;
             if (pointType == 0) data.MovePosition(knotIndex, newLocalPos);
             else if (pointType == 1) data.MoveTangentOut(knotIndex, newLocalPos - data.GetPosition(knotIndex));
@@ -78,14 +77,18 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
 
         public override void InsertSegment(int segmentIndex, Vector3 newPointWorldPos, PathData data, Transform owner)
         {
-            if (segmentIndex >= data.SegmentCount) { AddSegment(newPointWorldPos, data, owner); return; }
-            PathData.Knot startKnot = data.GetKnot(segmentIndex);
-            PathData.Knot endKnot = data.GetKnot(segmentIndex + 1);
+            if (segmentIndex >= data.SegmentCount)
+            {
+                AddSegment(newPointWorldPos, data, owner);
+                return;
+            }
+            var startKnot = data.GetKnot(segmentIndex);
+            var endKnot = data.GetKnot(segmentIndex + 1);
             Vector3 p0 = startKnot.Position, p1 = startKnot.GlobalTangentOut, p2 = endKnot.GlobalTangentIn, p3 = endKnot.Position;
-            float t = FindTValueOnSegment(p0, p1, p2, p3, owner.InverseTransformPoint(newPointWorldPos));
+            var t = FindTValueOnSegment(p0, p1, p2, p3, owner.InverseTransformPoint(newPointWorldPos));
             Vector3 p01 = Vector3.Lerp(p0, p1, t), p12 = Vector3.Lerp(p1, p2, t), p23 = Vector3.Lerp(p2, p3, t);
             Vector3 p012 = Vector3.Lerp(p01, p12, t), p123 = Vector3.Lerp(p12, p23, t);
-            Vector3 newKnotPos = Vector3.Lerp(p012, p123, t);
+            var newKnotPos = Vector3.Lerp(p012, p123, t);
             data.MoveTangentOut(segmentIndex, p01 - startKnot.Position);
             data.MoveTangentIn(segmentIndex + 1, p23 - endKnot.Position);
             data.InsertKnot(segmentIndex + 1, newKnotPos, p012 - newKnotPos, p123 - newKnotPos);
@@ -94,10 +97,9 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
         public override void DeleteSegment(int flatIndex, PathData data)
         {
             if (flatIndex % 3 != 0) return;
-            int knotIndex = flatIndex / 3;
+            var knotIndex = flatIndex / 3;
             if (knotIndex >= 0 && knotIndex < data.KnotCount) data.DeleteKnot(knotIndex);
         }
-
 
 
         #if UNITY_EDITOR
@@ -111,10 +113,10 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
         public override void UpdatePointHover(ref PathEditorHandles.HandleDrawContext context)
         {
             var creator = context.creator;
-            float knotRadius = (drawingStyle != null && drawingStyle.knotStyle != null) ? drawingStyle.knotStyle.size : 0.1f;
-            float tangentRadius = (drawingStyle != null && drawingStyle.tangentStyle != null) ? drawingStyle.tangentStyle.size : 0.1f;
+            var knotRadius = drawingStyle != null && drawingStyle.knotStyle != null ? drawingStyle.knotStyle.size : 0.1f;
+            var tangentRadius = drawingStyle != null && drawingStyle.tangentStyle != null ? drawingStyle.tangentStyle.size : 0.1f;
             // Bézier法则的悬停检测需要检查主节点和所有切线控制点
-            for (int i = 0; i < creator.NumPoints; i++)
+            for (var i = 0; i < creator.NumPoints; i++)
             {
                 var knot = creator.pathData.GetKnot(i);
                 // 检查主节点
@@ -135,8 +137,8 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
 
         private bool CheckHandleHover(Vector3 localPos, int flatIndex, float radius, ref PathEditorHandles.HandleDrawContext context)
         {
-            Vector3 worldPos = context.creator.transform.TransformPoint(localPos);
-            float handleRadius = HandleUtility.GetHandleSize(worldPos) * radius;
+            var worldPos = context.creator.transform.TransformPoint(localPos);
+            var handleRadius = HandleUtility.GetHandleSize(worldPos) * radius;
             if (HandleUtility.DistanceToCircle(worldPos, handleRadius) == 0)
             {
                 context.hoveredPointIndex = flatIndex;
@@ -148,15 +150,15 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
         private void DrawCurve(ref PathEditorHandles.HandleDrawContext context)
         {
             var creator = context.creator;
-            for (int i = 0; i < creator.NumSegments; i++)
+            for (var i = 0; i < creator.NumSegments; i++)
             {
-                Handles.color = (i == context.hoveredSegmentIndex) ? drawingStyle.curveHoverColor : drawingStyle.curveColor;
+                Handles.color = i == context.hoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor;
                 var knot1 = creator.pathData.GetKnot(i);
                 var knot2 = creator.pathData.GetKnot(i + 1);
-                Vector3 pStart = creator.transform.TransformPoint(knot1.Position);
-                Vector3 pEnd = creator.transform.TransformPoint(knot2.Position);
-                Vector3 ctrl1 = creator.transform.TransformPoint(knot1.GlobalTangentOut);
-                Vector3 ctrl2 = creator.transform.TransformPoint(knot2.GlobalTangentIn);
+                var pStart = creator.transform.TransformPoint(knot1.Position);
+                var pEnd = creator.transform.TransformPoint(knot2.Position);
+                var ctrl1 = creator.transform.TransformPoint(knot1.GlobalTangentOut);
+                var ctrl2 = creator.transform.TransformPoint(knot2.GlobalTangentIn);
                 Handles.DrawBezier(pStart, pEnd, ctrl1, ctrl2, Handles.color, null, drawingStyle.curveThickness);
             }
         }
@@ -166,7 +168,7 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
             var creator = context.creator;
             PreviewLineRenderer lineRenderer;
             bool shouldDispose;
-            
+
             if (context.lineRenderer != null)
             {
                 lineRenderer = context.lineRenderer;
@@ -183,7 +185,7 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
             {
                 lineRenderer.Clear(PreviewLineRenderer.LineType.ControlLine);
             }
-            
+
             try
             {
                 // 设置控制线样式
@@ -195,25 +197,25 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
                     dashSize = 4f,
                     antiAliased = true
                 };
-                
+
                 // 添加控制线到渲染器
-                for (int i = 0; i < creator.NumPoints; i++)
+                for (var i = 0; i < creator.NumPoints; i++)
                 {
                     var knot = creator.pathData.GetKnot(i);
-                    Vector3 worldPos = creator.transform.TransformPoint(knot.Position);
-                    Vector3 globalTanIn = creator.transform.TransformPoint(knot.GlobalTangentIn);
-                    Vector3 globalTanOut = creator.transform.TransformPoint(knot.GlobalTangentOut);
-                    
-                    if (i > 0) 
+                    var worldPos = creator.transform.TransformPoint(knot.Position);
+                    var globalTanIn = creator.transform.TransformPoint(knot.GlobalTangentIn);
+                    var globalTanOut = creator.transform.TransformPoint(knot.GlobalTangentOut);
+
+                    if (i > 0)
                     {
                         lineRenderer.AddLine(worldPos, globalTanIn, PreviewLineRenderer.LineType.ControlLine, controlLineStyle);
                     }
-                    if (i < creator.NumPoints - 1) 
+                    if (i < creator.NumPoints - 1)
                     {
                         lineRenderer.AddLine(worldPos, globalTanOut, PreviewLineRenderer.LineType.ControlLine, controlLineStyle);
                     }
                 }
-                
+
                 // 渲染所有线条
                 lineRenderer.Render();
             }
@@ -230,7 +232,7 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
         private void DrawPointHandles(ref PathEditorHandles.HandleDrawContext context, Camera camera)
         {
             var creator = context.creator;
-            for (int i = 0; i < creator.NumPoints; i++)
+            for (var i = 0; i < creator.NumPoints; i++)
             {
                 var knot = creator.pathData.GetKnot(i);
                 PathEditorHandles.DrawHandle(knot.Position, i * 3, drawingStyle.knotStyle, ref context, camera);
@@ -246,6 +248,7 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
         }
 #endif
 #endif
+
         #endregion
 
         #region 私有辅助 (Private Helpers)
@@ -291,11 +294,11 @@ namespace __temp.MrPathV2._2.Runtime.Strategies
         {
             const int samples = 100;
             float minSqrDist = float.MaxValue, bestT = 0;
-            for (int i = 0; i <= samples; i++)
+            for (var i = 0; i <= samples; i++)
             {
-                float t = (float)i / samples;
-                float u = 1 - t;
-                Vector3 p = u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+                var t = (float)i / samples;
+                var u = 1 - t;
+                var p = u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
                 if ((p - point).sqrMagnitude < minSqrDist)
                 {
                     minSqrDist = (p - point).sqrMagnitude;

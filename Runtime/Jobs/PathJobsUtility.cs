@@ -1,17 +1,21 @@
 // 文件路径: Runtime/Jobs/PathJobsUtility.cs (曲线烘焙版)
 
 using System;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = __temp.MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     public static class PathJobsUtility
     {
+        public static SpineData CreateSpineData(PathSpine spine, Allocator allocator) => new SpineData(spine, allocator);
+
+        public static ProfileData CreateProfileData(PathProfile profile, Allocator allocator) => new ProfileData(profile, allocator);
+
         // ... SpineData 结构体保持不变 ...
         public struct SpineData : IDisposable
         {
@@ -27,7 +31,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 Points = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
                 Tangents = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
                 Normals = NativeArrayExtensions.CreateTracked<float3>(spine.VertexCount, allocator);
-                
+
                 for (var i = 0; i < spine.VertexCount; i++)
                 {
                     Points[i] = spine.points[i];
@@ -35,7 +39,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                     Normals[i] = spine.surfaceNormals[i];
                 }
             }
-            
+
             public void Dispose()
             {
                 Points.SafeDispose();
@@ -68,7 +72,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
                 _bakedCrossSection = NativeArrayExtensions.CreateTracked<float>(BakeResolution, allocator);
                 _bakedFalloff = NativeArrayExtensions.CreateTracked<float>(BakeResolution, allocator);
-                
+
                 BakeCurve(profile.crossSection, _bakedCrossSection, -1, 1);
                 BakeCurve(profile.falloffShape, _bakedFalloff, 0, 1);
             }
@@ -100,15 +104,6 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 _bakedCrossSection.SafeDispose();
                 _bakedFalloff.SafeDispose();
             }
-        }
-        public static SpineData CreateSpineData(PathSpine spine, Allocator allocator)
-        {
-            return new SpineData(spine, allocator);
-        }
-
-        public static ProfileData CreateProfileData(PathProfile profile, Allocator allocator)
-        {
-            return new ProfileData(profile, allocator);
         }
     }
 }

@@ -15,37 +15,37 @@
 
 inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, float opacity)
 {
-    // Premultiply layer alpha by opacity once to avoid repeating in every branch
-    layerColor.a *= opacity;
+	// Premultiply layer alpha by opacity once to avoid repeating in every branch
+	layerColor.a *= opacity;
 
-    // Default output is base (no change)
-    float4 outColor = baseColor;
+	// Default output is base (no change)
+	float4 outColor = baseColor;
 
-    // Branchless blend selection using lerp chains to keep things burst-friendly
-    // For more complex modes consider using switch + static if on shader model 4.5+
+	// Branchless blend selection using lerp chains to keep things burst-friendly
+	// For more complex modes consider using switch + static if on shader model 4.5+
 
-    // AlphaBlend: lerp based on layer alpha
-    float4 alphaBlend = lerp(baseColor, layerColor, layerColor.a);
+	// AlphaBlend: lerp based on layer alpha
+	float4 alphaBlend = lerp(baseColor, layerColor, layerColor.a);
 
-    // Additive: base + layer * opacity
-    float4 addBlend = float4(baseColor.rgb + layerColor.rgb * opacity, alphaBlend.a);
+	// Additive: base + layer * opacity
+	float4 addBlend = float4(baseColor.rgb + layerColor.rgb * opacity, alphaBlend.a);
 
-    // Multiply: base * lerp(1, layer, opacity)
-    float4 mulBlend = float4(baseColor.rgb * lerp(1.0, layerColor.rgb, opacity), alphaBlend.a);
+	// Multiply: base * lerp(1, layer, opacity)
+	float4 mulBlend = float4(baseColor.rgb * lerp(1.0, layerColor.rgb, opacity), alphaBlend.a);
 
-    // Overlay (approx): if base < 0.5 use 2*base*layer else 1 - 2*(1-base)*(1-layer)
-    float3 overlayRgbLow = 2.0 * baseColor.rgb * layerColor.rgb;
-    float3 overlayRgbHigh = 1.0 - 2.0 * (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
-    float3 overlayRgb = lerp(overlayRgbLow, overlayRgbHigh, step(0.5, baseColor.rgb));
-    float4 overlayBlend = float4(lerp(baseColor.rgb, overlayRgb, opacity), alphaBlend.a);
+	// Overlay (approx): if base < 0.5 use 2*base*layer else 1 - 2*(1-base)*(1-layer)
+	float3 overlayRgbLow = 2.0 * baseColor.rgb * layerColor.rgb;
+	float3 overlayRgbHigh = 1.0 - 2.0 * (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
+	float3 overlayRgb = lerp(overlayRgbLow, overlayRgbHigh, step(0.5, baseColor.rgb));
+	float4 overlayBlend = float4(lerp(baseColor.rgb, overlayRgb, opacity), alphaBlend.a);
 
-    // Select blend result based on mode
-    outColor = (blendMode < 0.5) ? alphaBlend : outColor; // 0
-    outColor = (abs(blendMode - 1.0) < 0.5) ? addBlend : outColor; // 1
-    outColor = (abs(blendMode - 2.0) < 0.5) ? mulBlend : outColor; // 2
-    outColor = (abs(blendMode - 3.0) < 0.5) ? overlayBlend : outColor; // 3
+	// Select blend result based on mode
+	outColor = (blendMode < 0.5) ? alphaBlend : outColor; // 0
+	outColor = (abs(blendMode - 1.0) < 0.5) ? addBlend : outColor; // 1
+	outColor = (abs(blendMode - 2.0) < 0.5) ? mulBlend : outColor; // 2
+	outColor = (abs(blendMode - 3.0) < 0.5) ? overlayBlend : outColor; // 3
 
-    return saturate(outColor);
+	return saturate(outColor);
 }
 
 // -----------------------------------------------------------------------------
@@ -59,29 +59,28 @@ inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, f
 // atlasInvHeight = 1.0 / (layerCount * pathSamples)
 // -----------------------------------------------------------------------------
 inline float SampleMaskAtlas2D(
-    Texture2D maskAtlas,
-    SamplerState samp,
-    float across, // 0..1 distance across road (normalizedDist)
-    float pathProgress, // 0..1 along road
-    float layerIndex, // int but pass as float to avoid int ops
-    float pathSamples, // rows per layer
-    float atlasInvHeight,
-    float maskThreshold)
+	Texture2D    maskAtlas,
+	SamplerState samp,
+	float        across, // 0..1 distance across road (normalizedDist)
+	float        pathProgress, // 0..1 along road
+	float        layerIndex, // int but pass as float to avoid int ops
+	float        pathSamples, // rows per layer
+	float        atlasInvHeight,
+	float        maskThreshold)
 {
-    across = saturate(across);
-    pathProgress = saturate(pathProgress);
+	across = saturate(across);
+	pathProgress = saturate(pathProgress);
 
-    // Compute row index = layerIndex * pathSamples + pathProgress*(pathSamples-1)
-    float row = layerIndex * pathSamples + pathProgress * (pathSamples - 1.0);
-    // +0.5 for texel center
-    float v = (row + 0.5) * atlasInvHeight;
-    float2 uvAtlas = float2(across, v);
+	// Compute row index = layerIndex * pathSamples + pathProgress*(pathSamples-1)
+	float row = layerIndex * pathSamples + pathProgress * (pathSamples - 1.0);
+	// +0.5 for texel center
+	float  v = (row + 0.5) * atlasInvHeight;
+	float2 uvAtlas = float2(across, v);
 
-    float mask = maskAtlas.Sample(samp, uvAtlas).r;
-    mask = saturate((mask - maskThreshold) / max(1e-5, 1.0 - maskThreshold));
-    return mask;
+	float mask = maskAtlas.Sample(samp, uvAtlas).r;
+	mask = saturate((mask - maskThreshold) / max(1e-5, 1.0 - maskThreshold));
+	return mask;
 }
-
 
 
 #endif // BLEND_LAYER_INCLUDED

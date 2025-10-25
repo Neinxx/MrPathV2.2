@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 // 保留以兼容可能的 Task 用法（若不需要可后续移除）
 
-namespace __temp.MrPathV2._2.Runtime.Settings
+namespace MrPathV2._2.Runtime.Settings
 {
     /// <summary>
-    /// 路径策略注册中心：负责管理CurveType与PathStrategy的映射关系
-    /// 采用单例模式确保全局唯一访问点，支持数据驱动配置
+    ///     路径策略注册中心：负责管理CurveType与PathStrategy的映射关系
+    ///     采用单例模式确保全局唯一访问点，支持数据驱动配置
     /// </summary>
     [CreateAssetMenu(fileName = "PathStrategyRegistry", menuName = "MrPath/Path Strategy Registry", order = 100)]
     public class PathStrategyRegistry : ScriptableObject
@@ -19,8 +20,16 @@ namespace __temp.MrPathV2._2.Runtime.Settings
         private static PathStrategyRegistry _instance;
         private static bool _initializationAttempted;
 
+        [FormerlySerializedAs("_strategyEntries")]
+        [Header("策略映射配置")]
+        [Tooltip("曲线类型与策略的映射列表")]
+        [SerializeField] private List<StrategyEntry> strategyEntries = new List<StrategyEntry>();
+
+        // 缓存策略映射，提高查询性能
+        private Dictionary<CurveType, PathStrategy> _strategyCache;
+
         /// <summary>
-        /// 全局唯一实例
+        ///     全局唯一实例
         /// </summary>
         public static PathStrategyRegistry Instance
         {
@@ -34,46 +43,31 @@ namespace __temp.MrPathV2._2.Runtime.Settings
             }
         }
 
-        [Serializable]
-        public struct StrategyEntry : IEquatable<StrategyEntry>
+        private void OnEnable()
         {
-            [Tooltip("曲线类型")]
-            public CurveType type;
-
-            [Tooltip("对应的路径策略实例")]
-            public PathStrategy strategy;
-
-            public bool Equals(StrategyEntry other)
+            ErrorHandler.SafeExecute(() =>
             {
-                return type == other.type && strategy && strategy && other.strategy && strategy == other.strategy;
-            }
+                // 防止资源重新加载时实例丢失
+                if (_instance == null)
+                {
+                    _instance = this;
+                }
 
-            public override bool Equals(object obj)
-            {
-                return obj is StrategyEntry other && Equals(other);
-            }
-
-            public override int GetHashCode()
-            {
-                return HashCode.Combine((int)type, strategy);
-            }
-
-            /// <summary>
-            /// 验证策略条目是否有效
-            /// </summary>
-            public bool IsValid => strategy;
+                InitializeCache();
+            }, "PathStrategyRegistry.OnEnable");
         }
 
-        [FormerlySerializedAs("_strategyEntries")]
-        [Header("策略映射配置")]
-        [Tooltip("曲线类型与策略的映射列表")]
-        [SerializeField] private List<StrategyEntry> strategyEntries = new();
-
-        // 缓存策略映射，提高查询性能
-        private Dictionary<CurveType, PathStrategy> _strategyCache;
+        private void OnValidate()
+        {
+            ErrorHandler.SafeExecute(() =>
+            {
+                // 编辑器下数据变更时更新缓存
+                InitializeCache();
+            }, "PathStrategyRegistry.OnValidate");
+        }
 
         /// <summary>
-        /// 初始化实例
+        ///     初始化实例
         /// </summary>
         private static void InitializeInstance()
         {
@@ -88,13 +82,13 @@ namespace __temp.MrPathV2._2.Runtime.Settings
 #if UNITY_EDITOR
                 if (!_instance)
                 {
-                    var guids = UnityEditor.AssetDatabase.FindAssets($"t:{nameof(PathStrategyRegistry)}");
+                    var guids = AssetDatabase.FindAssets($"t:{nameof(PathStrategyRegistry)}");
                     if (guids?.Length > 0)
                     {
-                        var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+                        var path = AssetDatabase.GUIDToAssetPath(guids[0]);
                         if (!string.IsNullOrEmpty(path))
                         {
-                            _instance = UnityEditor.AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(path);
+                            _instance = AssetDatabase.LoadAssetAtPath<PathStrategyRegistry>(path);
                         }
                     }
                 }
@@ -114,7 +108,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
         }
 
         /// <summary>
-        /// 初始化策略缓存
+        ///     初始化策略缓存
         /// </summary>
         private void InitializeCache()
         {
@@ -148,23 +142,23 @@ namespace __temp.MrPathV2._2.Runtime.Settings
                     }
 
                     ErrorHandler.SafeExecute(() =>
-                    {
-                        EnsureDefaultStyle(entry.strategy);
-                        _strategyCache[entry.type] = entry.strategy;
-                        processedTypes.Add(entry.type);
-                    }, $"PathStrategyRegistry.InitializeCache.ProcessEntry({entry.type})");
+                        {
+                            EnsureDefaultStyle(entry.strategy);
+                            _strategyCache[entry.type] = entry.strategy;
+                            processedTypes.Add(entry.type);
+                        }, $"PathStrategyRegistry.InitializeCache.ProcessEntry({entry.type})");
                 }
 
                 // 报告缓存初始化结果
                 ErrorHandler.LogInfo($"Cache initialized with {_strategyCache.Count} strategies.", "PathStrategyRegistry");
-                
+
                 // 验证配置完整性
                 ValidateConfiguration();
             }, "PathStrategyRegistry.InitializeCache");
         }
 
         /// <summary>
-        /// 获取指定曲线类型的策略
+        ///     获取指定曲线类型的策略
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <returns>对应的路径策略，若未找到则返回null</returns>
@@ -176,7 +170,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
                 {
                     ErrorHandler.LogWarning("Strategy cache is null, attempting to reinitialize.", "PathStrategyRegistry");
                     InitializeCache();
-                    
+
                     if (_strategyCache == null)
                     {
                         ErrorHandler.LogError("Failed to initialize strategy cache.", "PathStrategyRegistry");
@@ -202,17 +196,14 @@ namespace __temp.MrPathV2._2.Runtime.Settings
         }
 
         /// <summary>
-        /// 检查指定曲线类型是否有可用的策略
+        ///     检查指定曲线类型是否有可用的策略
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <returns>如果有可用策略返回true，否则返回false</returns>
-        public bool HasStrategy(CurveType type)
-        {
-            return GetStrategy(type) != null;
-        }
+        public bool HasStrategy(CurveType type) => GetStrategy(type) != null;
 
         /// <summary>
-        /// 获取所有已配置的曲线类型
+        ///     获取所有已配置的曲线类型
         /// </summary>
         /// <returns>已配置的曲线类型数组</returns>
         public CurveType[] GetConfiguredCurveTypes()
@@ -229,11 +220,11 @@ namespace __temp.MrPathV2._2.Runtime.Settings
         }
 
         /// <summary>
-        /// 确保策略拥有默认样式
+        ///     确保策略拥有默认样式
         /// </summary>
         private void EnsureDefaultStyle(PathStrategy strategy)
         {
-            if (strategy == null) 
+            if (strategy == null)
             {
                 Debug.LogWarning("[PathStrategyRegistry] Cannot ensure default style for null strategy.");
                 return;
@@ -277,31 +268,8 @@ namespace __temp.MrPathV2._2.Runtime.Settings
             }
         }
 
-        private void OnEnable()
-        {
-            ErrorHandler.SafeExecute(() =>
-            {
-                // 防止资源重新加载时实例丢失
-                if (_instance == null)
-                {
-                    _instance = this;
-                }
-
-                InitializeCache();
-            }, "PathStrategyRegistry.OnEnable");
-        }
-
-        private void OnValidate()
-        {
-            ErrorHandler.SafeExecute(() =>
-            {
-                // 编辑器下数据变更时更新缓存
-                InitializeCache();
-            }, "PathStrategyRegistry.OnValidate");
-        }
-
         /// <summary>
-        /// 验证注册表配置的完整性
+        ///     验证注册表配置的完整性
         /// </summary>
         /// <returns>如果配置有效返回true，否则返回false</returns>
         public bool ValidateConfiguration()
@@ -314,7 +282,7 @@ namespace __temp.MrPathV2._2.Runtime.Settings
                     return false;
                 }
 
-                bool isValid = true;
+                var isValid = true;
                 var allCurveTypes = Enum.GetValues(typeof(CurveType)).Cast<CurveType>();
 
                 foreach (var curveType in allCurveTypes)
@@ -328,6 +296,27 @@ namespace __temp.MrPathV2._2.Runtime.Settings
 
                 return isValid;
             }, false, "PathStrategyRegistry.ValidateConfiguration");
+        }
+
+        [Serializable]
+        public struct StrategyEntry : IEquatable<StrategyEntry>
+        {
+            [Tooltip("曲线类型")]
+            public CurveType type;
+
+            [Tooltip("对应的路径策略实例")]
+            public PathStrategy strategy;
+
+            public bool Equals(StrategyEntry other) => type == other.type && strategy && strategy && other.strategy && strategy == other.strategy;
+
+            public override bool Equals(object obj) => obj is StrategyEntry other && Equals(other);
+
+            public override int GetHashCode() => HashCode.Combine((int)type, strategy);
+
+            /// <summary>
+            ///     验证策略条目是否有效
+            /// </summary>
+            public bool IsValid => strategy;
         }
     }
 }

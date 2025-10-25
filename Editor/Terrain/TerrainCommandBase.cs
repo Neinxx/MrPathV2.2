@@ -1,28 +1,27 @@
-
-
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
-using UnityEngine;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
 using UnityEditor;
+using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     public abstract class TerrainCommandBase
     {
         protected readonly PathCreator Creator;
         protected readonly IHeightProvider HeightProvider;
-        // 可选：来自预览网格的首选 XZ 包围盒 (minX, minZ, maxX, maxZ)
-        protected Vector4? PreferredBoundsXZ { get; private set; }
 
         protected TerrainCommandBase(PathCreator creator, IHeightProvider heightProvider)
         {
             Creator = creator;
             HeightProvider = heightProvider;
         }
+
+        // 可选：来自预览网格的首选 XZ 包围盒 (minX, minZ, maxX, maxZ)
+        protected Vector4? PreferredBoundsXZ { get; private set; }
 
         public abstract string GetCommandName();
         public Task ExecuteAsync() => ExecuteAsync(CancellationToken.None);
@@ -50,7 +49,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         protected abstract Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token);
 
         /// <summary>
-        /// 设置首选的预览包围盒（XZ 平面），用于作业的粗剔除。
+        ///     设置首选的预览包围盒（XZ 平面），用于作业的粗剔除。
         /// </summary>
         public void SetPreviewBoundsXZ(Vector4 boundsXZ)
         {
@@ -59,12 +58,25 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
         private bool Validate(out PathSpine spine, out List<UnityEngine.Terrain> affectedTerrains)
         {
-            spine = default; affectedTerrains = null;
-            if (Creator == null || Creator.profile == null || Creator.pathData.KnotCount < 2) { Debug.LogError("路径无效或未配置 Profile。"); return false; }
+            spine = default;
+            affectedTerrains = null;
+            if (Creator == null || Creator.profile == null || Creator.pathData.KnotCount < 2)
+            {
+                Debug.LogError("路径无效或未配置 Profile。");
+                return false;
+            }
             spine = PathSampler.SamplePath(Creator, HeightProvider);
-            if (spine.VertexCount < 2) { Debug.LogWarning("路径采样点不足，无法应用。"); return false; }
+            if (spine.VertexCount < 2)
+            {
+                Debug.LogWarning("路径采样点不足，无法应用。");
+                return false;
+            }
             affectedTerrains = FindAffectedTerrains(spine);
-            if (affectedTerrains.Count == 0) { Debug.LogWarning("路径未影响任何活动地形。"); return false; }
+            if (affectedTerrains.Count == 0)
+            {
+                Debug.LogWarning("路径未影响任何活动地形。");
+                return false;
+            }
             return true;
         }
         private List<UnityEngine.Terrain> FindAffectedTerrains(PathSpine spine)
@@ -75,7 +87,10 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             {
                 if (terrain == null || terrain.terrainData == null) continue;
                 var terrainBounds = new Bounds(terrain.GetPosition() + terrain.terrainData.size / 2f, terrain.terrainData.size);
-                if (projectedBounds.Intersects(terrainBounds)) { affectedTerrains.Add(terrain); }
+                if (projectedBounds.Intersects(terrainBounds))
+                {
+                    affectedTerrains.Add(terrain);
+                }
             }
             return affectedTerrains;
         }
@@ -83,14 +98,17 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             if (spine.VertexCount == 0) return new Bounds();
             var pathBounds = new Bounds(spine.points[0], Vector3.zero);
-            for (var i = 1; i < spine.VertexCount; i++) { pathBounds.Encapsulate(spine.points[i]); }
+            for (var i = 1; i < spine.VertexCount; i++)
+            {
+                pathBounds.Encapsulate(spine.points[i]);
+            }
             var maxExtent = Creator.profile != null ? Creator.profile.roadWidth / 2f + Creator.profile.falloffWidth : 0;
             pathBounds.Expand(new Vector3(maxExtent * 2, 0, maxExtent * 2));
             return new Bounds(new Vector3(pathBounds.center.x, pathBounds.center.y, pathBounds.center.z), new Vector3(pathBounds.size.x, float.MaxValue, pathBounds.size.z));
         }
 
         /// <summary>
-        /// 计算二维展开的 AABB（XZ 平面），用于作业的粗剔除或轮廓不可用时的退化。
+        ///     计算二维展开的 AABB（XZ 平面），用于作业的粗剔除或轮廓不可用时的退化。
         /// </summary>
         protected static Vector4 GetExpandedXZBounds(PathSpine spine, PathProfile profile)
         {
@@ -98,7 +116,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (spine.VertexCount == 0)
                 return new Vector4(float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
 
-            var halfWidth = (profile != null ? profile.roadWidth * 0.5f + profile.falloffWidth : 0f);
+            var halfWidth = profile != null ? profile.roadWidth * 0.5f + profile.falloffWidth : 0f;
             float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
             for (var i = 0; i < spine.VertexCount; i++)
             {
@@ -114,13 +132,22 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             var terrainLayers = terrain.terrainData.terrainLayers;
             var layerToIndexMap = new Dictionary<TerrainLayer, int>();
-            for (var i = 0; i < terrainLayers.Length; i++) { if (terrainLayers[i] != null) layerToIndexMap[terrainLayers[i]] = i; }
+            for (var i = 0; i < terrainLayers.Length; i++)
+            {
+                if (terrainLayers[i] != null) layerToIndexMap[terrainLayers[i]] = i;
+            }
             return layerToIndexMap;
         }
         private void StitchTerrains(List<UnityEngine.Terrain> terrains)
         {
-            foreach (var t in terrains) t.Flush();
-            foreach (var t in terrains) t.SetNeighbors(t.leftNeighbor, t.topNeighbor, t.rightNeighbor, t.bottomNeighbor);
+            foreach (var t in terrains)
+            {
+                t.Flush();
+            }
+            foreach (var t in terrains)
+            {
+                t.SetNeighbors(t.leftNeighbor, t.topNeighbor, t.rightNeighbor, t.bottomNeighbor);
+            }
         }
     }
 }

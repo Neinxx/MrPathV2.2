@@ -1,33 +1,28 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
-namespace __temp.MrPathV2._2.Runtime.Preview
+namespace MrPathV2._2.Runtime.Preview
 {
     /// <summary>
-    /// 预览渲染优化器：提供批量渲染、GPU实例化和渲染状态缓存
+    ///     预览渲染优化器：提供批量渲染、GPU实例化和渲染状态缓存
     /// </summary>
-    public class PreviewRenderingOptimizer : System.IDisposable
+    public class PreviewRenderingOptimizer : IDisposable
     {
-        private struct RenderBatch
-        {
-            public Mesh Mesh;
-            public Material Material;
-            public Matrix4x4[] Matrices;
-            public int Count;
-        }
+        private const int MaxInstancesPerBatch = 1023; // Unity限制
+        private readonly Dictionary<int, MaterialPropertyBlock> _propertyBlocks;
 
         private readonly List<RenderBatch> _renderBatches;
-        private readonly Dictionary<int, MaterialPropertyBlock> _propertyBlocks;
         private readonly MaterialPropertyBlock _sharedPropertyBlock;
-        
+        private Plane[] _frustumPlanes;
+        private bool _frustumPlanesValid;
+
         // GPU实例化支持
         private Vector4[] _instanceColors;
-        private const int MaxInstancesPerBatch = 1023; // Unity限制
 
         // 渲染状态缓存
         private Camera _lastCamera;
-        private Plane[] _frustumPlanes;
-        private bool _frustumPlanesValid;
 
         public PreviewRenderingOptimizer()
         {
@@ -43,8 +38,15 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             _propertyBlocks = propertyBlocks;
         }
 
+        public void Dispose()
+        {
+            ClearBatches();
+            _propertyBlocks?.Clear();
+            _instanceColors = null;
+        }
+
         /// <summary>
-        /// 添加渲染项到批次中
+        ///     添加渲染项到批次中
         /// </summary>
         public void AddRenderItem(Mesh mesh, Material material, Matrix4x4 matrix, Color color = default)
         {
@@ -53,7 +55,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             // 查找或创建批次
             var batchIndex = FindOrCreateBatch(mesh, material);
             var batch = _renderBatches[batchIndex];
-            
+
             if (batch.Count < MaxInstancesPerBatch)
             {
                 batch.Matrices[batch.Count] = matrix;
@@ -67,7 +69,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 执行批量渲染
+        ///     执行批量渲染
         /// </summary>
         public void ExecuteBatchedRender(Camera camera = null)
         {
@@ -93,15 +95,15 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 {
                     // 批量实例化渲染
                     Graphics.DrawMeshInstanced(
-                        batch.Mesh, 
-                        0, 
-                        batch.Material, 
-                        batch.Matrices, 
-                        visibleCount, 
-                        _sharedPropertyBlock, 
-                        UnityEngine.Rendering.ShadowCastingMode.Off, 
-                        false, 
-                        0, 
+                        batch.Mesh,
+                        0,
+                        batch.Material,
+                        batch.Matrices,
+                        visibleCount,
+                        _sharedPropertyBlock,
+                        ShadowCastingMode.Off,
+                        false,
+                        0,
                         camera
                     );
                 }
@@ -109,7 +111,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 清空所有渲染批次
+        ///     清空所有渲染批次
         /// </summary>
         public void ClearBatches()
         {
@@ -117,7 +119,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 设置全局渲染属性
+        ///     设置全局渲染属性
         /// </summary>
         public void SetGlobalProperty(string propertyName, float value)
         {
@@ -140,7 +142,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 查找或创建渲染批次
+        ///     查找或创建渲染批次
         /// </summary>
         private int FindOrCreateBatch(Mesh mesh, Material material)
         {
@@ -162,13 +164,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 Matrices = new Matrix4x4[MaxInstancesPerBatch],
                 Count = 0
             };
-            
+
             _renderBatches.Add(newBatch);
             return _renderBatches.Count - 1;
         }
 
         /// <summary>
-        /// 更新视锥体平面
+        ///     更新视锥体平面
         /// </summary>
         private void UpdateFrustumPlanes(Camera camera)
         {
@@ -186,7 +188,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 执行视锥体剔除
+        ///     执行视锥体剔除
         /// </summary>
         private int PerformFrustumCulling(RenderBatch batch)
         {
@@ -202,7 +204,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             {
                 // 变换边界框到世界空间
                 var worldBounds = TransformBounds(meshBounds, batch.Matrices[i]);
-                
+
                 // 视锥体测试
                 if (GeometryUtility.TestPlanesAABB(_frustumPlanes, worldBounds))
                 {
@@ -220,30 +222,31 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 变换边界框到世界空间
+        ///     变换边界框到世界空间
         /// </summary>
         private Bounds TransformBounds(Bounds localBounds, Matrix4x4 transform)
         {
             var center = transform.MultiplyPoint3x4(localBounds.center);
             var extents = localBounds.extents;
-            
+
             // 计算变换后的边界框
             var newExtents = Vector3.zero;
             for (var i = 0; i < 3; i++)
             {
                 newExtents[i] = Mathf.Abs(transform[i, 0] * extents.x) +
-                               Mathf.Abs(transform[i, 1] * extents.y) +
-                               Mathf.Abs(transform[i, 2] * extents.z);
+                                Mathf.Abs(transform[i, 1] * extents.y) +
+                                Mathf.Abs(transform[i, 2] * extents.z);
             }
-            
+
             return new Bounds(center, newExtents * 2);
         }
 
-        public void Dispose()
+        private struct RenderBatch
         {
-            ClearBatches();
-            _propertyBlocks?.Clear();
-            _instanceColors = null;
+            public Mesh Mesh;
+            public Material Material;
+            public Matrix4x4[] Matrices;
+            public int Count;
         }
     }
 }

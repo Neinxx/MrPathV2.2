@@ -1,31 +1,20 @@
 using System;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2._2.Runtime.Preview
+namespace MrPathV2._2.Runtime.Preview
 {
     /// <summary>
-    /// 基于 <see cref="RoadPreviewMeshGenerator"/> 的轻量级预览网格控制器。
-    /// 负责：
-    /// 1. 持有并调度 RoadPreviewMeshGenerator 进行数据生成;
-    /// 2. 将生成的 NativeArray 数据上传到 UnityEngine.Mesh;
-    /// 不再自行管理 JobData，确保与数据层解耦。
+    ///     基于 <see cref="RoadPreviewMeshGenerator" /> 的轻量级预览网格控制器。
+    ///     负责：
+    ///     1. 持有并调度 RoadPreviewMeshGenerator 进行数据生成;
+    ///     2. 将生成的 NativeArray 数据上传到 UnityEngine.Mesh;
+    ///     不再自行管理 JobData，确保与数据层解耦。
     /// </summary>
     public sealed class GeneratorPreviewMeshController : IDisposable
     {
-        private readonly RoadPreviewMeshGenerator _meshGenerator;
-        private readonly TempIndicesManager _tempIndicesManager;
-
-        public GeneratorPreviewMeshController()
-        {
-            _meshGenerator = new RoadPreviewMeshGenerator();
-            _tempIndicesManager = new TempIndicesManager();
-
-            PreviewMesh = new Mesh { name = "Path Preview Mesh" };
-            PreviewMesh.MarkDynamic();
-            PreviewMesh.hideFlags = HideFlags.HideAndDontSave;
-        }
 
         public enum MeshGenerationState
         {
@@ -35,17 +24,133 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             Failed
         }
 
+        private readonly RoadPreviewMeshGenerator _meshGenerator;
+        private readonly TempIndicesManager _tempIndicesManager;
+
+        public GeneratorPreviewMeshController()
+        {
+            _meshGenerator = new RoadPreviewMeshGenerator();
+            _tempIndicesManager = new TempIndicesManager();
+
+            PreviewMesh = new Mesh
+            {
+                name = "Path Preview Mesh"
+            };
+            PreviewMesh.MarkDynamic();
+            PreviewMesh.hideFlags = HideFlags.HideAndDontSave;
+        }
+
         private MeshGenerationState State { get; set; } = MeshGenerationState.Idle;
 
         /// <summary>
-        /// 公开 Mesh 供外部渲染
+        ///     公开 Mesh 供外部渲染
         /// </summary>
         public Mesh PreviewMesh { get; private set; }
 
+        public void Dispose()
+        {
+            _meshGenerator?.Dispose();
+            _tempIndicesManager?.Dispose();
+            if (PreviewMesh != null)
+            {
+                Object.DestroyImmediate(PreviewMesh);
+                PreviewMesh = null;
+            }
+        }
+
+        private bool ApplyMeshData()
+        {
+            //  Debug.Log("[GeneratorPreviewMeshController] ApplyMeshData invoked");
+            if (_meshGenerator.State != RoadPreviewMeshGenerator.GenerationState.Ready)
+            {
+                State = MeshGenerationState.Failed;
+                return false;
+            }
+
+            var vertices = _meshGenerator.Vertices;
+            var uvs = _meshGenerator.UVs;
+            var colors = _meshGenerator.Colors;
+            var indices = _meshGenerator.Indices;
+
+            if (!vertices.IsCreated || !indices.IsCreated || vertices.Length == 0 || indices.Length == 0)
+            {
+                Debug.LogError($"[GeneratorPreviewMeshController] Invalid mesh data - verticesCreated={vertices.IsCreated}, indicesCreated={indices.IsCreated}, vertexCount={vertices.Length}, indexCount={indices.Length}");
+                State = MeshGenerationState.Failed;
+                return false;
+            }
+
+            try
+            {
+                PreviewMesh.Clear(false);
+
+                var vertexCount = vertices.Length;
+                var indexCount = indices.Length;
+                var indexFormat = vertexCount > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
+                PreviewMesh.indexFormat = indexFormat;
+
+                var layout = new[]
+                {
+                    new VertexAttributeDescriptor(VertexAttribute.Position),
+                    new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2, 1),
+                    new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4, 2)
+                };
+                PreviewMesh.SetVertexBufferParams(vertexCount, layout);
+
+                PreviewMesh.SetVertexBufferData(vertices, 0, 0, vertexCount, 0, MeshUpdateFlags.DontRecalculateBounds);
+                PreviewMesh.SetVertexBufferData(uvs, 0, 0, vertexCount, 1, MeshUpdateFlags.DontRecalculateBounds);
+                PreviewMesh.SetVertexBufferData(colors, 0, 0, vertexCount, 2, MeshUpdateFlags.DontRecalculateBounds);
+
+                PreviewMesh.SetIndexBufferParams(indexCount, indexFormat);
+
+                if (indexFormat == IndexFormat.UInt16)
+                {
+                    var temp = _tempIndicesManager.GetOrCreateIndices(indexCount);
+                    _tempIndicesManager.FillIndices(indices, indexCount);
+                    PreviewMesh.SetIndexBufferData(temp, 0, 0, indexCount, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
+                }
+                else
+                {
+                    PreviewMesh.SetIndexBufferData(indices, 0, 0, indexCount, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
+                }
+
+                PreviewMesh.subMeshCount = 1;
+                var subDesc = new SubMeshDescriptor(0, indexCount)
+                {
+                    vertexCount = vertexCount
+                };
+                PreviewMesh.SetSubMesh(0, subDesc, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
+
+                PreviewMesh.RecalculateBounds();
+                //   Debug.Log($"[GeneratorPreviewMeshController] Mesh bounds computed center={b.center}, size={b.size}, vertexCount={vertexCount}, firstVertex={vertices[0]}");
+                PreviewMesh.UploadMeshData(false);
+
+                // 完成后重置状态
+
+                DisposeCurrentJob();
+                State = MeshGenerationState.Ready; // 保持 Ready 状态，避免重复刷新
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"GeneratorPreviewMeshController 应用网格数据失败: {ex.Message}");
+                State = MeshGenerationState.Failed;
+                return false;
+            }
+        }
+
+        private void DisposeCurrentJob()
+        {
+            if (_meshGenerator != null)
+            {
+                _meshGenerator.ForceComplete();
+            }
+        }
+
         #region API 与旧 PreviewMeshController 保持一致
+
         public void StartMeshGeneration(PathSpine spine, PathProfile profile)
         {
-           // Debug.Log("[GeneratorPreviewMeshController] StartMeshGeneration invoked");
+            // Debug.Log("[GeneratorPreviewMeshController] StartMeshGeneration invoked");
             // 先重置
             DisposeCurrentJob();
 
@@ -99,102 +204,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             State = MeshGenerationState.Ready;
             return ApplyMeshData();
         }
+
         #endregion
-
-        private bool ApplyMeshData()
-        {
-          //  Debug.Log("[GeneratorPreviewMeshController] ApplyMeshData invoked");
-            if (_meshGenerator.State != RoadPreviewMeshGenerator.GenerationState.Ready)
-            {
-                State = MeshGenerationState.Failed;
-                return false;
-            }
-
-            var vertices = _meshGenerator.Vertices;
-            var uvs = _meshGenerator.UVs;
-            var colors = _meshGenerator.Colors;
-            var indices = _meshGenerator.Indices;
-
-            if (!vertices.IsCreated || !indices.IsCreated || vertices.Length == 0 || indices.Length == 0)
-            {
-                Debug.LogError($"[GeneratorPreviewMeshController] Invalid mesh data - verticesCreated={vertices.IsCreated}, indicesCreated={indices.IsCreated}, vertexCount={vertices.Length}, indexCount={indices.Length}");
-                State = MeshGenerationState.Failed;
-                return false;
-            }
-
-            try
-            {
-                PreviewMesh.Clear(false);
-
-                var vertexCount = vertices.Length;
-                var indexCount = indices.Length;
-                var indexFormat = vertexCount > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-                PreviewMesh.indexFormat = indexFormat;
-
-                var layout = new[]
-                {
-                    new VertexAttributeDescriptor(VertexAttribute.Position),
-                    new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2, stream: 1),
-                    new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4, stream: 2)
-                };
-                PreviewMesh.SetVertexBufferParams(vertexCount, layout);
-
-                PreviewMesh.SetVertexBufferData(vertices, 0, 0, vertexCount, stream: 0, MeshUpdateFlags.DontRecalculateBounds);
-                PreviewMesh.SetVertexBufferData(uvs, 0, 0, vertexCount, stream: 1, MeshUpdateFlags.DontRecalculateBounds);
-                PreviewMesh.SetVertexBufferData(colors, 0, 0, vertexCount, stream: 2, MeshUpdateFlags.DontRecalculateBounds);
-
-                PreviewMesh.SetIndexBufferParams(indexCount, indexFormat);
-
-                if (indexFormat == IndexFormat.UInt16)
-                {
-                    var temp = _tempIndicesManager.GetOrCreateIndices(indexCount);
-                    _tempIndicesManager.FillIndices(indices, indexCount);
-                    PreviewMesh.SetIndexBufferData(temp, 0, 0, indexCount, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
-                }
-                else
-                {
-                    PreviewMesh.SetIndexBufferData(indices, 0, 0, indexCount, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
-                }
-
-                PreviewMesh.subMeshCount = 1;
-                var subDesc = new SubMeshDescriptor(0, indexCount) { vertexCount = vertexCount };
-                PreviewMesh.SetSubMesh(0, subDesc, MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds);
-
-                PreviewMesh.RecalculateBounds();
-                //   Debug.Log($"[GeneratorPreviewMeshController] Mesh bounds computed center={b.center}, size={b.size}, vertexCount={vertexCount}, firstVertex={vertices[0]}");
-                PreviewMesh.UploadMeshData(false);
-
-                // 完成后重置状态
-
-                DisposeCurrentJob();
-                State = MeshGenerationState.Ready; // 保持 Ready 状态，避免重复刷新
-                 return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"GeneratorPreviewMeshController 应用网格数据失败: {ex.Message}");
-                State = MeshGenerationState.Failed;
-                return false;
-            }
-        }
-
-        private void DisposeCurrentJob()
-        {
-            if (_meshGenerator != null)
-            {
-                _meshGenerator.ForceComplete();
-            }
-        }
-
-        public void Dispose()
-        {
-            _meshGenerator?.Dispose();
-            _tempIndicesManager?.Dispose();
-            if (PreviewMesh != null)
-            {
-                UnityEngine.Object.DestroyImmediate(PreviewMesh);
-                PreviewMesh = null;
-            }
-        }
     }
 }

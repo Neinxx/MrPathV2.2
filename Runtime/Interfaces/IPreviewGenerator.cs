@@ -1,40 +1,40 @@
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Interfaces
+namespace MrPathV2._2.Runtime.Interfaces
 {
 
     /// <summary>
-    /// 路径预览网格生成器接口。用于解耦具体实现与工具逻辑。
+    ///     路径预览网格生成器接口。用于解耦具体实现与工具逻辑。
     /// </summary>
     public interface IPreviewGenerator
     {
         /// <summary>
-        /// 获取当前已生成的预览网格。
+        ///     获取当前已生成的预览网格。
         /// </summary>
         Mesh PreviewMesh { get; }
 
         /// <summary>
-        /// 启动异步网格生成流程。
+        ///     启动异步网格生成流程。
         /// </summary>
         /// <param name="spine">路径脊线采样数据</param>
         /// <param name="profile">路径外观配置</param>
         void StartMeshGeneration(PathSpine spine, PathProfile profile);
 
         /// <summary>
-        /// 尝试完成生成并返回是否成功完成。
+        ///     尝试完成生成并返回是否成功完成。
         /// </summary>
         /// <returns>是否完成并已更新 PreviewMesh</returns>
         bool TryFinalizeMesh();
 
         /// <summary>
-        /// 强制等待Job完成并完成网格生成。
+        ///     强制等待Job完成并完成网格生成。
         /// </summary>
         /// <returns>是否成功完成网格生成</returns>
         bool ForceFinalizeMesh();
 
         /// <summary>
-        /// 释放内部资源（如Job与Mesh）。
+        ///     释放内部资源（如Job与Mesh）。
         /// </summary>
         void Dispose();
     }

@@ -1,20 +1,20 @@
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Input
+namespace MrPathV2._2.Editor.Input
 {
     /// <summary>
-    /// 【不动明王之掌 • 终极版】
-    /// 专职处理用户输入的"护法"。其心不动，洞悉万般意图；其掌既出，招式分明。
-    /// 采用"意图驱动"设计，将输入事件的"解析"与"执行"分离，清净优雅。
+    ///     【不动明王之掌 • 终极版】
+    ///     专职处理用户输入的"护法"。其心不动，洞悉万般意图；其掌既出，招式分明。
+    ///     采用"意图驱动"设计，将输入事件的"解析"与"执行"分离，清净优雅。
     /// </summary>
     public class PathInputHandler
     {
         private const int ControlId = 654321; // 固定控制ID，避免与其他控件冲突
 
         /// <summary>
-        /// 处理所有输入事件，并根据解析出的意图，对PathCreator执行操作。
+        ///     处理所有输入事件，并根据解析出的意图，对PathCreator执行操作。
         /// </summary>
         public void HandleInputEvents(Event evt, PathCreator creator, float hoveredPathT, int hoveredPointIndex)
         {
@@ -60,7 +60,7 @@ namespace __temp.MrPathV2._2.Editor.Input
         }
 
         /// <summary>
-        /// 从事件中解析并生成对应的路径操作命令
+        ///     从事件中解析并生成对应的路径操作命令
         /// </summary>
         private PathChangeCommand ResolveCommandFromEvent(Event evt, PathCreator creator, float hoveredPathT, int hoveredPointIndex)
         {
@@ -72,33 +72,33 @@ namespace __temp.MrPathV2._2.Editor.Input
         }
 
         /// <summary>
-        /// 解析鼠标按下事件，生成对应的操作命令
+        ///     解析鼠标按下事件，生成对应的操作命令
         /// </summary>
         private PathChangeCommand ResolveMouseDownCommand(Event evt, PathCreator creator, float hoveredPathT, int hoveredPointIndex)
         {
             return evt.button switch
             {
-                0 => ResolveLeftClickCommand(evt, creator, hoveredPathT),    // 左键操作
+                0 => ResolveLeftClickCommand(evt, creator, hoveredPathT), // 左键操作
                 1 => ResolveRightClickCommand(evt, creator, hoveredPointIndex), // 右键操作
                 _ => null // 忽略中键等其他按键
             };
         }
 
         /// <summary>
-        /// 解析左键点击命令
+        ///     解析左键点击命令
         /// </summary>
         private PathChangeCommand ResolveLeftClickCommand(Event evt, PathCreator creator, float hoveredPathT)
         {
             // Shift+左键：在路径上插入点
             if (evt.shift && IsValidHoverT(hoveredPathT))
             {
-                int segmentIndex = Mathf.FloorToInt(hoveredPathT);
-                Vector3 insertionPoint = creator.GetPointAt(hoveredPathT);
+                var segmentIndex = Mathf.FloorToInt(hoveredPathT);
+                var insertionPoint = creator.GetPointAt(hoveredPathT);
                 return new InsertPointCommand(segmentIndex, insertionPoint);
             }
 
             // Ctrl+左键：在射线检测点添加新点
-            if (evt.control && TryGetRaycastHitPoint(evt.mousePosition, out Vector3 hitPoint))
+            if (evt.control && TryGetRaycastHitPoint(evt.mousePosition, out var hitPoint))
             {
                 return new AddPointCommand(hitPoint);
             }
@@ -107,7 +107,7 @@ namespace __temp.MrPathV2._2.Editor.Input
         }
 
         /// <summary>
-        /// 解析右键点击命令
+        ///     解析右键点击命令
         /// </summary>
         private PathChangeCommand ResolveRightClickCommand(Event evt, PathCreator creator, int hoveredPointIndex)
         {
@@ -127,7 +127,7 @@ namespace __temp.MrPathV2._2.Editor.Input
         }
 
         /// <summary>
-        /// 执行命令并记录撤销操作
+        ///     执行命令并记录撤销操作
         /// </summary>
         private void ExecuteCommandWithUndo(PathCreator creator, PathChangeCommand command)
         {
@@ -137,7 +137,7 @@ namespace __temp.MrPathV2._2.Editor.Input
         }
 
         /// <summary>
-        /// 尝试创建清空路径命令（带确认对话框）
+        ///     尝试创建清空路径命令（带确认对话框）
         /// </summary>
         private PathChangeCommand TryCreateClearCommand(PathCreator creator)
         {
@@ -153,11 +153,11 @@ namespace __temp.MrPathV2._2.Editor.Input
         }
 
         /// <summary>
-        /// 射线检测获取世界坐标点
+        ///     射线检测获取世界坐标点
         /// </summary>
         private bool TryGetRaycastHitPoint(Vector2 screenPos, out Vector3 hitPoint)
         {
-            if (Physics.Raycast(HandleUtility.GUIPointToWorldRay(screenPos), out RaycastHit hit))
+            if (Physics.Raycast(HandleUtility.GUIPointToWorldRay(screenPos), out var hit))
             {
                 hitPoint = hit.point;
                 return true;

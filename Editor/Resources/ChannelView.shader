@@ -7,7 +7,10 @@ Shader "Hidden/MrPath/ChannelView"
     }
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "Queue" = "Overlay" }
+        Tags
+        {
+            "RenderType" = "Opaque" "Queue" = "Overlay"
+        }
         Pass
         {
             ZWrite Off
@@ -18,21 +21,19 @@ Shader "Hidden/MrPath/ChannelView"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            struct appdata
-            {
+            struct appdata {
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
             };
 
-            struct v2f
-            {
+            struct v2f {
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
             };
 
             sampler2D _MainTex;
-            float4 _MainTex_ST;
-            float _Channel;
+            float4    _MainTex_ST;
+            float     _Channel;
 
             v2f vert(appdata v)
             {
@@ -45,11 +46,11 @@ Shader "Hidden/MrPath/ChannelView"
             fixed4 frag(v2f i) : SV_Target
             {
                 fixed4 c = tex2D(_MainTex, i.uv);
-                if (_Channel < 0.5) return c; // RGB
+                if(_Channel < 0.5) return c; // RGB
                 fixed v = 0;
-                if (_Channel < 1.5) v = c.r; // R
-                else if (_Channel < 2.5) v = c.g; // G
-                else if (_Channel < 3.5) v = c.b; // B
+                if(_Channel < 1.5) v = c.r; // R
+                else if(_Channel < 2.5) v = c.g; // G
+                else if(_Channel < 3.5) v = c.b; // B
                 else v = c.a; // A
                 return fixed4(v, v, v, 1);
             }

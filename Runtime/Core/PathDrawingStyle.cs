@@ -1,14 +1,15 @@
 // PathDrawingStyle.cs
 
+using System;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     /// <summary>
-    /// 【第一步：铸造风骨】
-    /// 定义了一个可序列化的、独立的Handle样式。
+    ///     【第一步：铸造风骨】
+    ///     定义了一个可序列化的、独立的Handle样式。
     /// </summary>
-    [System.Serializable]
+    [Serializable]
     public class HandleStyle
     {
         [Tooltip("Handle的填充颜色")]
@@ -21,10 +22,10 @@ namespace __temp.MrPathV2._2.Runtime.Core
     }
 
     /// <summary>
-    /// 定义了一条曲线在编辑器中绘制时所需的完整样式集。
-    /// 它将被直接包含在 PathStrategy 资产中。
+    ///     定义了一条曲线在编辑器中绘制时所需的完整样式集。
+    ///     它将被直接包含在 PathStrategy 资产中。
     /// </summary>
-    [System.Serializable]
+    [Serializable]
     public class PathDrawingStyle
     {
         [Header("曲线样式")]
@@ -48,6 +49,6 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
         [Header("辅助线样式")]
         [Tooltip("连接主节点和切线控制点的虚线颜色")]
-        public Color bezierControlLineColor = new(1, 1, 1, 0.4f);
+        public Color bezierControlLineColor = new Color(1, 1, 1, 0.4f);
     }
 }

@@ -1,10 +1,12 @@
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using __temp.MrPathV2._2.Editor.Operations;
-using __temp.MrPathV2._2.Editor.Settings;
+using MrPathV2._2.Editor.Operations;
+using MrPathV2._2.Editor.Settings;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathTerrainOperations))]
     public class MrPathTerrainOperationsEditor : UnityEditor.Editor
@@ -37,7 +39,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             var existingAsset = AssetDatabase.LoadAssetAtPath<MrPathTerrainOperations>(path);
             if (existingAsset == null)
             {
-                EnsureFolderExists(System.IO.Path.GetDirectoryName(path));
+                EnsureFolderExists(Path.GetDirectoryName(path));
                 existingAsset = CreateInstance<MrPathTerrainOperations>();
                 AssetDatabase.CreateAsset(existingAsset, path);
                 Debug.Log("默认地形操作资产已创建: " + path);
@@ -45,16 +47,16 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             // 收集所有 PathTerrainOperation 资产并填充到列表
             // 先尝试通过反射查找所有派生自 PathTerrainOperation 的具体类型（非抽象）
-            var concreteTypes = UnityEditor.TypeCache.GetTypesDerivedFrom<PathTerrainOperation>()
+            var concreteTypes = TypeCache.GetTypesDerivedFrom<PathTerrainOperation>()
                 .Where(t => t is { IsAbstract: false, IsClass: true }).ToList();
-            
+
             // 用于存放最终结果的列表
-            var foundOpsList = new System.Collections.Generic.List<PathTerrainOperation>();
-            
+            var foundOpsList = new List<PathTerrainOperation>();
+
             // 目标文件夹：将所有操作资产集中放在 TerrainOperations 子文件夹下
             var opsFolder = settingsPath + "/TerrainOperations/Operations";
             EnsureFolderExists(opsFolder);
-            
+
             foreach (var type in concreteTypes)
             {
                 // 先尝试查找已经存在的资产
@@ -65,21 +67,21 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                     var assetPath = AssetDatabase.GUIDToAssetPath(guids[0]);
                     opAsset = AssetDatabase.LoadAssetAtPath(assetPath, type) as PathTerrainOperation;
                 }
-            
+
                 // 如果仍未找到，则创建一个新的资产
                 if (opAsset == null)
                 {
-                    opAsset = ScriptableObject.CreateInstance(type) as PathTerrainOperation;
+                    opAsset = CreateInstance(type) as PathTerrainOperation;
                     var assetPath = $"{opsFolder}/{type.Name}.asset";
                     AssetDatabase.CreateAsset(opAsset, assetPath);
                     Debug.Log($"已创建缺失的 PathTerrainOperation 资产: {assetPath}");
                 }
-            
+
                 if (opAsset != null) foundOpsList.Add(opAsset);
             }
-            
+
             var foundOps = foundOpsList.OrderBy(op => op.order).ToArray();
-            
+
             if (foundOps.Length == 0)
             {
                 Debug.LogWarning("未找到任何 PathTerrainOperation 资产，无法填充默认地形操作。");
@@ -87,26 +89,23 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             existingAsset.operations = foundOps;
             EditorUtility.SetDirty(existingAsset);
             AssetDatabase.SaveAssets();
-            
+
             // 将填充后的 operations 赋值给当前目标对象
             targetObject.operations = existingAsset.operations;
             EditorUtility.SetDirty(targetObject);
         }
 
-        private string GetSettingsPath()
-        {
-            return MrPathProjectSettings.GetSettingsRootFolder();
-        }
+        private string GetSettingsPath() => MrPathProjectSettings.GetSettingsRootFolder();
 
         /// <summary>
-        /// 确保指定文件夹存在（递归创建）。
+        ///     确保指定文件夹存在（递归创建）。
         /// </summary>
         private static void EnsureFolderExists(string folderPath)
         {
             if (AssetDatabase.IsValidFolder(folderPath)) return;
 
-            var parent = System.IO.Path.GetDirectoryName(folderPath);
-            var folderName = System.IO.Path.GetFileName(folderPath);
+            var parent = Path.GetDirectoryName(folderPath);
+            var folderName = Path.GetFileName(folderPath);
             if (!AssetDatabase.IsValidFolder(parent))
             {
                 EnsureFolderExists(parent);

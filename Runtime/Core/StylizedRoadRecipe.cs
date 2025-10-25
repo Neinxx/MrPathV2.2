@@ -2,14 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Sirenix.OdinInspector;
-using UnityEngine;
-#if UNITY_EDITOR
-using UnityEditor;
 using Sirenix.Utilities.Editor;
-#endif
+using UnityEditor;
+using UnityEngine;
 
-
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "StylizedRoadRecipe", menuName = "MrPath/Stylized Road Recipe")]
     public class StylizedRoadRecipe : ScriptableObject
@@ -37,7 +34,25 @@ namespace __temp.MrPathV2._2.Runtime.Core
             OnBeginListElementGUI = nameof(BeginListElement),
             OnEndListElementGUI = nameof(EndListElement)
         )]
-        public List<RoadLayer> layers = new();
+        public List<RoadLayer> layers = new List<RoadLayer>();
+
+        public int ActiveLayerCount => layers.Count(l => l?.enabled == true);
+
+        private void OnValidate()
+        {
+            layers ??= new List<RoadLayer>();
+            RaiseRecipeChanged();
+        }
+
+        // =============== Events & Utilities ===============
+        public event Action RecipeChanged;
+
+        public void RaiseRecipeChanged()
+        {
+            RecipeChanged?.Invoke();
+        }
+
+        public IReadOnlyList<RoadLayer> GetLayers() => layers;
 
         // =============== Editor-only Fields ===============
 #if UNITY_EDITOR
@@ -54,20 +69,20 @@ namespace __temp.MrPathV2._2.Runtime.Core
         {
             if (index < 0 || index >= layers.Count) return;
 
-            Rect boxRect = SirenixEditorGUI.BeginBox();
-            RoadLayer element = layers[index];
+            var boxRect = SirenixEditorGUI.BeginBox();
+            var element = layers[index];
 
             // 动态计算 toggle 位置：避免硬编码
             const float toggleSize = 18f;
             const float paddingFromRight = 42f; // 给删除按钮留出空间
-            Rect toggleRect = new Rect(
-                x: boxRect.xMax - paddingFromRight,
-                y: boxRect.yMin + 2f,
-                width: toggleSize,
-                height: toggleSize
+            var toggleRect = new Rect(
+                boxRect.xMax - paddingFromRight,
+                boxRect.yMin + 2f,
+                toggleSize,
+                toggleSize
             );
 
-            bool newEnabled = GUI.Toggle(toggleRect, element.enabled, GUIContent.none);
+            var newEnabled = GUI.Toggle(toggleRect, element.enabled, GUIContent.none);
             if (newEnabled != element.enabled)
             {
                 Undo.RecordObject(this, "Toggle RoadLayer Enabled");
@@ -82,23 +97,5 @@ namespace __temp.MrPathV2._2.Runtime.Core
             SirenixEditorGUI.EndBox();
         }
 #endif
-
-        // =============== Events & Utilities ===============
-        public event Action RecipeChanged;
-
-        public void RaiseRecipeChanged()
-        {
-            RecipeChanged?.Invoke();
-        }
-
-        private void OnValidate()
-        {
-            layers ??= new List<RoadLayer>();
-            RaiseRecipeChanged();
-        }
-
-        public IReadOnlyList<RoadLayer> GetLayers() => layers;
-
-        public int ActiveLayerCount => layers.Count(l => l?.enabled == true);
     }
 }

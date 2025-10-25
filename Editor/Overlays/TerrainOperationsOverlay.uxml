@@ -1,13 +1,14 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
-    <Style src="project://database/Assets/MrPathV2.2/Editor/Overlays/TerrainOperationsOverlay.uss?fileID=7433441132597879392&amp;guid=8c64c8cb499234c44b0cc473d98f4348&amp;type=3#TerrainOperationsOverlay" />
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/MrPathV2.2/Editor/Overlays/TerrainOperationsOverlay.uss?fileID=7433441132597879392&amp;guid=8c64c8cb499234c44b0cc473d98f4348&amp;type=3#TerrainOperationsOverlay"/>
     <ui:VisualElement name="root" style="flex-shrink: 1; flex-grow: 1;">
-        <ui:Label name="header" text="MR.PATH" />
+        <ui:Label name="header" text="Mr.Path V2" style="color: rgba(231, 136, 62, 255);"/>
         <ui:VisualElement style="justify-content: space-between; align-items: stretch;">
-            <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]" name="CpuOrGpu" style="flex-shrink: 1;" />
+            <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]" name="CpuOrGpu"
+                              style="flex-shrink: 1;"/>
         </ui:VisualElement>
         <ui:VisualElement name="operationsContainerWrapper">
-            <ui:VisualElement name="operationsContainer" />
+            <ui:VisualElement name="operationsContainer"/>
         </ui:VisualElement>
-        <ui:Toggle name="gpuPreviewToggle" text="实时GPU预览" />
+        <ui:Toggle name="gpuPreviewToggle" text="实时GPU预览"/>
     </ui:VisualElement>
 </ui:UXML>

@@ -1,14 +1,15 @@
 // 文件: __temp.MrPathV2._2.Runtime.Jobs.PaintSplatmapJob.cs
+
 using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// 两阶段地形绘制的第二阶段：读取缓存信息并执行混合。
+    ///     两阶段地形绘制的第二阶段：读取缓存信息并执行混合。
     /// </summary>
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
     public struct PaintSplatmapJob : IJobParallelFor
@@ -64,30 +65,30 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         #region 私有优化方法
 
         /// <summary>
-        /// 应用纹理混合算法 (使用缓存的 Dist 和 Progress)
+        ///     应用纹理混合算法 (使用缓存的 Dist 和 Progress)
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ApplyTextureBlending(int pixelIndex, float normalizedDist, float pathProgress)
         {
             var baseAlphaIndex = pixelIndex * AlphamapLayerCount;
-            
+
             if (baseAlphaIndex < 0 || baseAlphaIndex + AlphamapLayerCount > Alphamaps.Length)
                 return;
 
-            for(var l=0; l<AlphamapLayerCount; l++)
+            for (var l = 0; l < AlphamapLayerCount; l++)
             {
                 Alphamaps[baseAlphaIndex + l] = 0f;
             }
 
             var anyLayerPainted = false;
             var firstValidSplatIndex = -1;
-            
+
             for (var layerIndex = 0; layerIndex < Recipe.Length; layerIndex++)
             {
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
-                if (splatIndex < 0 || splatIndex >= AlphamapLayerCount) 
+                if (splatIndex < 0 || splatIndex >= AlphamapLayerCount)
                     continue;
-                
+
                 if (firstValidSplatIndex == -1)
                     firstValidSplatIndex = splatIndex;
 
@@ -98,16 +99,16 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 {
                     // 假设 SampleMaskAtlas 已更新为接受 pathProgress
                     maskValue = TerrainJobsUtility.SampleMaskAtlas(
-                        Recipe.MaskAtlas, Recipe.AtlasWidth,  Recipe.PathSamples,
+                        Recipe.MaskAtlas, Recipe.AtlasWidth, Recipe.PathSamples,
                         layerIndex, normalizedDist, pathProgress);
                 }
                 else if (Recipe.Strips.IsCreated)
                 {
-                     // Strips (1D) 无法使用 pathProgress
-                     maskValue = TerrainJobsUtility.EvaluateStrip(
+                    // Strips (1D) 无法使用 pathProgress
+                    maskValue = TerrainJobsUtility.EvaluateStrip(
                         Recipe.Strips, Recipe.StripSlices[layerIndex],
                         Recipe.StripResolution, normalizedDist);
-                     maskValue *= Recipe.Opacities[layerIndex]; // Strips 似乎预乘了 opacity? 检查 RecipeData
+                    maskValue *= Recipe.Opacities[layerIndex]; // Strips 似乎预乘了 opacity? 检查 RecipeData
                 }
                 else
                 {
@@ -121,7 +122,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 var alphaMapIndex = baseAlphaIndex + splatIndex;
                 var currentValue = Alphamaps[alphaMapIndex];
                 var blendedValue = TerrainJobsUtility.Blend(currentValue, maskValue, Recipe.BlendModes[layerIndex]);
-                
+
                 Alphamaps[alphaMapIndex] = blendedValue;
             }
 

@@ -1,31 +1,46 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Memory;
-using MrPathV2.Memory;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Preview
+namespace MrPathV2._2.Runtime.Preview
 {
     /// <summary>
-    /// 预览线条渲染器 - 统一管理所有预览相关的线条绘制
-    /// 应用最佳实践：职责分离、性能优化、可扩展设计
+    ///     预览线条渲染器 - 统一管理所有预览相关的线条绘制
+    ///     应用最佳实践：职责分离、性能优化、可扩展设计
     /// </summary>
     public class PreviewLineRenderer : IDisposable
     {
+
+        #region IDisposable
+
+        public void Dispose()
+        {
+            _tempPointsOwner?.Dispose();
+
+            _lineSegments?.Clear();
+
+            foreach (var batch in _batchedLines.Values)
+            {
+                batch?.Clear();
+            }
+        }
+
+        #endregion
         #region 线条类型定义
 
         public enum LineType
         {
-            PathCurve,          // 路径曲线
-            ControlLine,        // 控制线（贝塞尔）
-            WireframeEdge,      // 网格边框线
-            DebugLine,          // 调试线条
-            HandleConnection    // 控制点连接线
+            PathCurve, // 路径曲线
+            ControlLine, // 控制线（贝塞尔）
+            WireframeEdge, // 网格边框线
+            DebugLine, // 调试线条
+            HandleConnection // 控制点连接线
         }
 
         [Serializable]
@@ -142,7 +157,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         #region 公共API
 
         /// <summary>
-        /// 设置当前渲染相机（用于视锥体剔除）
+        ///     设置当前渲染相机（用于视锥体剔除）
         /// </summary>
         public void SetCamera(Camera camera)
         {
@@ -157,7 +172,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 添加单条线段
+        ///     添加单条线段
         /// </summary>
         public void AddLine(Vector3 start, Vector3 end, LineType type, LineStyle? customStyle = null, int priority = 0)
         {
@@ -176,7 +191,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 添加多段连续线条（如曲线）
+        ///     添加多段连续线条（如曲线）
         /// </summary>
         private void AddPolyLine(Vector3[] points, LineType type, LineStyle? customStyle = null, int priority = 0)
         {
@@ -200,7 +215,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 添加贝塞尔曲线
+        ///     添加贝塞尔曲线
         /// </summary>
         public void AddBezierCurve(Vector3 start, Vector3 end, Vector3 control1, Vector3 control2,
             LineType type, int resolution = 32, LineStyle? customStyle = null, int priority = 0)
@@ -210,7 +225,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 添加Catmull-Rom样条曲线
+        ///     添加Catmull-Rom样条曲线
         /// </summary>
         public void AddCatmullRomSpline(Vector3[] controlPoints, LineType type, int resolution = 16,
             LineStyle? customStyle = null, int priority = 0)
@@ -222,7 +237,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 清除所有线条
+        ///     清除所有线条
         /// </summary>
         public void Clear()
         {
@@ -235,7 +250,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 清除指定类型的线条
+        ///     清除指定类型的线条
         /// </summary>
         public void Clear(LineType type)
         {
@@ -245,7 +260,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 渲染所有线条
+        ///     渲染所有线条
         /// </summary>
         public void Render()
         {
@@ -268,7 +283,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 设置默认样式
+        ///     设置默认样式
         /// </summary>
         public void SetDefaultStyle(LineType type, LineStyle style)
         {
@@ -276,12 +291,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 获取默认样式
+        ///     获取默认样式
         /// </summary>
-        private LineStyle GetDefaultStyle(LineType type)
-        {
-            return _defaultStyles.TryGetValue(type, out var style) ? style : LineStyle.Default;
-        }
+        private LineStyle GetDefaultStyle(LineType type) => _defaultStyles.TryGetValue(type, out var style) ? style : LineStyle.Default;
 
         #endregion
 
@@ -429,23 +441,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 (-p0 + p2) * t +
                 (2f * p0 - 5f * p1 + 4f * p2 - p3) * tt +
                 (-p0 + 3f * p1 - 3f * p2 + p3) * ttt
-            );
-        }
-
-        #endregion
-
-        #region IDisposable
-
-        public void Dispose()
-        {
-            _tempPointsOwner?.Dispose();
-
-            _lineSegments?.Clear();
-
-            foreach (var batch in _batchedLines.Values)
-            {
-                batch?.Clear();
-            }
+                );
         }
 
         #endregion
@@ -453,7 +449,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         #region 性能配置
 
         /// <summary>
-        /// 启用/禁用视锥体剔除
+        ///     启用/禁用视锥体剔除
         /// </summary>
         public void SetFrustumCulling(bool enabled)
         {
@@ -461,7 +457,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 启用/禁用距离剔除
+        ///     启用/禁用距离剔除
         /// </summary>
         public void SetDistanceCulling(bool enabled, float maxDistance = 1000f)
         {
@@ -470,7 +466,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 获取当前线条统计信息
+        ///     获取当前线条统计信息
         /// </summary>
         public (int total, int rendered) GetRenderStats()
         {

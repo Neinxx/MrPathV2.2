@@ -1,28 +1,24 @@
+using System;
 using System.Linq;
-using __temp.MrPathV2._2.Editor.Terrain;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Editor.Terrain;
+using MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Tests
+namespace MrPathV2._2.Editor.Tests
 {
     /// <summary>
-    /// 多层WYSIWYG一致性测试
-    /// 验证预览材质与最终地形结果的视觉一致性
+    ///     多层WYSIWYG一致性测试
+    ///     验证预览材质与最终地形结果的视觉一致性
     /// </summary>
     public class MultiLayerWysiwygTest : EditorWindow
     {
-        [MenuItem("MrPath/Tests/Multi-Layer WYSIWYG Test")]
-        public static void ShowWindow()
-        {
-            GetWindow<MultiLayerWysiwygTest>("多层WYSIWYG测试");
-        }
 
         private PathCreator _pathCreator;
         private StylizedRoadRecipe _recipe;
-        private UnityEngine.Terrain _testTerrain;
         private bool _testInProgress;
         private string _testResults = "";
+        private UnityEngine.Terrain _testTerrain;
 
         private void OnGUI()
         {
@@ -71,6 +67,11 @@ namespace __temp.MrPathV2._2.Editor.Tests
                 CreateTestRecipe();
             }
         }
+        [MenuItem("MrPath/Tests/Multi-Layer WYSIWYG Test")]
+        public static void ShowWindow()
+        {
+            GetWindow<MultiLayerWysiwygTest>("多层WYSIWYG测试");
+        }
 
         private void StartWysiwygTest()
         {
@@ -80,33 +81,33 @@ namespace __temp.MrPathV2._2.Editor.Tests
             try
             {
                 // 验证配方层数
-                int layerCount = _recipe.GetLayers().Count;
+                var layerCount = _recipe.GetLayers().Count;
                 LogResult($"开始测试 - 配方包含 {layerCount} 层");
 
                 // 检查预览材质支持
-                bool supportsMultiLayer = CheckMultiLayerSupport();
+                var supportsMultiLayer = CheckMultiLayerSupport();
                 LogResult($"预览材质多层支持: {(supportsMultiLayer ? "✓" : "✗")}");
 
                 // 检查地形层数限制
-                bool terrainSupportsLayers = CheckTerrainLayerSupport();
+                var terrainSupportsLayers = CheckTerrainLayerSupport();
                 LogResult($"地形层数支持: {(terrainSupportsLayers ? "✓" : "✗")}");
 
                 // 验证LayerResolver
-                bool layerResolverOk = TestLayerResolver();
+                var layerResolverOk = TestLayerResolver();
                 LogResult($"LayerResolver无限制: {(layerResolverOk ? "✓" : "✗")}");
 
                 // 验证PaintSplatmapJob
-                bool paintJobOk = TestPaintSplatmapJob();
+                var paintJobOk = TestPaintSplatmapJob();
                 LogResult($"PaintSplatmapJob多层支持: {(paintJobOk ? "✓" : "✗")}");
 
                 // 总结
-                bool allTestsPassed = supportsMultiLayer && terrainSupportsLayers && layerResolverOk && paintJobOk;
-                LogResult($"\n=== 测试总结 ===");
+                var allTestsPassed = supportsMultiLayer && terrainSupportsLayers && layerResolverOk && paintJobOk;
+                LogResult("\n=== 测试总结 ===");
                 LogResult($"整体WYSIWYG一致性: {(allTestsPassed ? "✓ 通过" : "✗ 失败")}");
 
                 LogResult(allTestsPassed ? "🎉 多层支持已成功实现！预览与最终结果应保持一致。" : "⚠️ 发现问题，需要进一步调试。");
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 LogResult($"测试异常: {ex.Message}");
             }
@@ -127,9 +128,9 @@ namespace __temp.MrPathV2._2.Editor.Tests
             }
 
             LogResult("  - PathPreviewSplatMulti shader 已找到");
-            
+
             // 检查材质模板
-            string materialPath = "Assets/__temp/MrPathV2.2/Editor/Resources/PathPreviewSplatMultiMaterial.mat";
+            var materialPath = "Assets/__temp/MrPathV2.2/Editor/Resources/PathPreviewSplatMultiMaterial.mat";
             var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
             if (material == null)
             {
@@ -146,9 +147,9 @@ namespace __temp.MrPathV2._2.Editor.Tests
             if (_testTerrain?.terrainData == null)
                 return false;
 
-            int maxLayers = _testTerrain.terrainData.alphamapLayers;
+            var maxLayers = _testTerrain.terrainData.alphamapLayers;
             LogResult($"  - 当前地形支持最大层数: {maxLayers}");
-            
+
             // Unity理论上支持无限层数（通过多个control texture）
             return maxLayers >= 4; // 至少支持基本的4层
         }
@@ -157,7 +158,7 @@ namespace __temp.MrPathV2._2.Editor.Tests
         {
             // 创建一个包含多层的测试配方
             var testRecipe = CreateInstance<StylizedRoadRecipe>();
-            for (int i = 0; i < 8; i++)
+            for (var i = 0; i < 8; i++)
             {
                 testRecipe.layers.Add(new RoadLayer
                 {
@@ -170,11 +171,11 @@ namespace __temp.MrPathV2._2.Editor.Tests
             try
             {
                 // 测试LayerResolver是否会显示4层限制警告
-                var layerMap = LayerResolver.Resolve(_testTerrain, testRecipe, interactive: false);
+                var layerMap = LayerResolver.Resolve(_testTerrain, testRecipe, false);
                 LogResult($"  - LayerResolver处理了 {layerMap.Count} 层，无错误");
                 return true;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 LogResult($"  - LayerResolver错误: {ex.Message}");
                 return false;
@@ -193,14 +194,14 @@ namespace __temp.MrPathV2._2.Editor.Tests
             {
                 var terrainData = _testTerrain.terrainData;
                 var alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapResolution, terrainData.alphamapResolution);
-                
-                int layers = alphamaps.GetLength(2);
+
+                var layers = alphamaps.GetLength(2);
                 LogResult($"  - 地形alphamap支持 {layers} 层");
-                LogResult($"  - PaintSplatmapJob使用Unity原生alphamap系统");
-                
+                LogResult("  - PaintSplatmapJob使用Unity原生alphamap系统");
+
                 return layers > 0;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 LogResult($"  - PaintSplatmapJob测试错误: {ex.Message}");
                 return false;
@@ -213,19 +214,19 @@ namespace __temp.MrPathV2._2.Editor.Tests
             recipe.name = "Test Multi-Layer Recipe";
 
             // 创建8层测试配方
-            for (int i = 0; i < 8; i++)
+            for (var i = 0; i < 8; i++)
             {
                 recipe.layers.Add(new RoadLayer
                 {
                     //name = $"Test Layer {i + 1}",
                     enabled = true,
                     opacity = 0.8f,
-                    blendMode = (Runtime.Core.BlendMode)BlendMode.Normal
+                    blendMode = BlendMode.Normal
                 });
             }
 
             // 保存为资产
-            string path = "Assets/__temp/MrPathV2.2/Settings/TestMultiLayerRecipe.asset";
+            var path = "Assets/__temp/MrPathV2.2/Settings/TestMultiLayerRecipe.asset";
             AssetDatabase.CreateAsset(recipe, path);
             AssetDatabase.SaveAssets();
 

@@ -1,7 +1,11 @@
 .root-container {
     flex-direction: column;
     padding: 10px;
-    background-color: rgb(40, 40, 40);
+    background-color: rgba(40, 40, 40, 0.35);
+    border-top-left-radius: 9px;
+    border-bottom-left-radius: 9px;
+    border-top-right-radius: 9px;
+    border-bottom-right-radius: 9px;
 }
 
 .control-panel {
@@ -12,10 +16,14 @@
 
 .settings-group {
     flex-direction: column;
-    background-color: rgb(30, 30, 30);
+    background-color: rgba(30, 30, 30, 0.2);
     border-radius: 4px;
     padding: 12px;
     border-left: 2px solid rgb(70, 70, 70);
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
 }
 
 .group-header {
@@ -25,12 +33,15 @@
     margin-bottom: 8px;
     padding-bottom: 4px;
     border-bottom: 1px solid rgb(60, 60, 60);
+    -unity-font-style: bold;
 }
 
 .field-row {
     flex-direction: row;
     justify-content: space-between;
     margin-bottom: 8px;
+    padding-left: 9px;
+    padding-right: 6px;
 }
 
 .compact-field {
@@ -41,6 +52,10 @@
 
 .wide-field {
     margin: 8px 0;
+    margin-top: 8px;
+    margin-bottom: -4px;
+    padding-left: 9px;
+    padding-right: 6px;
 }
 
 .wide-slider {
@@ -56,6 +71,10 @@
     flex-grow: 1;
     background-color: rgb(35, 35, 35);
     padding: 12px;
+    border-top-left-radius: 9px;
+    border-bottom-left-radius: 9px;
+    border-top-right-radius: 9px;
+    border-bottom-right-radius: 9px;
 }
 
 .preview-controls {
@@ -66,12 +85,12 @@
 
 .preview-toggle {
     font-size: 12px;
-    margin-left: 13px;
+    margin-left: 0;
     margin-right: 0;
     margin-top: 0;
     margin-bottom: 0;
-    padding-left: 0;
-    padding-right: 0;
+    padding-left: 9px;
+    padding-right: 6px;
     padding-top: 0;
     padding-bottom: 0;
     translate: 0 0;
@@ -82,12 +101,82 @@
     min-height: 200px;
     background-color: rgb(25, 25, 25);
     margin-top: 10px;
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
 }
 
 .readonly-field {
     opacity: 0.7;
+    padding-left: 9px;
+    padding-right: 6px;
 }
 
 .object-field {
     margin-top: 10px;
+}
+
+.EnumField {
+    flex-grow: 1;
+    background-color: rgba(50, 50, 50, 0.5);
+    border: 1px solid rgb(70, 70, 70);
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: rgb(220, 220, 220);
+}
+
+.EnumField-focus-within {
+    border-color: rgb(90, 120, 180);
+    background-color: rgba(60, 60, 80, 0.5);
+}
+
+.EnumField > .unity-combobox__input > .unity-combobox__dropdown-button {
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    background-color: transparent;
+}
+
+.EnumField > .unity-combobox__input > .unity-base-text {
+    -unity-text-align: middle-left;
+    flex-grow: 1;
+}
+
+.compact-enum {
+    min-width: 120px;
+    margin: 0 5px;
+}
+
+.wide-enum {
+    margin: 8px 0;
+}
+
+.EnumField > .unity-combobox__popup {
+    background-color: rgba(40, 40, 40, 0.95);
+    border: 1px solid rgb(70, 70, 70);
+    border-radius: 4px;
+    padding: 2px 0;
+}
+
+.EnumField > .unity-combobox__popup > .unity-list-view__item {
+    color: rgb(220, 220, 220);
+    background-color: transparent;
+    padding: 4px 12px;
+    min-height: 24px;
+}
+
+.EnumField > .unity-combobox__popup > .unity-list-view__item:hover {
+    background-color: rgba(70, 100, 180, 0.3);
+}
+
+.EnumField > .unity-combobox__popup > .unity-list-view__item--selected {
+    background-color: rgba(70, 100, 180, 0.5);
+    color: white;
+}
+
+.EnumField > .unity-combobox__popup > .unity-list-view__separator {
+    background-color: rgb(60, 60, 60);
+    height: 1px;
+    margin: 2px 0;
 }

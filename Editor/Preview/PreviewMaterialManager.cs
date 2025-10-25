@@ -1,17 +1,21 @@
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Editor.Terrain;
+using MrPathV2._2.Runtime.Core;
+using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 #if UNITY_EDITOR
-using EditorGpuPreviewCache = __temp.MrPathV2._2.Editor.Terrain.GpuPreviewCache;
+using EditorGpuPreviewCache = MrPathV2._2.Editor.Terrain.GpuPreviewCache;
 #endif
 
-namespace __temp.MrPathV2._2.Runtime.Preview
+namespace MrPathV2._2.Editor.Preview
 {
 
     /// <summary>
-    /// Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current profile/template.
-    /// Supports PathPreviewSplatMulti shader (multi-layer preview).
+    ///     Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current
+    ///     profile/template.
+    ///     Supports PathPreviewSplatMulti shader (multi-layer preview).
     /// </summary>
     public sealed class PreviewMaterialManager : IDisposable
     {
@@ -38,22 +42,12 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         // 新增：Mesh UV 重复参数（用于遮罩与采样自适应）
         private static readonly int MeshRepeatAcrossId = Shader.PropertyToID("_MeshRepeatAcross");
         private static readonly int MeshRepeatAlongId = Shader.PropertyToID("_MeshRepeatAlong");
-        // 新增：GPU 预览相关属性
-#if UNITY_EDITOR
-        private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
-        private static readonly int UseSplatWeightsID = Shader.PropertyToID("_UseSplatWeights");
-        private static readonly int TerrainPositionID = Shader.PropertyToID("_TerrainPosition");
-        private static readonly int TerrainSizeID = Shader.PropertyToID("_TerrainSize");
-        private static readonly int AlphamapResolutionID = Shader.PropertyToID("_AlphamapResolution");
-        private static readonly int LayerSplatIndicesArr = Shader.PropertyToID("_LayerSplatIndices");
-#endif
 
-        private enum ShaderFlavor { Splat, Stylized, Unknown }
-
-        private Material _instance;
-        private ShaderFlavor _flavor = ShaderFlavor.Unknown;
-        private int _lastHash = -1;
+        private readonly List<Material> _cachedList = new List<Material>(1);
         private bool _dirty = true;
+        private ShaderFlavor _flavor = ShaderFlavor.Unknown;
+
+        private int _lastHash = -1;
 
         // Cached combined mask LUT (RGBA channels for up to 4 layers)
         // private Texture2D _maskLUT;
@@ -63,16 +57,14 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         // 新增：记录路径长度供构建 MaskAtlas 使用
         private float _pathLength = -1f;
 
-        private readonly List<Material> _cachedList = new(1);
-
-        public Material Current => _instance;
+        public Material Current { get; private set; }
 
         public List<Material> GetRenderMaterials()
         {
             if (_dirty)
             {
                 _cachedList.Clear();
-                if (_instance != null) _cachedList.Add(_instance);
+                if (Current != null) _cachedList.Add(Current);
                 _dirty = false;
             }
             return _cachedList;
@@ -80,23 +72,13 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
 #if UNITY_EDITOR
         /// <summary>
-        /// 设置当前预览所关联的 Terrain（用于从 <see cref="__temp.MrPathV2._2.Editor.Terrain.GpuPreviewCache"/> 获取缓存的 alphamap RenderTextureArray）
+        ///     设置当前预览所关联的 Terrain（用于从 <see cref="GpuPreviewCache" /> 获取缓存的 alphamap RenderTextureArray）
         /// </summary>
         /// <param name="terrain">目标 Terrain</param>
         public void SetTargetTerrain(UnityEngine.Terrain terrain)
         {
             _targetTerrain = terrain;
         }
-#endif
-
-        // GPU 预览目标 Terrain（仅在 Editor 环境下使用）
-#if UNITY_EDITOR
-        private UnityEngine.Terrain _targetTerrain;
-        /// <summary>
-        /// 全局开关：是否启用 GPU 实时预览。
-        /// 后续可替换为 ProjectSettings / ScriptableObject 配置。
-        /// </summary>
-        public static bool EnableGpuPreview = true;
 #endif
 
         // 新增：供外部推送路径长度与Mesh重复参数
@@ -107,9 +89,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
         public void SetMeshRepeats(float across, float along)
         {
-            if (_instance == null) return;
-            if (_instance.HasProperty(MeshRepeatAcrossId)) _instance.SetFloat(MeshRepeatAcrossId, Mathf.Max(1e-4f, across));
-            if (_instance.HasProperty(MeshRepeatAlongId)) _instance.SetFloat(MeshRepeatAlongId, Mathf.Max(1e-4f, along));
+            if (Current == null) return;
+            if (Current.HasProperty(MeshRepeatAcrossId)) Current.SetFloat(MeshRepeatAcrossId, Mathf.Max(1e-4f, across));
+            if (Current.HasProperty(MeshRepeatAlongId)) Current.SetFloat(MeshRepeatAlongId, Mathf.Max(1e-4f, along));
         }
 
         // 恢复 Update 方法（被前一次编辑移除），保持材质刷新与GPU绑定逻辑
@@ -124,16 +106,19 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             var newHash = CalculateHash(profile, template, previewAlpha);
             // 原先在哈希未变化且已存在实例时直接 return，导致 GPU 预览开关变化无法生效。
             // 调整为：仅在需要时刷新材质；但无论材质是否刷新，始终执行后续的 GPU 绑定逻辑。
-            bool needMaterialRefresh = newHash != _lastHash || _instance == null;
+            var needMaterialRefresh = newHash != _lastHash || Current == null;
             _lastHash = newHash;
 
             if (needMaterialRefresh)
             {
-                if (_instance == null || _instance.shader != template.shader)
+                if (Current == null || Current.shader != template.shader)
                 {
                     Clear();
-                    _instance = new Material(template) { hideFlags = HideFlags.HideAndDontSave };
-                    _flavor = DetectFlavor(_instance.shader);
+                    Current = new Material(template)
+                    {
+                        hideFlags = HideFlags.HideAndDontSave
+                    };
+                    _flavor = DetectFlavor(Current.shader);
                 }
 
                 switch (_flavor)
@@ -149,22 +134,22 @@ namespace __temp.MrPathV2._2.Runtime.Preview
 
 #if UNITY_EDITOR
             // Editor-only GPU preview binding with graceful fallback
-            if (_instance && _instance.HasProperty(SplatWeightsID))
+            if (Current && Current.HasProperty(SplatWeightsID))
             {
                 if (EnableGpuPreview && _targetTerrain &&
                     EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt != null)
                 {
                     // Bind cached alphamap array for GPU blending
-                    _instance.SetTexture(SplatWeightsID, rt);
-                    _instance.SetInt(UseSplatWeightsID, 1);
+                    Current.SetTexture(SplatWeightsID, rt);
+                    Current.SetInt(UseSplatWeightsID, 1);
 
                     var td = _targetTerrain.terrainData;
                     if (td)
                     {
                         var tpos = _targetTerrain.GetPosition();
-                        _instance.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
-                        _instance.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
-                        _instance.SetVector(AlphamapResolutionID, new Vector4(td.alphamapResolution, td.alphamapResolution, 0f, 0f));
+                        Current.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
+                        Current.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
+                        Current.SetVector(AlphamapResolutionID, new Vector4(td.alphamapResolution, td.alphamapResolution, 0f, 0f));
                     }
 
                     Debug.Log($"[PreviewMaterialManager] GPU Preview enabled - binding cached RT for terrain {_targetTerrain.name}");
@@ -172,8 +157,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 else
                 {
                     // Disable GPU weights usage; shader will fallback to mask atlas path
-                    _instance.SetInt(UseSplatWeightsID, 0);
-                    _instance.SetTexture(SplatWeightsID, null);
+                    Current.SetInt(UseSplatWeightsID, 0);
+                    Current.SetTexture(SplatWeightsID, null);
                     Debug.Log($"[PreviewMaterialManager] GPU Preview disabled or no cached RT - falling back to mask atlas. EnableGpuPreview: {EnableGpuPreview}, HasTerrain: {_targetTerrain != null}");
                 }
             }
@@ -189,7 +174,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             var layerCount = layers?.Count ?? 0;
 
             // 检测是否使用多层着色器
-            var isMultiLayerShader = _instance.shader.name.Contains("PathPreviewSplatMulti");
+            var isMultiLayerShader = Current.shader.name.Contains("PathPreviewSplatMulti");
             var maxLayers = isMultiLayerShader ? 16 : 4;
 
             // 当没有任何启用的图层时，仍然为着色器提供一个占位图层，
@@ -200,9 +185,9 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
 
             // ================= 新增：准备数组以批量推送到着色器 =================
-            Vector4[] tilingsArr = new Vector4[maxLayers];
-            float[] opacitiesArr = new float[maxLayers];
-            float[] blendModesArr = new float[maxLayers];
+            var tilingsArr = new Vector4[maxLayers];
+            var opacitiesArr = new float[maxLayers];
+            var blendModesArr = new float[maxLayers];
 
             // 设置所有层（最多16层），确保与StylizedRoadRecipe配方一致
             for (var i = 0; i < maxLayers; i++)
@@ -219,7 +204,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                     {
                         layer = roadLayer.contentLayer;
                         layerOpacity = roadLayer.opacity;
-                        blendMode = (BlendMode)roadLayer.blendMode;
+                        blendMode = roadLayer.blendMode;
                     }
                 }
 
@@ -255,46 +240,46 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             }
 
             // == 推送新数组属性 ==
-            _instance.SetVectorArray(LayerTilingsArr, tilingsArr);
-            _instance.SetFloatArray(LayerOpacitiesArr, opacitiesArr);
-            _instance.SetFloatArray(LayerBlendModesArr, blendModesArr);
+            Current.SetVectorArray(LayerTilingsArr, tilingsArr);
+            Current.SetFloatArray(LayerOpacitiesArr, opacitiesArr);
+            Current.SetFloatArray(LayerBlendModesArr, blendModesArr);
 
 #if UNITY_EDITOR
             // 推送每层在 Terrain 中的 splat 索引，供着色器从 _SplatWeights 采样正确的 slice/channel
             var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, layerCount) : Mathf.Min(4, layerCount);
             var splatIndicesArr = new float[maxLayers];
-            for (int i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
+            for (var i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
             if (EnableGpuPreview && _targetTerrain && profile.roadRecipe)
             {
-                var map = __temp.MrPathV2._2.Editor.Terrain.LayerResolver.Resolve(_targetTerrain, profile.roadRecipe, interactive: false);
+                var map = LayerResolver.Resolve(_targetTerrain, profile.roadRecipe, false);
                 if (map != null && layers != null)
                 {
                     // 保护：当 layers 为空时不进行索引访问
                     var safeCount = Mathf.Min(layerCountForIndices, layers.Count);
-                    for (int i = 0; i < safeCount; i++)
+                    for (var i = 0; i < safeCount; i++)
                     {
                         var tl = layers[i]?.contentLayer;
                         if (tl && map.TryGetValue(tl, out var idx)) splatIndicesArr[i] = idx;
                     }
                 }
             }
-            if (_instance.HasProperty(LayerSplatIndicesArr)) _instance.SetFloatArray(LayerSplatIndicesArr, splatIndicesArr);
+            if (Current.HasProperty(LayerSplatIndicesArr)) Current.SetFloatArray(LayerSplatIndicesArr, splatIndicesArr);
 #endif
 
             // 设置层数
-            _instance.SetInt(LayerCount, layerCount);
+            Current.SetInt(LayerCount, layerCount);
 
             var master = profile.roadRecipe?.masterOpacity ?? 1f;
-            _instance.SetFloat(PreviewAlpha, Mathf.Clamp01(alpha * master));
-            _instance.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
-            _instance.SetFloat(MasterOpacity, master);
-            _instance.SetFloat(EdgeFadeStart, 0.7f);
-            _instance.SetFloat(EdgeFadeEnd, 1f);
-            _instance.SetFloat(PathSamplesId, 64f);
+            Current.SetFloat(PreviewAlpha, Mathf.Clamp01(alpha * master));
+            Current.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
+            Current.SetFloat(MasterOpacity, master);
+            Current.SetFloat(EdgeFadeStart, 0.7f);
+            Current.SetFloat(EdgeFadeEnd, 1f);
+            Current.SetFloat(PathSamplesId, 64f);
             // 将整体不透明度同时推送到遮罩强度，用户可在Inspector调整PreviewAlpha或MasterOpacity
-            _instance.SetFloat(MaskStrengthId, master);
-            _instance.SetFloat(LayerIndexId, 0f);
-            if (_instance.HasProperty(ZTestId)) _instance.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
+            Current.SetFloat(MaskStrengthId, master);
+            Current.SetFloat(LayerIndexId, 0f);
+            if (Current.HasProperty(ZTestId)) Current.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
             // Prepare mask atlas texture even for stylized single-layer preview
             SetupMaskTextures(profile);
 
@@ -304,8 +289,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// Generates or updates the mask atlas texture that stores per-layer mask weights.
-        /// This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
+        ///     Generates or updates the mask atlas texture that stores per-layer mask weights.
+        ///     This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
         /// </summary>
         private void SetupMaskTextures(PathProfile profile)
         {
@@ -314,16 +299,16 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             if (layers == null || layers.Count == 0)
             {
                 // 无有效图层则绑定白纹理，确保着色器能正常工作
-                if (_instance.HasProperty(MaskAtlas))
+                if (Current.HasProperty(MaskAtlas))
                 {
-                    _instance.SetTexture(MaskAtlas, Texture2D.whiteTexture);
-                    _instance.SetFloat(AtlasInvHeight, 1f);
+                    Current.SetTexture(MaskAtlas, Texture2D.whiteTexture);
+                    Current.SetFloat(AtlasInvHeight, 1f);
                 }
                 return;
             }
 
             // 收集层信息（不限制层数）
-            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new(layers.Count);
+            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new List<PreviewPipelineUtility.PreviewLayerInfo>(layers.Count);
             var worldWidth = Mathf.Max(0.1f, profile.roadWidth);
 
             foreach (var roadLayer in layers)
@@ -347,51 +332,51 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             if (layerInfos.Count == 0)
             {
                 // Fallback to white texture when nothing to draw
-                _instance.SetTexture(MaskAtlas, Texture2D.whiteTexture);
-                _instance.SetFloat(AtlasInvHeight, 1f);
+                Current.SetTexture(MaskAtlas, Texture2D.whiteTexture);
+                Current.SetFloat(AtlasInvHeight, 1f);
                 return;
             }
 
             // 使用外部推送的真实路径长度；若未知则采用保守默认
             var effectivePathLength = _pathLength > 0f ? _pathLength : 100f;
             _maskAtlas = PreviewPipelineUtility.BuildMaskAtlas(_maskAtlas, layerInfos, worldWidth, effectivePathLength);
-            if (!_instance.HasProperty(MaskAtlas)) return;
-            _instance.SetTexture(MaskAtlas, _maskAtlas ?? Texture2D.whiteTexture);
-            _instance.SetFloat(AtlasInvHeight, _maskAtlas && _maskAtlas.height > 0 ? 1f / _maskAtlas.height : 1f);
-            _instance.SetFloat(PathSamplesId, 64f);
+            if (!Current.HasProperty(MaskAtlas)) return;
+            Current.SetTexture(MaskAtlas, _maskAtlas ?? Texture2D.whiteTexture);
+            Current.SetFloat(AtlasInvHeight, _maskAtlas && _maskAtlas.height > 0 ? 1f / _maskAtlas.height : 1f);
+            Current.SetFloat(PathSamplesId, 64f);
             // Stylized shader expects layer index uniform (always 0 for single-layer preview)
-            _instance.SetFloat(LayerIndexId, 0f);
+            Current.SetFloat(LayerIndexId, 0f);
         }
 
         private void ApplyStylized(PathProfile profile)
         {
             var layersList = profile.roadRecipe?.GetLayers();
-            TerrainLayer layer = (layersList != null && layersList.Count > 0) ? layersList[0]?.contentLayer : null;
+            var layer = layersList != null && layersList.Count > 0 ? layersList[0]?.contentLayer : null;
             if (layer?.diffuseTexture)
             {
-                _instance.SetTexture(LayerTex, layer.diffuseTexture);
+                Current.SetTexture(LayerTex, layer.diffuseTexture);
                 var sz = layer.tileSize;
                 if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
                 if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
                 var tiling = LayerTilingUtility.CalcLayerTiling(profile.roadWidth, layer);
-                _instance.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
-                _instance.SetColor(LayerTint, layer.specular); // assuming specular used as tint currently
+                Current.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
+                Current.SetColor(LayerTint, layer.specular); // assuming specular used as tint currently
             }
             else
             {
-                _instance.SetTexture(LayerTex, Texture2D.whiteTexture);
-                _instance.SetVector(LayerTiling, Vector4.one);
+                Current.SetTexture(LayerTex, Texture2D.whiteTexture);
+                Current.SetVector(LayerTiling, Vector4.one);
             }
 
             var master = profile.roadRecipe?.masterOpacity ?? 1f;
-            _instance.SetFloat(LayerOpacity, master);
-            _instance.SetFloat(MaskStrengthId, master);
-            _instance.SetFloat(Mode, 0f);
-            _instance.SetFloat(PathSamplesId, 64f);
-            _instance.SetFloat(LayerIndexId, 0f);
-            if (_instance.HasProperty(ZTestId)) _instance.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
+            Current.SetFloat(LayerOpacity, master);
+            Current.SetFloat(MaskStrengthId, master);
+            Current.SetFloat(Mode, 0f);
+            Current.SetFloat(PathSamplesId, 64f);
+            Current.SetFloat(LayerIndexId, 0f);
+            if (Current.HasProperty(ZTestId)) Current.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
             // 新增：Stylized 预览也支持不透明预览
-            if (_instance.HasProperty(OpaquePreview)) _instance.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
+            if (Current.HasProperty(OpaquePreview)) Current.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
 
             // 确保单层预览也能获取遮罩贴图（0号层）以应用透明度渐变
             SetupMaskTextures(profile);
@@ -401,20 +386,45 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         {
             if (layer?.diffuseTexture != null)
             {
-                _instance.SetTexture($"_Layer{index}_Texture", layer.diffuseTexture);
+                Current.SetTexture($"_Layer{index}_Texture", layer.diffuseTexture);
                 // Removed legacy _Layer{index}_Tiling; tiling is now provided via _LayerTilings array
                 // var tiling = LayerTilingUtility.CalcLayerTiling(worldWidth, layer);
                 // _instance.SetVector($"_Layer{index}_Tiling", new Vector4(tiling.x, tiling.y, 0, 0));
-                _instance.SetColor($"_Layer{index}_Color", Color.white); // 使用白色保持与地形贴图一致
+                Current.SetColor($"_Layer{index}_Color", Color.white); // 使用白色保持与地形贴图一致
             }
             else
             {
-                _instance.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
+                Current.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
                 // _instance.SetVector($"_Layer{index}_Tiling", Vector4.one);
-                _instance.SetColor($"_Layer{index}_Color", Color.white);
+                Current.SetColor($"_Layer{index}_Color", Color.white);
             }
         }
 
+        private enum ShaderFlavor
+        {
+            Splat,
+            Stylized,
+            Unknown
+        }
+        // 新增：GPU 预览相关属性
+#if UNITY_EDITOR
+        private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
+        private static readonly int UseSplatWeightsID = Shader.PropertyToID("_UseSplatWeights");
+        private static readonly int TerrainPositionID = Shader.PropertyToID("_TerrainPosition");
+        private static readonly int TerrainSizeID = Shader.PropertyToID("_TerrainSize");
+        private static readonly int AlphamapResolutionID = Shader.PropertyToID("_AlphamapResolution");
+        private static readonly int LayerSplatIndicesArr = Shader.PropertyToID("_LayerSplatIndices");
+#endif
+
+        // GPU 预览目标 Terrain（仅在 Editor 环境下使用）
+#if UNITY_EDITOR
+        private UnityEngine.Terrain _targetTerrain;
+        /// <summary>
+        ///     全局开关：是否启用 GPU 实时预览。
+        ///     后续可替换为 ProjectSettings / ScriptableObject 配置。
+        /// </summary>
+        public static bool EnableGpuPreview = true;
+#endif
 
 
         #region Utilities
@@ -424,7 +434,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
             if (shader == null) return ShaderFlavor.Unknown;
             var name = shader.name;
             return name.Contains("StylizedRoadBlend") ? ShaderFlavor.Stylized :
-                   name.Contains("PathPreviewSplatMulti") ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
+                name.Contains("PathPreviewSplatMulti") ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
         }
 
         private static int CalculateHash(PathProfile profile, Material template, float alpha)
@@ -442,6 +452,8 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 if (profile != null)
                 {
                     hash = hash * 31 + profile.enableDepthTest.GetHashCode();
+                    // 新增：当切换不透明预览时强制刷新材质
+                    hash = hash * 31 + profile.opaquePreview.GetHashCode();
                 }
 
                 // Profile 中的路面配方可能在 Inspector 中发生了修改，
@@ -451,7 +463,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                 if (profile?.roadRecipe != null)
                 {
                     // Include recipe itself
-                    var json = UnityEditor.EditorJsonUtility.ToJson(profile.roadRecipe);
+                    var json = EditorJsonUtility.ToJson(profile.roadRecipe);
                     hash = hash * 31 + json.GetHashCode();
 
                     // Additionally include embedded mask assets so tweaking their parameters triggers refresh
@@ -463,7 +475,7 @@ namespace __temp.MrPathV2._2.Runtime.Preview
                             var mask = roadLayer?.layerMask;
                             if (mask)
                             {
-                                var maskJson = UnityEditor.EditorJsonUtility.ToJson(mask);
+                                var maskJson = EditorJsonUtility.ToJson(mask);
                                 hash = hash * 31 + maskJson.GetHashCode();
                             }
                         }
@@ -479,20 +491,18 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         public void Dispose() => Clear();
         private void Clear()
         {
-            if (_instance != null)
+            if (Current != null)
             {
-                UnityEngine.Object.DestroyImmediate(_instance);
-                _instance = null;
+                Object.DestroyImmediate(Current);
+                Current = null;
             }
             if (_maskAtlas != null)
             {
-                UnityEngine.Object.DestroyImmediate(_maskAtlas);
+                Object.DestroyImmediate(_maskAtlas);
                 _maskAtlas = null;
             }
             _dirty = true;
         }
-
-
 
         #endregion
     }

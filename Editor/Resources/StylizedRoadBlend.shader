@@ -25,7 +25,10 @@ Shader "MrPathV2/StylizedRoadBlend"
 
     SubShader
     {
-        Tags { "RenderPipeline" = "UniversalPipeline" }
+        Tags
+        {
+            "RenderPipeline" = "UniversalPipeline"
+        }
 
         Pass
         {
@@ -37,22 +40,20 @@ Shader "MrPathV2/StylizedRoadBlend"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "BlendLayer.hlsl"
 
-            struct Attributes
-            {
+            struct Attributes {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
             };
 
-            struct Varyings
-            {
+            struct Varyings {
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0; // original mesh UV
                 float2 worldUV : TEXCOORD1; // world - space UV (XZ) for texture sampling
             };
 
-            sampler2D _PrevResultTex;
-            sampler2D _LayerTex;
-            Texture2D _MaskAtlas;
+            sampler2D    _PrevResultTex;
+            sampler2D    _LayerTex;
+            Texture2D    _MaskAtlas;
             SamplerState sampler_LinearClamp;
 
             float _AtlasInvHeight;
@@ -67,12 +68,12 @@ Shader "MrPathV2/StylizedRoadBlend"
 
             float4 _LayerTiling;
             float4 _LayerTint;
-            float _LayerOpacity;
+            float  _LayerOpacity;
 
-            Varyings vert (Attributes IN)
+            Varyings vert(Attributes IN)
             {
                 Varyings OUT;
-                float3 worldPos = TransformObjectToWorld(IN.positionOS.xyz);
+                float3   worldPos = TransformObjectToWorld(IN.positionOS.xyz);
                 OUT.positionCS = TransformWorldToHClip(worldPos);
                 OUT.uv = IN.uv;
                 OUT.worldUV = worldPos.xz;
@@ -80,13 +81,13 @@ Shader "MrPathV2/StylizedRoadBlend"
                 // 新增：计算道路本地UV，基于道路宽度和长度归一化
                 float2 localUV;
                 localUV.x = IN.uv.x / max(_MeshRepeatAcross, 1e-5); // 道路宽度归一化
-                localUV.y = IN.uv.y / max(_MeshRepeatAlong, 1e-5);  // 道路长度归一化
+                localUV.y = IN.uv.y / max(_MeshRepeatAlong, 1e-5); // 道路长度归一化
                 OUT.uv = localUV;
 
                 return OUT;
             }
 
-            float4 frag (Varyings IN) : SV_Target
+            float4 frag(Varyings IN) : SV_Target
             {
                 // 道路本地UV直接使用归一化后的值
                 float across01 = saturate(IN.uv.x);
@@ -96,14 +97,14 @@ Shader "MrPathV2/StylizedRoadBlend"
 
                 // 使用新的 2D 采样函数
                 float mask = SampleMaskAtlas2D(
-                _MaskAtlas,
-                sampler_LinearClamp,
-                across,
-                pathProgress,
-                _LayerIndex,
-                _PathSamples,
-                _AtlasInvHeight,
-                _MaskThreshold);
+                    _MaskAtlas,
+                    sampler_LinearClamp,
+                    across,
+                    pathProgress,
+                    _LayerIndex,
+                    _PathSamples,
+                    _AtlasInvHeight,
+                    _MaskThreshold);
 
                 // 移除硬裁剪早退，改为软透明混合，依赖 mask 透明度进行平滑过渡
                 float4 prevResult = tex2D(_PrevResultTex, IN.uv);

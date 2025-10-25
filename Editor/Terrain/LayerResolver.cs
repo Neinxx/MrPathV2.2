@@ -1,13 +1,14 @@
+using System;
 using System.Collections.Generic;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     /// <summary>
-    /// 解析 StylizedRoadRecipe 中的 TerrainLayer，并与目标 Terrain 进行比对。
-    /// 若缺失则提示用户是否添加，添加到 terrainData.terrainLayers 数组末尾。
+    ///     解析 StylizedRoadRecipe 中的 TerrainLayer，并与目标 Terrain 进行比对。
+    ///     若缺失则提示用户是否添加，添加到 terrainData.terrainLayers 数组末尾。
     /// </summary>
     public static class LayerResolver
     {
@@ -17,7 +18,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (terrain == null || terrain.terrainData == null || recipe == null) return result;
 
             var td = terrain.terrainData;
-            var layers = new List<TerrainLayer>(td.terrainLayers ?? System.Array.Empty<TerrainLayer>());
+            var layers = new List<TerrainLayer>(td.terrainLayers ?? Array.Empty<TerrainLayer>());
 
             // 现有映射
             for (var i = 0; i < layers.Count; i++)
@@ -49,7 +50,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                             var insertIndex = -1;
                             for (var si = 0; si < layers.Count; si++)
                             {
-                                if (layers[si] == null) { insertIndex = si; break; }
+                                if (layers[si] == null)
+                                {
+                                    insertIndex = si;
+                                    break;
+                                }
                             }
                             if (insertIndex >= 0)
                             {

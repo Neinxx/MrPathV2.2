@@ -1,13 +1,15 @@
 // PathCreatorTool.cs
 // 创建一个场景视图工具栏按钮，用于编辑 PathCreator。
 // 当选中 PathCreator 时，会自动激活该工具。
+
 #if UNITY_EDITOR
-using __temp.MrPathV2._2.Runtime.Core;
+using System;
+using MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Tools
+namespace MrPathV2._2.Editor.Tools
 {
     [EditorTool("Path Creator Tool", typeof(PathCreator))]
     public class PathCreatorTool : EditorTool
@@ -23,12 +25,6 @@ namespace __temp.MrPathV2._2.Editor.Tools
             }
         }
 
-        // 当前工具不需要额外的 GUI，因为 PathCreatorEditor 已经处理了场景绘制。
-        public override void OnToolGUI(EditorWindow window)
-        {
-            // Intentionally left blank.
-        }
-
         // --- 自动激活逻辑 ---------------------------------------------------
         private void OnEnable()
         {
@@ -40,6 +36,12 @@ namespace __temp.MrPathV2._2.Editor.Tools
         private void OnDisable()
         {
             Selection.selectionChanged -= TryAutoActivate;
+        }
+
+        // 当前工具不需要额外的 GUI，因为 PathCreatorEditor 已经处理了场景绘制。
+        public override void OnToolGUI(EditorWindow window)
+        {
+            // Intentionally left blank.
         }
 
         private static void TryAutoActivate()
@@ -73,7 +75,7 @@ namespace __temp.MrPathV2._2.Editor.Tools
                     ToolManager.SetActiveTool(typeof(PathCreatorTool));
                 }
             }
-            catch (System.InvalidOperationException)
+            catch (InvalidOperationException)
             {
                 // 忽略由于 selection 状态变化导致的异常
             }

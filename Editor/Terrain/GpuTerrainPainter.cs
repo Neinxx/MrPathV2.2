@@ -1,30 +1,26 @@
+// For PathJobsUtility
+// For SafeDispose
+// For Dictionary
+// For Linq
 
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Jobs; // For PathJobsUtility
-using __temp.MrPathV2._2.Runtime.Jobs.Extensions; // For SafeDispose
+using MrPathV2._2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
-using UnityEngine;
-using UnityEngine.Rendering;
-using __temp.MrPathV2._2.Runtime.Interfaces;
-using __temp.MrPathV2._2.Runtime.Settings;
-using System.Collections.Generic; // For Dictionary
-using System.Linq;
 using UnityEditor;
-using UnityEngine.Experimental.Rendering; // For Linq
+using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 #if UNITY_EDITOR
-using EditorGpuPreviewCache = __temp.MrPathV2._2.Editor.Terrain.GpuPreviewCache;
+using EditorGpuPreviewCache = MrPathV2._2.Editor.Terrain.GpuPreviewCache;
 #endif
 
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     public class GpuTerrainPainter : ITerrainPainter
     {
-        private ComputeShader _paintComputeShader;
-        private int _kernelHandle = -1;
 
         // --- Cache Shader Property IDs ---
         private static readonly int AlphamapResolutionID = Shader.PropertyToID("_AlphamapResolution");
@@ -51,6 +47,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         private static readonly int BrushStrengthID = Shader.PropertyToID("_BrushStrength");
         private static readonly int BrushSizeID = Shader.PropertyToID("_BrushSize");
         private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
+        private readonly int _kernelHandle = -1;
+        private readonly ComputeShader _paintComputeShader;
         // --------------------------------
 
         public GpuTerrainPainter()
@@ -70,11 +68,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 {
                     // Try AssetDatabase approach (Editor only)
 #if UNITY_EDITOR
-                    string[] guids = UnityEditor.AssetDatabase.FindAssets("PaintSplatmapCompute t:ComputeShader");
+                    var guids = AssetDatabase.FindAssets("PaintSplatmapCompute t:ComputeShader");
                     if (guids.Length > 0)
                     {
-                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
-                        _paintComputeShader = UnityEditor.AssetDatabase.LoadAssetAtPath<ComputeShader>(path);
+                        var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                        _paintComputeShader = AssetDatabase.LoadAssetAtPath<ComputeShader>(path);
                         Debug.Log($"[GpuTerrainPainter] Loaded via AssetDatabase from: {path}");
                     }
 #endif
@@ -83,7 +81,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
             if (_paintComputeShader != null)
             {
-                Debug.Log($"[GpuTerrainPainter] ComputeShader loaded successfully.");
+                Debug.Log("[GpuTerrainPainter] ComputeShader loaded successfully.");
 
                 _kernelHandle = _paintComputeShader.FindKernel("PaintTerrain");
                 Debug.Log($"[GpuTerrainPainter] PaintTerrain kernel handle: {_kernelHandle}");
@@ -129,7 +127,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             // Additional kernel validation
             try
             {
-                bool hasKernel = _paintComputeShader.HasKernel("PaintTerrain");
+                var hasKernel = _paintComputeShader.HasKernel("PaintTerrain");
                 Debug.Log($"[GpuTerrainPainter] HasKernel('PaintTerrain'): {hasKernel}");
 
                 if (!hasKernel)
@@ -138,21 +136,37 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                     return;
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogError($"[GpuTerrainPainter] Exception checking kernel: {ex.Message}");
                 return;
             }
-            if (recipeGpuData?.LayerParamsBuffer == null || !recipeGpuData.LayerParamsBuffer.IsValid()) { Debug.LogError("[GpuTerrainPainter] Recipe GPU data LayerParamsBuffer is invalid or null."); return; }
-            if (!spineData.IsCreated) { Debug.LogError("[GpuTerrainPainter] Invalid SpineData provided."); return; }
+            if (recipeGpuData?.LayerParamsBuffer == null || !recipeGpuData.LayerParamsBuffer.IsValid())
+            {
+                Debug.LogError("[GpuTerrainPainter] Recipe GPU data LayerParamsBuffer is invalid or null.");
+                return;
+            }
+            if (!spineData.IsCreated)
+            {
+                Debug.LogError("[GpuTerrainPainter] Invalid SpineData provided.");
+                return;
+            }
             var td = terrain.terrainData;
-            if (td == null) { Debug.LogError("[GpuTerrainPainter] TerrainData is null."); return; }
+            if (td == null)
+            {
+                Debug.LogError("[GpuTerrainPainter] TerrainData is null.");
+                return;
+            }
             var alphaMapTextures = td.alphamapTextures;
-            if (alphaMapTextures == null || alphaMapTextures.Length == 0) { Debug.LogError($"[GpuTerrainPainter] Terrain '{terrain.name}' does not have alphamap textures."); return; }
+            if (alphaMapTextures == null || alphaMapTextures.Length == 0)
+            {
+                Debug.LogError($"[GpuTerrainPainter] Terrain '{terrain.name}' does not have alphamap textures.");
+                return;
+            }
 
             // --- Graphics Format Check ---
-            GraphicsFormat format = alphaMapTextures[0].graphicsFormat;
-            int arrayCount = alphaMapTextures.Length;
+            var format = alphaMapTextures[0].graphicsFormat;
+            var arrayCount = alphaMapTextures.Length;
             // --- FIX for FormatUsage ---
             // Use LoadStore (10) as seen in screenshot, or RandomWrite if available
             if (!SystemInfo.IsFormatSupported(format, FormatUsage.LoadStore))
@@ -166,15 +180,15 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
             // ------------------------
 
-            int resolution = td.alphamapResolution;
-            int layers = td.alphamapLayers;
-            int numPixelsX = coverageMax.x - coverageMin.x + 1;
-            int numPixelsY = coverageMax.y - coverageMin.y + 1;
+            var resolution = td.alphamapResolution;
+            var layers = td.alphamapLayers;
+            var numPixelsX = coverageMax.x - coverageMin.x + 1;
+            var numPixelsY = coverageMax.y - coverageMin.y + 1;
 
             if (numPixelsX <= 0 || numPixelsY <= 0) return;
 
             // Indicates whether a cached RenderTexture was reused (Editor only)
-            bool reusedCachedRt = false;
+            var reusedCachedRt = false;
             RenderTexture tempAlphaMaps = null;
             ComputeBuffer spinePointsBuffer = null;
             ComputeBuffer spineTangentsBuffer = null;
@@ -209,7 +223,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                         filterMode = FilterMode.Point,
                         name = "Temp_Alphamap_RT"
                     };
-                    if (!tempAlphaMaps.Create()) { Debug.LogError("[GpuTerrainPainter] Failed to create temporary RenderTexture for alphamaps."); return; }
+                    if (!tempAlphaMaps.Create())
+                    {
+                        Debug.LogError("[GpuTerrainPainter] Failed to create temporary RenderTexture for alphamaps.");
+                        return;
+                    }
 #if UNITY_EDITOR
                     // Register the newly created RT to the global cache for future reuse
                     EditorGpuPreviewCache.Register(terrain, tempAlphaMaps);
@@ -217,7 +235,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 }
 
                 // Always sync RT from current Terrain alphamaps to avoid stale/zero weights
-                for (int i = 0; i < arrayCount && i < alphaMapTextures.Length; i++)
+                for (var i = 0; i < arrayCount && i < alphaMapTextures.Length; i++)
                 {
                     Graphics.CopyTexture(alphaMapTextures[i], 0, 0, tempAlphaMaps, i, 0);
                 }
@@ -254,7 +272,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 // -------------------------
 
                 _paintComputeShader.SetFloat(RoadWidthID, profileData.RoadWidth);
-                float pathLength = CalculatePathLengthFromSpine(spineData);
+                var pathLength = CalculatePathLengthFromSpine(spineData);
                 _paintComputeShader.SetFloat(PathLengthID, pathLength);
                 _paintComputeShader.SetBool(ForceHorizontalID, profileData.ForceHorizontal);
                 _paintComputeShader.SetInts(CoverageMinID, coverageMin.x, coverageMin.y);
@@ -296,20 +314,24 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                         _paintComputeShader.GetKernelThreadGroupSizes(_kernelHandle, out threadsX, out threadsY, out threadsZ);
                         Debug.Log($"[GpuTerrainPainter] Thread group sizes: {threadsX}x{threadsY}x{threadsZ}");
                     }
-                    catch (System.Exception exSizes)
+                    catch (Exception exSizes)
                     {
-                        threadsX = 8; threadsY = 8; threadsZ = 1;
+                        threadsX = 8;
+                        threadsY = 8;
+                        threadsZ = 1;
                         Debug.LogWarning($"[GpuTerrainPainter] GetKernelThreadGroupSizes failed: {exSizes.Message}. Using fallback 8x8x1.");
                     }
 
                     if (threadsX == 0 || threadsY == 0)
                     {
-                        threadsX = 8; threadsY = 8; threadsZ = 1;
+                        threadsX = 8;
+                        threadsY = 8;
+                        threadsZ = 1;
                         Debug.LogWarning("[GpuTerrainPainter] Invalid 0 thread sizes returned. Using fallback 8x8x1.");
                     }
 
-                    int groupsX = Mathf.CeilToInt((float)numPixelsX / threadsX);
-                    int groupsY = Mathf.CeilToInt((float)numPixelsY / threadsY);
+                    var groupsX = Mathf.CeilToInt((float)numPixelsX / threadsX);
+                    var groupsY = Mathf.CeilToInt((float)numPixelsY / threadsY);
 
                     Debug.Log($"[GpuTerrainPainter] Dispatch groups: {groupsX}x{groupsY} for coverage {numPixelsX}x{numPixelsY}");
 
@@ -320,7 +342,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                         Debug.Log("[GpuTerrainPainter] Compute shader dispatched successfully");
 
                         // Proper GPU synchronization - ensure compute shader completes before readback
-                        var cmdBuffer = new UnityEngine.Rendering.CommandBuffer();
+                        var cmdBuffer = new CommandBuffer();
                         cmdBuffer.name = "GpuTerrainPainter Sync";
 
                         Graphics.ExecuteCommandBuffer(cmdBuffer);
@@ -341,7 +363,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                         return;
                     }
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     Debug.LogError($"[GpuTerrainPainter] Exception during compute shader dispatch: {ex.Message}\nStackTrace: {ex.StackTrace}");
                     return;
@@ -355,7 +377,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 //    A better way for editor scripting is often to just readback and SetAlphamaps.
 
                 // Ensure GPU operations are complete before readback
-                Graphics.ExecuteCommandBuffer(new UnityEngine.Rendering.CommandBuffer());
+                Graphics.ExecuteCommandBuffer(new CommandBuffer());
 
                 // IMPORTANT: Always read back and apply to terrain, regardless of preview mode
                 // The GPU preview cache is for visual preview only, actual terrain data should always be updated
@@ -374,9 +396,9 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 }
 
                 Debug.Log($"[GpuTerrainPainter] RenderTexture validation - Created: {tempAlphaMaps.IsCreated()}, " +
-                         $"Size: {tempAlphaMaps.width}x{tempAlphaMaps.height}x{tempAlphaMaps.volumeDepth}, " +
-                         $"Format: {tempAlphaMaps.graphicsFormat}, Dimension: {tempAlphaMaps.dimension}, " +
-                         $"EnableRandomWrite: {tempAlphaMaps.enableRandomWrite}");
+                          $"Size: {tempAlphaMaps.width}x{tempAlphaMaps.height}x{tempAlphaMaps.volumeDepth}, " +
+                          $"Format: {tempAlphaMaps.graphicsFormat}, Dimension: {tempAlphaMaps.dimension}, " +
+                          $"EnableRandomWrite: {tempAlphaMaps.enableRandomWrite}");
 
                 // Check if the texture format is compatible with AsyncGPUReadback
                 if (tempAlphaMaps.dimension != TextureDimension.Tex2DArray)
@@ -393,10 +415,10 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 try
                 {
                     Debug.Log("[GpuTerrainPainter] Attempting AsyncGPUReadback.Request without format conversion...");
-                    request = AsyncGPUReadback.Request(tempAlphaMaps, 0);
+                    request = AsyncGPUReadback.Request(tempAlphaMaps);
                     Debug.Log($"[GpuTerrainPainter] AsyncGPUReadback.Request initiated successfully. Request layerCount: {request.layerCount}");
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     Debug.LogError($"[GpuTerrainPainter] Exception during AsyncGPUReadback.Request: {ex.Message}\nStackTrace: {ex.StackTrace}");
                     return;
@@ -415,13 +437,12 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
                 if (request.hasError)
                 {
-                    Debug.LogError($"[GpuTerrainPainter] AsyncGPUReadback encountered an error! Texture format: {tempAlphaMaps.graphicsFormat}, Dimension: {tempAlphaMaps.dimension}, Size: {tempAlphaMaps.width}x{tempAlphaMaps.height}x{tempAlphaMaps.volumeDepth}");
-                    return;
+                    Debug.LogError(
+                        $"[GpuTerrainPainter] AsyncGPUReadback encountered an error! Texture format: {tempAlphaMaps.graphicsFormat}, Dimension: {tempAlphaMaps.dimension}, Size: {tempAlphaMaps.width}x{tempAlphaMaps.height}x{tempAlphaMaps.volumeDepth}");
                 }
                 else if (!request.done)
                 {
                     Debug.LogError("[GpuTerrainPainter] AsyncGPUReadback is not done but no error reported!");
-                    return;
                 }
                 else
                 {
@@ -433,14 +454,14 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                         try
                         {
                             // Convert RGBA8 per-slice data to terrain layer format
-                            int width = resolution;
-                            int height = resolution;
-                            int layerCount = layers;
-                            int sliceCount = request.layerCount;
+                            var width = resolution;
+                            var height = resolution;
+                            var layerCount = layers;
+                            var sliceCount = request.layerCount;
                             Debug.Log($"[GpuTerrainPainter] Readback ok. Converting {sliceCount} slices ({width}x{height}) to {layerCount} layers...");
 
-                            float[,,] layerData = new float[height, width, layerCount];
-                            for (int slice = 0; slice < sliceCount; slice++)
+                            var layerData = new float[height, width, layerCount];
+                            for (var slice = 0; slice < sliceCount; slice++)
                             {
                                 var sliceData = request.GetData<Color32>(slice);
                                 if (!sliceData.IsCreated || sliceData.Length != width * height)
@@ -449,16 +470,16 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                                     continue;
                                 }
 
-                                int baseLayer = slice * 4;
-                                for (int i = 0; i < sliceData.Length; i++)
+                                var baseLayer = slice * 4;
+                                for (var i = 0; i < sliceData.Length; i++)
                                 {
-                                    int x = i % width;
-                                    int y = i / width;
+                                    var x = i % width;
+                                    var y = i / width;
                                     var c = sliceData[i];
-                                    float r = c.r / 255f;
-                                    float g = c.g / 255f;
-                                    float b = c.b / 255f;
-                                    float a = c.a / 255f;
+                                    var r = c.r / 255f;
+                                    var g = c.g / 255f;
+                                    var b = c.b / 255f;
+                                    var a = c.a / 255f;
                                     if (baseLayer < layerCount) layerData[y, x, baseLayer] = r;
                                     if (baseLayer + 1 < layerCount) layerData[y, x, baseLayer + 1] = g;
                                     if (baseLayer + 2 < layerCount) layerData[y, x, baseLayer + 2] = b;
@@ -468,25 +489,25 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
                             // 读回保护：对每个像素的所有图层做归一化，并在和为零时回退到第0层
                             // 这可以避免因为拷贝失败或计算得到全零而导致整片地形呈现为黑色
-                            for (int y = 0; y < height; y++)
+                            for (var y = 0; y < height; y++)
                             {
-                                for (int x = 0; x < width; x++)
+                                for (var x = 0; x < width; x++)
                                 {
-                                    float sum = 0f;
-                                    for (int l = 0; l < layerCount; l++) sum += layerData[y, x, l];
+                                    var sum = 0f;
+                                    for (var l = 0; l < layerCount; l++) sum += layerData[y, x, l];
                                     if (sum <= 1e-5f)
                                     {
                                         if (layerCount > 0)
                                         {
                                             // 回退：将第 0 层置为 1
-                                            for (int l = 0; l < layerCount; l++) layerData[y, x, l] = 0f;
+                                            for (var l = 0; l < layerCount; l++) layerData[y, x, l] = 0f;
                                             layerData[y, x, 0] = 1f;
                                         }
                                     }
                                     else
                                     {
-                                        float inv = 1f / sum;
-                                        for (int l = 0; l < layerCount; l++) layerData[y, x, l] *= inv;
+                                        var inv = 1f / sum;
+                                        for (var l = 0; l < layerCount; l++) layerData[y, x, l] *= inv;
                                     }
                                 }
                             }
@@ -495,7 +516,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                             terrain.Flush();
                             EditorUtility.SetDirty(td);
                         }
-                        catch (System.InvalidOperationException ex)
+                        catch (InvalidOperationException ex)
                         {
                             Debug.LogError($"[GpuTerrainPainter] Failed to get readback data: {ex.Message}. Request done: {request.done}, hasError: {request.hasError}");
                         }
@@ -504,7 +525,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
             catch (OperationCanceledException)
             {
-                Debug.Log($"[GpuTerrainPainter] Operation cancelled.");
+                Debug.Log("[GpuTerrainPainter] Operation cancelled.");
                 throw;
             }
             catch (Exception ex)
@@ -526,11 +547,13 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
         }
 
+        public void Dispose() { }
+
         private float CalculatePathLengthFromSpine(PathJobsUtility.SpineData spineData)
         {
             if (!spineData.IsCreated || spineData.Points.Length < 2) return 0f;
-            float length = 0f;
-            for (int i = 1; i < spineData.Points.Length; i++)
+            var length = 0f;
+            for (var i = 1; i < spineData.Points.Length; i++)
             {
                 length += math.distance(spineData.Points[i], spineData.Points[i - 1]);
             }
@@ -539,14 +562,14 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
         private float[,,] ConvertRGBAToLayerFormat(NativeArray<float> rgbaData, int width, int height, int layers)
         {
-            float[,,] layerData = new float[height, width, layers];
+            var layerData = new float[height, width, layers];
 
             // For Texture2DArray, the readback data is organized as:
             // [layer0_pixels][layer1_pixels][layer2_pixels]...
             // Each pixel in a layer has multiple channels depending on the format
 
-            int pixelsPerLayer = width * height;
-            int channelsPerPixel = rgbaData.Length / (pixelsPerLayer * layers);
+            var pixelsPerLayer = width * height;
+            var channelsPerPixel = rgbaData.Length / (pixelsPerLayer * layers);
 
             Debug.Log($"[GpuTerrainPainter] Readback analysis: Total data length: {rgbaData.Length}, Pixels per layer: {pixelsPerLayer}, Layers: {layers}, Calculated channels per pixel: {channelsPerPixel}");
 
@@ -561,13 +584,13 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             {
                 // Single channel per pixel, layer-separated format
                 Debug.Log("[GpuTerrainPainter] Using single-channel layer-separated format");
-                for (int layer = 0; layer < layers; layer++)
+                for (var layer = 0; layer < layers; layer++)
                 {
-                    for (int y = 0; y < height; y++)
+                    for (var y = 0; y < height; y++)
                     {
-                        for (int x = 0; x < width; x++)
+                        for (var x = 0; x < width; x++)
                         {
-                            int dataIndex = layer * pixelsPerLayer + y * width + x;
+                            var dataIndex = layer * pixelsPerLayer + y * width + x;
                             layerData[y, x, layer] = rgbaData[dataIndex];
                         }
                     }
@@ -577,14 +600,14 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             {
                 // RGBA format with 4 channels per pixel for all layers (Texture2DArray)
                 Debug.Log("[GpuTerrainPainter] Using RGBA Texture2DArray format");
-                for (int layer = 0; layer < layers; layer++)
+                for (var layer = 0; layer < layers; layer++)
                 {
-                    for (int y = 0; y < height; y++)
+                    for (var y = 0; y < height; y++)
                     {
-                        for (int x = 0; x < width; x++)
+                        for (var x = 0; x < width; x++)
                         {
                             // For Texture2DArray RGBA format: layer-major order with 4 channels per pixel
-                            int pixelIndex = layer * pixelsPerLayer * 4 + (y * width + x) * 4;
+                            var pixelIndex = layer * pixelsPerLayer * 4 + (y * width + x) * 4;
                             // Use the alpha channel (index 3) for terrain layer data
                             layerData[y, x, layer] = rgbaData[pixelIndex + 3];
                         }
@@ -595,21 +618,21 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             {
                 // RGBA format with 4 channels per pixel (single layer)
                 Debug.Log("[GpuTerrainPainter] Using RGBA interleaved format");
-                for (int y = 0; y < height; y++)
+                for (var y = 0; y < height; y++)
                 {
-                    for (int x = 0; x < width; x++)
+                    for (var x = 0; x < width; x++)
                     {
-                        int pixelIndex = y * width + x;
-                        int rgbaIndex = pixelIndex * 4;
+                        var pixelIndex = y * width + x;
+                        var rgbaIndex = pixelIndex * 4;
 
                         // Extract layer data from RGBA channels
-                        for (int layer = 0; layer < Mathf.Min(layers, 4); layer++)
+                        for (var layer = 0; layer < Mathf.Min(layers, 4); layer++)
                         {
                             layerData[y, x, layer] = rgbaData[rgbaIndex + layer];
                         }
 
                         // Fill remaining layers with 0
-                        for (int layer = 4; layer < layers; layer++)
+                        for (var layer = 4; layer < layers; layer++)
                         {
                             layerData[y, x, layer] = 0f;
                         }
@@ -627,20 +650,20 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
         private float[,,] ConvertReadbackTo3D(NativeArray<float> flatData, int width, int height, int depth)
         {
-            float[,,] data3D = new float[height, width, depth];
+            var data3D = new float[height, width, depth];
             if (!flatData.IsCreated || flatData.Length != width * height * depth)
             {
                 Debug.LogError($"Readback data length mismatch! Expected {width * height * depth}, got {(flatData.IsCreated ? flatData.Length : 0)}");
                 return data3D;
             }
-            int index = 0;
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    for (int z = 0; z < depth; z++)
-                        data3D[y, x, z] = flatData[index++];
+            var index = 0;
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            for (var z = 0; z < depth; z++)
+            {
+                data3D[y, x, z] = flatData[index++];
+            }
             return data3D;
         }
-
-        public void Dispose() { }
     }
 }

@@ -1,17 +1,21 @@
 using System;
+using System.Collections;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
+using MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using Random = UnityEngine.Random;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
+namespace MrPathV2._2.Runtime.Jobs.Examples
 {
     /// <summary>
-    /// 改进的Job实现示例，展示如何使用新的内存管理工具
+    ///     改进的Job实现示例，展示如何使用新的内存管理工具
     /// </summary>
     public class ImprovedJobExample : MonoBehaviour
     {
@@ -19,9 +23,9 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         [SerializeField] private int dataSize = 10000;
         [SerializeField] private bool enableMemoryTracking = true;
         [SerializeField] private bool useResourceManager = true;
+        private SafeJobExecutor _jobExecutor;
 
         private JobResourceManager _resourceManager;
-        private SafeJobExecutor _jobExecutor;
 
         private void Start()
         {
@@ -44,7 +48,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         }
 
         /// <summary>
-        /// 示例1：使用JobResourceManager的安全Job执行
+        ///     示例1：使用JobResourceManager的安全Job执行
         /// </summary>
         [ContextMenu("运行安全Job示例")]
         public async void RunSafeJobExample()
@@ -71,18 +75,18 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         }
 
         /// <summary>
-        /// 使用JobResourceManager的Job执行
+        ///     使用JobResourceManager的Job执行
         /// </summary>
         private async Task RunJobWithResourceManager()
         {
             // 创建输入数据
-            var inputData = _resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
-            var outputData = _resourceManager.CreateNativeArray<float>(dataSize, Allocator.Persistent);
+            var inputData = _resourceManager.CreateNativeArray<float>(dataSize);
+            var outputData = _resourceManager.CreateNativeArray<float>(dataSize);
 
             // 初始化输入数据
             for (var i = 0; i < dataSize; i++)
             {
-                inputData[i] = UnityEngine.Random.Range(0f, 100f);
+                inputData[i] = Random.Range(0f, 100f);
             }
 
             // 创建并执行Job
@@ -94,10 +98,10 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
             };
 
             // 使用SafeJobExecutor执行Job
-            await _jobExecutor.ExecuteAsync(job, dataSize, 64);
-            
+            await _jobExecutor.ExecuteAsync(job, dataSize);
+
             Debug.Log($"Job执行成功，处理了 {dataSize} 个元素");
-                
+
             // 验证结果
             float sum = 0;
             for (var i = 0; i < math.min(10, dataSize); i++)
@@ -105,12 +109,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
                 sum += outputData[i];
             }
             Debug.Log($"前10个结果的平均值: {sum / math.min(10, dataSize):F2}");
-            
+
             // 资源会在resourceManager.Dispose()时自动清理
         }
 
         /// <summary>
-        /// 手动内存管理的Job执行
+        ///     手动内存管理的Job执行
         /// </summary>
         private async Task RunJobWithManualManagement()
         {
@@ -121,13 +125,13 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
             try
             {
                 // 使用扩展方法创建带跟踪的NativeArray
-                inputData = Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
-                outputData = Extensions.NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
+                inputData = NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
+                outputData = NativeArrayExtensions.CreateTracked<float>(dataSize, Allocator.Persistent);
 
                 // 初始化输入数据
                 for (var i = 0; i < dataSize; i++)
                 {
-                    inputData[i] = UnityEngine.Random.Range(0f, 100f);
+                    inputData[i] = Random.Range(0f, 100f);
                 }
 
                 // 创建并调度Job
@@ -163,7 +167,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         }
 
         /// <summary>
-        /// 示例2：批量Job执行
+        ///     示例2：批量Job执行
         /// </summary>
         [ContextMenu("运行批量Job示例")]
         public async void RunBatchJobExample()
@@ -180,13 +184,13 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
                 // 创建多个Job
                 for (var i = 0; i < batchSize; i++)
                 {
-                    inputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
-                    outputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize, Allocator.Persistent);
+                    inputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize);
+                    outputArrays[i] = _resourceManager.CreateNativeArray<float>(dataSize / batchSize);
 
                     // 初始化数据
                     for (var j = 0; j < dataSize / batchSize; j++)
                     {
-                        inputArrays[i][j] = UnityEngine.Random.Range(0f, 100f);
+                        inputArrays[i][j] = Random.Range(0f, 100f);
                     }
 
                     jobs[i] = new ProcessDataJob
@@ -213,7 +217,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         }
 
         /// <summary>
-        /// 开始内存监控
+        ///     开始内存监控
         /// </summary>
         private async void StartMemoryMonitoring()
         {
@@ -248,7 +252,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
         }
 
         /// <summary>
-        /// 生成内存报告
+        ///     生成内存报告
         /// </summary>
         [ContextMenu("生成内存报告")]
         public void GenerateMemoryReport()
@@ -258,12 +262,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
 
             // 也可以保存到文件
             var filePath = Application.persistentDataPath + "/memory_report.txt";
-            System.IO.File.WriteAllText(filePath, report);
+            File.WriteAllText(filePath, report);
             Debug.Log($"内存报告已保存到: {filePath}");
         }
 
         /// <summary>
-        /// 重置内存统计
+        ///     重置内存统计
         /// </summary>
         [ContextMenu("重置内存统计")]
         public void ResetMemoryStats()
@@ -281,7 +285,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
     }
 
     /// <summary>
-    /// 示例Job：处理数据
+    ///     示例Job：处理数据
     /// </summary>
     public struct ProcessDataJob : IJobParallelFor
     {
@@ -300,14 +304,14 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
     }
 
     /// <summary>
-    /// 扩展方法：为MonoBehaviour添加取消令牌支持
+    ///     扩展方法：为MonoBehaviour添加取消令牌支持
     /// </summary>
     public static class MonoBehaviourExtensions
     {
         public static CancellationToken GetCancellationTokenOnDestroy(this MonoBehaviour monoBehaviour)
         {
             var source = new CancellationTokenSource();
-        
+
             // 当GameObject被销毁时取消令牌
             if (monoBehaviour != null)
             {
@@ -324,7 +328,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Examples
             return source.Token;
         }
 
-        private static System.Collections.IEnumerator WaitForDestroy(GameObject gameObject, Action onDestroy)
+        private static IEnumerator WaitForDestroy(GameObject gameObject, Action onDestroy)
         {
             while (gameObject != null)
             {

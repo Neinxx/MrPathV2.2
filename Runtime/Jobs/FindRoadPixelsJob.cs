@@ -1,14 +1,15 @@
 // 文件: Runtime/Jobs/FindRoadPixelsJob.cs
+
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using System.Runtime.CompilerServices;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// 两阶段地形绘制的第一阶段：计算每个像素与路径的关系并缓存。
+    ///     两阶段地形绘制的第一阶段：计算每个像素与路径的关系并缓存。
     /// </summary>
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
     public struct FindRoadPixelsJob : IJobParallelFor
@@ -38,19 +39,28 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             if (y > CoverageMax.y)
             {
-                 PixelInfoMap[index] = new RoadPixelInfo { IsInside = false };
-                 return;
+                PixelInfoMap[index] = new RoadPixelInfo
+                {
+                    IsInside = false
+                };
+                return;
             }
 
             if (!IsPixelInRoadContour(x, y, out var worldPos2D))
             {
-                PixelInfoMap[index] = new RoadPixelInfo { IsInside = false };
+                PixelInfoMap[index] = new RoadPixelInfo
+                {
+                    IsInside = false
+                };
                 return;
             }
 
             if (!CalculateDistanceAndProgress(worldPos2D, out var normalizedDist, out var pathProgress))
             {
-                PixelInfoMap[index] = new RoadPixelInfo { IsInside = false };
+                PixelInfoMap[index] = new RoadPixelInfo
+                {
+                    IsInside = false
+                };
                 return;
             }
 
@@ -78,7 +88,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         {
             normalizedDist = 1.0f;
             pathProgress = 0.0f;
-            
+
             var minDistanceSq = float.MaxValue;
             var closestSegmentIndex = -1;
             var tClosest = 0f;
@@ -97,13 +107,16 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 var t = 0f;
                 float distanceSq;
 
-                if (segmentLengthSq < Epsilon) {
-                     distanceSq = math.distancesq(worldPos2D, segmentStart);
-                     t = 0f;
-                } else {
-                     t = math.saturate(math.dot(pointVector, segmentVector) / segmentLengthSq);
-                     var closestPoint = segmentStart + t * segmentVector;
-                     distanceSq = math.distancesq(worldPos2D, closestPoint);
+                if (segmentLengthSq < Epsilon)
+                {
+                    distanceSq = math.distancesq(worldPos2D, segmentStart);
+                    t = 0f;
+                }
+                else
+                {
+                    t = math.saturate(math.dot(pointVector, segmentVector) / segmentLengthSq);
+                    var closestPoint = segmentStart + t * segmentVector;
+                    distanceSq = math.distancesq(worldPos2D, closestPoint);
                 }
 
                 if (distanceSq < minDistanceSq)
@@ -119,9 +132,9 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var spinePoint = math.lerp(Spine.Points[closestSegmentIndex], Spine.Points[closestSegmentIndex + 1], tClosest);
             var spineNormal = math.normalize(math.lerp(Spine.Normals[closestSegmentIndex], Spine.Normals[closestSegmentIndex + 1], tClosest));
             var spineTangent = math.normalize(math.lerp(Spine.Tangents[closestSegmentIndex], Spine.Tangents[closestSegmentIndex + 1], tClosest));
-            
+
             var rightVector = math.normalize(math.cross(
-                Profile.ForceHorizontal ? new float3(0, 1, 0) : spineNormal, 
+                Profile.ForceHorizontal ? new float3(0, 1, 0) : spineNormal,
                 spineTangent
             ));
 
@@ -130,7 +143,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
             var offsetVector = worldPos2D - spinePoint.xz;
             var signedDistance = math.dot(offsetVector, rightVector.xz);
-            
+
             normalizedDist = math.saturate(0.5f * (signedDistance / halfRoadWidth + 1f));
             pathProgress = math.saturate((closestSegmentIndex + tClosest) / spineSegmentCount);
 

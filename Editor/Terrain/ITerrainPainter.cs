@@ -1,18 +1,20 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Jobs; // For PathSpine, PathProfile etc.
+using MrPathV2._2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
+// For PathSpine, PathProfile etc.
 
-namespace __temp.MrPathV2._2.Editor.Terrain // Or Runtime.Interfaces
+namespace MrPathV2._2.Editor.Terrain // Or Runtime.Interfaces
 {
     /// <summary>
-    /// Interface for terrain painting strategies (CPU or GPU).
+    ///     Interface for terrain painting strategies (CPU or GPU).
     /// </summary>
-    public interface ITerrainPainter : System.IDisposable
+    public interface ITerrainPainter : IDisposable
     {
         /// <summary>
-        /// Executes the terrain painting operation asynchronously.
+        ///     Executes the terrain painting operation asynchronously.
         /// </summary>
         /// <param name="terrain">The target terrain.</param>
         /// <param name="spineData">Pre-calculated path spine data.</param>

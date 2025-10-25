@@ -1,18 +1,17 @@
-
-
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Jobs; // <-- 确保 using
-using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
+using MrPathV2._2.Runtime.Jobs;
+using MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
-using Unity.Mathematics;
-using UnityEngine;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEditor;
-using NativeArrayExtensions = __temp.MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using UnityEngine;
+// <-- 确保 using
+using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     public class CpuTerrainPainter : ITerrainPainter
     {
@@ -75,7 +74,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                         CoverageMax = coverageMax,
                         PixelInfoMap = pixelInfoMap
                     };
-                    var handle1 = job1.Schedule(totalPixelsInBounds, 128, default);
+                    var handle1 = job1.Schedule(totalPixelsInBounds, 128);
 
                     var job2 = new PaintSplatmapJob // <-- Fix: 已在 using 中
                     {
@@ -111,7 +110,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
             catch (OperationCanceledException)
             {
-                Debug.Log($"[CpuTerrainPainter] Operation cancelled.");
+                Debug.Log("[CpuTerrainPainter] Operation cancelled.");
                 throw;
             }
             catch (Exception ex)
@@ -125,28 +124,37 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 pixelInfoMap.SafeDispose();
             }
         }
+        // -----------------------------
+
+        public void Dispose() { }
 
         // --- Data Conversion Helpers ---
         private static void ConvertAlphamaps3DTo1D(float[,,] source, NativeArray<float> destination)
         {
             int height = source.GetLength(0), width = source.GetLength(1), depth = source.GetLength(2);
             var index = 0;
-            for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var z = 0; z < depth; z++)
-                        destination[index++] = source[y, x, z];
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            for (var z = 0; z < depth; z++)
+            {
+                destination[index++] = source[y, x, z];
+            }
         }
         private static void ConvertAlphamaps1DTo3D(NativeArray<float> source, float[,,] destination)
         {
             int height = destination.GetLength(0), width = destination.GetLength(1), depth = destination.GetLength(2);
             if (!source.IsCreated || source.Length != width * height * depth)
             {
-                Debug.LogError("ConvertAlphamaps1DTo3D size mismatch!"); return;
+                Debug.LogError("ConvertAlphamaps1DTo3D size mismatch!");
+                return;
             }
             var index = 0;
-            for (var y = 0; y < height; y++) for (var x = 0; x < width; x++) for (var z = 0; z < depth; z++)
-                        destination[y, x, z] = source[index++];
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            for (var z = 0; z < depth; z++)
+            {
+                destination[y, x, z] = source[index++];
+            }
         }
-        // -----------------------------
-
-        public void Dispose() { }
     }
 }

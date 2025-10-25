@@ -1,13 +1,15 @@
 using System;
-using MrPathV2;
+using MrPathV2._2.Runtime.Components;
 using UnityEngine;
 
-
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "NewPathProfile", menuName = "MrPath/Path Profile")]
     public class PathProfile : ScriptableObject
     {
+
+        private const int MIN_SEGMENTS = 3;
+        private const int MAX_SEGMENTS = 64;
         [Header("核心设置")]
         public CurveType curveType = CurveType.Bezier;
         [Range(0.1f, 10f)] public float generationPrecision = 1f;
@@ -38,9 +40,9 @@ namespace __temp.MrPathV2._2.Runtime.Core
         [Tooltip("是否在场景中显示预览网格")]
         public bool showPreviewMesh = true;
         [Tooltip("预览是否进行深度测试：开启时预览遵循场景深度(LEqual)；关闭时始终在最上层(Always)。")]
-        public bool enableDepthTest = false;
+        public bool enableDepthTest;
         [Tooltip("不透明预览：开启后预览为完全不透明，不与地形颜色混合。")]
-        public bool opaquePreview = false;
+        public bool opaquePreview;
 
         [Header("Mask Settings")]
         [Tooltip("Tiling for the mask, controlling how the mask texture repeats.")]
@@ -49,11 +51,6 @@ namespace __temp.MrPathV2._2.Runtime.Core
         [Tooltip("拖入 StylizedRoadRecipe 以定义道路的纹理分布与风格")]
         [RequiredField(ErrorMessage = "请分配一个StylizedRoadRecipe以调配道路风格")]
         public StylizedRoadRecipe roadRecipe;
-
-        private const int MIN_SEGMENTS = 3;
-        private const int MAX_SEGMENTS = 64;
-
-        public event Action ProfileModified;
 
         private StylizedRoadRecipe _subscribedRecipe;
 
@@ -66,6 +63,27 @@ namespace __temp.MrPathV2._2.Runtime.Core
         {
             UnsubscribeFromRecipe();
         }
+
+        private void OnValidate()
+        {
+            // 保证生成参数与曲线端点处于安全范围
+            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MIN_SEGMENTS, MAX_SEGMENTS);
+            roadWidth = Mathf.Max(0.01f, roadWidth);
+            falloffWidth = Mathf.Max(0f, falloffWidth);
+
+            EnsureKey(ref crossSection, -1f, 0f);
+            EnsureKey(ref crossSection, 1f, 0f);
+            EnsureKey(ref falloffShape, 0f, 1f);
+            EnsureKey(ref falloffShape, 1f, 0f);
+
+            // 重新订阅Recipe（可能在Inspector中更换了Recipe引用）
+            SubscribeToRecipe();
+
+            // 数据层仅负责发出立即事件；合并刷新交给上层
+            ProfileModified?.Invoke();
+        }
+
+        public event Action ProfileModified;
 
         private void SubscribeToRecipe()
         {
@@ -85,38 +103,15 @@ namespace __temp.MrPathV2._2.Runtime.Core
 
         private void OnRecipeChanged()
         {
-            // 当关联的Recipe发生变化时，触发Profile的修改事件
-            ProfileModified?.Invoke();
-        }
-
-        private void OnValidate()
-        {
-            // Keep generated parameters within safe range
-            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MIN_SEGMENTS, MAX_SEGMENTS);
-            roadWidth = Mathf.Max(0.01f, roadWidth);
-            falloffWidth = Mathf.Max(0f, falloffWidth);
-
-            // Ensure cross section curve has endpoints at -1 and 1
-            EnsureKey(ref crossSection, -1f, 0f);
-            EnsureKey(ref crossSection, 1f, 0f);
-
-            // Ensure falloff curve starts at 0->1 and ends at 1->0
-            EnsureKey(ref falloffShape, 0f, 1f);
-            EnsureKey(ref falloffShape, 1f, 0f);
-
-            // 重新订阅Recipe（可能在Inspector中更换了Recipe引用）
-            SubscribeToRecipe();
-
-            // 新增：触发配置文件修改事件
+            // 数据变化：立即通知消费者层（由 EditorRefreshManager 合并刷新）
             ProfileModified?.Invoke();
         }
 
         private static void EnsureKey(ref AnimationCurve curve, float time, float value)
         {
-            int idx = Array.FindIndex(curve.keys, k => Mathf.Approximately(k.time, time));
+            var idx = Array.FindIndex(curve.keys, k => Mathf.Approximately(k.time, time));
             if (idx >= 0)
             {
-                // Update value if needed
                 if (!Mathf.Approximately(curve.keys[idx].value, value))
                 {
                     var k = curve.keys[idx];

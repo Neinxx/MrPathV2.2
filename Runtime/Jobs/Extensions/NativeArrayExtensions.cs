@@ -1,24 +1,25 @@
 using System;
-using __temp.MrPathV2._2.Runtime.Memory;
+using MrPathV2._2.Runtime.Memory;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
+namespace MrPathV2._2.Runtime.Jobs.Extensions
 {
     /// <summary>
-    /// NativeArray扩展方法，提供内存跟踪和安全释放功能
+    ///     NativeArray扩展方法，提供内存跟踪和安全释放功能
     /// </summary>
     public static class NativeArrayExtensions
     {
         /// <summary>
-        /// 创建带内存跟踪的NativeArray
+        ///     创建带内存跟踪的NativeArray
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="length">数组长度</param>
         /// <param name="allocator">分配器类型</param>
         /// <param name="options">初始化选项</param>
         /// <returns>创建的NativeArray</returns>
-        public static NativeArray<T> CreateTracked<T>(int length, Allocator allocator, 
+        public static NativeArray<T> CreateTracked<T>(int length, Allocator allocator,
             NativeArrayOptions options = NativeArrayOptions.ClearMemory) where T : struct
         {
             NativeArray<T> array;
@@ -32,16 +33,16 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
             {
                 array = new NativeArray<T>(length, allocator, options);
             }
-            
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             MemoryTracker.TrackAllocation(array, allocator);
 #endif
-            
+
             return array;
         }
 
         /// <summary>
-        /// 安全释放NativeArray，包含内存跟踪
+        ///     安全释放NativeArray，包含内存跟踪
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">要释放的数组</param>
@@ -54,7 +55,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
                 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 MemoryTracker.TrackDeallocation(array);
                 #endif
-                
+
                 array.Dispose();
             }
             catch (Exception ex)
@@ -64,7 +65,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         }
 
         /// <summary>
-        /// 安全释放NativeList，包含内存跟踪
+        ///     安全释放NativeList，包含内存跟踪
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="list">要释放的列表</param>
@@ -77,7 +78,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
                 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 MemoryTracker.TrackDeallocation(list);
                 #endif
-                
+
                 list.Dispose();
             }
             catch (Exception ex)
@@ -87,29 +88,23 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         }
 
         /// <summary>
-        /// 检查NativeArray是否有效且已创建
+        ///     检查NativeArray是否有效且已创建
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">要检查的数组</param>
         /// <returns>是否有效</returns>
-        public static bool IsValid<T>(this NativeArray<T> array) where T : struct
-        {
-            return array.IsCreated && array.Length > 0;
-        }
+        public static bool IsValid<T>(this NativeArray<T> array) where T : struct => array.IsCreated && array.Length > 0;
 
         /// <summary>
-        /// 检查NativeList是否有效且已创建
+        ///     检查NativeList是否有效且已创建
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="list">要检查的列表</param>
         /// <returns>是否有效</returns>
-        public static bool IsValid<T>(this NativeList<T> list) where T : unmanaged
-        {
-            return list.IsCreated && list.Capacity > 0;
-        }
+        public static bool IsValid<T>(this NativeList<T> list) where T : unmanaged => list.IsCreated && list.Capacity > 0;
 
         /// <summary>
-        /// 安全复制NativeArray内容
+        ///     安全复制NativeArray内容
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="source">源数组</param>
@@ -146,7 +141,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         }
 
         /// <summary>
-        /// 创建NativeArray的安全副本
+        ///     创建NativeArray的安全副本
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="source">源数组</param>
@@ -166,7 +161,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         }
 
         /// <summary>
-        /// 重新调整NativeArray大小（创建新数组并复制数据）
+        ///     重新调整NativeArray大小（创建新数组并复制数据）
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">原数组</param>
@@ -174,22 +169,22 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         /// <param name="allocator">分配器类型</param>
         /// <param name="preserveData">是否保留原数据</param>
         /// <returns>新的调整大小后的数组</returns>
-        public static NativeArray<T> Resize<T>(this NativeArray<T> array, int newLength, 
+        public static NativeArray<T> Resize<T>(this NativeArray<T> array, int newLength,
             Allocator allocator, bool preserveData = true) where T : struct
         {
             var newArray = CreateTracked<T>(newLength, allocator);
-            
+
             if (preserveData && array.IsValid())
             {
                 var copyLength = Mathf.Min(array.Length, newLength);
                 array.SafeCopyTo(newArray, 0, 0, copyLength);
             }
-            
+
             return newArray;
         }
 
         /// <summary>
-        /// 获取NativeArray的内存使用量（字节）
+        ///     获取NativeArray的内存使用量（字节）
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">数组</param>
@@ -197,11 +192,11 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         public static long GetMemoryUsage<T>(this NativeArray<T> array) where T : struct
         {
             if (!array.IsCreated) return 0;
-            return array.Length * Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<T>();
+            return array.Length * UnsafeUtility.SizeOf<T>();
         }
 
         /// <summary>
-        /// 获取NativeList的内存使用量（字节）
+        ///     获取NativeList的内存使用量（字节）
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="list">列表</param>
@@ -209,11 +204,11 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         public static long GetMemoryUsage<T>(this NativeList<T> list) where T : unmanaged
         {
             if (!list.IsCreated) return 0;
-            return list.Capacity * Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<T>();
+            return list.Capacity * UnsafeUtility.SizeOf<T>();
         }
 
         /// <summary>
-        /// 填充NativeArray的所有元素
+        ///     填充NativeArray的所有元素
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">数组</param>
@@ -229,7 +224,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         }
 
         /// <summary>
-        /// 安全获取NativeArray元素，带边界检查
+        ///     安全获取NativeArray元素，带边界检查
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">数组</param>
@@ -240,12 +235,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         {
             if (!array.IsValid() || index < 0 || index >= array.Length)
                 return defaultValue;
-            
+
             return array[index];
         }
 
         /// <summary>
-        /// 安全设置NativeArray元素，带边界检查
+        ///     安全设置NativeArray元素，带边界检查
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">数组</param>
@@ -256,7 +251,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs.Extensions
         {
             if (!array.IsValid() || index < 0 || index >= array.Length)
                 return false;
-            
+
             array[index] = value;
             return true;
         }

@@ -1,10 +1,10 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core.Gpu
 {
     /// <summary>
-    /// 运行时侧用于打包遮罩参数的通用数据结构。Editor/Runtime 可将其拷贝到各自的 GPU 结构体。
-    /// 该数据结构不要求与 HLSL 完全内存对齐，仅作为桥接 DTO 使用。
+    ///     运行时侧用于打包遮罩参数的通用数据结构。Editor/Runtime 可将其拷贝到各自的 GPU 结构体。
+    ///     该数据结构不要求与 HLSL 完全内存对齐，仅作为桥接 DTO 使用。
     /// </summary>
     public struct GpuShoulderMaskParamsData
     {
@@ -39,13 +39,13 @@ namespace __temp.MrPathV2._2.Runtime.Core
     public enum NoiseAlgorithmId
     {
         Perlin = 0,
-        Simple = 1,
+        Simple = 1
     }
 
     public struct GpuMaskParamsData
     {
-        public int MaskType;    // 与 HLSL MASK_TYPE_* 对应
-        public float Strength;  // 顶层强度（通常等于具体遮罩的强度）
+        public int MaskType; // 与 HLSL MASK_TYPE_* 对应
+        public float Strength; // 顶层强度（通常等于具体遮罩的强度）
 
         public GpuShoulderMaskParamsData ShoulderParams;
         public GpuNoiseMaskParamsData NoiseParams;

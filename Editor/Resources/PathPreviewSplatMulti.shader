@@ -106,18 +106,16 @@ Shader "MrPath/PathPreviewSplatMulti"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "BlendLayer.hlsl"
 
-            struct Attributes
-            {
+            struct Attributes {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
-                half4 color : COLOR;
+                half4  color : COLOR;
             };
 
-            struct Varyings
-            {
+            struct Varyings {
                 float2 uv : TEXCOORD0;
                 float2 worldUV : TEXCOORD1;
-                half4 color : COLOR;
+                half4  color : COLOR;
                 float4 positionHCS : SV_POSITION;
             };
 
@@ -132,22 +130,38 @@ Shader "MrPath/PathPreviewSplatMulti"
             TEXTURE2D(_Control3);
 
             // Layer textures 0 - 15 with shared samplers
-            TEXTURE2D(_Layer0_Texture); half4 _Layer0_Color;
-            TEXTURE2D(_Layer1_Texture); half4 _Layer1_Color;
-            TEXTURE2D(_Layer2_Texture); half4 _Layer2_Color;
-            TEXTURE2D(_Layer3_Texture); half4 _Layer3_Color;
-            TEXTURE2D(_Layer4_Texture); half4 _Layer4_Color;
-            TEXTURE2D(_Layer5_Texture); half4 _Layer5_Color;
-            TEXTURE2D(_Layer6_Texture); half4 _Layer6_Color;
-            TEXTURE2D(_Layer7_Texture); half4 _Layer7_Color;
-            TEXTURE2D(_Layer8_Texture); half4 _Layer8_Color;
-            TEXTURE2D(_Layer9_Texture); half4 _Layer9_Color;
-            TEXTURE2D(_Layer10_Texture); half4 _Layer10_Color;
-            TEXTURE2D(_Layer11_Texture); half4 _Layer11_Color;
-            TEXTURE2D(_Layer12_Texture); half4 _Layer12_Color;
-            TEXTURE2D(_Layer13_Texture); half4 _Layer13_Color;
-            TEXTURE2D(_Layer14_Texture); half4 _Layer14_Color;
-            TEXTURE2D(_Layer15_Texture); half4 _Layer15_Color;
+            TEXTURE2D(_Layer0_Texture);
+            half4 _Layer0_Color;
+            TEXTURE2D(_Layer1_Texture);
+            half4 _Layer1_Color;
+            TEXTURE2D(_Layer2_Texture);
+            half4 _Layer2_Color;
+            TEXTURE2D(_Layer3_Texture);
+            half4 _Layer3_Color;
+            TEXTURE2D(_Layer4_Texture);
+            half4 _Layer4_Color;
+            TEXTURE2D(_Layer5_Texture);
+            half4 _Layer5_Color;
+            TEXTURE2D(_Layer6_Texture);
+            half4 _Layer6_Color;
+            TEXTURE2D(_Layer7_Texture);
+            half4 _Layer7_Color;
+            TEXTURE2D(_Layer8_Texture);
+            half4 _Layer8_Color;
+            TEXTURE2D(_Layer9_Texture);
+            half4 _Layer9_Color;
+            TEXTURE2D(_Layer10_Texture);
+            half4 _Layer10_Color;
+            TEXTURE2D(_Layer11_Texture);
+            half4 _Layer11_Color;
+            TEXTURE2D(_Layer12_Texture);
+            half4 _Layer12_Color;
+            TEXTURE2D(_Layer13_Texture);
+            half4 _Layer13_Color;
+            TEXTURE2D(_Layer14_Texture);
+            half4 _Layer14_Color;
+            TEXTURE2D(_Layer15_Texture);
+            half4 _Layer15_Color;
 
             // Mask atlas and other properties
             TEXTURE2D(_MaskAtlas);
@@ -161,25 +175,26 @@ Shader "MrPath/PathPreviewSplatMulti"
             float _AcrossScale;
             float _MeshRepeatAcross;
             float _MeshRepeatAlong;
-            int _LayerCount;
+            int   _LayerCount;
             float _PathSamples;
 
             // New unified layer parameter arrays (populated from PreviewMaterialManager)
             CBUFFER_START(UnityPerMaterial)
-            float4 _LayerTilings[16];
-            float _LayerOpacities[16];
-            float _LayerBlendModes[16];
-            // 新增：GPU 权重采样所需的地形与映射参数
-            float2 _TerrainPosition;
-            float2 _TerrainSize;
-            float2 _AlphamapResolution;
-            float _LayerSplatIndices[16];
-            float _UseSplatWeights;
+                float4 _LayerTilings[16];
+                float  _LayerOpacities[16];
+                float  _LayerBlendModes[16];
+                // 新增：GPU 权重采样所需的地形与映射参数
+                float2 _TerrainPosition;
+                float2 _TerrainSize;
+                float2 _AlphamapResolution;
+                float  _LayerSplatIndices[16];
+                float  _UseSplatWeights;
             CBUFFER_END
+
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                float3 worldPos = TransformObjectToWorld(input.positionOS.xyz);
+                float3   worldPos = TransformObjectToWorld(input.positionOS.xyz);
                 output.positionHCS = TransformWorldToHClip(worldPos);
                 output.uv = input.uv;
                 output.worldUV = worldPos.xz;
@@ -195,23 +210,23 @@ Shader "MrPath/PathPreviewSplatMulti"
 
                 switch(layerIndex)
                 {
-                    case 0 : return SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0) * _Layer0_Color;
-                    case 1 : return SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0) * _Layer1_Color;
-                    case 2 : return SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0) * _Layer2_Color;
-                    case 3 : return SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0) * _Layer3_Color;
-                    case 4 : return SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0) * _Layer4_Color;
-                    case 5 : return SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0) * _Layer5_Color;
-                    case 6 : return SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0) * _Layer6_Color;
-                    case 7 : return SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0) * _Layer7_Color;
-                    case 8 : return SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0) * _Layer8_Color;
-                    case 9 : return SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0) * _Layer9_Color;
-                    case 10 : return SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0) * _Layer10_Color;
-                    case 11 : return SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0) * _Layer11_Color;
-                    case 12 : return SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0) * _Layer12_Color;
-                    case 13 : return SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0) * _Layer13_Color;
-                    case 14 : return SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0) * _Layer14_Color;
-                    case 15 : return SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0) * _Layer15_Color;
-                    default : return half4(1, 1, 1, 1);
+                case 0: return SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0) * _Layer0_Color;
+                case 1: return SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0) * _Layer1_Color;
+                case 2: return SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0) * _Layer2_Color;
+                case 3: return SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0) * _Layer3_Color;
+                case 4: return SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0) * _Layer4_Color;
+                case 5: return SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0) * _Layer5_Color;
+                case 6: return SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0) * _Layer6_Color;
+                case 7: return SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0) * _Layer7_Color;
+                case 8: return SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0) * _Layer8_Color;
+                case 9: return SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0) * _Layer9_Color;
+                case 10: return SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0) * _Layer10_Color;
+                case 11: return SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0) * _Layer11_Color;
+                case 12: return SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0) * _Layer12_Color;
+                case 13: return SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0) * _Layer13_Color;
+                case 14: return SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0) * _Layer14_Color;
+                case 15: return SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0) * _Layer15_Color;
+                default: return half4(1, 1, 1, 1);
                 }
             }
 
@@ -229,6 +244,7 @@ Shader "MrPath/PathPreviewSplatMulti"
             {
                 return _LayerBlendModes[layerIndex];
             }
+
             // Legacy BlendLayer replaced by shared ApplyBlend in BlendLayer.hlsl
             #define BlendLayer(baseColor, layerColor, mode, opacity) ApplyBlend(baseColor, layerColor, mode, opacity)
 
@@ -236,22 +252,22 @@ Shader "MrPath/PathPreviewSplatMulti"
             float SampleWeightForLayer(float2 worldUV, float across, float progress, int layerIndex)
             {
                 // 优先使用 GPU 权重
-                if (_UseSplatWeights > 0.5)
+                if(_UseSplatWeights > 0.5)
                 {
                     int splatIndex = (int)round(_LayerSplatIndices[layerIndex]);
-                    if (splatIndex >= 0)
+                    if(splatIndex >= 0)
                     {
                         // (我们顺便也修复一下上次的整数除法和梯度警告)
-                        uint slice = (uint)splatIndex / 4u;
-                        uint channel = (uint)splatIndex % 4u;
+                        uint   slice = (uint)splatIndex / 4u;
+                        uint   channel = (uint)splatIndex % 4u;
                         float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
 
                         // 使用 _LOD 避免梯度警告
                         half4 rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
 
-                        if (channel == 0) return rgba.r;
-                        else if (channel == 1) return rgba.g;
-                        else if (channel == 2) return rgba.b;
+                        if(channel == 0) return rgba.r;
+                        else if(channel == 1) return rgba.g;
+                        else if(channel == 2) return rgba.b;
                         else return rgba.a;
                     }
                     else
@@ -263,15 +279,16 @@ Shader "MrPath/PathPreviewSplatMulti"
 
                 // 回退到 2D MaskAtlas
                 return SampleMaskAtlas2D(
-                _MaskAtlas,
-                sampler_LinearClamp,
-                across,
-                progress,
-                layerIndex,
-                _PathSamples,
-                _AtlasInvHeight,
-                _MaskThreshold) * _MaskStrength;
+                    _MaskAtlas,
+                    sampler_LinearClamp,
+                    across,
+                    progress,
+                    layerIndex,
+                    _PathSamples,
+                    _AtlasInvHeight,
+                    _MaskThreshold) * _MaskStrength;
             }
+
             half4 frag(Varyings input) : SV_Target
             {
                 // 拉伸到道路宽度：Across 不再重复，直接使用 0..1
@@ -285,16 +302,15 @@ Shader "MrPath/PathPreviewSplatMulti"
                 half4 finalColor = half4(0, 0, 0, 0);
 
                 int maxLayers = min(_LayerCount, 16);
-                for (int i = 0; i < maxLayers; i ++)
+                for(int i = 0; i < maxLayers; i++)
                 {
                     // 从 GPU 权重或 MaskAtlas 采样
                     float weight = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
-                    if (weight < 0.0004)
-                    continue;
+                    if(weight < 0.0004) continue;
 
                     float2 layerTiling = GetLayerTiling(i);
                     float2 layerUV = input.worldUV * layerTiling;
-                    half4 layerColor = SampleLayerTexture(i, layerUV);
+                    half4  layerColor = SampleLayerTexture(i, layerUV);
 
                     // 仅透明度受 mask 影响，颜色保持原值
                     layerColor.a *= weight;

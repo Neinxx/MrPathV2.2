@@ -1,12 +1,12 @@
-using __temp.MrPathV2._2.Editor.Terrain;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Editor.Terrain;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Operations
+namespace MrPathV2._2.Editor.Operations
 {
     /// <summary>
-    /// 数据驱动的地形操作定义。遵循开闭：新增操作只需新增资产。
+    ///     数据驱动的地形操作定义。遵循开闭：新增操作只需新增资产。
     /// </summary>
     public abstract class PathTerrainOperation : ScriptableObject
     {
@@ -19,15 +19,12 @@ namespace __temp.MrPathV2._2.Editor.Operations
         public string operationId = string.Empty;
 
         /// <summary>
-        /// 校验是否可执行。默认要求路径有效。
+        ///     校验是否可执行。默认要求路径有效。
         /// </summary>
-        public virtual bool CanExecute(PathCreator creator)
-        {
-            return creator != null && creator.profile != null && creator.pathData is { KnotCount: >= 2 };
-        }
+        public virtual bool CanExecute(PathCreator creator) => creator != null && creator.profile != null && creator.pathData is { KnotCount: >= 2 };
 
         /// <summary>
-        /// 通过上下文创建具体命令。保持数据与行为分离：资产仅描述，不直接执行。
+        ///     通过上下文创建具体命令。保持数据与行为分离：资产仅描述，不直接执行。
         /// </summary>
         public abstract TerrainCommandBase CreateCommand(PathCreator creator, IHeightProvider heightProvider);
     }

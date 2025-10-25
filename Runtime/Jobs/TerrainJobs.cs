@@ -5,7 +5,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
     public struct ModifyHeightsJob : IJobParallelFor
@@ -138,8 +138,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             var y = index / AlphamapResolution;
             var x = index % AlphamapResolution;
             var worldPos2D = new float2(
-                TerrainPos.x + (x / (float)(AlphamapResolution - 1)) * TerrainSize.x,
-                TerrainPos.z + (y / (float)(AlphamapResolution - 1)) * TerrainSize.z
+                TerrainPos.x + x / (float)(AlphamapResolution - 1) * TerrainSize.x,
+                TerrainPos.z + y / (float)(AlphamapResolution - 1) * TerrainSize.z
             );
 
             if (!TerrainJobsUtility.IsPointInContour(worldPos2D, ContourBounds, RoadContour)) return;
@@ -228,7 +228,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             {
                 Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
             }
-TerrainJobsUtility.NormalizeWeightsKeep(Alphamaps, baseAlphaIndex, AlphamapLayerCount, firstValidSplatIndex);
+            TerrainJobsUtility.NormalizeWeightsKeep(Alphamaps, baseAlphaIndex, AlphamapLayerCount, firstValidSplatIndex);
         }
     }
 }

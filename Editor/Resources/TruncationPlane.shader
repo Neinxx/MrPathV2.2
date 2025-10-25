@@ -27,7 +27,10 @@ Shader "MrPath/TruncationPlaneURP"
     }
     SubShader
     {
-        Tags { "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" "PreviewType" = "Plane" }
+        Tags
+        {
+            "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" "PreviewType" = "Plane"
+        }
         LOD 100
 
         Pass
@@ -61,35 +64,33 @@ Shader "MrPath/TruncationPlaneURP"
 
             // 材质属性
             CBUFFER_START(UnityPerMaterial)
-            float _Opacity0;
-            float _Opacity1;
-            float _Opacity2;
-            float _Opacity3;
-            float _BlendMode0;
-            float _BlendMode1;
-            float _BlendMode2;
-            float _BlendMode3;
-            float _LayerCount;
-            float _Normalize;
-            float _RedChannel;
-            float _GreenChannel;
-            float _BlueChannel;
-            float _AlphaChannel;
+                float _Opacity0;
+                float _Opacity1;
+                float _Opacity2;
+                float _Opacity3;
+                float _BlendMode0;
+                float _BlendMode1;
+                float _BlendMode2;
+                float _BlendMode3;
+                float _LayerCount;
+                float _Normalize;
+                float _RedChannel;
+                float _GreenChannel;
+                float _BlueChannel;
+                float _AlphaChannel;
             CBUFFER_END
 
-            struct Attributes
-            {
+            struct Attributes {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
             };
 
-            struct Varyings
-            {
+            struct Varyings {
                 float4 positionHCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
             };
 
-            Varyings vert (Attributes input)
+            Varyings vert(Attributes input)
             {
                 Varyings output;
                 // 将对象空间位置转换到齐次裁剪空间
@@ -101,7 +102,7 @@ Shader "MrPath/TruncationPlaneURP"
             float SampleMask(TEXTURE2D(tex), SAMPLER(samplerTex), float u, float opacity)
             {
                 float4 texSample = SAMPLE_TEXTURE2D(tex, samplerTex, float2(u, 0.5));
-                float maskValue = texSample.r;
+                float  maskValue = texSample.r;
 
                 // 修正：黑色遮罩剔除地形layer，遮罩值越小剔除越多
                 // 当遮罩为黑色(0)时完全剔除，遮罩为白色(1)时完全保留
@@ -110,38 +111,38 @@ Shader "MrPath/TruncationPlaneURP"
                 return saturate(maskValue * opacity);
             }
 
-            half4 frag (Varyings input) : SV_Target
+            half4 frag(Varyings input) : SV_Target
             {
                 float u = saturate(input.uv.x);
-                int count = (int)_LayerCount;
+                int   count = (int)_LayerCount;
                 float r = 0, g = 0, b = 0, a = 0;
 
-                if (count > 0)
+                if(count > 0)
                 {
                     float v0 = SampleMask(_MaskTex0, sampler_MaskTex0, u, _Opacity0);
                     r = BlendWeight(r, v0, (int)_BlendMode0);
                     r *= _RedChannel;
                 }
-                if (count > 1)
+                if(count > 1)
                 {
                     float v1 = SampleMask(_MaskTex1, sampler_MaskTex1, u, _Opacity1);
                     g = BlendWeight(g, v1, (int)_BlendMode1);
                     g *= _GreenChannel;
                 }
-                if (count > 2)
+                if(count > 2)
                 {
                     float v2 = SampleMask(_MaskTex2, sampler_MaskTex2, u, _Opacity2);
                     b = BlendWeight(b, v2, (int)_BlendMode2);
                     b *= _BlueChannel;
                 }
-                if (count > 3)
+                if(count > 3)
                 {
                     float v3 = SampleMask(_MaskTex3, sampler_MaskTex3, u, _Opacity3);
                     a = BlendWeight(a, v3, (int)_BlendMode3);
                     a *= _AlphaChannel;
                 }
 
-                if (_Normalize > 0.5)
+                if(_Normalize > 0.5)
                 {
                     float4 weights = float4(r, g, b, a);
                     weights = NormalizeWeightsKeep(weights);

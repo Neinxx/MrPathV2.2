@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   curveType: 1
   generationPrecision: 0.89
-  roadWidth: 7.47
+  roadWidth: 3.33
   crossSection:
     serializedVersion: 2
     m_Curve:
@@ -39,7 +39,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  falloffWidth: 0.1
+  falloffWidth: 0.64
   falloffShape:
     serializedVersion: 2
     m_Curve:
@@ -65,12 +65,12 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   snapToTerrain: 1
-  heightOffset: 0
-  smoothness: 100
+  heightOffset: 0.57
+  smoothness: 22
   forceHorizontal: 1
-  crossSectionSegments: 3
+  crossSectionSegments: 37
   showPreviewMesh: 1
-  enableDepthTest: 0
+  enableDepthTest: 1
   opaquePreview: 1
   maskTiling: {x: 4.34, y: 9.27}
   roadRecipe: {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}

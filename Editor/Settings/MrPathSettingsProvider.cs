@@ -1,25 +1,25 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
-using __temp.MrPathV2._2.Editor.Operations;
-using __temp.MrPathV2._2.Editor.Terrain;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2._2.Editor.Operations;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core.BlendMasks;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
-using UnityEditor.UIElements;
 using Object = UnityEngine.Object;
+using Random = UnityEngine.Random;
 
-namespace __temp.MrPathV2._2.Editor.Settings
+namespace MrPathV2._2.Editor.Settings
 {
-    internal class MrPathSettingsProvider : SettingsProvider
+    class MrPathSettingsProvider : SettingsProvider
     {
+        private string _originalTitleText = "MrPath Settings";
         private SerializedObject _settings;
         private Label _titleLabel;
-        private string _originalTitleText = "MrPath Settings";
 
         private MrPathSettingsProvider(string path, SettingsScope scopes) : base(path, scopes) { }
 
@@ -82,10 +82,16 @@ namespace __temp.MrPathV2._2.Editor.Settings
             sayHi.clicked += () =>
             {
                 if (titleLabel == null) return;
-                string[] greetings = { "Good day, sir! ", "Hello, Mr. " };
-                string greeting = greetings[UnityEngine.Random.Range(0, greetings.Length)];
+                string[] greetings =
+                {
+                    "Good day, sir! ", "Hello, Mr. "
+                };
+                var greeting = greetings[Random.Range(0, greetings.Length)];
                 _titleLabel.text = $"{_originalTitleText}: {greeting}";
-                _titleLabel.schedule.Execute(() => { if (_titleLabel != null) _titleLabel.text = _originalTitleText; }).StartingIn(3000);
+                _titleLabel.schedule.Execute(() =>
+                {
+                    if (_titleLabel != null) _titleLabel.text = _originalTitleText;
+                }).StartingIn(3000);
             };
 
             createButton.clicked += () =>
@@ -111,6 +117,7 @@ namespace __temp.MrPathV2._2.Editor.Settings
                 Selection.activeObject = newAsset;
                 EditorGUIUtility.PingObject(newAsset);
             };
+
             void UpdateButtons(Object obj)
             {
                 sayHi.SetEnabled(obj);
@@ -119,13 +126,16 @@ namespace __temp.MrPathV2._2.Editor.Settings
         }
 
         [SettingsProvider]
-        public static SettingsProvider CreateMrPathSettingsProvider()
+        public static SettingsProvider CreateMrPathSettingsProvider() => new MrPathSettingsProvider("Project/MrPath", SettingsScope.Project)
         {
-            return new MrPathSettingsProvider("Project/MrPath", SettingsScope.Project)
+            keywords = new HashSet<string>
             {
-                keywords = new HashSet<string> { "MrPath", "Road", "Path", "Stylized" }
-            };
-        }
+                "MrPath",
+                "Road",
+                "Path",
+                "Stylized"
+            }
+        };
 
         private static string GetSettingsPath() => MrPathProjectSettings.GetSettingsRootFolder();
 

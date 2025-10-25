@@ -1,12 +1,12 @@
-using __temp.MrPathV2._2.Editor.Terrain;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Editor.Terrain;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Operations
+namespace MrPathV2._2.Editor.Operations
 {
     /// <summary>
-    /// 绘制纹理操作定义
+    ///     绘制纹理操作定义
     /// </summary>
     [CreateAssetMenu(fileName = "Paint Terrain Operation", menuName = "MrPath/Operations/Paint Terrain")]
     public class PaintTerrainOperation : PathTerrainOperation
@@ -17,9 +17,6 @@ namespace __temp.MrPathV2._2.Editor.Operations
             if (buttonColor == default) buttonColor = new Color(1f, 0.75f, 1f);
         }
 
-        public override TerrainCommandBase CreateCommand(PathCreator creator, IHeightProvider heightProvider)
-        {
-            return new PaintTerrainCommand(creator, heightProvider);
-        }
+        public override TerrainCommandBase CreateCommand(PathCreator creator, IHeightProvider heightProvider) => new PaintTerrainCommand(creator, heightProvider);
     }
 }

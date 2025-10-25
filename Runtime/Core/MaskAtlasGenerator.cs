@@ -1,75 +1,33 @@
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2._2.Runtime.Core.Gpu;
 using UnityEngine;
-using Unity.Profiling;
-using MrPathV2;
+using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2._2.Runtime.Core
+namespace MrPathV2._2.Runtime.Core
 {
     /// <summary>
-    /// Generates a 2-D mask atlas containing the 1-D mask lookup for every blend layer *and*
-    /// for multiple longitudinal samples along the path.
-    /// 
-    /// Layout:
-    /// ‑ The atlas width represents horizontal samples across the path (-1 … +1 in canonical UV).
-    /// ‑ The atlas height is <c>layerCount * pathSamples</c>. Each layer occupies a vertical slice of
-    ///   <c>pathSamples</c> rows. Within each slice, <c>py</c> (0 … pathSamples-1) maps to
-    ///   <c>pathProgress = py / (pathSamples-1)</c>.
-    /// 
-    /// Shaders and CPU jobs should sample the atlas like so:
+    ///     Generates a 2-D mask atlas containing the 1-D mask lookup for every blend layer *and*
+    ///     for multiple longitudinal samples along the path.
+    ///     Layout:
+    ///     ‑ The atlas width represents horizontal samples across the path (-1 … +1 in canonical UV).
+    ///     ‑ The atlas height is <c>layerCount * pathSamples</c>. Each layer occupies a vertical slice of
+    ///     <c>pathSamples</c> rows. Within each slice, <c>py</c> (0 … pathSamples-1) maps to
+    ///     <c>pathProgress = py / (pathSamples-1)</c>.
+    ///     Shaders and CPU jobs should sample the atlas like so:
     ///     u = acrossRoad;                    // 0 … 1
     ///     v = (layerIndex * pathSamples + pathProgress * (pathSamples-1) + 0.5) * _AtlasInvHeight;
-    /// 
-    /// The atlas is stored as an <see cref="TextureFormat.R8"/> with bilinear filtering and clamp wrap mode.
+    ///     The atlas is stored as an <see cref="TextureFormat.R8" /> with bilinear filtering and clamp wrap mode.
     /// </summary>
     public static class MaskAtlasGenerator
     {
-        // GPU param structs (must match HLSL in BlendMaskLibrary.hlsl)
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct GpuShoulderMaskParams
-        {
-            public float ShoulderWidthRatio;
-            public float ShoulderStrength;
-            public float EdgeFalloff;
-            public int EnableLeftShoulder;
-            public int EnableRightShoulder;
-            public Vector2 Tiling;
-            public Vector2 Offset;
-            public float OverallScale;
-            public float Smooth;
-            public float Pad1;
-            public float Pad2;
-        }
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct GpuNoiseMaskParams
-        {
-            public float Strength;
-            public float Seed;
-            public Vector2 Tiling;
-            public Vector2 Offset;
-            public float OverallScale;
-            public float Smooth;
-            public Vector2 NoiseScale;
-            public float RotationRad;
-            public int Octaves;
-            public float Lacunarity;
-            public float Gain;
-            public int AlgorithmId;
-            public float Pad1;
-        }
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct GpuMaskParams
-        {
-            public int MaskType;
-            public float Strength;
-            public float Pad2, Pad3;
-            public GpuShoulderMaskParams ShoulderParams;
-            public GpuNoiseMaskParams NoiseParams;
-        }
 
         private const int DefaultPathSamples = 64;
 
         /// <summary>
-        /// Builds or updates a mask atlas texture (GPU preferred, CPU fallback).
+        ///     Builds or updates a mask atlas texture (GPU preferred, CPU fallback).
         /// </summary>
         public static Texture2D BuildMaskAtlas(
             Texture2D reuse,
@@ -89,19 +47,22 @@ namespace __temp.MrPathV2._2.Runtime.Core
 #else
                         if (reuse != null) Object.Destroy(reuse);
 #endif
-                        reuse = new Texture2D(1, 1, TextureFormat.R8, false, true) { wrapMode = TextureWrapMode.Clamp };
+                        reuse = new Texture2D(1, 1, TextureFormat.R8, false, true)
+                        {
+                            wrapMode = TextureWrapMode.Clamp
+                        };
                     }
                     reuse.SetPixel(0, 0, Color.white);
                     reuse.Apply(false, false);
                     return reuse;
                 }
 
-                int layerCount = layers.Count;
-                int width = Mathf.Clamp(baseResolution, 16, 2048);
-                int pathSamples = DefaultPathSamples;
-                int height = layerCount * pathSamples;
+                var layerCount = layers.Count;
+                var width = Mathf.Clamp(baseResolution, 16, 2048);
+                var pathSamples = DefaultPathSamples;
+                var height = layerCount * pathSamples;
 
-                bool needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
+                var needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
                 if (needCreate)
                 {
 #if UNITY_EDITOR
@@ -125,7 +86,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
                     {
                         return BuildAtlasGpu(cs, reuse, layers, worldWidth, pathLength, width, pathSamples);
                     }
-                    catch (System.Exception e)
+                    catch (Exception e)
                     {
                         Debug.LogWarning($"[MaskAtlasGenerator] GPU build failed, falling back to CPU. {e.Message}");
                     }
@@ -146,19 +107,19 @@ namespace __temp.MrPathV2._2.Runtime.Core
             int atlasWidth,
             int pathSamples)
         {
-            int layerCount = layers.Count;
-            int atlasHeight = layerCount * pathSamples;
+            var layerCount = layers.Count;
+            var atlasHeight = layerCount * pathSamples;
 
             // Pack params
             var maskParams = new GpuMaskParams[layerCount];
             var opacities = new float[layerCount];
-            for (int i = 0; i < layerCount; i++)
+            for (var i = 0; i < layerCount; i++)
             {
                 maskParams[i] = PackMaskParams(layers[i].mask);
                 opacities[i] = Mathf.Clamp01(layers[i].opacity);
             }
 
-            var maskBuf = new ComputeBuffer(layerCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(GpuMaskParams)), ComputeBufferType.Structured);
+            var maskBuf = new ComputeBuffer(layerCount, Marshal.SizeOf(typeof(GpuMaskParams)), ComputeBufferType.Structured);
             var opaBuf = new ComputeBuffer(layerCount, sizeof(float), ComputeBufferType.Structured);
             maskBuf.SetData(maskParams);
             opaBuf.SetData(opacities);
@@ -172,7 +133,7 @@ namespace __temp.MrPathV2._2.Runtime.Core
             };
             rt.Create();
 
-            int kernel = cs.FindKernel("BuildAtlas");
+            var kernel = cs.FindKernel("BuildAtlas");
             cs.SetInt("_AtlasWidth", atlasWidth);
             cs.SetInt("_LayerCount", layerCount);
             cs.SetInt("_PathSamples", pathSamples);
@@ -182,8 +143,8 @@ namespace __temp.MrPathV2._2.Runtime.Core
             cs.SetBuffer(kernel, "_Opacities", opaBuf);
             cs.SetTexture(kernel, "_Atlas", rt);
 
-            int gx = Mathf.CeilToInt(atlasWidth / 8.0f);
-            int gy = Mathf.CeilToInt(atlasHeight / 8.0f);
+            var gx = Mathf.CeilToInt(atlasWidth / 8.0f);
+            var gy = Mathf.CeilToInt(atlasHeight / 8.0f);
             cs.Dispatch(kernel, gx, gy, 1);
 
             // Copy into Texture2D for shader (use ReadPixels to avoid base format mismatch warnings)
@@ -212,28 +173,28 @@ namespace __temp.MrPathV2._2.Runtime.Core
             int atlasWidth,
             int pathSamples)
         {
-            int layerCount = layers.Count;
-            int atlasHeight = layerCount * pathSamples;
+            var layerCount = layers.Count;
+            var atlasHeight = layerCount * pathSamples;
 
             var pixels = new Color32[atlasWidth * atlasHeight];
-            for (int li = 0; li < layerCount; li++)
+            for (var li = 0; li < layerCount; li++)
             {
                 var layer = layers[li];
                 if (layer.opacity <= 0f) continue;
-                float opacity = Mathf.Clamp01(layer.opacity);
+                var opacity = Mathf.Clamp01(layer.opacity);
 
-                for (int py = 0; py < pathSamples; py++)
+                for (var py = 0; py < pathSamples; py++)
                 {
-                    float pathProgress = pathSamples > 1 ? py / (float)(pathSamples - 1) : 0.5f;
-                    int rowIndex = li * pathSamples + py;
+                    var pathProgress = pathSamples > 1 ? py / (float)(pathSamples - 1) : 0.5f;
+                    var rowIndex = li * pathSamples + py;
 
-                    for (int x = 0; x < atlasWidth; x++)
+                    for (var x = 0; x < atlasWidth; x++)
                     {
-                        float across = atlasWidth > 1 ? x / (float)(atlasWidth - 1) : 0f;
-                        float posAcross = across * 2f - 1f;
-                        float w = PreviewPipelineUtility.EvaluateMask(posAcross, pathProgress, worldWidth, pathLength, layer.mask);
+                        var across = atlasWidth > 1 ? x / (float)(atlasWidth - 1) : 0f;
+                        var posAcross = across * 2f - 1f;
+                        var w = PreviewPipelineUtility.EvaluateMask(posAcross, pathProgress, worldWidth, pathLength, layer.mask);
                         w = Mathf.Clamp01(w * opacity);
-                        int idx = rowIndex * atlasWidth + x;
+                        var idx = rowIndex * atlasWidth + x;
                         pixels[idx] = new Color32((byte)Mathf.RoundToInt(w * 255f), 0, 0, 255);
                     }
                 }
@@ -242,13 +203,17 @@ namespace __temp.MrPathV2._2.Runtime.Core
             target.Apply(false);
         }
 
-        private static GpuMaskParams PackMaskParams(BlendMasks.BlendMaskBase mask)
+        private static GpuMaskParams PackMaskParams(BlendMaskBase mask)
         {
-            var gpuMask = new GpuMaskParams { MaskType = 0, Strength = 1.0f };
+            var gpuMask = new GpuMaskParams
+            {
+                MaskType = 0,
+                Strength = 1.0f
+            };
             if (mask == null) return gpuMask;
 
             // 统一从遮罩对象收集参数
-            var dto = new __temp.MrPathV2._2.Runtime.Core.GpuMaskParamsData();
+            var dto = new GpuMaskParamsData();
             mask.FillGpuParams(ref dto);
 
             // 映射到运行时 GPU 结构（与 HLSL 对齐）
@@ -288,6 +253,51 @@ namespace __temp.MrPathV2._2.Runtime.Core
             };
 
             return gpuMask;
+        }
+
+        // GPU param structs (must match HLSL in BlendMaskLibrary.hlsl)
+        [StructLayout(LayoutKind.Sequential)]
+        private struct GpuShoulderMaskParams
+        {
+            public float ShoulderWidthRatio;
+            public float ShoulderStrength;
+            public float EdgeFalloff;
+            public int EnableLeftShoulder;
+            public int EnableRightShoulder;
+            public Vector2 Tiling;
+            public Vector2 Offset;
+            public float OverallScale;
+            public float Smooth;
+            public float Pad1;
+            public float Pad2;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct GpuNoiseMaskParams
+        {
+            public float Strength;
+            public float Seed;
+            public Vector2 Tiling;
+            public Vector2 Offset;
+            public float OverallScale;
+            public float Smooth;
+            public Vector2 NoiseScale;
+            public float RotationRad;
+            public int Octaves;
+            public float Lacunarity;
+            public float Gain;
+            public int AlgorithmId;
+            public float Pad1;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct GpuMaskParams
+        {
+            public int MaskType;
+            public float Strength;
+            public float Pad2, Pad3;
+            public GpuShoulderMaskParams ShoulderParams;
+            public GpuNoiseMaskParams NoiseParams;
         }
     }
 }

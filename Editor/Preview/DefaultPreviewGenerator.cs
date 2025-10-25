@@ -1,11 +1,12 @@
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Runtime.Preview;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Preview
+namespace MrPathV2._2.Editor.Preview
 {
     /// <summary>
-    /// 默认预览生成器实现，直接使用PreviewMeshController作为底层实现
+    ///     默认预览生成器实现，直接使用PreviewMeshController作为底层实现
     /// </summary>
     public class DefaultPreviewGenerator : IPreviewGenerator
     {
@@ -22,12 +23,12 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 获取当前已生成的预览网格
+        ///     获取当前已生成的预览网格
         /// </summary>
         public Mesh PreviewMesh => _controller.PreviewMesh;
 
         /// <summary>
-        /// 启动异步网格生成流程
+        ///     启动异步网格生成流程
         /// </summary>
         /// <param name="spine">路径脊线采样数据</param>
         /// <param name="profile">路径外观配置</param>
@@ -37,25 +38,19 @@ namespace __temp.MrPathV2._2.Runtime.Preview
         }
 
         /// <summary>
-        /// 尝试完成生成并返回是否成功完成
+        ///     尝试完成生成并返回是否成功完成
         /// </summary>
         /// <returns>是否完成并已更新 PreviewMesh</returns>
-        public bool TryFinalizeMesh()
-        {
-            return _controller.TryFinalizeMesh();
-        }
+        public bool TryFinalizeMesh() => _controller.TryFinalizeMesh();
 
         /// <summary>
-        /// 强制等待Job完成并完成网格生成
+        ///     强制等待Job完成并完成网格生成
         /// </summary>
         /// <returns>是否成功完成网格生成</returns>
-        public bool ForceFinalizeMesh()
-        {
-            return _controller.ForceFinalizeMesh();
-        }
+        public bool ForceFinalizeMesh() => _controller.ForceFinalizeMesh();
 
         /// <summary>
-        /// 释放内部资源（如Job与Mesh）
+        ///     释放内部资源（如Job与Mesh）
         /// </summary>
         public void Dispose()
         {

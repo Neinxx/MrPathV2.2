@@ -1,12 +1,10 @@
-
-
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Settings
+namespace MrPathV2._2.Editor.Settings
 {
     /// <summary>
-    /// 负责路径的默认视觉表现，包括Profile和预览材质。
+    ///     负责路径的默认视觉表现，包括Profile和预览材质。
     /// </summary>
     public class MrPathAppearanceDefaults : ScriptableObject
     {
@@ -17,7 +15,5 @@ namespace __temp.MrPathV2._2.Editor.Settings
         [Header("预览设置")]
         [Tooltip("预览使用的材质模板 (URP Shader)")]
         public Material previewMaterialTemplate;
-
-
     }
 }

@@ -3,18 +3,19 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// 内存跟踪器：监控NativeArray分配和释放，检测内存泄漏
-    /// 提供详细的内存使用统计和调试信息
+    ///     内存跟踪器：监控NativeArray分配和释放，检测内存泄漏
+    ///     提供详细的内存使用统计和调试信息
     /// </summary>
     public static class MemoryTracker
     {
-        private static readonly ConcurrentDictionary<IntPtr, AllocationInfo> SActiveAllocations = new();
-        
+        private static readonly ConcurrentDictionary<IntPtr, AllocationInfo> SActiveAllocations = new ConcurrentDictionary<IntPtr, AllocationInfo>();
+
         private static long _sTotalAllocations;
         private static long _sTotalDeallocations;
         private static long _sTotalBytesAllocated;
@@ -23,22 +24,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         private static long _sPeakMemoryUsage;
 
         /// <summary>
-        /// 分配信息结构
+        ///     获取当前活跃分配数量
         /// </summary>
-        private struct AllocationInfo
-        {
-            public string TypeName;
-            public int ElementCount;
-            public int ElementSize;
-            public Allocator AllocatorType;
-            public DateTime AllocationTime;
-            public string StackTrace;
-            
-            public long TotalBytes => ElementCount * ElementSize;
-        }
+        public static int ActiveAllocationCount => SActiveAllocations.Count;
 
         /// <summary>
-        /// 跟踪NativeArray分配
+        ///     跟踪NativeArray分配
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">分配的数组</param>
@@ -51,13 +42,13 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             {
                 TypeName = typeof(T).Name,
                 ElementCount = array.Length,
-                ElementSize = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<T>(),
+                ElementSize = UnsafeUtility.SizeOf<T>(),
                 AllocatorType = allocator,
                 AllocationTime = DateTime.Now,
                 StackTrace = Application.isEditor ? Environment.StackTrace : "N/A"
             };
 
-            var ptr = Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafePtr(array);
+            var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
             SActiveAllocations.TryAdd(new IntPtr(ptr), info);
 
             // 更新统计信息
@@ -67,16 +58,16 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             // 更新峰值统计
             var currentActive = SActiveAllocations.Count;
             var currentMemory = GetCurrentMemoryUsage();
-            
+
             if (currentActive > _sPeakActiveAllocations)
                 Interlocked.Exchange(ref _sPeakActiveAllocations, currentActive);
-                
+
             if (currentMemory > _sPeakMemoryUsage)
                 Interlocked.Exchange(ref _sPeakMemoryUsage, currentMemory);
         }
 
         /// <summary>
-        /// 跟踪NativeArray释放
+        ///     跟踪NativeArray释放
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="array">要释放的数组</param>
@@ -84,7 +75,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         {
             if (!array.IsCreated) return;
 
-            var ptr = Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafePtr(array);
+            var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
             if (SActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
             {
                 Interlocked.Increment(ref _sTotalDeallocations);
@@ -93,12 +84,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 跟踪NativeList分配
+        ///     跟踪NativeList分配
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="list">分配的列表</param>
         /// <param name="allocator">分配器类型</param>
-        public static unsafe void  TrackAllocation<T>(NativeList<T> list, Allocator allocator) where T : unmanaged
+        public static unsafe void TrackAllocation<T>(NativeList<T> list, Allocator allocator) where T : unmanaged
         {
             if (!list.IsCreated) return;
 
@@ -106,13 +97,13 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             {
                 TypeName = $"NativeList<{typeof(T).Name}>",
                 ElementCount = list.Capacity,
-                ElementSize = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<T>(),
+                ElementSize = UnsafeUtility.SizeOf<T>(),
                 AllocatorType = allocator,
                 AllocationTime = DateTime.Now,
                 StackTrace = Application.isEditor ? Environment.StackTrace : "N/A"
             };
 
-            var ptr = Unity.Collections.LowLevel.Unsafe.NativeListUnsafeUtility.GetUnsafePtr(list);
+            var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
             SActiveAllocations.TryAdd((IntPtr)ptr, info);
 
             Interlocked.Increment(ref _sTotalAllocations);
@@ -120,7 +111,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 跟踪NativeList释放
+        ///     跟踪NativeList释放
         /// </summary>
         /// <typeparam name="T">元素类型</typeparam>
         /// <param name="list">要释放的列表</param>
@@ -128,7 +119,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         {
             if (!list.IsCreated) return;
 
-            var ptr = Unity.Collections.LowLevel.Unsafe.NativeListUnsafeUtility.GetUnsafePtr(list);
+            var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
             if (SActiveAllocations.TryRemove((IntPtr)ptr, out var info))
             {
                 Interlocked.Increment(ref _sTotalDeallocations);
@@ -137,12 +128,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 获取当前活跃分配数量
-        /// </summary>
-        public static int ActiveAllocationCount => SActiveAllocations.Count;
-
-        /// <summary>
-        /// 获取当前内存使用量（字节）
+        ///     获取当前内存使用量（字节）
         /// </summary>
         public static long GetCurrentMemoryUsage()
         {
@@ -155,31 +141,28 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 获取内存使用统计信息
+        ///     获取内存使用统计信息
         /// </summary>
-        public static MemoryStats GetMemoryStats()
+        public static MemoryStats GetMemoryStats() => new MemoryStats
         {
-            return new MemoryStats
-            {
-                ActiveAllocations = SActiveAllocations.Count,
-                TotalAllocations = _sTotalAllocations,
-                TotalDeallocations = _sTotalDeallocations,
-                CurrentMemoryUsage = GetCurrentMemoryUsage(),
-                TotalBytesAllocated = _sTotalBytesAllocated,
-                TotalBytesFreed = _sTotalBytesFreed,
-                PeakActiveAllocations = _sPeakActiveAllocations,
-                PeakMemoryUsage = _sPeakMemoryUsage,
-                PotentialLeaks = _sTotalAllocations - _sTotalDeallocations
-            };
-        }
+            ActiveAllocations = SActiveAllocations.Count,
+            TotalAllocations = _sTotalAllocations,
+            TotalDeallocations = _sTotalDeallocations,
+            CurrentMemoryUsage = GetCurrentMemoryUsage(),
+            TotalBytesAllocated = _sTotalBytesAllocated,
+            TotalBytesFreed = _sTotalBytesFreed,
+            PeakActiveAllocations = _sPeakActiveAllocations,
+            PeakMemoryUsage = _sPeakMemoryUsage,
+            PotentialLeaks = _sTotalAllocations - _sTotalDeallocations
+        };
 
         /// <summary>
-        /// 获取按分配器类型分组的统计信息
+        ///     获取按分配器类型分组的统计信息
         /// </summary>
         public static Dictionary<Allocator, AllocatorStats> GetAllocatorStats()
         {
             var stats = new Dictionary<Allocator, AllocatorStats>();
-            
+
             foreach (var kvp in SActiveAllocations)
             {
                 var allocator = kvp.Value.AllocatorType;
@@ -187,18 +170,18 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 {
                     stats[allocator] = new AllocatorStats();
                 }
-                
+
                 var currentStats = stats[allocator];
                 currentStats.Count++;
                 currentStats.TotalBytes += kvp.Value.TotalBytes;
                 stats[allocator] = currentStats;
             }
-            
+
             return stats;
         }
 
         /// <summary>
-        /// 获取长时间未释放的分配（可能的内存泄漏）
+        ///     获取长时间未释放的分配（可能的内存泄漏）
         /// </summary>
         /// <param name="thresholdMinutes">阈值时间（分钟）</param>
         /// <returns>可能泄漏的分配信息</returns>
@@ -206,7 +189,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         {
             var leaks = new List<LeakInfo>();
             var threshold = DateTime.Now.AddMinutes(-thresholdMinutes);
-            
+
             foreach (var kvp in SActiveAllocations)
             {
                 var info = kvp.Value;
@@ -224,19 +207,19 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                     });
                 }
             }
-            
+
             return leaks;
         }
 
         /// <summary>
-        /// 生成内存使用报告
+        ///     生成内存使用报告
         /// </summary>
         public static string GenerateMemoryReport()
         {
             var stats = GetMemoryStats();
             var allocatorStats = GetAllocatorStats();
             var leaks = GetPotentialLeaks();
-            
+
             var report = $@"
 === MrPath V2.2 内存使用报告 ===
 生成时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
@@ -263,7 +246,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 report += $@"
 
 潜在内存泄漏 ({leaks.Count} 个):";
-                
+
                 foreach (var leak in leaks)
                 {
                     report += $@"
@@ -275,7 +258,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 重置所有统计信息
+        ///     重置所有统计信息
         /// </summary>
         public static void ResetStats()
         {
@@ -289,7 +272,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 格式化字节数为可读字符串
+        ///     格式化字节数为可读字符串
         /// </summary>
         private static string FormatBytes(long bytes)
         {
@@ -300,7 +283,22 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 内存统计信息结构
+        ///     分配信息结构
+        /// </summary>
+        private struct AllocationInfo
+        {
+            public string TypeName;
+            public int ElementCount;
+            public int ElementSize;
+            public Allocator AllocatorType;
+            public DateTime AllocationTime;
+            public string StackTrace;
+
+            public long TotalBytes => ElementCount * ElementSize;
+        }
+
+        /// <summary>
+        ///     内存统计信息结构
         /// </summary>
         public struct MemoryStats
         {
@@ -316,7 +314,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 分配器统计信息结构
+        ///     分配器统计信息结构
         /// </summary>
         public struct AllocatorStats
         {
@@ -325,7 +323,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 内存泄漏信息结构
+        ///     内存泄漏信息结构
         /// </summary>
         public struct LeakInfo
         {

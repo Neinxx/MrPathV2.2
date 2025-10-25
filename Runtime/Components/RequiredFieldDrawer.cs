@@ -2,30 +2,21 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace MrPathV2._2.Runtime.Components
 {
     /// <summary>
-    /// 标记字段为必填项的特性，为空时会在Inspector中显示错误提示
+    ///     标记字段为必填项的特性，为空时会在Inspector中显示错误提示
     /// </summary>
     public class RequiredFieldAttribute : PropertyAttribute
     {
-        /// <summary>
-        /// 自定义错误消息（留空则使用默认消息）
-        /// </summary>
-        public string ErrorMessage { get; set; }
 
         /// <summary>
-        /// 是否在编辑模式下强制检查（即使对象未被选中）
-        /// </summary>
-        public bool ForceCheckInEditMode { get; set; }
-
-        /// <summary>
-        /// 标记字段为必填项
+        ///     标记字段为必填项
         /// </summary>
         public RequiredFieldAttribute() { }
 
         /// <summary>
-        /// 标记字段为必填项并指定自定义错误消息
+        ///     标记字段为必填项并指定自定义错误消息
         /// </summary>
         /// <param name="errorMessage">为空时显示的错误消息</param>
         public RequiredFieldAttribute(string errorMessage)
@@ -34,7 +25,7 @@ namespace MrPathV2
         }
 
         /// <summary>
-        /// 标记字段为必填项并指定检查行为
+        ///     标记字段为必填项并指定检查行为
         /// </summary>
         /// <param name="errorMessage">为空时显示的错误消息</param>
         /// <param name="forceCheckInEditMode">是否在编辑模式下强制检查</param>
@@ -43,12 +34,17 @@ namespace MrPathV2
             ErrorMessage = errorMessage;
             ForceCheckInEditMode = forceCheckInEditMode;
         }
+
+        /// <summary>
+        ///     自定义错误消息（留空则使用默认消息）
+        /// </summary>
+        public string ErrorMessage { get; set; }
+
+        /// <summary>
+        ///     是否在编辑模式下强制检查（即使对象未被选中）
+        /// </summary>
+        public bool ForceCheckInEditMode { get; set; }
     }
-
-
-
-
-
 
 
     [CustomPropertyDrawer(typeof(RequiredFieldAttribute))]
@@ -59,35 +55,35 @@ namespace MrPathV2
         // ====================================================================
 
         /// <summary>
-        /// 错误框的固定高度
+        ///     错误框的固定高度
         /// </summary>
         private const float ErrorBoxHeight = 36f; // 你可以改成 30f, 24f 等
 
         /// <summary>
-        /// 错误消息的字体大小
+        ///     错误消息的字体大小
         /// </summary>
         private const int ErrorFontSize = 12; // 你可以改成 11, 13, 14 等
+        private const float BorderWidth = 1f;
 
         // ====================================================================
 
         // 错误框的背景和边框颜色 (比你原版的更柔和)
         private static readonly Color ErrorBackgroundColor = new Color(0.5f, 0.2f, 0.2f, 0.4f);
         private static readonly Color ErrorBorderColor = new Color(0.8f, 0.3f, 0.3f, 0.8f);
-        private const float BorderWidth = 1f;
 
         /// <summary>
-        /// 缓存自定义的 GUI 样式
-        /// </summary>
-        private GUIStyle _errorTextStyle;
-
-        /// <summary>
-        /// 缓存 Unity 的原生错误图标
+        ///     缓存 Unity 的原生错误图标
         /// </summary>
         private GUIContent _errorIconContent;
 
+        /// <summary>
+        ///     缓存自定义的 GUI 样式
+        /// </summary>
+        private GUIStyle _errorTextStyle;
+
 
         /// <summary>
-        /// 初始化我们的自定义样式
+        ///     初始化我们的自定义样式
         /// </summary>
         private void InitializeStyles()
         {
@@ -117,7 +113,7 @@ namespace MrPathV2
             InitializeStyles();
 
             var requiredAttribute = (RequiredFieldAttribute)attribute;
-            bool isNull = IsPropertyNull(property);
+            var isNull = IsPropertyNull(property);
 
             if (!isNull)
             {
@@ -129,7 +125,7 @@ namespace MrPathV2
             // --- 字段为空，开始自定义绘制 ---
 
             // 1. 定义错误框区域
-            Rect errorRect = new Rect(
+            var errorRect = new Rect(
                 position.x,
                 position.y,
                 position.width,
@@ -140,7 +136,7 @@ namespace MrPathV2
             DrawErrorBackground(errorRect);
 
             // 3. 绘制图标
-            Rect iconRect = new Rect(
+            var iconRect = new Rect(
                 errorRect.x + 5f,
                 errorRect.y + (errorRect.height - 20f) / 2f, // 垂直居中
                 20f,
@@ -149,21 +145,21 @@ namespace MrPathV2
             GUI.Label(iconRect, _errorIconContent, GUIStyle.none);
 
             // 4. 绘制文本
-            Rect labelRect = new Rect(
+            var labelRect = new Rect(
                 iconRect.xMax + 5f, // 图标右侧
                 errorRect.y,
                 errorRect.width - iconRect.width - 10f, // 减去图标和边距
                 errorRect.height
             );
 
-            string errorMessage = GetErrorMessage(requiredAttribute, label);
+            var errorMessage = GetErrorMessage(requiredAttribute, label);
             // 添加红色富文本 (可选)
-            string richErrorMessage = $"<color=#{ColorUtility.ToHtmlStringRGB(Color.white)}><b>!</b> {errorMessage}</color>";
+            var richErrorMessage = $"<color=#{ColorUtility.ToHtmlStringRGB(Color.white)}><b>!</b> {errorMessage}</color>";
 
             EditorGUI.LabelField(labelRect, richErrorMessage, _errorTextStyle);
 
             // 5. 定义属性字段区域 (在错误框下方)
-            Rect propertyRect = new Rect(
+            var propertyRect = new Rect(
                 position.x,
                 errorRect.yMax + EditorGUIUtility.standardVerticalSpacing,
                 position.width,
@@ -179,7 +175,7 @@ namespace MrPathV2
 
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
-            float baseHeight = EditorGUI.GetPropertyHeight(property, label, true);
+            var baseHeight = EditorGUI.GetPropertyHeight(property, label, true);
 
             if (IsPropertyNull(property))
             {
@@ -191,7 +187,7 @@ namespace MrPathV2
         }
 
         /// <summary>
-        /// 帮助方法：获取要显示的错误消息
+        ///     帮助方法：获取要显示的错误消息
         /// </summary>
         private string GetErrorMessage(RequiredFieldAttribute attribute, GUIContent label)
         {
@@ -203,7 +199,7 @@ namespace MrPathV2
         }
 
         /// <summary>
-        /// 检查属性是否为空（仅检查引用和字符串）
+        ///     检查属性是否为空（仅检查引用和字符串）
         /// </summary>
         private bool IsPropertyNull(SerializedProperty property)
         {
@@ -221,8 +217,8 @@ namespace MrPathV2
         }
 
         /// <summary>
-        /// 绘制错误提示的背景色
-        /// (来自你之前的代码，颜色已调整)
+        ///     绘制错误提示的背景色
+        ///     (来自你之前的代码，颜色已调整)
         /// </summary>
         private void DrawErrorBackground(Rect rect)
         {

@@ -1,26 +1,25 @@
 using System;
 using System.IO;
 using System.Linq;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
-using MrPathV2;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core.BlendMasks;
 using Sirenix.OdinInspector.Editor;
 using Sirenix.Utilities.Editor;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
     public class StylizedRoadRecipeEditor : OdinEditor
     {
-        public Action OnDataChanged;
-
-        private StylizedRoadRecipe _recipe;
+        private static readonly Type[] MaskTypes = FindAvailableMaskTypes();
         private int _lastRecipeHash;
 
+        private StylizedRoadRecipe _recipe;
+
         private Type _selectedMaskType;
-        private static readonly Type[] MaskTypes = FindAvailableMaskTypes();
+        public Action OnDataChanged;
 
         protected override void OnEnable()
         {
@@ -65,8 +64,8 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 {
                     if (MaskTypes.Length > 0)
                     {
-                        int currentIndex = Array.IndexOf(MaskTypes, _selectedMaskType);
-                        string[] typeNames = MaskTypes.Select(GetMaskTypeDisplayName).ToArray();
+                        var currentIndex = Array.IndexOf(MaskTypes, _selectedMaskType);
+                        var typeNames = MaskTypes.Select(GetMaskTypeDisplayName).ToArray();
 
                         // 使用标准 EditorGUILayout.Popup，但放在 Toolbar 中自动对齐
                         var newIndex = EditorGUILayout.Popup(currentIndex, typeNames, EditorStyles.popup, GUILayout.ExpandWidth(true));
@@ -98,6 +97,36 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             _recipe.RaiseRecipeChanged();
         }
 
+        #region Hash & Change Detection
+
+        private static int ComputeRecipeHash(StylizedRoadRecipe recipe)
+        {
+            if (recipe == null) return 0;
+
+            unchecked
+            {
+                var hash = 17;
+                foreach (var layer in recipe.GetLayers())
+                {
+                    if (layer == null) continue;
+
+                    hash = hash * 23 + layer.enabled.GetHashCode();
+                    hash = hash * 23 + layer.opacity.GetHashCode();
+                    hash = hash * 23 + layer.blendMode.GetHashCode();
+                    hash = hash * 23 + (layer.contentLayer ? layer.contentLayer.GetInstanceID() : 0);
+
+                    if (layer.layerMask != null)
+                    {
+                        var maskJson = JsonUtility.ToJson(layer.layerMask);
+                        hash = hash * 23 + maskJson.GetHashCode();
+                    }
+                }
+                return hash;
+            }
+        }
+
+        #endregion
+
         #region Mask Creation
 
         private void CreateMaskAsset()
@@ -115,15 +144,15 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
 
             var newMask = CreateInstance(maskType);
-            string recipePath = AssetDatabase.GetAssetPath(_recipe);
-            string folder = Path.GetDirectoryName(recipePath) ?? "Assets";
-            string masksFolder = Path.Combine(folder, "Masks");
+            var recipePath = AssetDatabase.GetAssetPath(_recipe);
+            var folder = Path.GetDirectoryName(recipePath) ?? "Assets";
+            var masksFolder = Path.Combine(folder, "Masks");
 
             if (!AssetDatabase.IsValidFolder(masksFolder))
                 AssetDatabase.CreateFolder(folder, "Masks");
 
-            string assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{maskType.Name}.asset").Replace("\\", "/");
-            string uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
+            var assetPath = Path.Combine(masksFolder, $"{_recipe.name}_{maskType.Name}.asset").Replace("\\", "/");
+            var uniquePath = AssetDatabase.GenerateUniqueAssetPath(assetPath);
 
             AssetDatabase.CreateAsset(newMask, uniquePath);
             AssetDatabase.SaveAssets();
@@ -149,36 +178,6 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 .SelectMany(a => a.GetTypes())
                 .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
                 .ToArray();
-        }
-
-        #endregion
-
-        #region Hash & Change Detection
-
-        private static int ComputeRecipeHash(StylizedRoadRecipe recipe)
-        {
-            if (recipe == null) return 0;
-
-            unchecked
-            {
-                int hash = 17;
-                foreach (var layer in recipe.GetLayers())
-                {
-                    if (layer == null) continue;
-
-                    hash = hash * 23 + layer.enabled.GetHashCode();
-                    hash = hash * 23 + layer.opacity.GetHashCode();
-                    hash = hash * 23 + layer.blendMode.GetHashCode();
-                    hash = hash * 23 + (layer.contentLayer ? layer.contentLayer.GetInstanceID() : 0);
-
-                    if (layer.layerMask != null)
-                    {
-                        string maskJson = JsonUtility.ToJson(layer.layerMask);
-                        hash = hash * 23 + maskJson.GetHashCode();
-                    }
-                }
-                return hash;
-            }
         }
 
         #endregion

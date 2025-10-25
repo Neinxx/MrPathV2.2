@@ -1,34 +1,37 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2._2.Runtime.Core; // add near top
-using __temp.MrPathV2._2.Runtime.Core.BlendMasks;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Core.BlendMasks;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+// add near top
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// 将 StylizedRoadRecipe 的数据烘焙为 Job 友好的结构。
-    /// 统一生成遮罩采样条（Strip），并记录 BlendMode 与不透明度，供预览与地形涂刷共享。
+    ///     将 StylizedRoadRecipe 的数据烘焙为 Job 友好的结构。
+    ///     统一生成遮罩采样条（Strip），并记录 BlendMode 与不透明度，供预览与地形涂刷共享。
     /// </summary>
-    public struct RecipeData : System.IDisposable
+    public struct RecipeData : IDisposable
     {
         [ReadOnly] public NativeArray<int> TerrainLayerIndices; // 与 Terrain 的 splat 索引对应（预览可为 -1）
-        [ReadOnly] public NativeArray<int> BlendModes;          // 对应 BlendMode 的枚举整数值
-        [ReadOnly] public NativeArray<float> Opacities;         // 每层不透明度（0~1）
+        [ReadOnly] public NativeArray<int> BlendModes; // 对应 BlendMode 的枚举整数值
+        [ReadOnly] public NativeArray<float> Opacities; // 每层不透明度（0~1）
 
         // 统一的遮罩采样条：把每层的遮罩（Gradient/Noise/Texture）采样为固定长度的一维数组
-        [ReadOnly] public NativeArray<float> Strips;            // 长度 = stripResolution * Length
-        [ReadOnly] public NativeArray<int2> StripSlices;        // 每层在 strips 中的起始偏移与长度（length = stripResolution）
-        [ReadOnly] public readonly int StripResolution;                  // 采样条分辨率（固定长度）
+        [ReadOnly] public NativeArray<float> Strips; // 长度 = stripResolution * Length
+        [ReadOnly] public NativeArray<int2> StripSlices; // 每层在 strips 中的起始偏移与长度（length = stripResolution）
+        [ReadOnly] public readonly int StripResolution; // 采样条分辨率（固定长度）
 
         // 兼容旧实现：仍保留曲线关键帧（用于外部可能的评估复用），但当前共享算法使用 strips
-        [ReadOnly] public NativeArray<Keyframe> GradientKeys;   // 合并后的所有关键帧
-        [ReadOnly] public NativeArray<int2> GradientKeySlices;  // 每层对应的 keys 片段范围
-        [ReadOnly] public NativeArray<float4> MaskLut256;   // 删除该字段及相关逻辑
+        [ReadOnly] public NativeArray<Keyframe> GradientKeys; // 合并后的所有关键帧
+        [ReadOnly] public NativeArray<int2> GradientKeySlices; // 每层对应的 keys 片段范围
+        [ReadOnly] public NativeArray<float4> MaskLut256; // 删除该字段及相关逻辑
         // 新 2D MaskAtlas，每行对应一层，单通道 R 保存权重
-        [ReadOnly] public NativeArray<float> MaskAtlas;    // 长度 = atlasWidth * atlasHeight
+        [ReadOnly] public NativeArray<float> MaskAtlas; // 长度 = atlasWidth * atlasHeight
         public readonly int AtlasWidth;
         public readonly int AtlasHeight;
         public readonly int PathSamples;
@@ -36,29 +39,29 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
         public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap, float roadWorldWidth, float roadWorldLength, Allocator allocator)
         {
-            var roadLayers = recipe?.GetLayers()?.ToArray() ?? System.Array.Empty<RoadLayer>();
+            var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
             Length = roadLayers.Length;
-            TerrainLayerIndices = Extensions.NativeArrayExtensions.CreateTracked<int>(Length, allocator);
-            BlendModes = Extensions.NativeArrayExtensions.CreateTracked<int>(Length, allocator);
-            Opacities = Extensions.NativeArrayExtensions.CreateTracked<float>(Length, allocator);
+            TerrainLayerIndices = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
+            BlendModes = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
+            Opacities = NativeArrayExtensions.CreateTracked<float>(Length, allocator);
             StripResolution = 128; // 统一采样分辨率（足够平滑且计算开销低）
-            Strips = Extensions.NativeArrayExtensions.CreateTracked<float>(math.max(1, StripResolution) * math.max(1, Length), allocator);
-            StripSlices = Extensions.NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
-            GradientKeySlices = Extensions.NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
+            Strips = NativeArrayExtensions.CreateTracked<float>(math.max(1, StripResolution) * math.max(1, Length), allocator);
+            StripSlices = NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
+            GradientKeySlices = NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
             // 已弃用: maskLUT256 逻辑已被 MaskAtlas 取代，但为兼容旧 Job 结构体仍分配空数组确保 IsCreated=true
-            MaskLut256 = Extensions.NativeArrayExtensions.CreateTracked<float4>(1, allocator); // length 1, minimal
+            MaskLut256 = NativeArrayExtensions.CreateTracked<float4>(1, allocator); // length 1, minimal
 
             // 设定 MaskAtlas 分辨率（与 Preview 保持一致，可后续参数化）
             AtlasWidth = 256;
             PathSamples = 64; // 纵向采样数，可后续做成可配置
             AtlasHeight = math.max(1, Length * PathSamples);
-            MaskAtlas = Extensions.NativeArrayExtensions.CreateTracked<float>(AtlasWidth * AtlasHeight, allocator);
+            MaskAtlas = NativeArrayExtensions.CreateTracked<float>(AtlasWidth * AtlasHeight, allocator);
 
             _disposed = false;
 
             var totalKeyframes = 0;
-            totalKeyframes += (from b in roadLayers select b?.layerMask as GradientMask into gradAsset select gradAsset ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>()) : System.Array.Empty<Keyframe>() into keys select keys.Length).Sum();
-            GradientKeys = Extensions.NativeArrayExtensions.CreateTracked<Keyframe>(math.max(1, totalKeyframes), allocator);
+            totalKeyframes += (from b in roadLayers select b?.layerMask as GradientMask into gradAsset select gradAsset ? gradAsset.gradient?.keys ?? Array.Empty<Keyframe>() : Array.Empty<Keyframe>() into keys select keys.Length).Sum();
+            GradientKeys = NativeArrayExtensions.CreateTracked<Keyframe>(math.max(1, totalKeyframes), allocator);
 
             var keyOffset = 0;
             var stripOffset = 0;
@@ -66,8 +69,9 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             {
                 var b = roadLayers[i];
                 var activeMask = b?.layerMask;
-                 var idx = (b?.contentLayer && terrainLayerMap != null && terrainLayerMap.TryGetValue(b.contentLayer, out var value))
-                    ? value : -1;
+                var idx = b?.contentLayer && terrainLayerMap != null && terrainLayerMap.TryGetValue(b.contentLayer, out var value)
+                    ? value
+                    : -1;
                 TerrainLayerIndices[i] = idx;
 
                 BlendModes[i] = b != null ? (int)b.blendMode : 0; // 默认 Normal=0
@@ -75,7 +79,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                     Opacities[i] = Mathf.Clamp01(b != null ? b.opacity * recipe.masterOpacity : recipe.masterOpacity);
 
                 var gradAsset = b?.layerMask as GradientMask;
-                var keys = gradAsset ? (gradAsset.gradient?.keys ?? System.Array.Empty<Keyframe>()) : System.Array.Empty<Keyframe>();
+                var keys = gradAsset ? gradAsset.gradient?.keys ?? Array.Empty<Keyframe>() : Array.Empty<Keyframe>();
                 for (var k = 0; k < keys.Length; k++) GradientKeys[keyOffset + k] = keys[k];
                 GradientKeySlices[i] = new int2(keyOffset, keys.Length);
                 keyOffset += keys.Length;
@@ -83,8 +87,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 StripSlices[i] = new int2(stripOffset, StripResolution);
                 for (var s = 0; s < StripResolution; s++)
                 {
-                    var t = s / (float)(StripResolution - 1);    // 0..1
-                    var pos = Mathf.Lerp(-1f, 1f, t);             // -1..1
+                    var t = s / (float)(StripResolution - 1); // 0..1
+                    var pos = Mathf.Lerp(-1f, 1f, t); // -1..1
                     var v = 1f;
                     if (activeMask)
                     {
@@ -187,12 +191,12 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
     }
 
     /// <summary>
-    /// RecipeJobsUtility 静态工具类
+    ///     RecipeJobsUtility 静态工具类
     /// </summary>
     public static class RecipeJobsUtility
     {
         /// <summary>
-        /// 烘焙 StylizedRoadRecipe 为 Job 友好的数据结构
+        ///     烘焙 StylizedRoadRecipe 为 Job 友好的数据结构
         /// </summary>
         public static RecipeData BakeRecipe(StylizedRoadRecipe recipe, Allocator allocator, float roadWorldWidth = -1, float roadWorldLength = -1)
         {
@@ -202,11 +206,8 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 创建默认的 RecipeData
+        ///     创建默认的 RecipeData
         /// </summary>
-        public static RecipeData CreateDefaultRecipe(Allocator allocator)
-        {
-            return new RecipeData(null, null, 10f, 100f, allocator);
-        }
+        public static RecipeData CreateDefaultRecipe(Allocator allocator) => new RecipeData(null, null, 10f, 100f, allocator);
     }
 }

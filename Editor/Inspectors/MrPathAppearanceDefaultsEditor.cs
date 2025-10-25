@@ -1,9 +1,10 @@
-using __temp.MrPathV2._2.Editor.Settings;
-using __temp.MrPathV2._2.Runtime.Core;
+using System.IO;
+using MrPathV2._2.Editor.Settings;
+using MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathAppearanceDefaults))]
     public class MrPathAppearanceDefaultsEditor : UnityEditor.Editor
@@ -23,14 +24,14 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private void CreateAndAssignDefaultAssets()
         {
             var targetObject = (MrPathAppearanceDefaults)target;
-            string settingsPath = GetSettingsPath();
+            var settingsPath = GetSettingsPath();
 
             // 创建并设置 defaultPathProfile
-            string pathProfilePath = settingsPath + "/AppearanceDefaults/DefaultPathProfile.asset";
+            var pathProfilePath = settingsPath + "/AppearanceDefaults/DefaultPathProfile.asset";
             var existingPathProfile = AssetDatabase.LoadAssetAtPath<PathProfile>(pathProfilePath);
             if (existingPathProfile == null)
             {
-                EnsureFolderExists(System.IO.Path.GetDirectoryName(pathProfilePath));
+                EnsureFolderExists(Path.GetDirectoryName(pathProfilePath));
                 var defaultPathProfile = CreateInstance<PathProfile>();
                 AssetDatabase.CreateAsset(defaultPathProfile, pathProfilePath);
                 AssetDatabase.SaveAssets();
@@ -40,11 +41,11 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             targetObject.defaultPathProfile = existingPathProfile;
 
             // 创建并设置 previewMaterialTemplate
-            string materialTemplatePath = settingsPath + "/AppearanceDefaults/DefaultPreviewMaterialTemplate.mat";
+            var materialTemplatePath = settingsPath + "/AppearanceDefaults/DefaultPreviewMaterialTemplate.mat";
             var existingMaterialTemplate = AssetDatabase.LoadAssetAtPath<Material>(materialTemplatePath);
             if (existingMaterialTemplate == null)
             {
-                EnsureFolderExists(System.IO.Path.GetDirectoryName(materialTemplatePath));
+                EnsureFolderExists(Path.GetDirectoryName(materialTemplatePath));
                 var defaultMaterialTemplate = new Material(Shader.Find("MrPath/PathPreviewSplatMulti"));
                 AssetDatabase.CreateAsset(defaultMaterialTemplate, materialTemplatePath);
                 AssetDatabase.SaveAssets();
@@ -65,20 +66,17 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             EditorUtility.SetDirty(targetObject);
         }
 
-        private string GetSettingsPath()
-        {
-            return MrPathProjectSettings.GetSettingsRootFolder();
-        }
+        private string GetSettingsPath() => MrPathProjectSettings.GetSettingsRootFolder();
 
         /// <summary>
-        /// 确保指定文件夹存在（递归创建）。
+        ///     确保指定文件夹存在（递归创建）。
         /// </summary>
         private static void EnsureFolderExists(string folderPath)
         {
             if (AssetDatabase.IsValidFolder(folderPath)) return;
 
-            string parent = System.IO.Path.GetDirectoryName(folderPath);
-            string folderName = System.IO.Path.GetFileName(folderPath);
+            var parent = Path.GetDirectoryName(folderPath);
+            var folderName = Path.GetFileName(folderPath);
             if (!AssetDatabase.IsValidFolder(parent))
             {
                 EnsureFolderExists(parent);

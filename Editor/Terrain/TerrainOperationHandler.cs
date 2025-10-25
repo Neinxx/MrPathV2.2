@@ -1,24 +1,22 @@
-
-
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     /// <summary>
-    /// 地形操作处理器：统一管理地形命令的执行、进度显示、错误处理和取消操作。
-    /// 优化版本：集成AsyncOperationManager，提供更好的异步操作管理
+    ///     地形操作处理器：统一管理地形命令的执行、进度显示、错误处理和取消操作。
+    ///     优化版本：集成AsyncOperationManager，提供更好的异步操作管理
     /// </summary>
     public class TerrainOperationHandler : IDisposable
     {
-        private readonly IHeightProvider _heightProvider;
         private readonly AsyncOperationManager _asyncManager;
-        
+        private readonly IHeightProvider _heightProvider;
+
         // 保持向后兼容的字段
         private CancellationTokenSource _cts;
         private TerrainCommandBase _currentCommand;
@@ -27,15 +25,21 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             _heightProvider = heightProvider;
             _asyncManager = new AsyncOperationManager();
-            
+
             // 设置地形操作的默认超时时间
             _asyncManager.SetOperationTimeout("FlattenTerrain", TimeSpan.FromMinutes(5));
             _asyncManager.SetOperationTimeout("PaintTerrain", TimeSpan.FromMinutes(10));
         }
 
+        public void Dispose()
+        {
+            _asyncManager?.Dispose();
+            _cts?.Dispose();
+        }
+
         /// <summary>
-        /// 执行地形命令，显示进度并捕获错误。支持取消令牌。
-        /// 优化版本：使用AsyncOperationManager进行统一管理
+        ///     执行地形命令，显示进度并捕获错误。支持取消令牌。
+        ///     优化版本：使用AsyncOperationManager进行统一管理
         /// </summary>
         public async Task ExecuteAsync(TerrainCommandBase command, Action<bool> setIsApplying)
         {
@@ -46,7 +50,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
 
             var operationId = command.GetCommandName();
-            
+
             // 检查是否已有同类操作在执行
             if (_asyncManager.IsOperationActive(operationId))
             {
@@ -56,21 +60,21 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
             setIsApplying?.Invoke(true);
             _heightProvider?.MarkAsDirty();
-            
+
             // 保持向后兼容
             _currentCommand = command;
 
             try
             {
                 EditorUtility.DisplayProgressBar("应用路径到地形", $"正在执行: {operationId}...", 0.3f);
-                
+
                 // 使用AsyncOperationManager执行操作
-                var success = await _asyncManager.ExecuteAsync(operationId, async (token) =>
+                var success = await _asyncManager.ExecuteAsync(operationId, async token =>
                 {
                     // 创建兼容的CancellationTokenSource
                     _cts?.Dispose();
                     _cts = CancellationTokenSource.CreateLinkedTokenSource(token);
-                    
+
                     await command.ExecuteAsync(_cts.Token);
                 });
 
@@ -95,7 +99,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
 
         /// <summary>
-        /// 取消当前操作
+        ///     取消当前操作
         /// </summary>
         public void Cancel()
         {
@@ -103,7 +107,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             {
                 var operationId = _currentCommand.GetCommandName();
                 var cancelled = _asyncManager.CancelOperation(operationId);
-                
+
                 if (cancelled)
                 {
                     EditorUtility.DisplayDialog("取消操作", $"已请求取消操作: {operationId}", "确定");
@@ -113,13 +117,13 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                     Debug.LogWarning($"[TerrainOperationHandler] 无法取消操作: {operationId}");
                 }
             }
-            
+
             // 保持向后兼容
             if (_cts != null && !_cts.IsCancellationRequested) _cts.Cancel();
         }
 
         /// <summary>
-        /// 取消所有活动操作
+        ///     取消所有活动操作
         /// </summary>
         public void CancelAllOperations()
         {
@@ -128,7 +132,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
 
         /// <summary>
-        /// 检查是否有操作正在执行
+        ///     检查是否有操作正在执行
         /// </summary>
         /// <returns>是否有活动操作</returns>
         public bool HasActiveOperations()
@@ -138,7 +142,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
 
         /// <summary>
-        /// 获取当前活动操作的信息
+        ///     获取当前活动操作的信息
         /// </summary>
         /// <returns>活动操作信息</returns>
         public string GetActiveOperationsInfo()
@@ -153,7 +157,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
 
         /// <summary>
-        /// 等待所有操作完成
+        ///     等待所有操作完成
         /// </summary>
         /// <param name="timeout">等待超时时间</param>
         /// <returns>是否所有操作都已完成</returns>
@@ -161,7 +165,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         {
             var activeIds = _asyncManager.GetActiveOperationIds();
             var tasks = new Task<bool>[activeIds.Length];
-            
+
             for (var i = 0; i < activeIds.Length; i++)
             {
                 tasks[i] = _asyncManager.WaitForOperationAsync(activeIds[i], timeout);
@@ -182,17 +186,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
 
         /// <summary>
-        /// 清理已完成的操作
+        ///     清理已完成的操作
         /// </summary>
         public void CleanupCompletedOperations()
         {
             _asyncManager.CleanupCompletedOperations();
-        }
-
-        public void Dispose()
-        {
-            _asyncManager?.Dispose();
-            _cts?.Dispose();
         }
     }
 }

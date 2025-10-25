@@ -1,11 +1,9 @@
-
-
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Settings
+namespace MrPathV2._2.Editor.Settings
 {
     /// <summary>
-    /// 专门负责新路径创建时的所有默认值。
+    ///     专门负责新路径创建时的所有默认值。
     /// </summary>
     public class MrPathCreationDefaults : ScriptableObject
     {

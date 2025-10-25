@@ -1,39 +1,47 @@
 // 文件: Editor/Terrain/PaintTerrainCommand.cs
+
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Editor.Settings;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
-using __temp.MrPathV2._2.Runtime.Jobs;
-using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
-using __temp.MrPathV2._2.Runtime.Settings; // <-- 修正：添加 using
+using MrPathV2._2.Editor.Settings;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Runtime.Jobs;
+using MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
-using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
+// <-- 修正：添加 using
 
 // 确保 Painter 命名空间可访问
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     public class PaintTerrainCommand : TerrainCommandBase
     {
         #region 常量与枚举
+
         private const string OperationName = "绘制纹理 (Paint Textures)";
-        public enum PaintingBackend { CPU_Job_TwoPass, GPU_Compute }
+
+        public enum PaintingBackend
+        {
+            CPU_Job_TwoPass,
+            GPU_Compute
+        }
+
         #endregion
 
         #region 构造函数
+
         public PaintTerrainCommand(PathCreator creator, IHeightProvider heightProvider)
             : base(creator, heightProvider) { }
 
         public override string GetCommandName() => OperationName;
+
         #endregion
 
         #region 核心处理方法
+
         protected override async Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token)
         {
             // --- 1. 选择后端 ---
@@ -153,9 +161,9 @@ namespace __temp.MrPathV2._2.Editor.Terrain
 
 
                     tasks.Add(ExecutePainterAsync(painter, terrain, spineData, profileData,
-                                                  currentCpuRecipeData, gpuDataForThisTerrain,
-                                                  roadContour, finalBounds,
-                                                  coverageMin, coverageMax, token));
+                        currentCpuRecipeData, gpuDataForThisTerrain,
+                        roadContour, finalBounds,
+                        coverageMin, coverageMax, token));
 
                 } // End foreach terrain
 
@@ -164,7 +172,7 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             }
             catch (OperationCanceledException)
             {
-                Debug.Log($"[PaintTerrainCommand] Operation cancelled.");
+                Debug.Log("[PaintTerrainCommand] Operation cancelled.");
                 throw;
             }
             catch (Exception ex)
@@ -191,11 +199,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
         }
 
         private async Task ExecutePainterAsync(
-             ITerrainPainter painter, UnityEngine.Terrain terrain,
-             PathJobsUtility.SpineData spineData, PathJobsUtility.ProfileData profileData,
-             RecipeData cpuRecipeData, RecipeGpuDataManager gpuDataManager,
-             NativeArray<float2> roadContour, float4 finalBounds,
-             int2 coverageMin, int2 coverageMax, CancellationToken token)
+            ITerrainPainter painter, UnityEngine.Terrain terrain,
+            PathJobsUtility.SpineData spineData, PathJobsUtility.ProfileData profileData,
+            RecipeData cpuRecipeData, RecipeGpuDataManager gpuDataManager,
+            NativeArray<float2> roadContour, float4 finalBounds,
+            int2 coverageMin, int2 coverageMax, CancellationToken token)
         {
             try
             {

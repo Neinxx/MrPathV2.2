@@ -1,12 +1,12 @@
-using __temp.MrPathV2._2.Editor.Settings;
-using __temp.MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Editor.Settings;
+using MrPathV2._2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Factories
+namespace MrPathV2._2.Editor.Factories
 {
     /// <summary>
-    /// 路径创建工厂，负责创建配置完整的路径对象
+    ///     路径创建工厂，负责创建配置完整的路径对象
     /// </summary>
     public static class PathFactory
     {
@@ -26,8 +26,8 @@ namespace __temp.MrPathV2._2.Editor.Factories
             var appearanceDefaults = projectSettings.appearanceDefaults;
 
             // 确定对象名称
-            string objectName = creationDefaults?.defaultObjectName ?? "New MrPath";
-            float defaultLength = creationDefaults?.defaultLineLength ?? 10f;
+            var objectName = creationDefaults?.defaultObjectName ?? "New MrPath";
+            var defaultLength = creationDefaults?.defaultLineLength ?? 10f;
 
             // 创建游戏对象并注册撤销
             var go = new GameObject(objectName);
@@ -38,11 +38,11 @@ namespace __temp.MrPathV2._2.Editor.Factories
 
             // 初始化PathData并添加默认的两个节点
             creator.pathData = new PathData();
-            
+
             // 添加起始节点和结束节点，形成一条直线
-            Vector3 startPos = Vector3.zero;
-            Vector3 endPos = Vector3.forward * defaultLength;
-            
+            var startPos = Vector3.zero;
+            var endPos = Vector3.forward * defaultLength;
+
             creator.pathData.AddKnot(startPos, Vector3.zero, Vector3.zero);
             creator.pathData.AddKnot(endPos, Vector3.zero, Vector3.zero);
 
@@ -60,22 +60,22 @@ namespace __temp.MrPathV2._2.Editor.Factories
             if (SceneView.lastActiveSceneView != null)
             {
                 var sceneView = SceneView.lastActiveSceneView;
-                Vector3 spawnPos = sceneView.pivot;
-                
+                var spawnPos = sceneView.pivot;
+
                 // 如果有地形，尝试将路径放置在地形表面
                 var terrain = UnityEngine.Terrain.activeTerrain;
                 if (terrain != null)
                 {
-                    float terrainHeight = terrain.SampleHeight(spawnPos);
+                    var terrainHeight = terrain.SampleHeight(spawnPos);
                     spawnPos.y = terrainHeight;
                 }
-                
+
                 go.transform.position = spawnPos;
             }
 
             // 选中新创建的对象
             Selection.activeGameObject = go;
-            
+
             // 确保场景视图聚焦到新对象
             if (SceneView.lastActiveSceneView != null)
             {

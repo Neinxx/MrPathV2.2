@@ -1,16 +1,16 @@
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
+using UnityEngine.Scripting;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// Configures Unity's NativeLeakDetection system to provide full stack traces for leaked Native Collections.
-    /// This allows easier identification of disposal issues during development and testing.
-    /// The static constructor runs once on domain load before any NativeCollection allocations occur.
+    ///     Configures Unity's NativeLeakDetection system to provide full stack traces for leaked Native Collections.
+    ///     This allows easier identification of disposal issues during development and testing.
+    ///     The static constructor runs once on domain load before any NativeCollection allocations occur.
     /// </summary>
-    [UnityEngine.Scripting.Preserve]
-    internal static class NativeLeakDetectionConfig
+    [Preserve]
+    static class NativeLeakDetectionConfig
     {
         // Static constructor executes automatically on domain load.
         static NativeLeakDetectionConfig()

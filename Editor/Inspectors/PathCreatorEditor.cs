@@ -1,17 +1,19 @@
 #if UNITY_EDITOR
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Preview;
-using __temp.MrPathV2._2.Runtime.Settings;
-using __temp.MrPathV2._2.Runtime.Strategies;
+using System;
+using MrPathV2._2.Editor.Tools;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Preview;
+using MrPathV2._2.Runtime.Settings;
+using MrPathV2._2.Runtime.Strategies;
 using UnityEditor;
 using UnityEditor.EditorTools;
-using UnityEditor.UIElements; // <--- 引入 UI Toolkit
+using UnityEditor.UIElements;
 using UnityEngine;
-using UnityEngine.UIElements; // <--- 引入 UI Toolkit
-// alias UnityEditor.Tools to avoid namespace conflict
+using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 using UnityEditorTools = UnityEditor.Tools;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace MrPathV2._2.Editor.Inspectors
 {
     [CustomEditor(typeof(PathCreator))]
     public class PathCreatorEditor : UnityEditor.Editor
@@ -35,6 +37,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         // --- Profile 事件订阅跟踪 ---
         private PathProfile _lastSubscribedProfile;
+        private StylizedRoadRecipe _lastRecipeRef;
 
         // --- Transform 变化跟踪 ---
         private Vector3 _lastPosition;
@@ -49,6 +52,10 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private VisualElement _recipeEmbeddedContainer;
         private VisualElement _profileInspectorUI;
         private IMGUIContainer _recipeInspectorIMGUI;
+        public PathCreatorEditor(PathCreator targetCreator)
+        {
+            _targetCreator = targetCreator;
+        }
 
         #endregion
 
@@ -75,6 +82,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
             // 订阅初始 Profile 的修改事件
             SubscribeToProfile(_targetCreator.profile);
+            _lastRecipeRef = _targetCreator.profile != null ? _targetCreator.profile.roadRecipe : null;
 
             // 标记为脏以进行初始刷新
             MarkPathAsDirty();
@@ -99,7 +107,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             {
                 Undo.undoRedoPerformed -= OnUndoRedo;
             }
-            catch (System.ArgumentException e)
+            catch (ArgumentException e)
             {
                 Debug.LogWarning($"Undo callback removal failed: {e.Message}");
             }
@@ -113,7 +121,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                     _targetCreator.AppearanceChanged -= OnAppearanceChanged;
                     _targetCreator.TerrainInteractionChanged -= OnTerrainInteractionChanged;
                 }
-                catch (System.NullReferenceException e)
+                catch (NullReferenceException e)
                 {
                     Debug.LogError($"Event unsubscription failed: {e.Message}");
                 }
@@ -124,13 +132,13 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             {
                 UnsubscribeFromLastProfile();
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
                 Debug.LogError($"Profile cleanup failed: {e}");
             }
 
             // 6. 额外防御：确保所有委托被清除
-            System.GC.Collect();
+            GC.Collect();
         }
 
         // 安全销毁编辑器的方法
@@ -140,7 +148,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             {
                 try
                 {
-                    UnityEngine.Object.DestroyImmediate(editor);
+                    DestroyImmediate(editor);
                     editor = null;
                 }
                 catch (UnityException e)
@@ -148,7 +156,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                     Debug.LogWarning($"Editor destroy failed: {e.Message}");
                 }
             }
-            else if (editor != null)
+            else if (editor)
             {
                 editor = null;
             }
@@ -158,16 +166,11 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         #region GUI 绘制 (UI Toolkit)
 
-
         public override VisualElement CreateInspectorGUI()
         {
 
             _rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
             // var _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
-
-
-
-
 
 
             // 自动将 SerializedObject 绑定到 UXML (PropertyField 会自动生效)
@@ -198,7 +201,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 当 Profile 属性在 Inspector 中被更改时调用
+        ///     当 Profile 属性在 Inspector 中被更改时调用
         /// </summary>
         private void OnProfilePropertyChanged(SerializedPropertyChangeEvent evt)
         {
@@ -216,11 +219,11 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 绘制 Profile 内嵌编辑器 (被 IMGUIContainer 调用)
+        ///     绘制 Profile 内嵌编辑器 (被 IMGUIContainer 调用)
         /// </summary>
         private void DrawEmbeddedProfileUI()
         {
-            if (_targetCreator.profile == null) return;
+            if (!_targetCreator.profile) return;
 
             // [优雅] 重构为通用绘制方法
             DrawEmbeddedEditor(
@@ -233,11 +236,11 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 绘制 Recipe 内嵌编辑器 (被 IMGUIContainer 调用)
+        ///     绘制 Recipe 内嵌编辑器 (被 IMGUIContainer 调用)
         /// </summary>
         private void DrawEmbeddedRecipeUI()
         {
-            if (_targetCreator.profile == null || _targetCreator.profile.roadRecipe == null) return;
+            if (!_targetCreator.profile || !_targetCreator.profile.roadRecipe) return;
 
             // [优雅] 重构为通用绘制方法
             DrawEmbeddedEditor(
@@ -250,11 +253,11 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// [优雅] 用于绘制内嵌编辑器的通用方法，减少代码重复
+        ///     [优雅] 用于绘制内嵌编辑器的通用方法，减少代码重复
         /// </summary>
-        private void DrawEmbeddedEditor(ref UnityEditor.Editor editor, Object targetAsset, ref bool foldoutState, string title, System.Action onEditAction)
+        private void DrawEmbeddedEditor(ref UnityEditor.Editor editor, Object targetAsset, ref bool foldoutState, string title, Action onEditAction)
         {
-            if (targetAsset == null) return;
+            if (!targetAsset) return;
 
             // 检查编辑器是否需要重新创建 (例如切换了资产)
             if (!editor || editor.target != targetAsset)
@@ -286,93 +289,153 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
 
-
         /// <summary>
-        /// 根据当前的 PathProfile 更新嵌套编辑器的UI和实例。
+        ///     根据当前的 Path Profile 更新嵌套编辑器的UI和实例。
         /// </summary>
         private void UpdateEmbeddedEditorUI(PathProfile currentProfile)
         {
-            // 1) 防御性检查：UI 尚未准备好则直接返回
-            if (_rootElement == null || _profileMissingWarning == null || _profileEmbeddedContainer == null || _recipeEmbeddedContainer == null)
+            // 仅按区域更新，避免整面板重建
+            UpdateProfileEmbeddedArea(currentProfile);
+            UpdateRecipeEmbeddedArea(currentProfile);
+        }
+
+        private void UpdateProfileEmbeddedArea(PathProfile currentProfile)
+        {
+            if (_rootElement == null || _profileMissingWarning == null || _profileEmbeddedContainer == null)
             {
                 return;
             }
 
-            // 2) 每次刷新前先清空容器
-            _profileEmbeddedContainer.Clear();
-            _recipeEmbeddedContainer.Clear();
-
-            // 3) 处理 Profile 为空的情况
-            if (currentProfile == null)
+            if (!currentProfile)
             {
                 _profileMissingWarning.style.display = DisplayStyle.Flex;
                 _profileEmbeddedContainer.style.display = DisplayStyle.None;
-                _recipeEmbeddedContainer.style.display = DisplayStyle.None;
-
                 SafeDestroyEditor(ref _profileEmbeddedEditor);
-                SafeDestroyEditor(ref _recipeEmbeddedEditor);
+                if (_profileInspectorUI != null)
+                {
+                    _profileInspectorUI.RemoveFromHierarchy();
+                    _profileInspectorUI = null;
+                }
                 return;
             }
 
-            // 4) Profile 有效：展示 Profile 容器
             _profileMissingWarning.style.display = DisplayStyle.None;
             _profileEmbeddedContainer.style.display = DisplayStyle.Flex;
 
-            // 创建或更新 Profile 编辑器
-            if (_profileEmbeddedEditor == null || _profileEmbeddedEditor.target != currentProfile)
+            // 仅当目标变更时才重建 Profile 区域
+            var editorNeedsUpdate = !_profileEmbeddedEditor || _profileEmbeddedEditor.target != currentProfile;
+            if (editorNeedsUpdate)
             {
                 SafeDestroyEditor(ref _profileEmbeddedEditor);
-                _profileEmbeddedEditor = UnityEditor.Editor.CreateEditor(currentProfile);
-            }
+                _profileEmbeddedEditor = CreateEditor(currentProfile);
 
-            // 尝试使用 UI Toolkit 生成嵌入界面
-            VisualElement profileUI = null;
-            try
-            {
-                profileUI = _profileEmbeddedEditor?.CreateInspectorGUI();
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"Profile UITK 嵌入失败，回退 IMGUI: {e.Message}");
-            }
-
-            if (profileUI != null)
-            {
-                _profileInspectorUI = profileUI;
-                _profileEmbeddedContainer.Add(profileUI);
-            }
-            else
-            {
-                var imgui = new IMGUIContainer(() =>
+                if (_profileInspectorUI != null)
                 {
-                    if (_profileEmbeddedEditor != null)
+                    _profileInspectorUI.RemoveFromHierarchy();
+                    _profileInspectorUI = null;
+                }
+
+                VisualElement profileUI = null;
+                try
+                {
+                    profileUI = _profileEmbeddedEditor?.CreateInspectorGUI();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"Profile UITK 嵌入失败，回退 IMGUI: {e.Message}");
+                }
+
+                if (profileUI != null)
+                {
+                    _profileInspectorUI = profileUI;
+                    _profileEmbeddedContainer.Add(profileUI);
+                }
+                else
+                {
+                    var imgui = new IMGUIContainer(() =>
                     {
-                        EditorGUI.BeginChangeCheck();
-                        _profileEmbeddedEditor.OnInspectorGUI();
-                        if (EditorGUI.EndChangeCheck())
+                        if (_profileEmbeddedEditor)
                         {
-                            _targetCreator.NotifyProfileModified();
+                            EditorGUI.BeginChangeCheck();
+                            _profileEmbeddedEditor.OnInspectorGUI();
+                            if (EditorGUI.EndChangeCheck())
+                            {
+                                _targetCreator.NotifyProfileModified();
+                            }
                         }
-                    }
-                });
-                _profileEmbeddedContainer.Add(imgui);
+                    });
+                    _profileInspectorUI = imgui;
+                    _profileEmbeddedContainer.Add(imgui);
+                }
+            }
+        }
+
+        private void UpdateRecipeEmbeddedArea(PathProfile currentProfile)
+        {
+            if (_rootElement == null || _recipeEmbeddedContainer == null)
+            {
+                return;
             }
 
-            // 5) Recipe：通常为 Odin IMGUI，仅在容器内以 IMGUIContainer 回退
-            var targetRecipe = currentProfile.roadRecipe;
-            _recipeEmbeddedContainer.style.display = (targetRecipe != null) ? DisplayStyle.Flex : DisplayStyle.None;
+            var currentRecipe = currentProfile ? currentProfile.roadRecipe : null;
+            var recipeAlreadyEmbeddedInProfile = _profileInspectorUI != null && _profileInspectorUI.Q<VisualElement>("preview-content") != null;
 
-            if (targetRecipe != null)
+            if (!currentProfile)
             {
-                if (_recipeEmbeddedEditor == null || _recipeEmbeddedEditor.target != targetRecipe)
+                _recipeEmbeddedContainer.style.display = DisplayStyle.None;
+                if (_recipeInspectorIMGUI != null)
                 {
-                    SafeDestroyEditor(ref _recipeEmbeddedEditor);
-                    _recipeEmbeddedEditor = UnityEditor.Editor.CreateEditor(targetRecipe);
+                    _recipeInspectorIMGUI.RemoveFromHierarchy();
+                    _recipeInspectorIMGUI = null;
+                }
+                SafeDestroyEditor(ref _recipeEmbeddedEditor);
+                _lastRecipeRef = null;
+                return;
+            }
+
+            if (recipeAlreadyEmbeddedInProfile)
+            {
+                // Profile 检查器已内嵌 Recipe：隐藏独立区域并清理实例
+                _recipeEmbeddedContainer.style.display = DisplayStyle.None;
+                if (_recipeInspectorIMGUI != null)
+                {
+                    _recipeInspectorIMGUI.RemoveFromHierarchy();
+                    _recipeInspectorIMGUI = null;
+                }
+                SafeDestroyEditor(ref _recipeEmbeddedEditor);
+                _lastRecipeRef = currentRecipe;
+                return;
+            }
+
+            _recipeEmbeddedContainer.style.display = currentRecipe ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (!currentRecipe)
+            {
+                if (_recipeInspectorIMGUI != null)
+                {
+                    _recipeInspectorIMGUI.RemoveFromHierarchy();
+                    _recipeInspectorIMGUI = null;
+                }
+                SafeDestroyEditor(ref _recipeEmbeddedEditor);
+                _lastRecipeRef = null;
+                return;
+            }
+
+            var editorNeedsUpdate = !_recipeEmbeddedEditor || _recipeEmbeddedEditor.target != currentRecipe;
+            if (editorNeedsUpdate)
+            {
+                SafeDestroyEditor(ref _recipeEmbeddedEditor);
+                _recipeEmbeddedEditor = CreateEditor(currentRecipe);
+
+                if (_recipeInspectorIMGUI != null)
+                {
+                    _recipeInspectorIMGUI.RemoveFromHierarchy();
+                    _recipeInspectorIMGUI = null;
                 }
 
                 var recipeImgui = new IMGUIContainer(() =>
                 {
-                    if (_recipeEmbeddedEditor != null)
+                    if (_recipeEmbeddedEditor)
                     {
                         EditorGUI.BeginChangeCheck();
                         _recipeEmbeddedEditor.OnInspectorGUI();
@@ -385,53 +448,30 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 _recipeInspectorIMGUI = recipeImgui;
                 _recipeEmbeddedContainer.Add(recipeImgui);
             }
-            else
-            {
-                SafeDestroyEditor(ref _recipeEmbeddedEditor);
-            }
+
+            _lastRecipeRef = currentRecipe;
         }
 
         /// <summary>
-        /// 同步一个编辑器实例(editor)以匹配一个目标对象(targetObject)。
-        /// 这个方法会处理所有的生命周期逻辑：创建、销毁、或在匹配时保留。
+        ///     同步一个编辑器实例(editor)以匹配一个目标对象(targetObject)。
+        ///     这个方法会处理所有的生命周期逻辑：创建、销毁、或在匹配时保留。
         /// </summary>
         /// <typeparam name="T">目标对象的类型 (必须是 UnityEngine.Object)</typeparam>
         /// <param name="editor">对要管理的编辑器字段的引用 (例如 _profileEmbeddedEditor)</param>
         /// <param name="targetObject">编辑器应该显示的目标对象 (如果为null，则会销毁编辑器)</param>
         /// <param name="editorName">用于调试日志的编辑器名称 (例如 "Profile" 或 "Recipe")</param>
-        private void SyncEmbeddedEditor<T>(ref UnityEditor.Editor editor, T targetObject, string editorName) where T : UnityEngine.Object
+        private void SyncEmbeddedEditor<T>(ref UnityEditor.Editor editor, T targetObject, string editorName) where T : Object
         {
-            // 检查编辑器是否需要更新
-            // 需要更新的条件：
-            // 1. 目标对象存在，但编辑器不存在 (editor == null)
-            // 2. 目标对象存在，编辑器也存在，但编辑器的目标与新目标不匹配 (editor.target != targetObject)
-            // 3. 目标对象为null，但编辑器仍然存在 (editor != null)
 
-            if (editor != null && editor.target == targetObject)
+            if (editor && editor.target == targetObject) return;
+            if (editor)
             {
-                // 状态正确：目标和编辑器都存在且匹配。
-                // (可选) 为详细调试取消注释下一行
-                // Debug.Log($"[{editorName} Editor] 实例已是最新，无需操作。");
-                return;
-            }
-
-            // --- 如果状态不匹配，则需要执行操作 ---
-
-            // 步骤 A: 如果旧编辑器存在，则销毁它
-            if (editor != null)
-            {
-                // 添加调试日志，说明销毁原因
-                string oldTargetName = editor.target != null ? editor.target.name : "已失效的目标";
-                Debug.LogWarning($"[{editorName} Editor] 销毁旧实例 (目标: {oldTargetName})。新目标: {targetObject?.name ?? "NULL"}");
                 DestroyImmediate(editor);
-                editor = null; // 立即设为null
+                editor = null;
             }
-
-            // 步骤 B: 如果新目标存在，则创建新编辑器
-            if (targetObject != null)
+            if (targetObject)
             {
-                Debug.Log($"[{editorName} Editor] 为目标 '{targetObject.name}' 创建新实例。");
-                editor = UnityEditor.Editor.CreateEditor(targetObject);
+                editor = CreateEditor(targetObject);
             }
         }
 
@@ -440,7 +480,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         #region 场景 GUI (OnSceneGUI) - [模块化]
 
         /// <summary>
-        /// 在场景中绘制的调度中心
+        ///     在场景中绘制的调度中心
         /// </summary>
         private void OnSceneGUI()
         {
@@ -479,16 +519,11 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         // --- OnSceneGUI 辅助方法 ---
 
-        private bool ContextIsValid()
-        {
-            return _targetCreator != null && _ctx != null && _ctx.IsPathValid();
-        }
+        private bool ContextIsValid() => _targetCreator && _ctx != null && _ctx.IsPathValid();
 
-        private bool IsOtherToolActive()
-        {
+        private bool IsOtherToolActive() =>
             // [策略] 和平共存
-            return ToolManager.activeToolType != typeof(Tools.PathCreatorTool) && UnityEditorTools.current != Tool.Move;
-        }
+            ToolManager.activeToolType != typeof(PathCreatorTool) && UnityEditorTools.current != Tool.Move;
 
         private void CleanupPreviewLines()
         {
@@ -557,19 +592,21 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         private void OnUndoRedo() => MarkPathAsDirty();
 
         /// <summary>
-        /// 当 Profile 资产本身被修改时调用
+        ///     当 Profile 资产本身被修改时调用
         /// </summary>
         private void OnProfileModified()
         {
-            // 确保 Recipe 内嵌编辑器的 UI 状态也刷新
-            UpdateEmbeddedEditorUI(_targetCreator.profile);
+            if (!_targetCreator.profile) return;
 
+            // 将重建逻辑下沉至具体区域方法，编辑器本身只进行轻量刷新
+            UpdateEmbeddedEditorUI(_targetCreator.profile);
+            Repaint();
+
+            // 预览和场景刷新保持不变
             _ctx?.PreviewManager?.MarkMaterialsDirty();
-            _ctx?.RequestSceneViewRefresh(true); // 强制立即刷新
+            _ctx?.RequestSceneViewRefresh(true);
             MarkPathAsDirty();
         }
-
-
 
         #endregion
 
@@ -589,7 +626,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         private void SubscribeToProfile(PathProfile profile)
         {
-            if (profile == null) return;
+            if (!profile) return;
 
             _lastSubscribedProfile = profile;
             _lastSubscribedProfile.ProfileModified += OnProfileModified;
@@ -597,7 +634,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
 
         private void UnsubscribeFromLastProfile()
         {
-            if (_lastSubscribedProfile != null)
+            if (_lastSubscribedProfile)
             {
                 _lastSubscribedProfile.ProfileModified -= OnProfileModified;
                 _lastSubscribedProfile = null;

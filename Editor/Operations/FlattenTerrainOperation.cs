@@ -1,12 +1,12 @@
-using __temp.MrPathV2._2.Editor.Terrain;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Editor.Terrain;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Operations
+namespace MrPathV2._2.Editor.Operations
 {
     /// <summary>
-    /// 压平地形操作定义
+    ///     压平地形操作定义
     /// </summary>
     [CreateAssetMenu(fileName = "Flatten Terrain Operation", menuName = "MrPath/Operations/Flatten Terrain")]
     public class FlattenTerrainOperation : PathTerrainOperation
@@ -17,9 +17,6 @@ namespace __temp.MrPathV2._2.Editor.Operations
             if (buttonColor == default) buttonColor = new Color(0.6f, 0.85f, 1f);
         }
 
-        public override TerrainCommandBase CreateCommand(PathCreator creator, IHeightProvider heightProvider)
-        {
-            return new FlattenTerrainCommand(creator, heightProvider);
-        }
+        public override TerrainCommandBase CreateCommand(PathCreator creator, IHeightProvider heightProvider) => new FlattenTerrainCommand(creator, heightProvider);
     }
 }

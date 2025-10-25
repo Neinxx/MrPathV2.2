@@ -115,7 +115,7 @@
     padding-bottom: 4px;
     flex-shrink: 1;
     /* 高度改为 auto (原 49px) */
-    height: auto; 
+    height: auto;
     justify-content: center; /* [cite: 20] */
 }
 

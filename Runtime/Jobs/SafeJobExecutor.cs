@@ -6,23 +6,38 @@ using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Runtime.Jobs
+namespace MrPathV2._2.Runtime.Jobs
 {
     /// <summary>
-    /// 安全的Job执行器：提供异常安全的Job调度和内存管理
-    /// 集成性能监控和取消令牌支持
+    ///     安全的Job执行器：提供异常安全的Job调度和内存管理
+    ///     集成性能监控和取消令牌支持
     /// </summary>
     public class SafeJobExecutor : IDisposable
     {
         // 性能监控标记
-        private static readonly ProfilerMarker SJobScheduleMarker = new("SafeJobExecutor.Schedule");
-        private static readonly ProfilerMarker SJobCompleteMarker = new("SafeJobExecutor.Complete");
-        private static readonly ProfilerMarker SJobWaitMarker = new("SafeJobExecutor.Wait");
+        private static readonly ProfilerMarker SJobScheduleMarker = new ProfilerMarker("SafeJobExecutor.Schedule");
+        private static readonly ProfilerMarker SJobCompleteMarker = new ProfilerMarker("SafeJobExecutor.Complete");
+        private static readonly ProfilerMarker SJobWaitMarker = new ProfilerMarker("SafeJobExecutor.Wait");
+
+        private static JobExecutionStats _sStats;
 
         private bool _disposed;
 
         /// <summary>
-        /// 安全执行单个IJobParallelFor
+        ///     释放资源
+        /// </summary>
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                // 当前实现中没有需要释放的资源
+                // 但保留此方法以便将来扩展
+                _disposed = true;
+            }
+        }
+
+        /// <summary>
+        ///     安全执行单个IJobParallelFor
         /// </summary>
         /// <typeparam name="T">Job类型</typeparam>
         /// <param name="job">要执行的Job</param>
@@ -34,7 +49,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             where T : struct, IJobParallelFor
         {
             JobHandle handle = default;
-            
+
             try
             {
                 using (SJobScheduleMarker.Auto())
@@ -53,7 +68,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             catch (Exception ex)
             {
                 Debug.LogError($"Job执行失败: {ex.Message}");
-                
+
                 // 异常时确保Job完成
                 handle.Complete();
                 throw;
@@ -61,7 +76,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 安全执行单个IJob
+        ///     安全执行单个IJob
         /// </summary>
         /// <typeparam name="T">Job类型</typeparam>
         /// <param name="job">要执行的Job</param>
@@ -71,7 +86,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             where T : struct, IJob
         {
             JobHandle handle = default;
-            
+
             try
             {
                 using (SJobScheduleMarker.Auto())
@@ -89,14 +104,14 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             catch (Exception ex)
             {
                 Debug.LogError($"Job执行失败: {ex.Message}");
-                
+
                 handle.Complete();
                 throw;
             }
         }
 
         /// <summary>
-        /// 批量执行多个Job并等待全部完成
+        ///     批量执行多个Job并等待全部完成
         /// </summary>
         /// <param name="jobSchedulers">Job调度器委托列表</param>
         /// <param name="cancellationToken">取消令牌</param>
@@ -107,7 +122,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
                 return;
 
             var handles = new NativeArray<JobHandle>(jobSchedulers.Length, Allocator.TempJob);
-            
+
             try
             {
                 // 调度所有Job
@@ -121,7 +136,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
 
                 // 合并所有JobHandle
                 var combinedHandle = JobHandle.CombineDependencies(handles);
-                
+
                 await WaitForJobCompletionAsync(combinedHandle, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -136,7 +151,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             catch (Exception ex)
             {
                 Debug.LogError($"批量Job执行失败: {ex.Message}");
-                
+
                 // 异常时完成所有Job
                 for (var i = 0; i < handles.Length; i++)
                 {
@@ -154,7 +169,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 使用资源管理器安全执行Job
+        ///     使用资源管理器安全执行Job
         /// </summary>
         /// <typeparam name="T">Job类型</typeparam>
         /// <param name="resourceManager">资源管理器</param>
@@ -179,7 +194,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 异步等待Job完成，支持取消令牌
+        ///     异步等待Job完成，支持取消令牌
         /// </summary>
         /// <param name="jobHandle">Job句柄</param>
         /// <param name="cancellationToken">取消令牌</param>
@@ -202,7 +217,7 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 创建带有超时的取消令牌
+        ///     创建带有超时的取消令牌
         /// </summary>
         /// <param name="timeoutMs">超时时间（毫秒）</param>
         /// <param name="parentToken">父级取消令牌</param>
@@ -210,17 +225,30 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
         public static CancellationToken CreateTimeoutToken(int timeoutMs, CancellationToken parentToken = default)
         {
             var timeoutSource = new CancellationTokenSource(timeoutMs);
-            
+
             if (parentToken != default)
             {
                 return CancellationTokenSource.CreateLinkedTokenSource(parentToken, timeoutSource.Token).Token;
             }
-            
+
             return timeoutSource.Token;
         }
 
         /// <summary>
-        /// Job执行统计信息
+        ///     获取Job执行统计信息
+        /// </summary>
+        public static JobExecutionStats GetExecutionStats() => _sStats;
+
+        /// <summary>
+        ///     重置统计信息
+        /// </summary>
+        public static void ResetStats()
+        {
+            _sStats = new JobExecutionStats();
+        }
+
+        /// <summary>
+        ///     Job执行统计信息
         /// </summary>
         public struct JobExecutionStats
         {
@@ -229,34 +257,6 @@ namespace __temp.MrPathV2._2.Runtime.Jobs
             public int CancelledJobs;
             public float AverageExecutionTimeMs;
             public float TotalExecutionTimeMs;
-        }
-
-        private static JobExecutionStats _sStats;
-
-        /// <summary>
-        /// 获取Job执行统计信息
-        /// </summary>
-        public static JobExecutionStats GetExecutionStats() => _sStats;
-
-        /// <summary>
-        /// 重置统计信息
-        /// </summary>
-        public static void ResetStats()
-        {
-            _sStats = new JobExecutionStats();
-        }
-
-        /// <summary>
-        /// 释放资源
-        /// </summary>
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                // 当前实现中没有需要释放的资源
-                // 但保留此方法以便将来扩展
-                _disposed = true;
-            }
         }
     }
 }

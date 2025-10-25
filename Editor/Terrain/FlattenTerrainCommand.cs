@@ -1,19 +1,19 @@
-
-
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2._2.Runtime.Core;
-using __temp.MrPathV2._2.Runtime.Interfaces;
-using __temp.MrPathV2._2.Runtime.Jobs;
-using __temp.MrPathV2._2.Runtime.Jobs.Extensions;
+using MrPathV2._2.Runtime.Core;
+using MrPathV2._2.Runtime.Interfaces;
+using MrPathV2._2.Runtime.Jobs;
+using MrPathV2._2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEditor;
+using NativeArrayExtensions = MrPathV2._2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
 // 新增：使用 CreateTracked 扩展
 
-namespace __temp.MrPathV2._2.Editor.Terrain
+namespace MrPathV2._2.Editor.Terrain
 {
     public class FlattenTerrainCommand : TerrainCommandBase
     {
@@ -33,12 +33,12 @@ namespace __temp.MrPathV2._2.Editor.Terrain
             if (PreferredBoundsXZ.HasValue)
             {
                 var pb = PreferredBoundsXZ.Value;
-                contourBounds = new Unity.Mathematics.float4(pb.x, pb.y, pb.z, pb.w);
+                contourBounds = new float4(pb.x, pb.y, pb.z, pb.w);
             }
             else if (!roadContour.IsCreated || roadContour.Length < 3)
             {
                 var fallback = GetExpandedXZBounds(spine, Creator.profile);
-                contourBounds = new Unity.Mathematics.float4(fallback.x, fallback.y, fallback.z, fallback.w);
+                contourBounds = new float4(fallback.x, fallback.y, fallback.z, fallback.w);
             }
 
             try
@@ -49,8 +49,8 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                     Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
                     var td = terrain.terrainData;
                     var h2D = td.GetHeights(0, 0, td.heightmapResolution, td.heightmapResolution);
-                    var hn = Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
-                    var ohn = Runtime.Jobs.Extensions.NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
+                    var hn = NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
+                    var ohn = NativeArrayExtensions.CreateTracked<float>(h2D.Length, Allocator.Persistent);
                     Copy2DTo1D(h2D, hn, td.heightmapResolution);
                     Copy2DTo1D(h2D, ohn, td.heightmapResolution);
 
@@ -72,7 +72,11 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 }
 
                 var combinedHandle = JobHandle.CombineDependencies(handles.AsArray());
-                while (!combinedHandle.IsCompleted) { await Task.Yield(); token.ThrowIfCancellationRequested(); }
+                while (!combinedHandle.IsCompleted)
+                {
+                    await Task.Yield();
+                    token.ThrowIfCancellationRequested();
+                }
                 combinedHandle.Complete();
                 token.ThrowIfCancellationRequested();
 
@@ -96,7 +100,17 @@ namespace __temp.MrPathV2._2.Editor.Terrain
                 HeightProvider?.MarkAsDirty();
             }
         }
-        private void Copy2DTo1D(float[,] s, NativeArray<float> d, int r) { for (var y=0;y<r;y++) for(var x=0;x<r;x++) d[y*r+x]=s[y,x]; }
-        private void Copy1DTo2D(NativeArray<float> s, float[,] d, int r) { for (var y=0;y<r;y++) for(var x=0;x<r;x++) d[y,x]=s[y*r+x]; }
+        private void Copy2DTo1D(float[,] s, NativeArray<float> d, int r)
+        {
+            for (var y = 0; y < r; y++)
+            for (var x = 0; x < r; x++)
+                d[y * r + x] = s[y, x];
+        }
+        private void Copy1DTo2D(NativeArray<float> s, float[,] d, int r)
+        {
+            for (var y = 0; y < r; y++)
+            for (var x = 0; x < r; x++)
+                d[y, x] = s[y * r + x];
+        }
     }
 }

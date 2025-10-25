@@ -3,25 +3,36 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2._2.Editor.Inspectors
+namespace MrPathV2._2.Editor.Inspectors
 {
     /// <summary>
-    /// 编辑器刷新管理器，提供更鲁棒地刷新机制
+    ///     编辑器刷新管理器，提供更鲁棒地刷新机制
     /// </summary>
     public class EditorRefreshManager : IDisposable
     {
         private readonly Dictionary<string, float> _lastRefreshTimes = new Dictionary<string, float>();
-    private readonly Dictionary<string, Action> _pendingRefreshActions = new Dictionary<string, Action>();
-    private readonly float _minRefreshInterval = 0.3f; // 最小刷新间隔300ms，增大防抖动间隔，减少频繁重建
-    private bool _disposed;
+        private readonly float _minRefreshInterval = 0.3f; // 最小刷新间隔300ms，增大防抖动间隔，减少频繁重建
+        private readonly Dictionary<string, Action> _pendingRefreshActions = new Dictionary<string, Action>();
+        private bool _disposed;
 
         public EditorRefreshManager()
         {
             EditorApplication.update += ProcessPendingRefreshes;
         }
 
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                EditorApplication.update -= ProcessPendingRefreshes;
+                _pendingRefreshActions.Clear();
+                _lastRefreshTimes.Clear();
+                _disposed = true;
+            }
+        }
+
         /// <summary>
-        /// 请求刷新操作，带有防抖动机制
+        ///     请求刷新操作，带有防抖动机制
         /// </summary>
         /// <param name="key">刷新操作的唯一标识</param>
         /// <param name="refreshAction">刷新操作</param>
@@ -32,7 +43,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
                 return;
 
             var currentTime = (float)EditorApplication.timeSinceStartup;
-            
+
             if (forceImmediate)
             {
                 // 立即执行并更新时间戳
@@ -74,7 +85,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 取消待执行的刷新操作
+        ///     取消待执行的刷新操作
         /// </summary>
         public void CancelRefresh(string key)
         {
@@ -82,7 +93,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 清除所有待执行的刷新操作
+        ///     清除所有待执行的刷新操作
         /// </summary>
         public void ClearAllPendingRefreshes()
         {
@@ -90,15 +101,12 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 获取待执行刷新操作的数量
+        ///     获取待执行刷新操作的数量
         /// </summary>
-        public int GetPendingRefreshCount()
-        {
-            return _pendingRefreshActions.Count;
-        }
+        public int GetPendingRefreshCount() => _pendingRefreshActions.Count;
 
         /// <summary>
-        /// 请求刷新Inspector
+        ///     请求刷新Inspector
         /// </summary>
         public void RequestInspectorRefresh()
         {
@@ -155,17 +163,6 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
             }
         }
 
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                EditorApplication.update -= ProcessPendingRefreshes;
-                _pendingRefreshActions.Clear();
-                _lastRefreshTimes.Clear();
-                _disposed = true;
-            }
-        }
-
         ~EditorRefreshManager()
         {
             if (!_disposed)
@@ -177,12 +174,12 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
     }
 
     /// <summary>
-    /// 编辑器刷新管理器的静态访问点
+    ///     编辑器刷新管理器的静态访问点
     /// </summary>
     public static class EditorRefresh
     {
         private static EditorRefreshManager _instance;
-        
+
         public static EditorRefreshManager Instance
         {
             get
@@ -193,7 +190,7 @@ namespace __temp.MrPathV2._2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 在编辑器重新编译时清理资源
+        ///     在编辑器重新编译时清理资源
         /// </summary>
         [InitializeOnLoadMethod]
         private static void Initialize()

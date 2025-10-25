@@ -1,0 +1,4 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <uie:EnumField label="Curve Type" binding-path="curveType" name="CurveTypeField" class="compact-field"
+                   style="flex-shrink: 1; background-color: rgba(0, 0, 0, 0); opacity: 1;"/>
+</ui:UXML>
