@@ -113,8 +113,8 @@ namespace MrPathV2.Runtime.Strategies
                 lineRenderer.Clear(PreviewLineRenderer.LineType.PathCurve);
                 lineRenderer.SetCamera(SceneView.currentDrawingSceneView.camera);
 
-                var precision = creator.profile?.generationPrecision ?? 1f;
-                var resolution = Mathf.Clamp(Mathf.RoundToInt(ResolutionScalar / precision), MinCurveResolution, MaxCurveResolution);
+                // 曲线绘制分辨率不再依赖 Profile 参数，按段数动态估计
+                var resolution = Mathf.Clamp(Mathf.RoundToInt(creator.NumSegments * 16f), MinCurveResolution, MaxCurveResolution);
                 var controlPoints = new Vector3[4]; // Pre-allocate to avoid GC alloc in loop
 
                 for (var i = 0; i < creator.NumSegments; i++)

@@ -19,7 +19,6 @@ MonoBehaviour:
   stylizedRoadRecipe: {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
   profiles:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
-  - {fileID: 11400000, guid: a78d4df5d6a6d5f4cbab0848a3b1e700, type: 2}
   roadRecipes:
   - {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
   masks:

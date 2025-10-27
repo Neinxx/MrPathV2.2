@@ -53,8 +53,8 @@ float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3>
 	float totalLen = 0.0f;
 	for(int segIdx = 0; segIdx < spinePointCount - 1; segIdx++)
 	{
-		float2 s = spineData[segIdx].xy;
-		float2 e = spineData[segIdx + 1].xy;
+		float2 s = spineData[segIdx].xz;
+        float2 e = spineData[segIdx + 1].xz;
 		float2 d = e - s;
 		totalLen += length(d);
 	}
@@ -66,13 +66,13 @@ float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3>
 	float accumLen = 0.0f;
 	float signedDist = 0.0f;
 
-	for(int segIdx = 0; segIdx < spinePointCount - 1; segIdx++)
+	for(int segIdx2 = 0; segIdx2 < spinePointCount - 1; segIdx2++)
 	{
-		float3 p1 = spineData[segIdx];
-		float3 p2 = spineData[segIdx + 1];
+		float3 p1 = spineData[segIdx2];
+		float3 p2 = spineData[segIdx2 + 1];
 
-		float2 segmentStart = p1.xy;
-		float2 segmentEnd = p2.xy;
+		float2 segmentStart = p1.xz;
+        float2 segmentEnd = p2.xz;
 		float2 segmentDir = segmentEnd - segmentStart;
 		float  segmentLenSq = dot(segmentDir, segmentDir);
 		float  segmentLen = sqrt(max(0.0f, segmentLenSq));

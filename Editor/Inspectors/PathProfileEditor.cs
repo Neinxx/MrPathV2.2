@@ -37,6 +37,7 @@ namespace MrPathV2.Editor.Inspectors
         private VisualElement _rootElement;
         private Toggle _showMeshToggle;
         private SliderInt _smoothnessSlider;
+        private SliderInt _longitudinalSegmentsSlider;
         private Toggle _snappingToggle;
 
         // 订阅的 Profile 实例引用，用于解除订阅
@@ -146,6 +147,7 @@ namespace MrPathV2.Editor.Inspectors
             _rootElement.Q<FloatField>("FalloffWidthField");
             _rootElement.Q<CurveField>("CrossSectionCurveField");
             _rootElement.Q<CurveField>("FalloffShapeCurveField");
+            _longitudinalSegmentsSlider = _rootElement.Q<SliderInt>("LongitudinalSegmentsField");
         }
 
         /// <summary>
@@ -162,6 +164,7 @@ namespace MrPathV2.Editor.Inspectors
             if (_enableDepthTestToggle != null) _enableDepthTestToggle.bindingPath = nameof(PathProfile.enableDepthTest);
             if (_opaquePreviewToggle != null) _opaquePreviewToggle.bindingPath = nameof(PathProfile.opaquePreview);
             if (_recipeField != null) _recipeField.bindingPath = nameof(PathProfile.roadRecipe);
+            if (_longitudinalSegmentsSlider != null) _longitudinalSegmentsSlider.bindingPath = nameof(PathProfile.longitudinalSegments);
         }
 
         /// <summary>

@@ -18,7 +18,7 @@ namespace MrPathV2.Runtime.Core
                 if (creator == null || creator.profile == null) return new PathSpine();
 
                 // 1. 生成理想的、平滑的局部空间脊线
-                var localSpine = GenerateIdealSpine(creator, creator.profile.generationPrecision);
+                var localSpine = GenerateIdealSpine(creator, creator.profile.longitudinalSegments);
                 if (localSpine.VertexCount < 2) return new PathSpine();
 
                 // 2. 根据配置决定是否进行地形吸附
@@ -128,9 +128,9 @@ namespace MrPathV2.Runtime.Core
 
         // --- 其他所有辅助方法保持不变 ---
         // ... (GenerateIdealSpine, GenerateEquidistantPoints, TransformSpineToWorld, etc.)
-        private static PathSpine GenerateIdealSpine(PathCreator creator, float precision)
+        private static PathSpine GenerateIdealSpine(PathCreator creator, int segmentsAlong)
         {
-            GenerateEquidistantPoints(creator, precision, out var points, out var cumulativeDistances);
+            GeneratePointsBySegments(creator, Mathf.Max(2, segmentsAlong), out var points, out var cumulativeDistances);
             if (points.Count < 2) return new PathSpine();
             var sampledPoints = points.ToArray();
             var tangents = RecalculateTangentsFromPoints(sampledPoints);
@@ -138,6 +138,75 @@ namespace MrPathV2.Runtime.Core
             for (var i = 0; i < upVectors.Length; i++) upVectors[i] = Vector3.up;
             CalculateTimestamps(cumulativeDistances, out var timestamps);
             return new PathSpine(sampledPoints, tangents, upVectors, timestamps);
+        }
+        // duplicate removed
+        
+        private static void GeneratePointsBySegments(PathCreator creator, int segments, out List<Vector3> localPoints, out List<float> cumulativeDistances)
+        {
+            localPoints = new List<Vector3>();
+            cumulativeDistances = new List<float>();
+            if (creator.NumPoints < 2)
+                return;
+        
+            segments = Mathf.Max(2, segments);
+        
+            // 细采样以获得近似弧长
+            var finePoints = new List<Vector3>();
+            var fineDistances = new List<float>();
+            var lastPoint = creator.GetPointAtLocal(0);
+            finePoints.Add(lastPoint);
+            fineDistances.Add(0f);
+        
+            var step = Mathf.Max(1f / (creator.NumSegments * 40f), 0.005f);
+            var accum = 0f;
+            for (var t = step; t <= creator.NumSegments; t += step)
+            {
+                var p = creator.GetPointAtLocal(t);
+                var d = Vector3.Distance(lastPoint, p);
+                if (d > 0.0001f)
+                {
+                    accum += d;
+                    finePoints.Add(p);
+                    fineDistances.Add(accum);
+                    lastPoint = p;
+                }
+            }
+        
+            if (finePoints.Count < 2)
+                return;
+        
+            var totalLength = fineDistances[fineDistances.Count - 1];
+            if (totalLength <= 0f)
+                return;
+        
+            var targetSpacing = totalLength / segments; // segments 个区间，生成 segments+1 个点
+            localPoints.Add(finePoints[0]);
+            cumulativeDistances.Add(0f);
+        
+            var targetDist = targetSpacing;
+            var i = 1; // 从第二个细采样点开始
+            while (i < finePoints.Count && targetDist < totalLength - 1e-5f)
+            {
+                var prevDist = fineDistances[i - 1];
+                var currDist = fineDistances[i];
+                if (currDist >= targetDist)
+                {
+                    var segLen = currDist - prevDist;
+                    var w = segLen > 0f ? (targetDist - prevDist) / segLen : 0f;
+                    var newPoint = Vector3.Lerp(finePoints[i - 1], finePoints[i], w);
+                    localPoints.Add(newPoint);
+                    cumulativeDistances.Add(targetDist);
+                    targetDist += targetSpacing;
+                }
+                else
+                {
+                    i++;
+                }
+            }
+        
+            // 确保末端点
+            localPoints.Add(finePoints[finePoints.Count - 1]);
+            cumulativeDistances.Add(totalLength);
         }
         private static void GenerateEquidistantPoints(PathCreator creator, float spacing, out List<Vector3> localPoints, out List<float> cumulativeDistances)
         {

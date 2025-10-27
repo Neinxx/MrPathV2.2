@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: MrPath_StylizedRoadRecipe_PerlinNoiseMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 3.4, y: 113.9}
+  tiling: {x: 0.95, y: 114.47}
   offset: {x: 16, y: 0}
   overallScale: 1.03
   strength: 1
   seed: 37.4
-  noiseScale: {x: 3.46, y: 3.46}
+  noiseScale: {x: 4.37, y: 4.37}
   uniformScale: 1
-  rotationDeg: 50
+  rotationDeg: 98
   octaves: 4
   lacunarity: 2.57
   gain: 0.381

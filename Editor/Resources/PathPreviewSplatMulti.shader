@@ -326,7 +326,6 @@ Shader "MrPath/PathPreviewSplatMulti"
                         float2 layerUV = input.worldUV * layerTiling;
                         half4  layerColor = SampleLayerTexture(i, layerUV);
 
-                        // 仅透明度受归一化后的 mask 影响，颜色保持原值
                         layerColor.a *= weight;
 
                         float layerOpacity = GetLayerOpacity(i);
@@ -338,10 +337,21 @@ Shader "MrPath/PathPreviewSplatMulti"
                 }
                 else
                 {
-                    // 未使用 GPU 权重时，保持原逻辑（直接使用遮罩采样值，不进行跨层归一化）
+                    // Fallback: 从 MaskAtlas 采样并进行跨层归一化，确保预览与最终地形一致
+                    float weights[16];
+                    float total = 0.0;
                     for (int i = 0; i < maxLayers; i++)
                     {
-                        float weight = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
+                        float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
+                        weights[i] = w;
+                        total += w;
+                    }
+
+                    float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
+
+                    for (int i = 0; i < maxLayers; i++)
+                    {
+                        float weight = (invTotal > 0.0) ? saturate(weights[i] * invTotal) : 0.0;
                         if (weight < 0.0004) continue;
 
                         float2 layerTiling = GetLayerTiling(i);

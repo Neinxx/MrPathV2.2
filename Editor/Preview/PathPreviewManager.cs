@@ -136,6 +136,14 @@ namespace MrPathV2.Editor.Preview
             // 统一UV语义：网格UV已归一化到0..1，材质重复设为1
             _matMgr.SetMeshRepeats(1f, 1f);
 
+#if UNITY_EDITOR
+            // 在材质更新之前，先尝试运行一次 GPU 预览调度以填充缓存 RT
+            if (PreviewMaterialManager.EnableGpuPreview && targetTerrain && LatestSpine.HasValue)
+            {
+                GpuPreviewRunner.TryRun(targetTerrain, LatestSpine.Value, creator.profile);
+            }
+#endif
+
             // 更新材质并刷新缓存
             _matMgr.Update(creator.profile, _template, _alpha);
             if (_materialsDirty)

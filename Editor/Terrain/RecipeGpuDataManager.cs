@@ -179,21 +179,17 @@ namespace MrPathV2.Editor.Terrain
             var srcCommonFormat = mostCommon.Key.format;
             var mipChainRequested = _cachedTextures.Any(t => t.mipmapCount > 1);
 
-            // Filter out incompatible textures and create a list of valid ones (same size & format)
+            // Include all textures; resample/convert mismatches via staging RT
             var validTextures = new List<Texture2D>();
-            var textureIndices = new List<int>(); // Track original indices
             for (var i = 0; i < _cachedTextures.Count; i++)
             {
                 var texture = _cachedTextures[i];
-                if (texture.width == width && texture.height == height && texture.graphicsFormat == srcCommonFormat)
+                if (texture == null) continue;
+                validTextures.Add(texture);
+                if (texture.width != width || texture.height != height || texture.graphicsFormat != srcCommonFormat)
                 {
-                    validTextures.Add(texture);
-                    textureIndices.Add(i);
-                }
-                else
-                {
-                    Debug.LogWarning(
-                        $"Texture '{texture.name}' has incompatible dimensions/format. Expected {width}x{height} {srcCommonFormat}, got {texture.width}x{texture.height} {texture.graphicsFormat}. This texture will be excluded from the array.");
+                   // Debug.LogWarning(
+                     //   $"Texture '{texture.name}' will be resampled/converted to {width}x{height} {srcCommonFormat} for the array.");
                 }
             }
 
@@ -255,10 +251,16 @@ namespace MrPathV2.Editor.Terrain
                 isCrunch = IsCrunchCompressed(srcTex);
 #endif
                 var sameFormatAsTarget = srcTex.graphicsFormat == targetFormat;
+                var dimsMatch = srcTex.width == width && srcTex.height == height;
 
                 if (!stagingRenderable)
                 {
-                    // Last-resort path: convert base level into uncompressed array slice (mips skipped)
+                    // Last-resort path: convert base level into uncompressed array slice, only when dimensions already match
+                    if (!dimsMatch)
+                    {
+                        ErrorHandler.LogWarning($"[RecipeGpuDataManager] '{srcTex.name}' cannot be resampled without staging; excluded from array build.");
+                        continue;
+                    }
                     Graphics.ConvertTexture(srcTex, 0, TerrainTextureArray, i);
                     if (mipCount > 1)
                     {
@@ -269,8 +271,8 @@ namespace MrPathV2.Editor.Terrain
                     continue;
                 }
 
-                // Use staging blit whenever conversion is needed (Crunch or format mismatch)
-                var needConvert = isCrunch || !sameFormatAsTarget;
+                // Use staging blit whenever conversion is needed (Crunch, format mismatch, or dimensions mismatch)
+                var needConvert = isCrunch || !sameFormatAsTarget || !dimsMatch;
                 if (needConvert)
                 {
                     cmd.Blit(srcTex, stagingId);
@@ -282,8 +284,9 @@ namespace MrPathV2.Editor.Terrain
                 }
                 else
                 {
-                    // Direct copy when formats match and not Crunch
-                    for (var mip = 0; mip < mipCount; mip++)
+                    // Direct copy when formats and dimensions match and not Crunch
+                    var targetMipCount = Math.Min(mipCount, TerrainTextureArray.mipmapCount);
+                    for (var mip = 0; mip < targetMipCount; mip++)
                     {
                         cmd.CopyTexture(srcTex, 0, mip, TerrainTextureArray, i, mip);
                     }

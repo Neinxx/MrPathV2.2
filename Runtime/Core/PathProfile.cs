@@ -1,6 +1,7 @@
 using System;
 using MrPathV2.Runtime.Components;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace MrPathV2.Runtime.Core
 {
@@ -12,7 +13,8 @@ namespace MrPathV2.Runtime.Core
         private const int MaxSegments = 64;
         [Header("核心设置")]
         public CurveType curveType = CurveType.Bezier;
-        [Range(0.1f, 10f)] public float generationPrecision = 1f;
+        [FormerlySerializedAs("generationPrecision")]
+        [Range(2, 100)] public int longitudinalSegments = 32;
         [Tooltip("道路的总宽度")]
         public float roadWidth = 5f;
 
@@ -68,6 +70,7 @@ namespace MrPathV2.Runtime.Core
         {
             // 保证生成参数与曲线端点处于安全范围
             crossSectionSegments = Mathf.Clamp(crossSectionSegments, MinSegments, MaxSegments);
+            longitudinalSegments = Mathf.Clamp(longitudinalSegments, 2, 100);
             roadWidth = Mathf.Max(0.01f, roadWidth);
             falloffWidth = Mathf.Max(0f, falloffWidth);
 

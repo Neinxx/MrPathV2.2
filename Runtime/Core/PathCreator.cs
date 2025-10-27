@@ -272,53 +272,30 @@ namespace MrPathV2.Runtime.Core
             {
                 return 0f;
             }
-
-            // 使用与PathSampler相同的精度
-            var precision = profile?.generationPrecision ?? 1f;
-
-            // 直接调用PathSampler的逻辑来获取totalPathDistance
-            return GetTotalPathDistanceFromSampler(precision);
+            // 纯数学曲线：采用细采样估算整条路径弧长，不依赖配置参数
+            return EstimateTotalPathLength();
         }
 
         /// <summary>
-        ///     从PathSampler获取总路径距离，复用其内部的累积距离计算
+        ///     细采样估算整条路径弧长（本地空间），后换算到世界尺度
         /// </summary>
-        private float GetTotalPathDistanceFromSampler(float spacing)
+        private float EstimateTotalPathLength()
         {
             if (NumPoints < 2) return 0f;
 
-            // 复用PathSampler.GenerateEquidistantPoints的逻辑
-            var cumulativeDistances = new List<float>();
-            var lastSampledPoint = GetPointAtLocal(0);
-            cumulativeDistances.Add(0);
-
-            var distanceSinceLastSample = 0f;
-            var previousFineStepPoint = lastSampledPoint;
-
-            // 使用与PathSampler相同的采样步长逻辑
-            var step = Mathf.Max(1f / (NumSegments * 20f), 0.01f);
-
+            var prev = GetPointAtLocal(0);
+            var totalPathDistance = 0f;
+            var step = Mathf.Max(1f / (NumSegments * 40f), 0.005f);
             for (var t = step; t <= NumSegments; t += step)
             {
-                var currentFineStepPoint = GetPointAtLocal(t);
-                var segmentLength = Vector3.Distance(previousFineStepPoint, currentFineStepPoint);
-
-                if (segmentLength < 0.0001f) continue;
-
-                distanceSinceLastSample += segmentLength;
-
-                while (distanceSinceLastSample >= spacing)
+                var p = GetPointAtLocal(t);
+                var d = Vector3.Distance(prev, p);
+                if (d > 0.0001f)
                 {
-                    var overshoot = distanceSinceLastSample - spacing;
-                    cumulativeDistances.Add(cumulativeDistances[cumulativeDistances.Count - 1] + spacing);
-                    distanceSinceLastSample = overshoot;
+                    totalPathDistance += d;
+                    prev = p;
                 }
-
-                previousFineStepPoint = currentFineStepPoint;
             }
-
-            // 获取totalPathDistance（累积距离的最后一个值）
-            var totalPathDistance = cumulativeDistances.Count > 1 ? cumulativeDistances[cumulativeDistances.Count - 1] : 0f;
 
             // 转换到世界坐标系
             var worldScale = transform.lossyScale;
