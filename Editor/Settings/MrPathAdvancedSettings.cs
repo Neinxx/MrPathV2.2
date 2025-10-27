@@ -19,11 +19,9 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         //
         // [Tooltip("【已弃用/仅参考】可用策略列表不再由此处控制，请在 PathStrategyRegistry 中配置。")]
         // public PathStrategy[] availableStrategies; // 保留旧字段并标记
-        [Tooltip("Bezier 曲线所使用的策略实例")]
-        public BezierStrategy bezierStrategy;
+        [Tooltip("Bezier 曲线所使用的策略实例")] public BezierStrategy bezierStrategy;
 
-        [Tooltip("CatmullRom 曲线所使用的策略实例")]
-        public CatmullRomStrategy catmullRomStrategy;
+        [Tooltip("CatmullRom 曲线所使用的策略实例")] public CatmullRomStrategy catmullRomStrategy;
 
         // --- 地形绘制后端设置 ---
         [Header("地形绘制 (Terrain Painting)")]
@@ -35,5 +33,12 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         [Header("性能与调试")]
         [Tooltip("启用内存跟踪器 (MemoryTracker)，会带来少量性能开销，建议仅在开发或调试时开启。")]
         public bool enableMemoryTracking; // 默认关闭
+
+        [Header("预览与Basemap")]
+        [Tooltip("实时 GPU 预览结束后是否触发 Basemap 重建（读回并调用 TerrainData.SetAlphamaps）。开启后远景不会回退到旧 Basemap，但会增加少量 CPU/GPU 同步与读回开销。")]
+        public bool rebuildBasemapInRealtimePreview = false;
+
+        [Tooltip("Basemap 重建时在对齐矩形外扩的安全边距（像素），用于读回与回写，避免边界失配。建议为线程组大小的倍数，例如 8、16。")]
+        public int basemapSafetyMarginPixels = 8;
     }
 }

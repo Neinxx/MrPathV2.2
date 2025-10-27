@@ -16,3 +16,5 @@ MonoBehaviour:
   catmullRomStrategy: {fileID: 11400000, guid: bd36c88b0765ed24aa6b868b64fc5642, type: 2}
   paintingBackend: 0
   enableMemoryTracking: 1
+  rebuildBasemapInRealtimePreview: 0
+  basemapSafetyMarginPixels: 8

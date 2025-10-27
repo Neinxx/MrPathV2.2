@@ -18,24 +18,28 @@ struct GpuNoiseMaskParams {
 	float  Pad1; // 对齐
 };
 
-struct GpuShoulderMaskParams {
-	float Width; // 比例值：与道路宽度相乘得到实际肩宽
-	float Softness; // 软化/边缘过渡系数
-	float Strength; // 肩部影响强度
-	float Pad;
+struct GpuShoulderMaskParams
+{
+    float Width;
+    float Softness;
+    float Strength;
+    float OverallScale;
+    float Smooth;
+    float Pad;
 };
 
 struct GpuMaskParams {
 	int                   Type; // MASK_TYPE_*
 	float                 Strength; // 顶层遮罩强度
+	float2                Padding; // 对齐填充，保持后续字段在 16B 边界上
 	GpuNoiseMaskParams    Noise;
 	GpuShoulderMaskParams Shoulder;
 };
 
-// 掩码类型常量（需与 C# 保持一致）
+// 掩码类型常量（需与 C# / MaskAtlas.compute 保持一致）
 static const int MASK_TYPE_NONE = 0;
-static const int MASK_TYPE_NOISE = 1;
-static const int MASK_TYPE_SHOULDER = 2;
+static const int MASK_TYPE_SHOULDER = 1;
+static const int MASK_TYPE_NOISE = 2;
 
 // 由 Compute 注入的路径总长度（米）。
 // 在 PaintSplatmapCompute.compute 中通过 SetFloat("_PathLength", ...) 传入。
@@ -117,8 +121,8 @@ inline float EvaluateNoise(float progress, float signedDistance, float roadWidth
 {
 	float2 uv = ComputeMaskUV(progress, signedDistance, roadWidth, p);
 
-	// 综合整体缩放、细节缩放与旋转
-	float2 m = uv * max(p.OverallScale, 1e-6);
+	// 细节缩放与旋转（OverallScale 不再缩放 UV）
+	float2 m = uv;
 	m = m * float2(max(p.NoiseScale.x, 1e-6), max(p.NoiseScale.y, 1e-6));
 	m = rotate2(m, p.RotationRad);
 	m += float2(p.Seed * 17.0, p.Seed * 29.0);
@@ -127,11 +131,15 @@ inline float EvaluateNoise(float progress, float signedDistance, float roadWidth
 	float n = fbm2d(m, oct, max(p.Lacunarity, 1.0), p.Gain, p.AlgorithmId); // [-1,1]
 	float n01 = n * 0.5 + 0.5;
 
-	// 平滑
-	float s = saturate(p.Smooth);
-	n01 = lerp(n01, smoothstep(0.0, 1.0, n01), s);
-
-	return saturate(n01 * p.Strength);
+	// 与 CPU ApplySmoothing 一致：先整体缩放，再做平滑
+	float pre = saturate(n01 * p.Strength) * p.OverallScale;
+	if (p.Smooth <= 1e-5)
+	{
+		return saturate(pre);
+	}
+	float edge0 = p.Smooth * 0.5;
+	float edge1 = 1.0 - p.Smooth * 0.5;
+	return saturate(smoothstep(edge0, edge1, pre));
 }
 
 // 肩部遮罩：根据与路径的距离（signedDistance）生成两侧肩部影响
@@ -146,7 +154,16 @@ inline float EvaluateShoulder(float signedDistance, float roadWidth, GpuShoulder
 	float outside = saturate((d - halfRoad) / max(0.00001, shoulderWidth));
 	// 软化过渡（Softness 越大边缘越柔）
 	float softened = smoothstep(0.0, max(0.00001, p.Softness), outside);
-	return saturate(softened * p.Strength);
+
+	// 与 CPU ApplySmoothing 一致：Strength/OverallScale 后按 Smooth 再次平滑
+	float pre = saturate(softened * p.Strength) * p.OverallScale;
+	if (p.Smooth <= 1e-5)
+	{
+		return saturate(pre);
+	}
+	float edge0 = p.Smooth * 0.5;
+	float edge1 = 1.0 - p.Smooth * 0.5;
+	return saturate(smoothstep(edge0, edge1, pre));
 }
 
 // 主评估函数（统一坐标）：使用 progress / signedDistance / roadWidth
@@ -155,13 +172,13 @@ inline float EvaluateMask(float progress, float signedDistance, float roadWidth,
 	if(mask.Type == MASK_TYPE_NONE) return 1.0;
 
 	float m = 1.0;
-	if(mask.Type == MASK_TYPE_NOISE)
-	{
-		m = EvaluateNoise(progress, signedDistance, roadWidth, mask.Noise);
-	}
-	else if(mask.Type == MASK_TYPE_SHOULDER)
+	if(mask.Type == MASK_TYPE_SHOULDER)
 	{
 		m = EvaluateShoulder(signedDistance, roadWidth, mask.Shoulder);
+	}
+	else if(mask.Type == MASK_TYPE_NOISE)
+	{
+		m = EvaluateNoise(progress, signedDistance, roadWidth, mask.Noise);
 	}
 
 	return saturate(m * mask.Strength);

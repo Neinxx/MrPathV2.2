@@ -41,6 +41,8 @@ namespace MrPathV2.Editor.Terrain
         public float Width; // 比例值，最终在 HLSL 中乘以 roadWidth
         public float Softness; // 软化系数
         public float Strength; // 强度
+        public float OverallScale; // 与 CPU 一致的整体缩放
+        public float Smooth; // 统一的二次平滑参数
         public float Pad; // 对齐填充
     }
 
@@ -51,6 +53,7 @@ namespace MrPathV2.Editor.Terrain
         public int Type; // 与 HLSL MASK_TYPE_* 对齐
 
         public float Strength; // 顶层强度系数
+        public Vector2 Pad; // 对齐填充，保证后续字段 16B 对齐
 
         // 结构体顺序必须与 HLSL 相同：Noise 在前，Shoulder 在后
         public GpuNoiseMaskParams Noise;
@@ -157,6 +160,8 @@ namespace MrPathV2.Editor.Terrain
                 Width = Mathf.Max(0.0001f, dto.ShoulderParams.ShoulderWidthRatio), // 比例值，HLSL 中乘 roadWidth
                 Softness = Mathf.Max(0.0001f, dto.ShoulderParams.EdgeFalloff), // 作为软化控制
                 Strength = dto.ShoulderParams.ShoulderStrength,
+                OverallScale = dto.ShoulderParams.OverallScale,
+                Smooth = dto.ShoulderParams.Smooth,
                 Pad = 0f
             };
 
@@ -277,7 +282,8 @@ namespace MrPathV2.Editor.Terrain
                 {
                     cmd.Blit(srcTex, stagingId);
                     if (useMip) cmd.GenerateMips(stagingId);
-                    for (var mip = 0; mip < mipCount; mip++)
+                    var targetMipCount = Math.Min(mipCount, TerrainTextureArray.mipmapCount);
+                    for (var mip = 0; mip < targetMipCount; mip++)
                     {
                         cmd.CopyTexture(_stagingRt, 0, mip, TerrainTextureArray, i, mip);
                     }

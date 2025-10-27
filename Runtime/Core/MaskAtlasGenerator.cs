@@ -296,8 +296,8 @@ namespace MrPathV2.Runtime.Core
             public int MaskType;
             public float Strength;
             public float Pad2, Pad3;
-            public GpuShoulderMaskParams ShoulderParams;
             public GpuNoiseMaskParams NoiseParams;
+            public GpuShoulderMaskParams ShoulderParams;
         }
     }
 }

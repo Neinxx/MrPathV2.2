@@ -309,7 +309,7 @@ namespace MrPathV2.Editor.Terrain
                 gpuDataManager = new RecipeGpuDataManager();
                 if (Creator.profile?.roadRecipe != null)
                 {
-                    var terrainLayerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
+                    var terrainLayerMap = LayerResolver.ResolveEnsurePresent(terrain, Creator.profile.roadRecipe);
                     gpuDataManager.UpdateData(Creator.profile.roadRecipe, terrainLayerMap);
                 }
                 painter = new GpuTerrainPainter();

@@ -13,6 +13,7 @@ using UnityEngine.Rendering;
 using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
 #endif
 using System.Collections.Generic;
+using MrPathV2.Editor.Settings;
 
 namespace MrPathV2.Editor.Preview
 {
@@ -61,47 +62,107 @@ namespace MrPathV2.Editor.Preview
 #endif
             try
             {
+                Debug.Log($"[GpuPreviewRunner] TryRun called - terrain: {terrain?.name}, spine vertices: {spine.VertexCount}, profile: {profile?.name}");
+                
                 if (terrain == null || terrain.terrainData == null || profile == null || spine.VertexCount < 2)
+                {
+                    Debug.LogWarning($"[GpuPreviewRunner] Early return - terrain: {terrain != null}, terrainData: {terrain?.terrainData != null}, profile: {profile != null}, spine vertices: {spine.VertexCount}");
                     return false;
+                }
 
                 var td = terrain.terrainData;
+
+                // 延后获取 alphamap 信息，先确保地形图层已就绪
+
+                // Load compute shader and kernel
+                var compute = LoadPaintCompute();
+                if (compute == null) 
+                {
+                    Debug.LogError("[GpuPreviewRunner] Failed to load compute shader");
+                    return false;
+                }
+                var kernel = compute.FindKernel("PaintTerrain");
+                if (kernel == -1) 
+                {
+                    Debug.LogError("[GpuPreviewRunner] PaintTerrain kernel not found");
+                    return false;
+                }
+
+                // 现在获取 alphamap 纹理与参数（确保图层已存在）
                 var alphaMapTextures = td.alphamapTextures;
                 if (alphaMapTextures == null || alphaMapTextures.Length == 0)
+                {
+                    Debug.LogWarning("[GpuPreviewRunner] No alphamap textures found");
                     return false;
-
+                }
                 var resolution = td.alphamapResolution;
                 var layers = td.alphamapLayers;
-
                 var format = alphaMapTextures[0].graphicsFormat;
-                // 如果原始格式不可作为 RWTexture 使用，则回退为 UNorm，保证计算着色器可写
                 if (!IsGraphicsFormatRWCompatible(format))
                 {
                     format = GraphicsFormat.R8G8B8A8_UNorm;
                 }
 
-                // Load compute shader and kernel
-                var compute = LoadPaintCompute();
-                if (compute == null) return false;
-                var kernel = compute.FindKernel("PaintTerrain");
-                if (kernel == -1) return false;
+                Debug.Log($"[GpuPreviewRunner] Compute shader loaded successfully, resolution: {resolution}, layers: {layers}, format: {format}");
 
                 // Build spine/profile data
                 using var spineData = new PathJobsUtility.SpineData(spine, Allocator.TempJob);
                 using var profileData = new PathJobsUtility.ProfileData(profile, Allocator.TempJob);
                 if (!spineData.IsCreated || !profileData.IsCreated)
+                {
+                    Debug.LogWarning("[GpuPreviewRunner] Failed to create spine or profile data");
                     return false;
+                }
+
+                Debug.Log($"[GpuPreviewRunner] Spine data created - points: {spineData.Points.Length}, tangents: {spineData.Tangents.Length}, normals: {spineData.Normals.Length}");
 
                 // Generate road contour & bounds (用于覆盖区域计算)
                 RoadContourGenerator.GenerateContour(spine, profile, out var contour, out var contourBounds, Allocator.TempJob);
                 contour.Dispose();
 
+                // Fallback: if contour bounds are degenerate (zero size), derive bounds from spine with margin
+                {
+                    var boundsWidth = contourBounds.z - contourBounds.x;
+                    var boundsHeight = contourBounds.w - contourBounds.y;
+                    var degenerate = boundsWidth <= 0f || boundsHeight <= 0f || float.IsNaN(boundsWidth) || float.IsNaN(boundsHeight) || float.IsInfinity(boundsWidth) || float.IsInfinity(boundsHeight);
+                    if (degenerate)
+                    {
+                        var pts = spine.Points;
+                        if (pts != null && pts.Length > 0)
+                        {
+                            var minX = pts[0].x;
+                            var minZ = pts[0].z;
+                            var maxX = pts[0].x;
+                            var maxZ = pts[0].z;
+                            for (var i = 1; i < pts.Length; i++)
+                            {
+                                var p = pts[i];
+                                if (p.x < minX) minX = p.x; if (p.z < minZ) minZ = p.z;
+                                if (p.x > maxX) maxX = p.x; if (p.z > maxZ) maxZ = p.z;
+                            }
+                            var margin = Mathf.Max(0.25f, profile.roadWidth * 0.5f + profile.falloffWidth);
+                            contourBounds = new float4(minX - margin, minZ - margin, maxX + margin, maxZ + margin);
+                            Debug.Log($"[GpuPreviewRunner] Contour bounds degenerate; using spine-derived fallback bounds: min=({contourBounds.x},{contourBounds.y}) max=({contourBounds.z},{contourBounds.w})");
+                        }
+                    }
+                }
+
                 // Determine coverage (复用 PaintTerrainCommand 的逻辑)
                 var (useLimit, coverageMin, coverageMax) = CalculateCoverageArea(terrain, contourBounds);
-                if (!useLimit) return false;
+                if (!useLimit) 
+                {
+                    Debug.LogWarning("[GpuPreviewRunner] Coverage calculation failed");
+                    return false;
+                }
                 var numPixelsX = coverageMax.x - coverageMin.x + 1;
                 var numPixelsY = coverageMax.y - coverageMin.y + 1;
                 if (numPixelsX <= 0 || numPixelsY <= 0)
+                {
+                    Debug.LogWarning($"[GpuPreviewRunner] Invalid pixel coverage - X: {numPixelsX}, Y: {numPixelsY}");
                     return false;
+                }
+
+                Debug.Log($"[GpuPreviewRunner] Coverage area - min: ({coverageMin.x}, {coverageMin.y}), max: ({coverageMax.x}, {coverageMax.y}), pixels: {numPixelsX}x{numPixelsY}");
 
                 // Ensure GPU recipe data
                 var recipeId = profile.roadRecipe ? profile.roadRecipe.GetInstanceID() : 0;
@@ -110,21 +171,27 @@ namespace MrPathV2.Editor.Preview
                     gpuData = new RecipeGpuDataManager();
                     _recipeGpuCache[recipeId] = gpuData;
                 }
-                var layerMap = LayerResolver.Resolve(terrain, profile.roadRecipe, interactive: false);
+                var layerMap = LayerResolver.ResolveEnsurePresent(terrain, profile.roadRecipe);
                 gpuData.UpdateData(profile.roadRecipe, layerMap);
                 if (gpuData.LayerParamsBuffer == null || !gpuData.LayerParamsBuffer.IsValid() || gpuData.ActiveLayerCount <= 0)
                 {
+                    Debug.LogWarning("[GpuPreviewRunner] GPU recipe data is invalid");
                     return false;
                 }
+
+                Debug.Log($"[GpuPreviewRunner] GPU recipe data ready - active layers: {gpuData.ActiveLayerCount}");
 
                 // Acquire working RT (cached by terrain)
                 var tempAlphaMaps = AcquireAlphaMapRT(terrain, alphaMapTextures, resolution, format);
                 if (tempAlphaMaps == null || !tempAlphaMaps.IsCreated())
                 {
+                    Debug.LogError("[GpuPreviewRunner] Failed to acquire RenderTexture");
                     gpuData.Dispose();
                     return false;
                 }
                 SyncAlphaMapsToRT(alphaMapTextures, tempAlphaMaps);
+
+                Debug.Log($"[GpuPreviewRunner] RenderTexture acquired - size: {tempAlphaMaps.width}x{tempAlphaMaps.height}, depth: {tempAlphaMaps.volumeDepth}");
 
                 // Build compute buffers
                 ComputeBuffer pointsBuffer = null, tangentsBuffer = null, normalsBuffer = null;
@@ -134,13 +201,44 @@ namespace MrPathV2.Editor.Preview
 
                     (pointsBuffer, tangentsBuffer, normalsBuffer) = SetupSpineBuffers(spineData);
 
-                    // Bind common + inputs
-                    BindCommonParams(compute, terrain, td, profileData, coverageMin, coverageMax, resolution, layers, spineData);
+                    Debug.Log($"[GpuPreviewRunner] Spine buffers created - points: {pointsBuffer.count}, tangents: {tangentsBuffer.count}, normals: {normalsBuffer.count}");
 
-                    compute.SetBuffer(kernel, SpinePointsID, pointsBuffer);
+                    // 线程组尺寸与对齐覆盖区域
+                    compute.GetKernelThreadGroupSizes(kernel, out var tx, out var ty, out var tz);
+                    tx = tx == 0 ? 8u : tx;
+                    ty = ty == 0 ? 8u : ty;
+                   var remX = coverageMin.x % (int)tx; if (remX < 0) remX += (int)tx;
+                    var remY = coverageMin.y % (int)ty; if (remY < 0) remY += (int)ty;
+                    var alignedOffset = new int2(coverageMin.x - remX, coverageMin.y - remY);
+                    var totalPixelsX = numPixelsX + remX;
+                    var totalPixelsY = numPixelsY + remY;
+                    var gx = Mathf.CeilToInt(totalPixelsX / (float)tx);
+                    var gy = Mathf.CeilToInt(totalPixelsY / (float)ty);
+                    var alignedStartX = Mathf.Clamp(alignedOffset.x, 0, resolution - 1);
+                    var alignedStartY = Mathf.Clamp(alignedOffset.y, 0, resolution - 1);
+                    var alignedEndX = Mathf.Clamp(alignedOffset.x + gx * (int)tx - 1, 0, resolution - 1);
+                    var alignedEndY = Mathf.Clamp(alignedOffset.y + gy * (int)ty - 1, 0, resolution - 1);
+
+                    // 高级设置：预览是否重建Basemap与安全边距
+                    var adv = MrPathProjectSettings.GetOrCreateSettings()?.advancedSettings;
+                    var rebuildPreviewBasemap = adv != null && adv.rebuildBasemapInRealtimePreview;
+                    var margin = Mathf.Max(0, adv != null ? adv.basemapSafetyMarginPixels : 0);
+                    var safeStartX = Mathf.Clamp(alignedStartX - margin, 0, resolution - 1);
+                    var safeStartY = Mathf.Clamp(alignedStartY - margin, 0, resolution - 1);
+                    var safeEndX = Mathf.Clamp(alignedEndX + margin, 0, resolution - 1);
+                   var safeEndY = Mathf.Clamp(alignedEndY + margin, 0, resolution - 1);
+                    var safeW = safeEndX - safeStartX + 1;
+                    var safeH = safeEndY - safeStartY + 1;
+                    Debug.Log($"[GpuPreviewRunner] Aligned coverage [{alignedStartX},{alignedStartY}]~[{alignedEndX},{alignedEndY}], groups {gx}x{gy}, safe margin {margin} -> {safeW}x{safeH}");
+
+
+                    // 绑定对齐后的覆盖窗口
+                    BindCommonParams(compute, terrain, td, profileData, new int2(alignedStartX, alignedStartY), new int2(alignedEndX, alignedEndY), resolution, layers, spineData);
+
                     compute.SetBuffer(kernel, SpineTangentsID, tangentsBuffer);
                     compute.SetBuffer(kernel, SpineNormalsID, normalsBuffer);
-                    compute.SetBuffer(kernel, SpineDataID, pointsBuffer); // 兼容 Compute 中使用的旧变量名
+                    // 修复：只绑定到 SpineDataID，移除重复的 SpinePointsID 绑定
+                    compute.SetBuffer(kernel, SpineDataID, pointsBuffer);
                     compute.SetInt(SpinePointCountID, spineData.Points.Length);
 
                     compute.SetInt(NumActiveLayersID, gpuData.ActiveLayerCount);
@@ -153,21 +251,40 @@ namespace MrPathV2.Editor.Preview
 
                     compute.SetTexture(kernel, SplatWeightsID, tempAlphaMaps);
 
-                    // Dispatch
-                    var (gx, gy) = CalculateDispatchGroups(compute, kernel, numPixelsX, numPixelsY);
+
+                    // 调度（按对齐后的组数）
                     if (gx <= 0 || gy <= 0)
                     {
+                        Debug.LogError($"[GpuPreviewRunner] Invalid dispatch groups - gx: {gx}, gy: {gy}");
                         gpuData.Dispose();
                         return false;
                     }
-                    compute.Dispatch(kernel, gx, gy, 1);
 
-                    // 预览模式：不读回，不写 Terrain；仅将 RT 留在缓存，供材质绑定。
+                    // 可选：实时预览重建 Basemap（安全边距矩形）
+                    if (rebuildPreviewBasemap && safeW > 0 && safeH > 0)
+                    {
+                        try
+                        {
+                            GpuTerrainPainter.RebuildBasemapFromRTRegion(td, tempAlphaMaps, layers, safeStartX, safeStartY, safeW, safeH);
+#if UNITY_EDITOR
+                            terrain.basemapDistance = Mathf.Max(terrain.basemapDistance, 100000f);
+                            terrain.Flush();
+                            EditorUtility.SetDirty(td);
+#else
+                            terrain.Flush();
+#endif
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogWarning($"[GpuPreviewRunner] Basemap rebuild (preview) failed: {e.Message}");
+                        }
+                    }
 
                     return true;
                 }
                 catch (OperationCanceledException)
                 {
+                    Debug.Log("[GpuPreviewRunner] Operation was cancelled");
                     return false;
                 }
                 finally
@@ -181,8 +298,9 @@ namespace MrPathV2.Editor.Preview
 #endif
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.LogError($"[GpuPreviewRunner] Exception occurred: {ex.Message}\n{ex.StackTrace}");
                 return false;
             }
         }
@@ -274,28 +392,40 @@ namespace MrPathV2.Editor.Preview
 
         private static (bool useLimit, int2 pixelMin, int2 pixelMax) CalculateCoverageArea(UnityEngine.Terrain terrain, float4 bounds)
         {
-            var terrainBounds = new Bounds(terrain.GetPosition() + terrain.terrainData.size / 2f, terrain.terrainData.size);
-            var roadBounds = new Bounds(new Vector3(bounds.x + bounds.z * 0.5f, 0f, bounds.y + bounds.w * 0.5f), new Vector3(bounds.z, terrainBounds.size.y, bounds.w));
-            var intersectCenter = terrainBounds.ClosestPoint(roadBounds.center);
-            var intersectMin = Vector3.Min(terrainBounds.min, roadBounds.min);
-            var intersectMax = Vector3.Max(terrainBounds.max, roadBounds.max);
+            var td = terrain.terrainData;
+            var terrainBounds = new Bounds(terrain.GetPosition() + td.size / 2f, td.size);
+            // 修正：正确解析 bounds = [minX, minZ, maxX, maxZ]，并用 (max-min) 作为尺寸、(min+max)/2 作为中心
+            var roadMinX = bounds.x;
+            var roadMinZ = bounds.y;
+            var roadMaxX = bounds.z;
+            var roadMaxZ = bounds.w;
+            var roadCenter = new Vector3((roadMinX + roadMaxX) * 0.5f, terrainBounds.center.y, (roadMinZ + roadMaxZ) * 0.5f);
+            var roadSizeX = Mathf.Max(0f, roadMaxX - roadMinX);
+            var roadSizeZ = Mathf.Max(0f, roadMaxZ - roadMinZ);
+            var roadBounds = new Bounds(roadCenter, new Vector3(roadSizeX, terrainBounds.size.y, roadSizeZ));
+
+            // Correct intersection (not union) between terrain and road bounds
+            var minX = Mathf.Max(terrainBounds.min.x, roadBounds.min.x);
+            var minZ = Mathf.Max(terrainBounds.min.z, roadBounds.min.z);
+            var maxX = Mathf.Min(terrainBounds.max.x, roadBounds.max.x);
+            var maxZ = Mathf.Min(terrainBounds.max.z, roadBounds.max.z);
+
+            // No overlap
+            if (maxX <= minX || maxZ <= minZ)
+            {
+                return (false, default, default);
+            }
+
+            var resolution = td.alphamapResolution;
+            var invSizeX = 1.0f / Mathf.Max(1e-5f, terrainBounds.size.x);
+            var invSizeZ = 1.0f / Mathf.Max(1e-5f, terrainBounds.size.z);
             var terrainMinX = terrainBounds.min.x;
             var terrainMinZ = terrainBounds.min.z;
-            var terrainSizeX = terrainBounds.size.x;
-            var terrainSizeZ = terrainBounds.size.z;
-            var resolution = terrain.terrainData.alphamapResolution;
-            var invSizeX = 1.0f / Mathf.Max(1e-5f, terrainSizeX);
-            var invSizeZ = 1.0f / Mathf.Max(1e-5f, terrainSizeZ);
 
-            var intersectMinX = Mathf.Max(intersectMin.x, terrainBounds.min.x);
-            var intersectMinZ = Mathf.Max(intersectMin.z, terrainBounds.min.z);
-            var intersectMaxX = Mathf.Min(intersectMax.x, terrainBounds.max.x);
-            var intersectMaxZ = Mathf.Min(intersectMax.z, terrainBounds.max.z);
-
-            var pixelMinX = Mathf.FloorToInt((intersectMinX - terrainMinX) * invSizeX * (resolution - 1));
-            var pixelMinZ = Mathf.FloorToInt((intersectMinZ - terrainMinZ) * invSizeZ * (resolution - 1));
-            var pixelMaxX = Mathf.CeilToInt((intersectMaxX - terrainMinX) * invSizeX * (resolution - 1));
-            var pixelMaxZ = Mathf.CeilToInt((intersectMaxZ - terrainMinZ) * invSizeZ * (resolution - 1));
+            var pixelMinX = Mathf.FloorToInt((minX - terrainMinX) * invSizeX * (resolution - 1));
+            var pixelMinZ = Mathf.FloorToInt((minZ - terrainMinZ) * invSizeZ * (resolution - 1));
+            var pixelMaxX = Mathf.CeilToInt((maxX - terrainMinX) * invSizeX * (resolution - 1));
+            var pixelMaxZ = Mathf.CeilToInt((maxZ - terrainMinZ) * invSizeZ * (resolution - 1));
 
             pixelMinX = Mathf.Clamp(pixelMinX, 0, resolution - 1);
             pixelMinZ = Mathf.Clamp(pixelMinZ, 0, resolution - 1);
@@ -307,13 +437,14 @@ namespace MrPathV2.Editor.Preview
 
         private static RenderTexture AcquireAlphaMapRT(UnityEngine.Terrain terrain, Texture2D[] alphaMapTextures, int resolution, GraphicsFormat format)
         {
-            var arrayCount = alphaMapTextures.Length;
+            var td = terrain.terrainData;
+            var requiredSlices = Mathf.CeilToInt(td.alphamapLayers / 4f);
             RenderTexture tempAlphaMaps = null;
 #if UNITY_EDITOR
             if (EditorGpuPreviewCache.TryGet(terrain, out var cached) &&
                 cached != null &&
                 cached.width == resolution && cached.height == resolution &&
-                cached.volumeDepth == arrayCount &&
+                cached.volumeDepth == requiredSlices &&
                 cached.graphicsFormat == format)
             {
                 tempAlphaMaps = cached;
@@ -324,7 +455,7 @@ namespace MrPathV2.Editor.Preview
                 var desc = new RenderTextureDescriptor(resolution, resolution);
                 desc.graphicsFormat = format;
                 desc.dimension = TextureDimension.Tex2DArray;
-                desc.volumeDepth = arrayCount;
+                desc.volumeDepth = requiredSlices;
                 desc.enableRandomWrite = true;
                 desc.useMipMap = false;
                 desc.msaaSamples = 1;

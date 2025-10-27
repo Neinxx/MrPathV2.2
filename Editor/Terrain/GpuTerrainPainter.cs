@@ -11,7 +11,9 @@ using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 #if UNITY_EDITOR
 using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
+using Object = UnityEngine.Object;
 #endif
+using MrPathV2.Editor.Settings;
 
 namespace MrPathV2.Editor.Terrain
 {
@@ -43,6 +45,7 @@ namespace MrPathV2.Editor.Terrain
         private static readonly int BrushStrengthID = Shader.PropertyToID("_BrushStrength");
         private static readonly int BrushSizeID = Shader.PropertyToID("_BrushSize");
         private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
+        private static readonly int DebugModeID = Shader.PropertyToID("_DebugMode");
         private readonly int _kernelHandle = -1;
         private readonly ComputeShader _paintComputeShader;
         // --------------------------------
@@ -120,7 +123,7 @@ namespace MrPathV2.Editor.Terrain
                 Debug.LogError("[GpuTerrainPainter] Failed to acquire working RenderTexture.");
                 return;
             }
-            SyncAlphaMapsToRT(alphaMapTextures, tempAlphaMaps);
+            // 预拷贝已在串行命令缓冲中执行，避免重复拷贝开销
 
             // 2) 构建与绑定输入
             ComputeBuffer pointsBuffer = null, tangentsBuffer = null, normalsBuffer = null;
@@ -129,25 +132,43 @@ namespace MrPathV2.Editor.Terrain
                 token.ThrowIfCancellationRequested();
 
                 (pointsBuffer, tangentsBuffer, normalsBuffer) = SetupSpineBuffers(spineData);
-                BindShaderInputs(terrain, td, profileData, spineData, recipeGpuData,
-                    pointsBuffer, tangentsBuffer, normalsBuffer,
-                    coverageMin, coverageMax, resolution, layers, tempAlphaMaps);
 
-                token.ThrowIfCancellationRequested();
-
-                // 3) 调度计算
-                var (gx, gy) = CalculateDispatchGroups(numPixelsX, numPixelsY);
-                if (gx <= 0 || gy <= 0)
+                // --- 计算对齐后的偏移和调度组 ---
+                uint tx = 8, ty = 8, tz = 1;
+                try
                 {
-                    Debug.LogWarning("[GpuTerrainPainter] Invalid dispatch groups.");
-                    return;
+                    _paintComputeShader.GetKernelThreadGroupSizes(_kernelHandle, out tx, out ty, out tz);
                 }
-                DispatchPaint(gx, gy);
+                catch { tx = 8; ty = 8; tz = 1; }
+                tx = tx == 0 ? 8u : tx;
+                ty = ty == 0 ? 8u : ty;
 
-                token.ThrowIfCancellationRequested();
+                // 计算偏移对齐（向下取整到线程组大小的倍数）
+                var remX = coverageMin.x % (int)tx;
+                var remY = coverageMin.y % (int)ty;
+                if (remX < 0) remX += (int)tx;
+                if (remY < 0) remY += (int)ty;
+                var alignedOffset = new int2(coverageMin.x - remX, coverageMin.y - remY);
 
-                // 4) 读回并应用到 Terrain
-                await ReadbackAndApplyAsync(tempAlphaMaps, td, terrain, layers, resolution, token);
+                // 计算需要覆盖的像素总数（包含前置填充）
+                var totalPixelsX = numPixelsX + remX;
+                var totalPixelsY = numPixelsY + remY;
+
+                // 计算调度组数量
+                var gx = Mathf.CeilToInt(totalPixelsX / (float)tx);
+                var gy = Mathf.CeilToInt(totalPixelsY / (float)ty);
+                Debug.Log($"[GpuTerrainPainter] Dispatch groups aligned: {gx} x {gy} (threads {tx}x{ty}), Offset {alignedOffset}");
+
+                // 使用串行 CommandBuffer：预拷贝 → Dispatch → Fence → 区域拷贝
+                CommitSerialGpuPipeline(
+                    terrain, td, profileData, spineData, recipeGpuData,
+                    pointsBuffer, tangentsBuffer, normalsBuffer,
+                    tempAlphaMaps,
+                    coverageMin, coverageMax,
+                    alignedOffset,
+                    resolution, layers,
+                    gx, gy
+                );
             }
             catch (OperationCanceledException)
             {
@@ -164,7 +185,12 @@ namespace MrPathV2.Editor.Terrain
                 pointsBuffer?.Release();
                 tangentsBuffer?.Release();
                 normalsBuffer?.Release();
-#if !UNITY_EDITOR
+#if UNITY_EDITOR
+                if (!(EditorGpuPreviewCache.TryGet(terrain, out var cachedRt) && cachedRt == tempAlphaMaps))
+                {
+                    tempAlphaMaps?.Release();
+                }
+#else
                 tempAlphaMaps?.Release();
 #endif
             }
@@ -231,8 +257,8 @@ namespace MrPathV2.Editor.Terrain
             format = alphaMapTextures[0].graphicsFormat;
             if (!IsGraphicsFormatRWCompatible(format))
             {
-                Debug.LogError($"[GpuTerrainPainter] GraphicsFormat '{format}' is not RWTexture compatible.");
-                return false;
+                Debug.LogWarning($"[GpuTerrainPainter] GraphicsFormat '{format}' not RW-compatible, falling back to R8G8B8A8_UNorm.");
+                format = GraphicsFormat.R8G8B8A8_UNorm;
             }
             if (recipeGpuData?.LayerParamsBuffer != null && recipeGpuData.LayerParamsBuffer.IsValid()) return true;
             Debug.LogError("[GpuTerrainPainter] Invalid RecipeGpuData.");
@@ -247,38 +273,44 @@ namespace MrPathV2.Editor.Terrain
         // 获取并同步工作 RT
         private static RenderTexture AcquireAlphaMapRT(UnityEngine.Terrain terrain, Texture2D[] alphaMapTextures, int resolution, GraphicsFormat format)
         {
-            var arrayCount = alphaMapTextures.Length;
-            RenderTexture tempAlphaMaps = null;
+            var td = terrain.terrainData;
+            var requiredSlices = Mathf.CeilToInt(td.alphamapLayers / 4f);
 #if UNITY_EDITOR
-            if (EditorGpuPreviewCache.TryGet(terrain, out var cached) &&
-                cached != null &&
-                cached.width == resolution && cached.height == resolution &&
-                cached.volumeDepth == arrayCount &&
-                cached.graphicsFormat == format)
+            // 尝试复用缓存中的工作 RT（Editor 环境）
+            if (EditorGpuPreviewCache.TryGet(terrain, out var cached) && cached && cached.IsCreated())
             {
-                tempAlphaMaps = cached;
+                var ok = cached.width == resolution && cached.height == resolution
+                         && cached.volumeDepth == requiredSlices
+                         && cached.graphicsFormat == format
+                         && cached.dimension == TextureDimension.Tex2DArray
+                         && cached.enableRandomWrite;
+                if (ok) return cached;
+                cached.Release();
+                Object.DestroyImmediate(cached);
             }
 #endif
-            if (tempAlphaMaps == null)
+            var desc = new RenderTextureDescriptor(resolution, resolution)
             {
-                tempAlphaMaps = new RenderTexture(resolution, resolution, 0, format)
-                {
-                    dimension = TextureDimension.Tex2DArray,
-                    volumeDepth = arrayCount,
-                    enableRandomWrite = true,
-                    useMipMap = false,
-                    filterMode = FilterMode.Point,
-                    name = "Temp_Alphamap_RT"
-                };
-                if (!tempAlphaMaps.Create())
-                {
-                    Debug.LogError("[GpuTerrainPainter] Failed to create temporary RenderTexture.");
-                    return null;
-                }
-#if UNITY_EDITOR
-                EditorGpuPreviewCache.Register(terrain, tempAlphaMaps);
-#endif
+                graphicsFormat = format,
+                dimension = TextureDimension.Tex2DArray,
+                volumeDepth = requiredSlices,
+                enableRandomWrite = true,
+                useMipMap = false,
+                msaaSamples = 1
+            };
+            var tempAlphaMaps = new RenderTexture(desc)
+            {
+                filterMode = FilterMode.Point,
+                name = "Temp_Alphamap_RT"
+            };
+            if (!tempAlphaMaps.Create())
+            {
+                Debug.LogError("[GpuTerrainPainter] Failed to create temporary RenderTexture.");
+                return null;
             }
+#if UNITY_EDITOR
+            EditorGpuPreviewCache.Register(terrain, tempAlphaMaps);
+#endif
             return tempAlphaMaps;
         }
 
@@ -320,7 +352,7 @@ namespace MrPathV2.Editor.Terrain
             int layers,
             RenderTexture outputRT)
         {
-            BindCommonParams(_paintComputeShader, terrain, td, profileData, coverageMin, coverageMax, resolution, layers,spineData);
+            BindCommonParams(_paintComputeShader, terrain, td, profileData, coverageMin, coverageMax, resolution, layers, spineData);
 
             _paintComputeShader.SetBuffer(_kernelHandle, SpinePointsID, pointsBuffer);
             _paintComputeShader.SetBuffer(_kernelHandle, SpineTangentsID, tangentsBuffer);
@@ -340,7 +372,7 @@ namespace MrPathV2.Editor.Terrain
         }
 
         private static void BindCommonParams(ComputeShader cs, UnityEngine.Terrain t, TerrainData data,
-            PathJobsUtility.ProfileData prof, int2 covMin, int2 covMax, int res, int layerCount,PathJobsUtility.SpineData spineData)
+            PathJobsUtility.ProfileData prof, int2 covMin, int2 covMax, int res, int layerCount, PathJobsUtility.SpineData spineData)
         {
             cs.SetInts(AlphamapResolutionID, res, res);
             cs.SetInt(AlphamapLayerCountID, layerCount);
@@ -357,6 +389,9 @@ namespace MrPathV2.Editor.Terrain
             cs.SetBool(ForceHorizontalID, prof.ForceHorizontal);
             cs.SetInts(CoverageMinID, covMin.x, covMin.y);
             cs.SetInts(CoverageMaxID, covMax.x, covMax.y);
+            cs.SetInt(DebugModeID, 0); // Disable debug mode for production
+            cs.SetInt(SpinePointCountID, spineData.Points.Length);
+
         }
 
         private (int gx, int gy) CalculateDispatchGroups(int pixelsX, int pixelsY)
@@ -374,6 +409,7 @@ namespace MrPathV2.Editor.Terrain
             ty = ty == 0 ? 8u : ty;
             var gx = Mathf.CeilToInt(pixelsX / (float)tx);
             var gy = Mathf.CeilToInt(pixelsY / (float)ty);
+            Debug.Log("[GpuTerrainPainter] Dispatch groups: " + gx + " x " + gy + " (threads " + tx + "x" + ty + ")");
             return (gx, gy);
         }
 
@@ -382,97 +418,320 @@ namespace MrPathV2.Editor.Terrain
             _paintComputeShader.Dispatch(_kernelHandle, groupsX, groupsY, 1);
         }
 
-        private async Task ReadbackAndApplyAsync(RenderTexture rt, TerrainData data, UnityEngine.Terrain terrain, int layerCount, int res, CancellationToken ct)
+        private async Task ReadbackAndApplyAsync(RenderTexture rt, TerrainData data, UnityEngine.Terrain terrain, int layerCount, int res, int2 coverageMin, int2 coverageMax, CancellationToken ct)
         {
-            AsyncGPUReadbackRequest request;
+            // 改为纯 GPU 提交：使用 GraphicsFence + CommandBuffer.CopyTexture 按覆盖区拷贝到地形控制纹理
             try
             {
-                request = AsyncGPUReadback.Request(rt);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[GpuTerrainPainter] AsyncGPUReadback.Request failed: {ex.Message}");
-                return;
-            }
-            while (!request.done)
-            {
-                if (ct.IsCancellationRequested) ct.ThrowIfCancellationRequested();
-                await Task.Yield();
-            }
-            if (request.hasError)
-            {
-                Debug.LogError("[GpuTerrainPainter] AsyncGPUReadback encountered an error.");
-                return;
-            }
+                ct.ThrowIfCancellationRequested();
+                await Task.Yield(); // 让前面的 Dispatch 在队列中安置好
 
-            await Task.Yield();
-            ct.ThrowIfCancellationRequested();
+                if (data == null || terrain == null) return;
+                var dstTextures = data.alphamapTextures;
+                if (dstTextures == null || dstTextures.Length == 0) return;
 
-            if (data.alphamapTextureCount <= 0) return;
-
-            try
-            {
                 var width = res;
                 var height = res;
-                var sliceCount = request.layerCount;
-                var layerData = new float[height, width, layerCount];
 
-                for (var slice = 0; slice < sliceCount; slice++)
+                // 覆盖区像素边界钳制
+                var startX = Mathf.Clamp(coverageMin.x, 0, width - 1);
+                var startY = Mathf.Clamp(coverageMin.y, 0, height - 1);
+                var endX = Mathf.Clamp(coverageMax.x, 0, width - 1);
+                var endY = Mathf.Clamp(coverageMax.y, 0, height - 1);
+                var subW = endX - startX + 1;
+                var subH = endY - startY + 1;
+                if (subW <= 0 || subH <= 0) return;
+
+                // 计算需要拷贝的切片数量（每个切片对应一个控制纹理，RGBA×4层）
+                var sliceCount = Mathf.CeilToInt(layerCount / 4f);
+                sliceCount = Mathf.Min(sliceCount, rt != null ? rt.volumeDepth : 0);
+                sliceCount = Mathf.Min(sliceCount, dstTextures.Length);
+                if (sliceCount <= 0) return;
+
+                // 在全局队列插入一个 Fence，确保后续拷贝发生在 Compute 完成之后
+                var fence = Graphics.CreateGraphicsFence(GraphicsFenceType.AsyncQueueSynchronisation, SynchronisationStageFlags.ComputeProcessing);
+
+                var cmd = new CommandBuffer { name = "[GpuTerrainPainter] Commit_Alphamaps_GPU" };
+                // 等待上面的 Fence（Compute 阶段）
+                cmd.WaitOnAsyncGraphicsFence(fence);
+
+                // 按覆盖区域进行分片拷贝
+                for (var i = 0; i < sliceCount; i++)
                 {
-                    var sliceData = request.GetData<Color32>(slice);
-                    if (!sliceData.IsCreated || sliceData.Length != width * height) continue;
-                    var baseLayer = slice * 4;
-                    for (var i = 0; i < sliceData.Length; i++)
-                    {
-                        var x = i % width;
-                        var y = i / width;
-                        var c = sliceData[i];
-                        var r = c.r / 255f; var g = c.g / 255f; var b = c.b / 255f; var a = c.a / 255f;
-                        if (baseLayer < layerCount) layerData[y, x, baseLayer] = r;
-                        if (baseLayer + 1 < layerCount) layerData[y, x, baseLayer + 1] = g;
-                        if (baseLayer + 2 < layerCount) layerData[y, x, baseLayer + 2] = b;
-                        if (baseLayer + 3 < layerCount) layerData[y, x, baseLayer + 3] = a;
-                    }
+                    // 从 2DArray 的第 i 个切片拷贝到第 i 个控制纹理的指定区域
+                    cmd.CopyTexture(rt, i, 0, startX, startY, subW, subH, dstTextures[i], 0, 0, startX, startY);
                 }
 
-                for (var y = 0; y < height; y++)
-                {
-                    for (var x = 0; x < width; x++)
-                    {
-                        var sum = 0f;
-                        for (var l = 0; l < layerCount; l++) sum += layerData[y, x, l];
-                        if (sum <= 1e-5f)
-                        {
-                            if (layerCount > 0)
-                            {
-                                for (var l = 0; l < layerCount; l++) layerData[y, x, l] = 0f;
-                                layerData[y, x, 0] = 1f;
-                            }
-                        }
-                        else
-                        {
-                            var inv = 1f / sum;
-                            for (var l = 0; l < layerCount; l++) layerData[y, x, l] *= inv;
-                        }
-                    }
-                }
+                Graphics.ExecuteCommandBuffer(cmd);
+                cmd.Release();
 
-                data.SetAlphamaps(0, 0, layerData);
 #if UNITY_EDITOR
-                terrain.Flush();
-                EditorUtility.SetDirty(data);
+            // 预览：提高 basemapDistance，避免远距离回退到旧的基底贴图
+            terrain.basemapDistance = Mathf.Max(terrain.basemapDistance, 100000f);
+            terrain.Flush();
+            EditorUtility.SetDirty(data);
 #else
-                terrain.Flush();
+            terrain.Flush();
 #endif
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.Log("[GpuTerrainPainter] GPU commit cancelled.");
+                throw;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[GpuTerrainPainter] Failed to apply readback: {ex.Message}");
+                Debug.LogError($"[GpuTerrainPainter] GPU commit failed: {ex.Message}");
             }
         }
 
-        public void Dispose() { }
+        private void CommitSerialGpuPipeline(
+            UnityEngine.Terrain terrain,
+            TerrainData data,
+            PathJobsUtility.ProfileData profileData,
+            PathJobsUtility.SpineData spineData,
+            RecipeGpuDataManager recipeGpuData,
+            ComputeBuffer pointsBuffer,
+            ComputeBuffer tangentsBuffer,
+            ComputeBuffer normalsBuffer,
+            RenderTexture rt,
+            int2 coverageMin,
+            int2 coverageMax,
+            int2 alignedOffset,
+            int resolution,
+            int layerCount,
+            int gx,
+            int gy)
+        {
+            if (gx <= 0 || gy <= 0)
+            {
+                Debug.LogWarning("[GpuTerrainPainter] Invalid dispatch groups.");
+                return;
+            }
 
+            if (data == null || terrain == null || rt == null)
+            {
+                Debug.LogWarning("[GpuTerrainPainter] Serial pipeline early-exit: invalid inputs.");
+                return;
+            }
+
+            var copySupport = SystemInfo.copyTextureSupport;
+            if ((copySupport & CopyTextureSupport.DifferentTypes) == 0)
+            {
+                Debug.LogWarning("[GpuTerrainPainter] CopyTexture different types not supported; GPU commit may be limited on this platform.");
+            }
+
+            var dstTextures = data.alphamapTextures;
+            if (dstTextures == null || dstTextures.Length == 0) return;
+
+            var width = resolution;
+            var height = resolution;
+
+
+            // 覆盖区像素边界钳制（用于 CoverageMin/Max 的安全窗口）
+            var startX = Mathf.Clamp(coverageMin.x, 0, width - 1);
+            var startY = Mathf.Clamp(coverageMin.y, 0, height - 1);
+            var endX = Mathf.Clamp(coverageMax.x, 0, width - 1);
+            var endY = Mathf.Clamp(coverageMax.y, 0, height - 1);
+            var subW = endX - startX + 1;
+            var subH = endY - startY + 1;
+            if (subW <= 0 || subH <= 0) return;
+
+            // 计算线程组大小，得到调度的对齐矩形（Compute 实际触达像素范围）
+            uint tx = 8, ty = 8, tz = 1;
+            try { _paintComputeShader.GetKernelThreadGroupSizes(_kernelHandle, out tx, out ty, out tz); } catch { tx = 8; ty = 8; tz = 1; }
+            tx = tx == 0 ? 8u : tx;
+            ty = ty == 0 ? 8u : ty;
+            var dispatchPixelsX = gx * (int)tx;
+            var dispatchPixelsY = gy * (int)ty;
+
+            // 对齐后的预拷贝/回写矩形（包含线程组对齐带来的填充像素）
+            var alignedStartX = Mathf.Clamp(alignedOffset.x, 0, width - 1);
+            var alignedStartY = Mathf.Clamp(alignedOffset.y, 0, height - 1);
+            var alignedEndX = Mathf.Clamp(alignedOffset.x + dispatchPixelsX - 1, 0, width - 1);
+            var alignedEndY = Mathf.Clamp(alignedOffset.y + dispatchPixelsY - 1, 0, height - 1);
+            var alignedSubW = alignedEndX - alignedStartX + 1;
+            var alignedSubH = alignedEndY - alignedStartY + 1;
+            if (alignedSubW <= 0 || alignedSubH <= 0) return;
+
+            // 安全边距（来自高级设置），用于预拷贝/回写和 Basemap 重建
+#if UNITY_EDITOR
+            var adv = MrPathProjectSettings.GetOrCreateSettings()?.advancedSettings;
+#else
+            var adv = (MrPathAdvancedSettings)null;
+#endif
+            var margin = Mathf.Max(0, adv != null ? adv.basemapSafetyMarginPixels : 0);
+            var safeStartX = Mathf.Clamp(alignedStartX - margin, 0, width - 1);
+            var safeStartY = Mathf.Clamp(alignedStartY - margin, 0, height - 1);
+            var safeEndX = Mathf.Clamp(alignedEndX + margin, 0, width - 1);
+            var safeEndY = Mathf.Clamp(alignedEndY + margin, 0, height - 1);
+            var safeW = safeEndX - safeStartX + 1;
+            var safeH = safeEndY - safeStartY + 1;
+            if (safeW <= 0 || safeH <= 0) return;
+
+            // 绑定常规模型参数（对齐矩形作为覆盖窗口）
+            BindCommonParams(_paintComputeShader, terrain, data, profileData, new int2(alignedStartX, alignedStartY), new int2(alignedEndX, alignedEndY), resolution, layerCount, spineData);
+
+            var cmd = new CommandBuffer { name = "[GpuTerrainPainter] Serial_GPU_Pipeline" };
+
+            // 在命令缓冲中绑定 Compute 所需的 Buffer/Texture（CB 上下文专用）
+            if (pointsBuffer != null) cmd.SetComputeBufferParam(_paintComputeShader, _kernelHandle, SpinePointsID, pointsBuffer);
+            if (tangentsBuffer != null) cmd.SetComputeBufferParam(_paintComputeShader, _kernelHandle, SpineTangentsID, tangentsBuffer);
+            if (normalsBuffer != null) cmd.SetComputeBufferParam(_paintComputeShader, _kernelHandle, SpineNormalsID, normalsBuffer);
+            if (pointsBuffer != null) cmd.SetComputeBufferParam(_paintComputeShader, _kernelHandle, SpineDataID, pointsBuffer); // 兼容旧变量名
+            cmd.SetComputeIntParam(_paintComputeShader, SpinePointCountID, spineData.Points.Length);
+
+            cmd.SetComputeIntParam(_paintComputeShader, NumActiveLayersID, recipeGpuData.ActiveLayerCount);
+            cmd.SetComputeIntParam(_paintComputeShader, LayerCountID, recipeGpuData.ActiveLayerCount);
+            if (recipeGpuData.LayerParamsBuffer != null)
+                cmd.SetComputeBufferParam(_paintComputeShader, _kernelHandle, LayerParamsID, recipeGpuData.LayerParamsBuffer);
+            if (recipeGpuData.TerrainTextureArray != null)
+            {
+                cmd.SetComputeTextureParam(_paintComputeShader, _kernelHandle, TerrainTexturesID, recipeGpuData.TerrainTextureArray);
+            }
+            cmd.SetComputeTextureParam(_paintComputeShader, _kernelHandle, SplatWeightsID, rt);
+
+            // 计算需要拷贝/回写的切片数量
+            var sliceCount = Mathf.Min(dstTextures.Length, rt.volumeDepth);
+
+            // 1) 区域预拷贝：Terrain 控制纹理 → 工作 RT 切片（对齐矩形）
+            for (var i = 0; i < sliceCount; i++)
+            {
+                cmd.CopyTexture(dstTextures[i], 0, 0, safeStartX, safeStartY, safeW, safeH, rt, i, 0, safeStartX, safeStartY);
+            }
+
+            // 2) 调度 Compute（在同一命令缓冲中保证与拷贝严格顺序）
+            cmd.DispatchCompute(_paintComputeShader, _kernelHandle, gx, gy, 1);
+
+            // 3) Fence：显式标记 Compute 阶段，用于老驱动/平台提供更强的时序保障
+            var fence = cmd.CreateGraphicsFence(GraphicsFenceType.AsyncQueueSynchronisation, SynchronisationStageFlags.ComputeProcessing);
+            cmd.WaitOnAsyncGraphicsFence(fence);
+
+
+            // 4) 区域回写：工作 RT 切片 → Terrain 控制纹理（对齐矩形）
+            for (var i = 0; i < sliceCount; i++)
+            {
+                cmd.CopyTexture(rt, i, 0, safeStartX, safeStartY, safeW, safeH, dstTextures[i], 0, 0, safeStartX, safeStartY);
+            }
+ 
+            Graphics.ExecuteCommandBuffer(cmd);
+            cmd.Release();
+
+            // 在 GPU 回写之后，重建 Basemap（按对齐区域）
+            try
+            {
+                RebuildBasemapFromTexturesRegion(data, dstTextures, layerCount, alignedStartX, alignedStartY, alignedSubW, alignedSubH);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[GpuTerrainPainter] Basemap rebuild failed: {e.Message}");
+            }
+
+#if UNITY_EDITOR
+            // 预览：提高 basemapDistance，避免远距离回退到旧的基底贴图
+            terrain.basemapDistance = Mathf.Max(terrain.basemapDistance, 100000f);
+            terrain.Flush();
+            EditorUtility.SetDirty(data);
+#else
+            terrain.Flush();
+#endif
+        }
+
+        public void Dispose() { }
+ 
+        // 基于区域的 Basemap 重建：从控制纹理按区域GPU读回并调用 SetAlphamaps
+        private static void RebuildBasemapFromTexturesRegion(TerrainData data, Texture2D[] dstTextures, int layers, int startX, int startY, int width, int height)
+        {
+            if (data == null || dstTextures == null || dstTextures.Length == 0) return;
+            if (width <= 0 || height <= 0) return;
+ 
+            var sliceCount = Mathf.CeilToInt(layers / 4f);
+            sliceCount = Mathf.Min(sliceCount, dstTextures.Length);
+            var weights = new float[height, width, layers];
+ 
+            for (var slice = 0; slice < sliceCount; slice++)
+            {
+                var tex = dstTextures[slice];
+                if (tex == null) continue;
+ 
+                // 执行 GPU 读回（读取整张纹理，再按区域裁剪）
+                var req = AsyncGPUReadback.Request(tex, 0);
+                req.WaitForCompletion();
+                if (req.hasError)
+                {
+                    Debug.LogWarning($"[GpuTerrainPainter] AsyncGPUReadback error on slice {slice}.");
+                    continue;
+                }
+                var colors = req.GetData<Color32>();
+                var baseLayer = slice * 4;
+                var texW = tex.width;
+                var texH = tex.height;
+
+                for (int y = 0; y < height; y++)
+                {
+                    var pyFull = startY + y;
+                    if (pyFull < 0 || pyFull >= texH) continue;
+                    for (int x = 0; x < width; x++)
+                    {
+                        var pxFull = startX + x;
+                        if (pxFull < 0 || pxFull >= texW) continue;
+                        var idx = pyFull * texW + pxFull;
+                        var c = colors[idx];
+                        if (baseLayer + 0 < layers) weights[y, x, baseLayer + 0] = c.r / 255f;
+                        if (baseLayer + 1 < layers) weights[y, x, baseLayer + 1] = c.g / 255f;
+                        if (baseLayer + 2 < layers) weights[y, x, baseLayer + 2] = c.b / 255f;
+                        if (baseLayer + 3 < layers) weights[y, x, baseLayer + 3] = c.a / 255f;
+                    }
+                }
+            }
+ 
+            // 调用 SetAlphamaps 以触发 Basemap 重建（仅限该区域）
+            data.SetAlphamaps(startX, startY, weights);
+        }
+
+        // 新增：基于 RenderTexture 切片的区域 Basemap 重建（用于实时 GPU 预览）
+        public static void RebuildBasemapFromRTRegion(TerrainData data, RenderTexture rt, int layers, int startX, int startY, int width, int height)
+        {
+            if (data == null || rt == null) return;
+            if (width <= 0 || height <= 0) return;
+            var sliceCount = Mathf.Min(Mathf.CeilToInt(layers / 4f), rt.volumeDepth);
+            var weights = new float[height, width, layers];
+            var texW = rt.width;
+            var texH = rt.height;
+ 
+            for (var slice = 0; slice < sliceCount; slice++)
+            {
+                var req = AsyncGPUReadback.Request(rt, slice, TextureFormat.ARGB32);
+                req.WaitForCompletion();
+                if (req.hasError)
+                {
+                    Debug.LogWarning($"[GpuTerrainPainter] AsyncGPUReadback error on RT slice {slice}.");
+                    continue;
+                }
+                var colors = req.GetData<Color32>();
+                var baseLayer = slice * 4;
+ 
+                for (int y = 0; y < height; y++)
+                {
+                    var pyFull = startY + y;
+                    if (pyFull < 0 || pyFull >= texH) continue;
+                    var rowOffset = pyFull * texW;
+                    for (int x = 0; x < width; x++)
+                    {
+                        var pxFull = startX + x;
+                        if (pxFull < 0 || pxFull >= texW) continue;
+                        var c = colors[rowOffset + pxFull];
+                        if (baseLayer + 0 < layers) weights[y, x, baseLayer + 0] = c.r / 255f;
+                        if (baseLayer + 1 < layers) weights[y, x, baseLayer + 1] = c.g / 255f;
+                        if (baseLayer + 2 < layers) weights[y, x, baseLayer + 2] = c.b / 255f;
+                        if (baseLayer + 3 < layers) weights[y, x, baseLayer + 3] = c.a / 255f;
+                    }
+                }
+            }
+ 
+            data.SetAlphamaps(startX, startY, weights);
+        }
+ 
         private static float CalculatePathLengthFromSpine(PathJobsUtility.SpineData spineData)
         {
             if (!spineData.IsCreated || spineData.Points.Length < 2) return 0f;
@@ -483,6 +742,6 @@ namespace MrPathV2.Editor.Terrain
             }
             return length;
         }
-
+ 
     }
 }

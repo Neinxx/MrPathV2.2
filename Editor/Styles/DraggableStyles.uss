@@ -1,0 +1,25 @@
+/* 拖放容器样式 */
+.drop-container {
+    background-color: rgba(50, 50, 50, 0.1);
+    border-radius: 4px;
+    border: 1px dashed rgba(100, 100, 100, 0.3);
+}
+
+/* 可拖动项样式 */
+.draggable-item {
+    background-color: white;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    padding: 8px;
+    cursor: move;
+    transition: background-color 0.2s;
+}
+
+.draggable-item:hover {
+    background-color: rgba(200, 200, 255, 0.1);
+}
+
+/* 拖动代理样式 */
+.draggable-item__proxy {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}

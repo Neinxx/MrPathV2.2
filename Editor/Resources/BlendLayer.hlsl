@@ -15,37 +15,35 @@
 
 inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, float opacity)
 {
-	// Premultiply layer alpha by opacity once to avoid repeating in every branch
-	layerColor.a *= opacity;
+    // Effective alpha from layer's alpha and per-layer opacity
+    float layerAlpha = saturate(layerColor.a * opacity);
 
-	// Default output is base (no change)
-	float4 outColor = baseColor;
+    // Candidate results for selection
+    float3 alphaBlendRgb = lerp(baseColor.rgb, layerColor.rgb, layerAlpha);
+    float3 addRgb        = baseColor.rgb + layerColor.rgb * layerAlpha;
+    float3 mulRgb        = baseColor.rgb * lerp(1.0, layerColor.rgb, layerAlpha);
 
-	// Branchless blend selection using lerp chains to keep things burst-friendly
-	// For more complex modes consider using switch + static if on shader model 4.5+
+    float3 overlayRgbLow   = 2.0 * baseColor.rgb * layerColor.rgb;
+    float3 overlayRgbHigh  = 1.0 - 2.0 * (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
+    float3 overlayBlendRgb = lerp(overlayRgbLow, overlayRgbHigh, step(0.5, baseColor.rgb));
+    float3 screenRgb       = 1.0 - (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
 
-	// AlphaBlend: lerp based on layer alpha
-	float4 alphaBlend = lerp(baseColor, layerColor, layerColor.a);
+    float4 outColor = float4(baseColor.rgb, baseColor.a);
 
-	// Additive: base + layer * opacity
-	float4 addBlend = float4(baseColor.rgb + layerColor.rgb * opacity, alphaBlend.a);
+    // C# enum PathTool.Data.BlendMode:
+    // 0: Normal, 1: Multiply, 2: Add, 3: Overlay, 4: Screen, 5: Lerp, 6: Additive
+    outColor.rgb = (abs(blendMode - 0.0) < 0.5) ? alphaBlendRgb : outColor.rgb;                                   // Normal
+    outColor.rgb = (abs(blendMode - 1.0) < 0.5) ? mulRgb        : outColor.rgb;                                   // Multiply
+    outColor.rgb = (abs(blendMode - 2.0) < 0.5) ? addRgb        : outColor.rgb;                                   // Add
+    outColor.rgb = (abs(blendMode - 3.0) < 0.5) ? lerp(baseColor.rgb, overlayBlendRgb, layerAlpha) : outColor.rgb; // Overlay
+    outColor.rgb = (abs(blendMode - 4.0) < 0.5) ? lerp(baseColor.rgb, screenRgb, layerAlpha) : outColor.rgb;      // Screen
+    outColor.rgb = (abs(blendMode - 5.0) < 0.5) ? alphaBlendRgb : outColor.rgb;                                   // Lerp
+    outColor.rgb = (abs(blendMode - 6.0) < 0.5) ? addRgb        : outColor.rgb;                                   // Additive
 
-	// Multiply: base * lerp(1, layer, opacity)
-	float4 mulBlend = float4(baseColor.rgb * lerp(1.0, layerColor.rgb, opacity), alphaBlend.a);
+    // Alpha preserved; preview alpha is computed separately
+    outColor.a = baseColor.a;
 
-	// Overlay (approx): if base < 0.5 use 2*base*layer else 1 - 2*(1-base)*(1-layer)
-	float3 overlayRgbLow = 2.0 * baseColor.rgb * layerColor.rgb;
-	float3 overlayRgbHigh = 1.0 - 2.0 * (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
-	float3 overlayRgb = lerp(overlayRgbLow, overlayRgbHigh, step(0.5, baseColor.rgb));
-	float4 overlayBlend = float4(lerp(baseColor.rgb, overlayRgb, opacity), alphaBlend.a);
-
-	// Select blend result based on mode
-	outColor = (blendMode < 0.5) ? alphaBlend : outColor; // 0
-	outColor = (abs(blendMode - 1.0) < 0.5) ? addBlend : outColor; // 1
-	outColor = (abs(blendMode - 2.0) < 0.5) ? mulBlend : outColor; // 2
-	outColor = (abs(blendMode - 3.0) < 0.5) ? overlayBlend : outColor; // 3
-
-	return saturate(outColor);
+    return saturate(outColor);
 }
 
 // -----------------------------------------------------------------------------

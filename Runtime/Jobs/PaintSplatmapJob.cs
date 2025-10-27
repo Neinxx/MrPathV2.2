@@ -76,16 +76,21 @@ namespace MrPathV2.Runtime.Jobs
             if (!ValidateAlphaIndexRange(baseAlphaIndex))
                 return;
 
-            // 初始化alpha值
-            InitializeAlphaValues(baseAlphaIndex);
+            // 注意：不再重置 alpha，保留原有权重以实现透明剔除
 
             // 应用纹理混合
             var (anyLayerPainted, firstValidSplatIndex) = ApplyLayerBlending(baseAlphaIndex, normalizedDist, pathProgress);
 
-            // 处理未绘制图层的情况
+            // 若本像素涂绘了至少一个配方图层，则剔除所有非配方图层的权重（仅在道路覆盖区）
+            if (anyLayerPainted)
+            {
+                ZeroOutNonRecipeLayers(baseAlphaIndex);
+            }
+
+            // 未绘制任何图层时，保持原权重，不做强制填充
             HandleUnpaintedLayers(baseAlphaIndex, anyLayerPainted, firstValidSplatIndex);
 
-            // 标准化alpha权重
+            // 标准化alpha权重，保持总和为 1
             NormalizeAlphaWeights(baseAlphaIndex, firstValidSplatIndex);
         }
 
@@ -96,18 +101,6 @@ namespace MrPathV2.Runtime.Jobs
         private bool ValidateAlphaIndexRange(int baseAlphaIndex)
         {
             return baseAlphaIndex >= 0 && baseAlphaIndex + AlphamapLayerCount <= Alphamaps.Length;
-        }
-
-        /// <summary>
-        /// 初始化alpha值为0
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void InitializeAlphaValues(int baseAlphaIndex)
-        {
-            for (var l = 0; l < AlphamapLayerCount; l++)
-            {
-                Alphamaps[baseAlphaIndex + l] = 0f;
-            }
         }
 
         /// <summary>
@@ -153,33 +146,55 @@ namespace MrPathV2.Runtime.Jobs
         }
 
         /// <summary>
+        /// 在道路覆盖区清除非配方图层的权重
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ZeroOutNonRecipeLayers(int baseAlphaIndex)
+        {
+            for (var i = 0; i < AlphamapLayerCount; i++)
+            {
+                if (!IsRecipeSplatIndex(i))
+                {
+                    Alphamaps[baseAlphaIndex + i] = 0f;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool IsRecipeSplatIndex(int splatIndex)
+        {
+            for (var k = 0; k < Recipe.Length; k++)
+            {
+                if (Recipe.TerrainLayerIndices[k] == splatIndex) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// 获取遮罩值
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetMaskValue(int layerIndex, float normalizedDist, float pathProgress)
         {
-            // --- 使用 PathProgress (需要 TerrainJobsUtility.SampleMaskAtlas 支持) ---
+            // 优先使用 MaskAtlas（支持 pathProgress）
             if (Recipe.MaskAtlas.IsCreated)
             {
-                // 假设 SampleMaskAtlas 已更新为接受 pathProgress
                 return TerrainJobsUtility.SampleMaskAtlas(
                     Recipe.MaskAtlas, Recipe.AtlasWidth, Recipe.PathSamples,
                     layerIndex, normalizedDist, pathProgress);
             }
             else if (Recipe.Strips.IsCreated)
             {
-                // Strips (1D) 无法使用 pathProgress
-                var maskValue = TerrainJobsUtility.EvaluateStrip(
+                // Strips (1D) 已在生成时预乘 opacity，这里不再乘
+                return TerrainJobsUtility.EvaluateStrip(
                     Recipe.Strips, Recipe.StripSlices[layerIndex],
                     Recipe.StripResolution, normalizedDist);
-                maskValue *= Recipe.Opacities[layerIndex]; // Strips 似乎预乘了 opacity? 检查 RecipeData
-                return maskValue;
             }
             else
             {
-                return 1f * Recipe.Opacities[layerIndex];
+                // 没有遮罩时不涂绘
+                return 0f;
             }
-            // --- 结束 ---
         }
 
         /// <summary>
@@ -196,15 +211,12 @@ namespace MrPathV2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 处理未绘制图层的情况
+        /// 未绘制任何图层时保持原权重不变
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void HandleUnpaintedLayers(int baseAlphaIndex, bool anyLayerPainted, int firstValidSplatIndex)
         {
-            if (!anyLayerPainted && firstValidSplatIndex >= 0)
-            {
-                Alphamaps[baseAlphaIndex + firstValidSplatIndex] = 1f;
-            }
+            // 保持空实现：不强制写 1，避免清空原地形纹理
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -39,6 +39,8 @@ namespace MrPathV2.Editor.Preview
         private static readonly int LayerIndexId = Shader.PropertyToID("_LayerIndex");
         private static readonly int MaskStrengthId = Shader.PropertyToID("_MaskStrength");
         private static readonly int ZTestId = Shader.PropertyToID("_ZTest");
+        // 新增：Mask 阈值属性绑定，控制遮罩锐化阈值
+        private static readonly int MaskThresholdId = Shader.PropertyToID("_MaskThreshold");
         // 新增：Mesh UV 重复参数（用于遮罩与采样自适应）
         private static readonly int MeshRepeatAcrossId = Shader.PropertyToID("_MeshRepeatAcross");
         private static readonly int MeshRepeatAlongId = Shader.PropertyToID("_MeshRepeatAlong");
@@ -116,6 +118,7 @@ namespace MrPathV2.Editor.Preview
             }
 
 #if UNITY_EDITOR
+            // 绑定（或解除）GPU 实时预览纹理
             TryBindGpuPreview(profile);
 #endif
 
@@ -235,6 +238,9 @@ namespace MrPathV2.Editor.Preview
             Current.SetFloat(PathSamplesId, 64f);
             // 将整体不透明度同时推送到遮罩强度，用户可在Inspector调整PreviewAlpha或MasterOpacity
             Current.SetFloat(MaskStrengthId, master);
+            // 新增：根据不透明预览设置遮罩阈值，避免回退到 MaskAtlas 时出现半透明边缘
+            var maskThreshold = profile.opaquePreview ? 0.2f : 0.0f;
+            if (Current.HasProperty(MaskThresholdId)) Current.SetFloat(MaskThresholdId, maskThreshold);
             Current.SetFloat(LayerIndexId, 0f);
             if (Current.HasProperty(ZTestId)) Current.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
             // Prepare mask atlas texture even for stylized single-layer preview
@@ -272,7 +278,20 @@ namespace MrPathV2.Editor.Preview
             {
                 if (roadLayer is not { enabled: true }) continue;
                 var tLayer = roadLayer.contentLayer;
-                if (tLayer?.diffuseTexture is not { } tex) continue;
+
+                Texture2D tex = null;
+                try
+                {
+                    if (tLayer && tLayer.diffuseTexture != null)
+                    {
+                        tex = tLayer.diffuseTexture;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[PreviewMaterialManager] Failed to access TerrainLayer.diffuseTexture while building mask atlas: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                }
+                if (tex == null) continue;
 
                 var tiling = PreviewPipelineUtility.CalcLayerTiling(worldWidth, tLayer);
                 var info = new PreviewPipelineUtility.PreviewLayerInfo(
@@ -309,9 +328,23 @@ namespace MrPathV2.Editor.Preview
         {
             var layersList = profile.roadRecipe?.GetLayers();
             var layer = layersList != null && layersList.Count > 0 ? layersList[0]?.contentLayer : null;
-            if (layer?.diffuseTexture)
+
+            Texture2D tex = null;
+            try
             {
-                Current.SetTexture(LayerTex, layer.diffuseTexture);
+                if (layer && layer.diffuseTexture != null)
+                {
+                    tex = layer.diffuseTexture;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[PreviewMaterialManager] Failed to access TerrainLayer.diffuseTexture for stylized preview: {ex.Message}\nStackTrace: {ex.StackTrace}");
+            }
+
+            if (tex != null)
+            {
+                Current.SetTexture(LayerTex, tex);
                 var sz = layer.tileSize;
                 if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
                 if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
@@ -334,6 +367,9 @@ namespace MrPathV2.Editor.Preview
             if (Current.HasProperty(ZTestId)) Current.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
             // 新增：Stylized 预览也支持不透明预览
             if (Current.HasProperty(OpaquePreview)) Current.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
+            // 新增：为单层风格化预览设置遮罩阈值，保证边缘清晰
+            var maskThresholdStylized = profile.opaquePreview ? 0.2f : 0.0f;
+            if (Current.HasProperty(MaskThresholdId)) Current.SetFloat(MaskThresholdId, maskThresholdStylized);
 
             // 确保单层预览也能获取遮罩贴图（0号层）以应用透明度渐变
             SetupMaskTextures(profile);
@@ -341,18 +377,35 @@ namespace MrPathV2.Editor.Preview
 
         private void SetLayer(int index, TerrainLayer layer, float worldWidth)
         {
-            if (layer?.diffuseTexture != null)
+            try
             {
-                Current.SetTexture($"_Layer{index}_Texture", layer.diffuseTexture);
-                // Removed legacy _Layer{index}_Tiling; tiling is now provided via _LayerTilings array
-                // var tiling = LayerTilingUtility.CalcLayerTiling(worldWidth, layer);
-                // _instance.SetVector($"_Layer{index}_Tiling", new Vector4(tiling.x, tiling.y, 0, 0));
-                Current.SetColor($"_Layer{index}_Color", Color.white); // 使用白色保持与地形贴图一致
+                Texture2D tex = null;
+                // Safely access TerrainLayer.diffuseTexture; Unity may throw if the asset is invalid/destroyed
+                if (layer != null)
+                {
+                    // Guard against Unity's fake-null: use implicit bool check first
+                    if (layer && layer.diffuseTexture != null)
+                    {
+                        tex = layer.diffuseTexture;
+                    }
+                }
+
+                if (tex != null)
+                {
+                    Current.SetTexture($"_Layer{index}_Texture", tex);
+                    Current.SetColor($"_Layer{index}_Color", Color.white);
+                }
+                else
+                {
+                    Current.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
+                    Current.SetColor($"_Layer{index}_Color", Color.white);
+                }
             }
-            else
+            catch (Exception ex)
             {
+                Debug.LogWarning($"[PreviewMaterialManager] Failed to read TerrainLayer at index {index}: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                // Fallback to safe defaults so preview continues rendering
                 Current.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                // _instance.SetVector($"_Layer{index}_Tiling", Vector4.one);
                 Current.SetColor($"_Layer{index}_Color", Color.white);
             }
         }
@@ -380,7 +433,7 @@ namespace MrPathV2.Editor.Preview
         ///     全局开关：是否启用 GPU 实时预览。
         ///     后续可替换为 ProjectSettings / ScriptableObject 配置。
         /// </summary>
-        public static bool EnableGpuPreview = true;
+        public static bool EnableGpuPreview = false;
 #endif
 
 
@@ -511,30 +564,45 @@ namespace MrPathV2.Editor.Preview
 #if UNITY_EDITOR
         private void TryBindGpuPreview(PathProfile profile)
         {
-            if (!Current || !Current.HasProperty(SplatWeightsID)) return;
+            if (!Current) return;
 
-            if (EnableGpuPreview && _targetTerrain && EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt != null)
+            // 默认走 MaskAtlas 回退路径
+            var useGpu = EnableGpuPreview && _targetTerrain && profile && profile.roadRecipe;
+            if (!useGpu)
             {
-                Current.SetTexture(SplatWeightsID, rt);
-                Current.SetInt(UseSplatWeightsID, 1);
+                if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 0);
+                if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, null);
+                return;
+            }
 
+            // 从缓存获取 RenderTextureArray
+            if (EditorGpuPreviewCache.TryGet(_targetTerrain, out var rt) && rt)
+            {
+                // 绑定 GPU 生成的权重纹理
+                if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, rt);
+                if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 1);
+
+                // 推送地形参数供着色器采样世界坐标
                 var td = _targetTerrain.terrainData;
-                if (td)
+                var pos = _targetTerrain.GetPosition();
+                var size = td.size;
+                if (Current.HasProperty(TerrainPositionID)) Current.SetVector(TerrainPositionID, new Vector4(pos.x, pos.z, 0f, 0f));
+                if (Current.HasProperty(TerrainSizeID)) Current.SetVector(TerrainSizeID, new Vector4(size.x, size.z, 0f, 0f));
+                if (Current.HasProperty(AlphamapResolutionID))
                 {
-                    var tpos = _targetTerrain.GetPosition();
-                    Current.SetVector(TerrainPositionID, new Vector4(tpos.x, tpos.z, 0f, 0f));
-                    Current.SetVector(TerrainSizeID, new Vector4(td.size.x, td.size.z, 0f, 0f));
-                    Current.SetVector(AlphamapResolutionID, new Vector4(td.alphamapResolution, td.alphamapResolution, 0f, 0f));
+                    var res = td.alphamapResolution;
+                    Current.SetVector(AlphamapResolutionID, new Vector4(res, res, 0f, 0f));
                 }
             }
             else
             {
-                Current.SetInt(UseSplatWeightsID, 0);
-                Current.SetTexture(SplatWeightsID, null);
+                // 无缓存：解除绑定，回退到 MaskAtlas
+                if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 0);
+                if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, null);
             }
         }
 #endif
 
-        #endregion
+            #endregion
     }
 }

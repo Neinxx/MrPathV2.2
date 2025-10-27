@@ -8,7 +8,7 @@ namespace MrPathV2.Runtime.Core
 {
     public static class PathSampler
     {
-        private const float MinPointDistanceSquared = 0.0001f;
+        private const float MinPointDistanceSquared = 1e-8f;
 
 
         public static PathSpine SamplePath(PathCreator creator, IHeightProvider heightProvider)
@@ -131,7 +131,15 @@ namespace MrPathV2.Runtime.Core
         private static PathSpine GenerateIdealSpine(PathCreator creator, int segmentsAlong)
         {
             GeneratePointsBySegments(creator, Mathf.Max(2, segmentsAlong), out var points, out var cumulativeDistances);
-            if (points.Count < 2) return new PathSpine();
+            if (points.Count < 2)
+            {
+                var p0 = creator.GetPointAtLocal(0);
+                var p1 = creator.GetPointAtLocal(creator.NumSegments);
+                if ((p1 - p0).sqrMagnitude < 1e-8f)
+                    p1 = p0 + Vector3.forward * 0.02f;
+                points = new List<Vector3> { p0, p1 };
+                cumulativeDistances = new List<float> { 0f, Vector3.Distance(p0, p1) };
+            }
             var sampledPoints = points.ToArray();
             var tangents = RecalculateTangentsFromPoints(sampledPoints);
             var upVectors = new Vector3[sampledPoints.Length];
@@ -163,7 +171,7 @@ namespace MrPathV2.Runtime.Core
             {
                 var p = creator.GetPointAtLocal(t);
                 var d = Vector3.Distance(lastPoint, p);
-                if (d > 0.0001f)
+                if (d > 1e-6f)
                 {
                     accum += d;
                     finePoints.Add(p);

@@ -1,3 +1,5 @@
+
+
 #pragma kernel PaintTerrain
 
 #include "BlendingLibrary.hlsl"
@@ -38,6 +40,10 @@ float2 _TerrainPosition;
 int2   _AlphamapResolution;
 int2   _TerrainOffset;
 int2   _AlphamapOffset;
+int2   _CoverageMin;   // 新增：覆盖范围最小像素坐标
+int2   _CoverageMax;   // 新增：覆盖范围最大像素坐标
+int    _DebugMode; // 新增：调试模式 0=正常, 1=UV渐变, 2=道路衰减
+
 
 // Helper function to calculate squared distance
 float distanceSq(float2 a, float2 b)
@@ -51,6 +57,8 @@ float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3>
 {
 	// First pass: total path length
 	float totalLen = 0.0f;
+
+	
 	for(int segIdx = 0; segIdx < spinePointCount - 1; segIdx++)
 	{
 		float2 s = spineData[segIdx].xz;
@@ -58,7 +66,7 @@ float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3>
 		float2 d = e - s;
 		totalLen += length(d);
 	}
-	totalLen = max(0.0001f, totalLen);
+	totalLen = max(1e-6f, totalLen);
 
 	// Second pass: find closest segment; compute progress by length and signed distance
 	float minDistanceSq = FLT_INF;
@@ -81,7 +89,7 @@ float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3>
 		float2 closestPoint = segmentStart;
 		float  distSq = FLT_INF;
 
-		if(segmentLenSq > 0.0001f)
+		if(segmentLenSq > 1e-8f)
 		{
 			t = saturate(dot(worldPos - segmentStart, segmentDir) / segmentLenSq);
 			closestPoint = segmentStart + t * segmentDir;
@@ -118,7 +126,7 @@ void ApplyBlending(int2 pixelCoord, LayerParams layer, float distanceAbs, float 
 	if(falloff <= 0.0f) return;
 
 	// Evaluate mask with recipe-provided params
-	float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+	float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + (float2(pixelCoord) + 0.5f) * _TerrainSize / _AlphamapResolution;
 	float  maskValue = EvaluateMask(layer.MaskParams, worldPos, progress, signedDistance, _RoadWidth);
 
 	// Calculate final strength using recipe opacity
@@ -142,12 +150,12 @@ void ApplyBlending(int2 pixelCoord, LayerParams layer, float distanceAbs, float 
 
 	// Blend per selected channel using unified BlendMode weight function
 	float baseWeight = (channelIndex == 0)
-		                   ? currentAlpha.r
-		                   : (channelIndex == 1)
-		                   ? currentAlpha.g
-		                   : (channelIndex == 2)
-		                   ? currentAlpha.b
-		                   : currentAlpha.a;
+					   ? currentAlpha.r
+					   : (channelIndex == 1)
+					   ? currentAlpha.g
+					   : (channelIndex == 2)
+					   ? currentAlpha.b
+					   : currentAlpha.a;
 	float blendedWeight = BlendWeight(baseWeight, finalStrength, layer.BlendMode);
 	blendedWeight = saturate(blendedWeight);
 
@@ -165,27 +173,82 @@ void ApplyBlending(int2 pixelCoord, LayerParams layer, float distanceAbs, float 
 [numthreads(8, 8, 1)]
 void PaintTerrain(uint3 id : SV_DispatchThreadID)
 {
-	int2 pixelCoord = int2(id.xy) + _AlphamapOffset;
+    // Map threads into the coverage window using the alphamap offset
+    int2 pixelCoord = int2(id.xy) + _AlphamapOffset;
 
-	// Check bounds (including negative offsets)
-	if(pixelCoord.x < 0 || pixelCoord.y < 0 || pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y) return;
+    // Bounds check (supports negative offsets safely)
+    if(pixelCoord.x < 0 || pixelCoord.y < 0 || pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y) return;
 
-	// Convert to world position
-	float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+    // 新增：裁剪到覆盖包围盒，避免调度超出 ROI 的线程做无效计算
+    if(pixelCoord.x < _CoverageMin.x || pixelCoord.y < _CoverageMin.y || pixelCoord.x > _CoverageMax.x || pixelCoord.y > _CoverageMax.y) return;
 
-	// Calculate distance, progress and signed distance along the path
-	float3 dps = CalculateDistanceProgressSigned(worldPos, SpineData, _SpinePointCount);
-	float  distanceAbs = dps.x;
-	float  progress = dps.y;
-	float  signedDistance = dps.z;
 
-	// Skip if too far from path
-	if(distanceAbs > _FalloffDistance) return;
+    // 调试：检查spine数据是否有效
+    if(_SpinePointCount <= 0)
+    {
+        // 如果没有spine数据，将像素设为红色以便调试
+        {
+            _SplatWeights[int3(pixelCoord, 0)] = float4(1, 0, 0, 0);
+        }
+        return;
+    }
 
-	// Apply each layer
-	for(int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
-	{
-		LayerParams layer = LayerParamsBuffer[layerIdx];
-		ApplyBlending(pixelCoord, layer, distanceAbs, progress, signedDistance);
-	}
+    // 调试：检查第一个spine点是否有效
+    if(_SpinePointCount > 0)
+    {
+        float3 firstPoint = SpineData[0];
+        // 如果第一个点的坐标都是0，可能数据有问题
+        if(abs(firstPoint.x) < 0.001f && abs(firstPoint.y) < 0.001f && abs(firstPoint.z) < 0.001f)
+        {
+            // 将左上角设为蓝色表示spine数据可能有问题
+            if(pixelCoord.x < 10 && pixelCoord.y < 10)
+            {
+                _SplatWeights[int3(pixelCoord, 0)] = float4(0, 0, 1, 0);
+            }
+            return;
+        }
+    }
+
+    // Convert to world position
+    float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + (float2(pixelCoord) + 0.5f) * _TerrainSize / _AlphamapResolution;
+
+    // Calculate distance, progress and signed distance along the path
+    float3 dps = CalculateDistanceProgressSigned(worldPos, SpineData, _SpinePointCount);
+    float  distanceAbs = dps.x;
+    float  progress = dps.y;
+    float  signedDistance = dps.z;
+
+    // 新增：调试模式分支（在获得 progress/signedDistance 后输出UV）
+    if(_DebugMode == 1)
+    {
+        // 使用第一个图层的噪声参数计算统一UV；若无图层则输出0
+        float2 uvOut = float2(0.0, 0.0);
+        if(_LayerCount > 0)
+        {
+            LayerParams layer0 = LayerParamsBuffer[0];
+            uvOut = ComputeMaskUV(progress, signedDistance, _RoadWidth, layer0.MaskParams.Noise);
+        }
+        _SplatWeights[int3(pixelCoord, 0)] = float4(uvOut.x, uvOut.y, 0, 1);
+        return;
+    }
+
+    // 新增：调试模式 2，写入道路衰减查看覆盖范围
+    if(_DebugMode == 2)
+    {
+        float fall = 1.0f - saturate(distanceAbs / max(_FalloffDistance, 1e-6));
+        _SplatWeights[int3(pixelCoord, 0)] = float4(fall, 0, 0, 1);
+        return;
+    }
+
+    // Skip if too far from path
+    if(distanceAbs > _FalloffDistance) return;
+
+    // Within falloff we proceed to layer blending (no debug writes)
+
+    // Apply each layer
+    for(int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
+    {
+        LayerParams layer = LayerParamsBuffer[layerIdx];
+        ApplyBlending(pixelCoord, layer, distanceAbs, progress, signedDistance);
+    }
 }

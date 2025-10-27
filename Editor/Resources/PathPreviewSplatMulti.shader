@@ -302,6 +302,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                 half4 finalColor = half4(0, 0, 0, 0);
 
                 int maxLayers = min(_LayerCount, 16);
+                float compositeAlpha = 0.0; // 汇总各层归一化权重 * 不透明度
 
                 // 若使用 GPU 权重，则先收集所有层权重并进行全局归一化，确保与最终地形结果一致
                 if (_UseSplatWeights > 0.5)
@@ -333,6 +334,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                         float blendOpacity = layerOpacity;
 
                         finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                        compositeAlpha += weight * layerOpacity;
                     }
                 }
                 else
@@ -365,12 +367,12 @@ Shader "MrPath/PathPreviewSplatMulti"
                         float blendOpacity = layerOpacity;
 
                         finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                        compositeAlpha += weight * layerOpacity;
                     }
                 }
 
-                // 使用颜色强度驱动透明度；全黑像素输出全透明
-                float alphaFactor = saturate(max(max(finalColor.r, finalColor.g), finalColor.b));
-                finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : alphaFactor * saturate(_PreviewAlpha);
+                // 透明度与滑块结合：按合成权重驱动显示强度，避免因颜色暗导致过度透明
+                finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(compositeAlpha) * saturate(_PreviewAlpha);
                 return finalColor;
             }
             ENDHLSL

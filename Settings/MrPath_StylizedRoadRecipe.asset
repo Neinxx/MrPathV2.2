@@ -18,14 +18,14 @@ MonoBehaviour:
     enabled: 1
     blendMode: 0
     opacity: 1
-    contentLayer: {fileID: 8574412962073106934, guid: 7be3814069071f54596c3e281487f8a0,
+    contentLayer: {fileID: 8574412962073106934, guid: d42463a2673e83a40bd40257137079af,
       type: 2}
-    layerMask: {fileID: 11400000, guid: 57bcf2af1267cc847a8705f56de09fd0, type: 2}
+    layerMask: {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}
   - name: Layer 2
     enabled: 1
     blendMode: 0
-    opacity: 0.41
-    contentLayer: {fileID: 8574412962073106934, guid: d69026617a177274fbedc2d457858b3e,
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: 0f2a60323354bb148b494fedd88b1c82,
       type: 2}
-    layerMask: {fileID: 11400000, guid: 57bcf2af1267cc847a8705f56de09fd0, type: 2}
+    layerMask: {fileID: 0}
   width: 5

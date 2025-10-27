@@ -54,7 +54,7 @@ namespace MrPathV2.Runtime.Jobs
     InitializeStripData(recipe, roadWorldWidth, roadWorldLength);
 
     // 初始化遮罩图集数据
-    InitializeMaskAtlasData();
+    InitializeMaskAtlasData(recipe, roadWorldWidth, roadWorldLength);
 
     _disposed = false;
 }
@@ -184,14 +184,15 @@ private void InitializeStripData(StylizedRoadRecipe recipe, float roadWorldWidth
 /// <summary>
 /// 初始化遮罩图集数据
 /// </summary>
-private void InitializeMaskAtlasData()
+private void InitializeMaskAtlasData(StylizedRoadRecipe recipe, float roadWorldWidth, float roadWorldLength)
 {
+    var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
+
     // 生成 2D MaskAtlas：
     // Y 方向先是 layer，再是 pathProgress 采样，共 Length * PathSamples 行。
     for (var layerIndex = 0; layerIndex < Length; layerIndex++)
     {
-        var sliceStart = StripSlices[layerIndex].x;
-        var res = StripResolution;
+        var activeMask = roadLayers.Length > layerIndex ? roadLayers[layerIndex]?.layerMask : null;
 
         for (var py = 0; py < PathSamples; py++)
         {
@@ -201,18 +202,19 @@ private void InitializeMaskAtlasData()
             for (var x = 0; x < AtlasWidth; x++)
             {
                 var t = x / (float)(AtlasWidth - 1);
-                var fIdx = t * (res - 1);
-                var ia = (int)math.floor(fIdx);
-                ia = math.clamp(ia, 0, res - 1);
-                var ib = math.min(ia + 1, res - 1);
-                var w = fIdx - ia;
-                var va = Strips[sliceStart + ia];
-                var vb = Strips[sliceStart + ib];
-                var v = math.lerp(va, vb, w);
+                var pos = Mathf.Lerp(-1f, 1f, t); // -1..1 横向
+
+                var v = 1f;
+                if (activeMask)
+                {
+                    v = Mathf.Clamp01(activeMask.Evaluate(pos, pathProgress, roadWorldWidth, roadWorldLength));
+                }
+
+                // 应用不透明度（已与 GPU 对齐）：mask * per-layer opacity * masterOpacity
+                v = Mathf.Clamp01(v * Opacities[layerIndex]);
 
                 // 写入 atlas
-                var idx = rowIndex * AtlasWidth + x;
-                MaskAtlas[idx] = v; // 先用横向strip值，稍后将考虑沿 pathProgress 的变化
+                MaskAtlas[rowIndex * AtlasWidth + x] = v;
             }
         }
     }

@@ -43,8 +43,8 @@ struct GpuMaskParams {
 	int                   maskType; // C#: MaskType
 	float                 strength; // C#: Strength
 	float2                padding; // C#: Pad2, Pad3
-	GpuShoulderMaskParams shoulderParams;
 	GpuNoiseMaskParams    noiseParams;
+	GpuShoulderMaskParams shoulderParams;
 };
 
 // Removed alias macros to avoid field name collisions across structs
