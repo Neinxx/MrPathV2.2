@@ -109,19 +109,68 @@ namespace MrPathV2.Runtime.Core
 
         private static void EnsureKey(ref AnimationCurve curve, float time, float value)
         {
-            var idx = Array.FindIndex(curve.keys, k => Mathf.Approximately(k.time, time));
-            if (idx >= 0)
+            // 优化：不再强制修改端点数值，避免编辑器抖动与自动加点。
+            // 仅保证有且仅有一个端点位于指定时间；如果不存在，则将最靠近的端点移动到该时间。
+            if (curve == null) return;
+
+            var keys = curve.keys;
+            var keyCount = keys.Length;
+            if (keyCount == 0)
             {
-                if (!Mathf.Approximately(curve.keys[idx].value, value))
+                // 空曲线的容错：只添加一个关键帧以避免 NRE；数值沿用传入值
+                curve.AddKey(new Keyframe(time, value));
+                return;
+            }
+
+            // 判断该时间应匹配曲线的开头还是结尾（本方法仅用于端点保障）
+            var firstIdx = 0;
+            var lastIdx = keyCount - 1;
+
+            // 如果已存在精确的端点，直接返回（避免重复操作）
+            var existingIdx = Array.FindIndex(keys, k => Mathf.Approximately(k.time, time));
+            if (existingIdx >= 0)
+            {
+                // 可能存在重复端点：清理除第一个匹配外的其它重复
+                for (var i = keyCount - 1; i >= 0; i--)
                 {
-                    var k = curve.keys[idx];
-                    k.value = value;
-                    curve.MoveKey(idx, k);
+                    if (i == existingIdx) continue;
+                    if (Mathf.Approximately(curve.keys[i].time, time))
+                    {
+                        curve.RemoveKey(i);
+                    }
+                }
+                return;
+            }
+
+            // 将最靠近目标时间的端点移动到指定时间；保留其原有数值
+            // 这里假定 EnsureKey 被用于极值时间（如 -1/1 或 0/1），因此使用首尾端点
+            var targetIsStart = time <= (keys[firstIdx].time + keys[lastIdx].time) * 0.5f;
+            if (targetIsStart)
+            {
+                var k = curve.keys[firstIdx];
+                k.time = time; // 保持 value 不变
+                curve.MoveKey(firstIdx, k);
+                // 移动后可能出现重复端点，进行清理（保留新的首端点）
+                for (var i = curve.keys.Length - 1; i >= 1; i--)
+                {
+                    if (Mathf.Approximately(curve.keys[i].time, time))
+                        curve.RemoveKey(i);
                 }
             }
             else
             {
-                curve.AddKey(new Keyframe(time, value));
+                // 重新取最后索引以防排序
+                lastIdx = curve.keys.Length - 1;
+                var k = curve.keys[lastIdx];
+                k.time = time; // 保持 value 不变
+                curve.MoveKey(lastIdx, k);
+                // 移动后可能出现重复端点，进行清理（保留新的末端点）
+                lastIdx = curve.keys.Length - 1;
+                for (var i = lastIdx - 1; i >= 0; i--)
+                {
+                    if (Mathf.Approximately(curve.keys[i].time, time))
+                        curve.RemoveKey(i);
+                }
             }
         }
     }

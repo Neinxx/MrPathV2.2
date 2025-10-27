@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   curveType: 1
   generationPrecision: 0.89
-  roadWidth: 3.33
+  roadWidth: 3.22
   crossSection:
     serializedVersion: 2
     m_Curve:
@@ -23,29 +23,38 @@ MonoBehaviour:
       value: 0
       inSlope: 0
       outSlope: 0
-      tangentMode: 0
+      tangentMode: 34
       weightedMode: 0
       inWeight: 0
-      outWeight: 0
+      outWeight: 0.33333334
     - serializedVersion: 3
       time: 1
       value: 0
       inSlope: 0
       outSlope: 0
-      tangentMode: 0
+      tangentMode: 34
       weightedMode: 0
-      inWeight: 0
+      inWeight: 0.33333334
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  falloffWidth: 0.64
+  falloffWidth: 5.51
   falloffShape:
     serializedVersion: 2
     m_Curve:
     - serializedVersion: 3
       time: 0
       value: 1
+      inSlope: -0.02
+      outSlope: -0.02
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.24733335
+      value: 0.5816327
       inSlope: 0
       outSlope: 0
       tangentMode: 0
@@ -54,21 +63,21 @@ MonoBehaviour:
       outWeight: 0
     - serializedVersion: 3
       time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
+      value: 0.01388821
+      inSlope: -2.6475258
+      outSlope: -2.6475258
+      tangentMode: 34
       weightedMode: 0
-      inWeight: 0
+      inWeight: 0.33333334
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  snapToTerrain: 1
+  snapToTerrain: 0
   heightOffset: 0.57
   smoothness: 22
   forceHorizontal: 1
-  crossSectionSegments: 37
+  crossSectionSegments: 3
   showPreviewMesh: 1
   enableDepthTest: 1
   opaquePreview: 1

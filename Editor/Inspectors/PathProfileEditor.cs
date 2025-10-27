@@ -1,3 +1,4 @@
+// ReSharper disable InconsistentNaming
 using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -26,6 +27,8 @@ namespace MrPathV2.Editor.Inspectors
         private FloatField _meshWidthField; // 对应 "MeshWithField"
         private Toggle _opaquePreviewToggle;
         private VisualElement _previewContent;
+        // 复合视图
+        private CompositeCurveView _compositeView;
 
         // --- 内嵌 Recipe 编辑器 ---
         private IMGUIContainer _recipeContainer;
@@ -72,11 +75,18 @@ namespace MrPathV2.Editor.Inspectors
                 _recipeContainer.RemoveFromHierarchy();
                 _recipeContainer = null;
             }
+
+            // 清理复合视图
+            if (_compositeView != null)
+            {
+                _compositeView.RemoveFromHierarchy();
+                _compositeView = null;
+            }
         }
 
         public override VisualElement CreateInspectorGUI()
         {
-          //  Debug.Log("[PathProfileEditor] Loaded UXML template.");
+            //  Debug.Log("[PathProfileEditor] Loaded UXML template.");
 
             // 1. 加载 UXML 模板
             var root = UIResourceLoader.LoadAndClone<PathProfileEditor>();
@@ -101,6 +111,9 @@ namespace MrPathV2.Editor.Inspectors
 
             // 6. 注册事件处理器（仅 UI 联动，不做刷新）
             SetupEventHandlers();
+
+            // 6.5 初始化复合视图（曲线叠加 + 宽度联动）
+            InitializeCompositeView();
 
             // 7. 初始化内嵌编辑器
             InitializeRecipeEditor();
@@ -206,8 +219,30 @@ namespace MrPathV2.Editor.Inspectors
             _heightOffsetField?.SetEnabled(enabled);
             _smoothnessSlider?.SetEnabled(enabled);
         }
+        // --- 复合视图集成 ---
+        private void InitializeCompositeView()
+        {
+            var profile = target as PathProfile;
+            if (profile == null) return;
 
-        // --- 其他方法 (原样保留，移除刷新依赖) ---
+            _compositeView = new CompositeCurveView();
+            _compositeView.SetProfile(profile);
+            _compositeView.style.flexGrow = 1;
+            _compositeView.style.minHeight = 180;
+
+            // 优先挂载到 UXML 中名为 "CompositeCurveView" 的容器
+            var uxmlMount = _rootElement.Q<VisualElement>("CompositeCurveView");
+            if (uxmlMount != null)
+            {
+                uxmlMount.Clear();
+                uxmlMount.Add(_compositeView);
+            }
+            else if (_previewContent != null)
+            {
+                // 兜底：插入到 preview-content 顶部，避免无容器时丢失视图
+                _previewContent.Insert(0, _compositeView);
+            }
+        }
 
         // 根据绑定后的初始值设置控件状态（仅 UI 联动）
         private void InitializeControlStates()
@@ -220,10 +255,10 @@ namespace MrPathV2.Editor.Inspectors
             }
         }
 
-        // 当 ProfileModified 被触发（来自 OnValidate 或 Recipe 变更）时，仅重绘，避免在拖动中断交互
+        // 当 ProfileModified 被触发（来自 OnValidate 或 Recipe 变更）时，仅重绘
         private void OnProfileAssetModified()
         {
-            // 不执行 Inspector 重绑定或 SetDirty，避免打断滑块拖动的鼠标捕获
+            // 不执行 Inspector 重绑定或 SetDirty，避免打断交互
             Repaint();
         }
 
@@ -254,7 +289,7 @@ namespace MrPathV2.Editor.Inspectors
             _recipeContainer?.RemoveFromHierarchy();
             _recipeContainer = null;
 
-            if (!recipe || _previewContent == null) return;
+            if (!recipe) return;
 
             _recipeEditor = CreateEditor(recipe);
             if (!_recipeEditor)
@@ -269,7 +304,6 @@ namespace MrPathV2.Editor.Inspectors
                 {
                     EditorGUILayout.LabelField("Stylized Road Recipe", EditorStyles.boldLabel);
                     _recipeEditor.OnInspectorGUI();
-                    // 不做手动刷新；StylizedRoadRecipeEditor 内部会 RaiseRecipeChanged
                 }
             })
             {
@@ -281,7 +315,8 @@ namespace MrPathV2.Editor.Inspectors
                 }
             };
 
-            _previewContent.Add(_recipeContainer);
+            // 挂载到预览内容区（保持原有布局）
+            _previewContent?.Add(_recipeContainer);
         }
     }
 }
