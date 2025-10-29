@@ -60,7 +60,7 @@ namespace MrPathV2.Editor.Terrain
             {
                 // 选择绘制后端
                 var backend = SelectPaintingBackend();
-                
+
                 // 准备共享数据
                 sharedData = await PrepareSharedDataAsync(spine, token);
                 if (!sharedData.IsValid)
@@ -71,7 +71,7 @@ namespace MrPathV2.Editor.Terrain
 
                 // 准备后端特定数据
                 var backendData = await PrepareBackendDataAsync(backend, terrains, token);
-                
+
                 // 处理所有地形
                 await ProcessAllTerrainsAsync(backend, terrains, sharedData, backendData, token);
             }
@@ -89,7 +89,7 @@ namespace MrPathV2.Editor.Terrain
             {
                 // 清理共享资源
                 CleanupSharedResources(ref sharedData);
-                
+
                 // 标记高度提供器为脏
                 HeightProvider?.MarkAsDirty();
             }
@@ -98,7 +98,7 @@ namespace MrPathV2.Editor.Terrain
         /// <summary>
         ///     清理共享资源
         /// </summary>
-        private void CleanupSharedResources(ref SharedData sharedData)
+        private static void CleanupSharedResources(ref SharedData sharedData)
         {
             sharedData.RoadContour.SafeDispose();
             if (sharedData.SpineData.IsCreated) sharedData.SpineData.Dispose();
@@ -108,7 +108,7 @@ namespace MrPathV2.Editor.Terrain
         /// <summary>
         ///     选择绘制后端
         /// </summary>
-        private PaintingBackend SelectPaintingBackend()
+        private static PaintingBackend SelectPaintingBackend()
         {
             var backend = PaintingBackend.CPUJobTwoPass; // 默认
             var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
@@ -145,7 +145,7 @@ namespace MrPathV2.Editor.Terrain
             // 生成道路轮廓
             RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
             var finalBounds = DetermineFinalBounds(contourBounds, roadContour, spine);
-            
+
             // 创建脊柱和剖面数据
             var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
             var profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
@@ -202,9 +202,9 @@ namespace MrPathV2.Editor.Terrain
                 var layerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
                 var roadWorldWidth = Creator.profile.roadWidth;
                 var roadWorldLength = Creator.GetPathLength();
-                
+
                 var recipeData = new RecipeData(Creator.profile.roadRecipe, layerMap, roadWorldWidth, roadWorldLength, Allocator.Persistent);
-                
+
                 if (!recipeData.IsCreated)
                 {
                     Debug.LogError($"[PaintTerrainCommand] Failed to create CPU RecipeData for terrain {terrain.name}");
@@ -221,8 +221,8 @@ namespace MrPathV2.Editor.Terrain
         ///     处理所有地形
         /// </summary>
         private async Task ProcessAllTerrainsAsync(
-            PaintingBackend backend, 
-            List<UnityEngine.Terrain> terrains, 
+            PaintingBackend backend,
+            List<UnityEngine.Terrain> terrains,
             SharedData sharedData,
             BackendData backendData,
             CancellationToken token)
@@ -241,15 +241,18 @@ namespace MrPathV2.Editor.Terrain
 
                 // 计算覆盖区域
                 var (_, coverageMin, coverageMax) = CalculateCoverageArea(terrain, sharedData.FinalBounds);
-                
+
                 // 提前返回：检查覆盖区域有效性
                 if (!IsCoverageAreaValid(coverageMin, coverageMax))
                 {
                     continue;
                 }
 
+                // 自适应后端选择：根据覆盖区域大小和设置选择最佳后端
+                var selectedBackend = SelectBackendForTerrain(backend, terrain, coverageMin, coverageMax);
+
                 // 创建绘制器任务
-                var task = CreatePainterTask(backend, terrain, sharedData, backendData, coverageMin, coverageMax, token);
+                var task = CreatePainterTask(selectedBackend, terrain, sharedData, backendData, coverageMin, coverageMax, token);
                 tasks.Add(task);
             }
 
@@ -261,16 +264,16 @@ namespace MrPathV2.Editor.Terrain
         /// </summary>
         private bool IsTerrainValidForPainting(UnityEngine.Terrain terrain)
         {
-            return terrain != null && 
-                   terrain.terrainData != null && 
-                   terrain.terrainData.alphamapLayers > 0 && 
+            return terrain != null &&
+                   terrain.terrainData != null &&
+                   terrain.terrainData.alphamapLayers > 0 &&
                    Creator.profile?.roadRecipe != null;
         }
 
         /// <summary>
         ///     检查覆盖区域是否有效
         /// </summary>
-        private static bool IsCoverageAreaValid(int2 coverageMin, int2 coverageMax)
+        private static bool IsCoverageAreaValid(Vector2Int coverageMin, Vector2Int coverageMax)
         {
             var numPixelsX = coverageMax.x - coverageMin.x + 1;
             var numPixelsY = coverageMax.y - coverageMin.y + 1;
@@ -285,8 +288,8 @@ namespace MrPathV2.Editor.Terrain
             UnityEngine.Terrain terrain,
             SharedData sharedData,
             BackendData backendData,
-            int2 coverageMin,
-            int2 coverageMax,
+            Vector2Int coverageMin,
+            Vector2Int coverageMax,
             CancellationToken token)
         {
             ITerrainPainter painter;
@@ -345,7 +348,7 @@ namespace MrPathV2.Editor.Terrain
             PathJobsUtility.SpineData spineData, PathJobsUtility.ProfileData profileData,
             RecipeData cpuRecipeData, RecipeGpuDataManager gpuDataManager,
             NativeArray<float2> roadContour, float4 finalBounds,
-            int2 coverageMin, int2 coverageMax, CancellationToken token)
+            Vector2Int coverageMin, Vector2Int coverageMax, CancellationToken token)
         {
             try
             {
@@ -364,17 +367,12 @@ namespace MrPathV2.Editor.Terrain
             }
         }
 
-        private (bool useCoverageLimit, int2 coverageMin, int2 coverageMax) CalculateCoverageArea(UnityEngine.Terrain terrain, float4 contourBounds)
+        private static (bool useCoverageLimit, Vector2Int coverageMin, Vector2Int coverageMax) CalculateCoverageArea(UnityEngine.Terrain terrain, float4 finalBounds)
         {
             var td = terrain.terrainData;
-            if (td == null) return (true, int2.zero, new int2(-1, -1));
+            if (td == null) return (true, new Vector2Int(0, 0), new Vector2Int(-1, -1));
 
-            var bounds = contourBounds;
-            if (PreferredBoundsXZ.HasValue)
-            {
-                var pb = PreferredBoundsXZ.Value;
-                bounds = new float4(pb.x, pb.y, pb.z, pb.w);
-            }
+            var bounds = finalBounds;
 
             var terrainPos = terrain.GetPosition();
             var terrainSize = td.size;
@@ -387,7 +385,7 @@ namespace MrPathV2.Editor.Terrain
 
             if (intersectMinX >= intersectMaxX || intersectMinZ >= intersectMaxZ)
             {
-                return (true, new int2(0, 0), new int2(-1, -1));
+                return (true, new Vector2Int(0, 0), new Vector2Int(-1, -1));
             }
 
             float invSizeX = 1f / terrainSize.x, invSizeZ = 1f / terrainSize.z;
@@ -401,20 +399,63 @@ namespace MrPathV2.Editor.Terrain
             pixelMaxX = Mathf.Clamp(pixelMaxX, 0, resolution - 1);
             pixelMaxZ = Mathf.Clamp(pixelMaxZ, 0, resolution - 1);
 
-            return (true, new int2(pixelMinX, pixelMinZ), new int2(pixelMaxX, pixelMaxZ));
+            return (true, new   (pixelMinX, pixelMinZ), new (pixelMaxX, pixelMaxZ));
         }
-
 
 
         private float4 DetermineFinalBounds(float4 contourBounds, NativeArray<float2> roadContour, PathSpine spine)
         {
-            if (PreferredBoundsXZ.HasValue) return new float4(PreferredBoundsXZ.Value.x, PreferredBoundsXZ.Value.y, PreferredBoundsXZ.Value.z, PreferredBoundsXZ.Value.w);
             if (!roadContour.IsCreated || roadContour.Length < 3)
             {
                 var fallback = GetExpandedXZBounds(spine, Creator.profile);
                 return new float4(fallback.x, fallback.y, fallback.z, fallback.w);
             }
+
+            if (PreferredBoundsXZ.HasValue)
+            {
+                var pb = PreferredBoundsXZ.Value;
+                var minX = Mathf.Min(contourBounds.x, pb.x);
+                var minZ = Mathf.Min(contourBounds.y, pb.y);
+                var maxX = Mathf.Max(contourBounds.z, pb.z);
+                var maxZ = Mathf.Max(contourBounds.w, pb.w);
+                return new float4(minX, minZ, maxX, maxZ);
+            }
+
             return contourBounds;
+        }
+
+        private static PaintingBackend SelectBackendForTerrain(PaintingBackend userSelectedBackend, UnityEngine.Terrain terrain, Vector2Int coverageMin, Vector2Int coverageMax)
+        {
+            var adv = MrPathProjectSettings.GetOrCreateSettings()?.advancedSettings;
+            // 如果用户强制选择 GPU，则直接使用 GPU（若支持）。
+            if (userSelectedBackend == PaintingBackend.GPUCompute)
+            {
+                return SystemInfo.supportsComputeShaders ? PaintingBackend.GPUCompute : PaintingBackend.CPUJobTwoPass;
+            }
+
+            // 如果禁用自动切换或阈值为 0，则保持用户选择（默认 CPU）。
+            var threshold = adv?.gpuAutoSwitchThreshold ?? 0;
+            if (threshold <= 0)
+            {
+                return userSelectedBackend;
+            }
+
+            // 计算覆盖区域像素数
+            int width = Mathf.Max(0, coverageMax.x - coverageMin.x + 1);
+            int height = Mathf.Max(0, coverageMax.y - coverageMin.y + 1);
+            int areaPixels = width * height;
+
+            // 动态阈值：不超过整张纹理分辨率的 10%，但至少为设置的阈值
+            var td = terrain.terrainData;
+            int terrainPixels = td.alphamapWidth * td.alphamapHeight;
+            int dynamicMax = Mathf.Max(threshold, Mathf.FloorToInt(terrainPixels * 0.10f));
+
+            if (SystemInfo.supportsComputeShaders && areaPixels >= dynamicMax)
+            {
+                return PaintingBackend.GPUCompute;
+            }
+
+            return PaintingBackend.CPUJobTwoPass;
         }
 
         #endregion

@@ -11,7 +11,7 @@ namespace MrPathV2.Editor.Factories
     public static class PathFactory
     {
         [MenuItem("GameObject/MrPathV2/Create Path", false, 10)]
-        public static void CreateDefaultPath(string pathName = "New MrPath")
+        public static void CreateDefaultPath()
         {
             // 获取项目设置
             var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
@@ -26,11 +26,8 @@ namespace MrPathV2.Editor.Factories
             var appearanceDefaults = projectSettings.appearanceDefaults;
 
             // 确定对象名称
-            var objectName = creationDefaults?.defaultObjectName ?? pathName;
-            if(!string.IsNullOrEmpty(pathName))
-            {
-                objectName = pathName;
-            }
+            var objectName = creationDefaults?.defaultObjectName ?? "MrPath";
+         
             
             var defaultLength = creationDefaults?.defaultLineLength ?? 10f;
 

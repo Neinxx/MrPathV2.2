@@ -1,6 +1,6 @@
 
 
-#pragma kernel PaintTerrain
+#pragma kernel paint_terrain
 
 #include "BlendingLibrary.hlsl"
 #include "BlendMaskLibrary.hlsl"
@@ -10,245 +10,255 @@
 #define FLT_INF 3.402823466e+38f
 
 // Structs (must be defined before use)
-struct LayerParams {
-	int           BlendMode;
-	float         Opacity;
-	int           TextureIndex;
-	int           TerrainLayerSplatIndex;
-	float4        TilingOffset;
-	float4        TintColor;
-	GpuMaskParams MaskParams;
+struct layer_params {
+    int           blend_mode;
+    float         opacity;
+    int           texture_index;
+    int           terrain_layer_splat_index;
+    float4        tiling_offset;
+    float4        tint_color;
+    GpuMaskParams mask_params;
 };
 
 // Input buffers
-StructuredBuffer<LayerParams> LayerParamsBuffer;
-StructuredBuffer<float3>      SpineData;
+StructuredBuffer<layer_params> layer_params_buffer;
+StructuredBuffer<float3>      spine_data;
+StructuredBuffer<float2>      road_contour;
 
-// Textures
-RWTexture2DArray<unorm float4> _SplatWeights;
+// Textures - 修改为float4格式以兼容GLES3
+RWTexture2DArray<float4> splat_weights;  // 使用float4替代unorm float4
+Texture2D<float> road_mask;
+Texture2D<float> road_sdf;
 
 // Uniforms
-int    _LayerCount;
-int    _AlphamapLayerCount;
-int    _SpinePointCount;
-float  _BrushSize;
-float  _BrushStrength;
-float  _FalloffDistance;
-float  _RoadWidth;
-float2 _TerrainSize;
-float2 _TerrainPosition;
-int2   _AlphamapResolution;
-int2   _TerrainOffset;
-int2   _AlphamapOffset;
-int2   _CoverageMin;   // 新增：覆盖范围最小像素坐标
-int2   _CoverageMax;   // 新增：覆盖范围最大像素坐标
-int    _DebugMode; // 新增：调试模式 0=正常, 1=UV渐变, 2=道路衰减
-
+int    layer_count;
+int    alphamap_layer_count;
+int    spine_point_count;
+float  falloff_distance;
+float  road_width;
+float2 terrain_size;
+float2 terrain_position;
+int2   alphamap_resolution;
+int2   terrain_offset;
+int2   alphamap_offset;
+int2   coverage_min;
+int2   coverage_max;
+int    debug_mode;
+int    contour_point_count;
+float4 contour_bounds;
+float  mask_threshold;
+float  edge_width_world;
 
 // Helper function to calculate squared distance
-float distanceSq(float2 a, float2 b)
+float distance_sq(float2 a, float2 b)
 {
-	float2 diff = a - b;
-	return dot(diff, diff);
+    float2 diff = a - b;
+    return dot(diff, diff);
 }
 
-// Calculate distance, progress (length-normalized) and signed distance across the path
-float3 CalculateDistanceProgressSigned(float2 worldPos, StructuredBuffer<float3> spineData, int spinePointCount)
+bool is_point_in_aabb(float2 p, float4 b)
 {
-	// First pass: total path length
-	float totalLen = 0.0f;
-
-	
-	for(int segIdx = 0; segIdx < spinePointCount - 1; segIdx++)
-	{
-		float2 s = spineData[segIdx].xz;
-        float2 e = spineData[segIdx + 1].xz;
-		float2 d = e - s;
-		totalLen += length(d);
-	}
-	totalLen = max(1e-6f, totalLen);
-
-	// Second pass: find closest segment; compute progress by length and signed distance
-	float minDistanceSq = FLT_INF;
-	float progressLen = 0.0f;
-	float accumLen = 0.0f;
-	float signedDist = 0.0f;
-
-	for(int segIdx2 = 0; segIdx2 < spinePointCount - 1; segIdx2++)
-	{
-		float3 p1 = spineData[segIdx2];
-		float3 p2 = spineData[segIdx2 + 1];
-
-		float2 segmentStart = p1.xz;
-        float2 segmentEnd = p2.xz;
-		float2 segmentDir = segmentEnd - segmentStart;
-		float  segmentLenSq = dot(segmentDir, segmentDir);
-		float  segmentLen = sqrt(max(0.0f, segmentLenSq));
-
-		float  t = 0.0f;
-		float2 closestPoint = segmentStart;
-		float  distSq = FLT_INF;
-
-		if(segmentLenSq > 1e-8f)
-		{
-			t = saturate(dot(worldPos - segmentStart, segmentDir) / segmentLenSq);
-			closestPoint = segmentStart + t * segmentDir;
-			float2 toPoint = worldPos - closestPoint;
-			// Per-segment normal (perpendicular, right-handed)
-			float2 normal2d = (segmentLenSq > 0.0f) ? normalize(float2(-segmentDir.y, segmentDir.x)) : float2(0.0f, 1.0f);
-			distSq = dot(toPoint, toPoint);
-			// Signed distance uses dot with the perpendicular
-			float distSigned = dot(toPoint, normal2d);
-			if(distSq < minDistanceSq)
-			{
-				minDistanceSq = distSq;
-				float alongLen = accumLen + t * segmentLen;
-				progressLen = saturate(alongLen / totalLen);
-				signedDist = distSigned;
-			}
-		}
-		else
-		{
-			// Degenerate segment: keep accumLen only
-		}
-
-		accumLen += segmentLen;
-	}
-
-	return float3(sqrt(minDistanceSq), progressLen, signedDist);
+    return !(p.x < b.x || p.y < b.y || p.x > b.z || p.y > b.w);
 }
 
-// Apply blending based on layer parameters
-void ApplyBlending(int2 pixelCoord, LayerParams layer, float distanceAbs, float progress, float signedDistance)
+bool perform_ray_casting(float2 p)
 {
-	// Calculate brush falloff
-	float falloff = 1.0f - saturate(distanceAbs / _FalloffDistance);
-	if(falloff <= 0.0f) return;
+    int n = contour_point_count;
+    if (n < 3) return is_point_in_aabb(p, contour_bounds);
+    bool inside = false;
+    for (int i = 0, j = n - 1; i < n; j = i++)
+    {
+        float2 pi = road_contour[i];
+        float2 pj = road_contour[j];
+        bool intersect = (pi.y > p.y) != (pj.y > p.y);
+        if (!intersect) continue;
+        float denom = pj.y - pi.y;
+        if (abs(denom) <= 1e-6) continue;
+        float ix = (pj.x - pi.x) * (p.y - pi.y) / denom + pi.x;
+        if (p.x < ix) inside = !inside;
+    }
+    return inside;
+}
 
-	// Evaluate mask with recipe-provided params
-	float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + (float2(pixelCoord) + 0.5f) * _TerrainSize / _AlphamapResolution;
-	float  maskValue = EvaluateMask(layer.MaskParams, worldPos, progress, signedDistance, _RoadWidth);
+float distance_to_segment(float2 p, float2 a, float2 b)
+{
+    float2 ab = b - a;
+    float denom = dot(ab, ab);
+    float t = 0.0;
+    if (denom > 1e-8) t = saturate(dot(p - a, ab) / denom);
+    float2 q = a + t * ab;
+    return length(p - q);
+}
 
-	// Calculate final strength using recipe opacity
-	float finalStrength = layer.Opacity * falloff * maskValue * _BrushStrength;
-	if(finalStrength <= 0.0f) return;
+float distance_to_contour_edge(float2 p)
+{
+    uint n = (uint)contour_point_count;
+    if (n < 2u) return 0.0;
+    float d = FLT_INF;
+    
+    for (uint i = 0u; i < n; i++)
+    {
+        float2 a = road_contour[i];
+        uint nextIndex = (i + 1u) % n;
+        float2 b = road_contour[nextIndex];
+        d = min(d, distance_to_segment(p, a, b));
+    }
+    return d;
+}
 
-	// Validate splat index (fallback to 0 when invalid)
-	int splatIdxSigned = layer.TerrainLayerSplatIndex;
-	if(splatIdxSigned < 0 || splatIdxSigned >= _AlphamapLayerCount)
-	{
-		splatIdxSigned = 0; // 安全回退，避免完全不绘制
-	}
+float3 calculate_distance_progress_signed(float2 world_pos, StructuredBuffer<float3> spine_data, int spine_point_count)
+{
+    float totalLen = 0.0f;
 
-	// Map to alphamap slice/channel via terrain splat index
-	uint splatIndex = (uint)splatIdxSigned;
-	uint alphamapIndex = splatIndex / 4u;
-	uint channelIndex = splatIndex % 4u;
+    for(int segIdx = 0; segIdx < spine_point_count - 1; segIdx++)
+    {
+        float2 s = spine_data[segIdx].xz;
+        float2 e = spine_data[segIdx + 1].xz;
+        float2 d = e - s;
+        totalLen += length(d);
+    }
+    totalLen = max(1e-6f, totalLen);
 
-	// Read current alpha before blending
-	float4 currentAlpha = _SplatWeights[int3(pixelCoord, alphamapIndex)];
+    float min_distance_sq = FLT_INF;
+    float progress_len = 0.0f;
+    float accum_len = 0.0f;
+    float signed_dist = 0.0f;
 
-	// Blend per selected channel using unified BlendMode weight function
-	float baseWeight = (channelIndex == 0)
-					   ? currentAlpha.r
-					   : (channelIndex == 1)
-					   ? currentAlpha.g
-					   : (channelIndex == 2)
-					   ? currentAlpha.b
-					   : currentAlpha.a;
-	float blendedWeight = BlendWeight(baseWeight, finalStrength, layer.BlendMode);
-	blendedWeight = saturate(blendedWeight);
+    for(int seg_idx2 = 0; seg_idx2 < spine_point_count - 1; seg_idx2++)
+    {
+        float3 p1 = spine_data[seg_idx2];
+        float3 p2 = spine_data[seg_idx2 + 1];
 
-	if(channelIndex == 0) currentAlpha.r = blendedWeight;
-	else if(channelIndex == 1) currentAlpha.g = blendedWeight;
-	else if(channelIndex == 2) currentAlpha.b = blendedWeight;
-	else /* channelIndex == 3 */ currentAlpha.a = blendedWeight;
+        float2 segment_start = p1.xz;
+        float2 segment_end = p2.xz;
+        float2 segment_dir = segment_end - segment_start;
+        float  segment_len_sq = dot(segment_dir, segment_dir);
+        float  segment_len = sqrt(max(0.0f, segment_len_sq));
 
-	// Replace local normalization with shared helper to keep multiple channels sum=1
-	currentAlpha = NormalizeWeightsKeep(currentAlpha);
+        float  t = 0.0f;
+        float2 closest_point = segment_start; 
+        float  distSq = FLT_INF;
 
-	_SplatWeights[int3(pixelCoord, alphamapIndex)] = currentAlpha;
+        if(segment_len_sq > 1e-8f)
+        {
+            t = saturate(dot(world_pos - segment_start, segment_dir) / segment_len_sq);
+            closest_point = segment_start + t * segment_dir;
+            float2 to_point = world_pos - closest_point;
+            float2 normal2d = (segment_len_sq > 0.0f) ? normalize(float2(-segment_dir.y, segment_dir.x)) : float2(0.0f, 1.0f);
+            distSq = dot(to_point, to_point);
+            float dist_signed = dot(to_point, normal2d);
+            if(distSq < min_distance_sq)
+            {
+                min_distance_sq = distSq;
+                float along_len = accum_len + t * segment_len;
+                progress_len = saturate(along_len / totalLen);
+                signed_dist = dist_signed;
+            }
+        }
+        accum_len += segment_len;
+    }
+
+    return float3(sqrt(min_distance_sq), progress_len, signed_dist);
+}
+
+// 新增：确保值在[0,1]范围内并转换为线性空间
+float4 clamp_to_linear(float4 value)
+{
+    return saturate(value);  // 替代unorm的自动范围处理
+}
+
+void apply_blending(int2 pixel_coord, layer_params layer, float distance_abs, float progress, float signed_distance, float mask_gate)
+{
+    // distance_abs 现传入的是 edgeFactor（0..1）：中心=1，边界外=0
+    float falloff = saturate(distance_abs);
+
+    float2 world_pos = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
+    float  mask_value = EvaluateMask(layer.mask_params, world_pos, progress, signed_distance, road_width);
+
+    float final_strength = layer.opacity * falloff * mask_value * mask_gate;
+    if(final_strength <= 0.0f) return;
+
+    int splat_idx_signed = layer.terrain_layer_splat_index;
+    if(splat_idx_signed < 0 || splat_idx_signed >= alphamap_layer_count)
+    {
+        splat_idx_signed = 0;
+    }
+
+    uint splat_index = (uint)splat_idx_signed;
+    uint alphamap_index = splat_index / 4u;
+    uint channel_index = splat_index % 4u;
+
+    // 读取当前值并确保在有效范围内
+    float4 current_alpha = splat_weights[int3(pixel_coord, alphamap_index)];
+    current_alpha = clamp_to_linear(current_alpha);
+
+    float base_weight = (channel_index == 0) ? current_alpha.r
+                      : (channel_index == 1) ? current_alpha.g
+                      : (channel_index == 2) ? current_alpha.b
+                      : current_alpha.a;
+                      
+    float blended_weight = BlendWeight(base_weight, final_strength, layer.blend_mode);
+    blended_weight = saturate(blended_weight);
+
+    if(channel_index == 0) current_alpha.r = blended_weight;
+    else if(channel_index == 1) current_alpha.g = blended_weight;
+    else if(channel_index == 2) current_alpha.b = blended_weight;
+    else current_alpha.a = blended_weight;
+
+    // 写入前再次确保值在[0,1]范围
+    splat_weights[int3(pixel_coord, alphamap_index)] = clamp_to_linear(current_alpha);
 }
 
 [numthreads(8, 8, 1)]
-void PaintTerrain(uint3 id : SV_DispatchThreadID)
+void paint_terrain(uint3 id : SV_DispatchThreadID)
 {
-    // Map threads into the coverage window using the alphamap offset
-    int2 pixelCoord = int2(id.xy) + _AlphamapOffset;
+    int2 pixel_coord = int2(id.xy) + alphamap_offset;
 
-    // Bounds check (supports negative offsets safely)
-    if(pixelCoord.x < 0 || pixelCoord.y < 0 || pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y) return;
+    if(pixel_coord.x < 0 || pixel_coord.y < 0 || pixel_coord.x >= alphamap_resolution.x || pixel_coord.y >= alphamap_resolution.y) return;
 
-    // 新增：裁剪到覆盖包围盒，避免调度超出 ROI 的线程做无效计算
-    if(pixelCoord.x < _CoverageMin.x || pixelCoord.y < _CoverageMin.y || pixelCoord.x > _CoverageMax.x || pixelCoord.y > _CoverageMax.y) return;
+    if(pixel_coord.x < coverage_min.x || pixel_coord.y < coverage_min.y || pixel_coord.x > coverage_max.x || pixel_coord.y > coverage_max.y) return;
 
+    float2 world_pos = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
 
-    // 调试：检查spine数据是否有效
-    if(_SpinePointCount <= 0)
-    {
-        // 如果没有spine数据，将像素设为红色以便调试
-        {
-            _SplatWeights[int3(pixelCoord, 0)] = float4(1, 0, 0, 0);
-        }
-        return;
-    }
-
-    // 调试：检查第一个spine点是否有效
-    if(_SpinePointCount > 0)
-    {
-        float3 firstPoint = SpineData[0];
-        // 如果第一个点的坐标都是0，可能数据有问题
-        if(abs(firstPoint.x) < 0.001f && abs(firstPoint.y) < 0.001f && abs(firstPoint.z) < 0.001f)
-        {
-            // 将左上角设为蓝色表示spine数据可能有问题
-            if(pixelCoord.x < 10 && pixelCoord.y < 10)
-            {
-                _SplatWeights[int3(pixelCoord, 0)] = float4(0, 0, 1, 0);
-            }
-            return;
-        }
-    }
-
-    // Convert to world position
-    float2 worldPos = _TerrainPosition + float2(_TerrainOffset) * _TerrainSize + (float2(pixelCoord) + 0.5f) * _TerrainSize / _AlphamapResolution;
-
-    // Calculate distance, progress and signed distance along the path
-    float3 dps = CalculateDistanceProgressSigned(worldPos, SpineData, _SpinePointCount);
-    float  distanceAbs = dps.x;
+    float3 dps = calculate_distance_progress_signed(world_pos, spine_data, spine_point_count);
     float  progress = dps.y;
-    float  signedDistance = dps.z;
+    float  signed_distance = dps.z;
 
-    // 新增：调试模式分支（在获得 progress/signedDistance 后输出UV）
-    if(_DebugMode == 1)
+    float halfRoad = max(1e-6, road_width * 0.5);
+
+    // 仅用路面遮罩进行门控
+    float mask_sample = road_mask.Load(int3(pixel_coord, 0));
+    float maskGate = (mask_sample > mask_threshold) ? 1.0 : 0.0;
+    if (maskGate <= 0.0) return;
+
+    // 使用 signed_distance 计算边缘因子：中心=1，超出道路+边缘宽度=0
+    float edgeFactor = saturate(1.0 - max(0.0, abs(signed_distance) - halfRoad) / max(edge_width_world, 1e-6));
+
+    if(debug_mode == 1)
     {
-        // 使用第一个图层的噪声参数计算统一UV；若无图层则输出0
         float2 uvOut = float2(0.0, 0.0);
-        if(_LayerCount > 0)
+        if(layer_count > 0)
         {
-            LayerParams layer0 = LayerParamsBuffer[0];
-            uvOut = ComputeMaskUV(progress, signedDistance, _RoadWidth, layer0.MaskParams.Noise);
+            layer_params layer0 = layer_params_buffer[0];
+            uvOut = ComputeMaskUV(progress, signed_distance, road_width, layer0.mask_params.Noise);
         }
-        _SplatWeights[int3(pixelCoord, 0)] = float4(uvOut.x, uvOut.y, 0, 1);
+        // 调试输出也确保在有效范围
+        splat_weights[int3(pixel_coord, 0)] = clamp_to_linear(float4(uvOut.x, uvOut.y, 0, 1));
         return;
     }
 
-    // 新增：调试模式 2，写入道路衰减查看覆盖范围
-    if(_DebugMode == 2)
+    // 原先无条件的调试写入导致始终提前返回，这里改为仅在 debug_mode==2 时输出
+    else if (debug_mode == 2)
     {
-        float fall = 1.0f - saturate(distanceAbs / max(_FalloffDistance, 1e-6));
-        _SplatWeights[int3(pixelCoord, 0)] = float4(fall, 0, 0, 1);
+        float fall = edgeFactor;
+        splat_weights[int3(pixel_coord, 0)] = clamp_to_linear(float4(fall, 0, 0, 1));
         return;
     }
 
-    // Skip if too far from path
-    if(distanceAbs > _FalloffDistance) return;
-
-    // Within falloff we proceed to layer blending (no debug writes)
-
-    // Apply each layer
-    for(int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
+    // 正常模式：对所有图层执行混合
+    for(int layerIdx = 0; layerIdx < layer_count; layerIdx++)
     {
-        LayerParams layer = LayerParamsBuffer[layerIdx];
-        ApplyBlending(pixelCoord, layer, distanceAbs, progress, signedDistance);
+        layer_params layer = layer_params_buffer[layerIdx];
+        apply_blending(pixel_coord, layer, edgeFactor, progress, signed_distance, maskGate);
     }
 }

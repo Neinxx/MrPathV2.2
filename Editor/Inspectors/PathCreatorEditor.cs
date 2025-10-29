@@ -1,6 +1,8 @@
 #if UNITY_EDITOR
 using System;
 using MrPathV2.Editor.Tools;
+using MrPathV2;
+
 using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
 using MrPathV2.Runtime.Settings;
@@ -10,7 +12,6 @@ using UnityEditor.EditorTools;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
-using Object = UnityEngine.Object;
 using UnityEditorTools = UnityEditor.Tools;
 
 namespace MrPathV2.Editor.Inspectors
@@ -24,7 +25,6 @@ namespace MrPathV2.Editor.Inspectors
 
         // --- 序列化属性缓存 ---
         private SerializedProperty _profileProperty;
-        private SerializedProperty _pathDataProperty;
 
         // --- 内嵌编辑器 ---
         private UnityEditor.Editor _profileEmbeddedEditor;
@@ -37,12 +37,8 @@ namespace MrPathV2.Editor.Inspectors
 
         // --- Profile 事件订阅跟踪 ---
         private PathProfile _lastSubscribedProfile;
-        private StylizedRoadRecipe _lastRecipeRef;
 
         // --- Transform 变化跟踪 ---
-        private Vector3 _lastPosition;
-        private Quaternion _lastRotation;
-        private Vector3 _lastScale;
 
         // --- UI Toolkit 元素 ---
         private VisualElement _rootElement;
@@ -68,7 +64,7 @@ namespace MrPathV2.Editor.Inspectors
 
             // 缓存 SerializedProperty
             _profileProperty = serializedObject.FindProperty(nameof(PathCreator.profile));
-            _pathDataProperty = serializedObject.FindProperty(nameof(PathCreator.pathData));
+            serializedObject.FindProperty(nameof(PathCreator.pathData));
 
             // 初始化上下文
             _ctx = new PathEditorContext(_targetCreator);
@@ -82,10 +78,9 @@ namespace MrPathV2.Editor.Inspectors
 
             // 订阅初始 Profile 的修改事件
             SubscribeToProfile(_targetCreator.profile);
-            _lastRecipeRef = _targetCreator.profile != null ? _targetCreator.profile.roadRecipe : null;
 
-            // 标记为脏以进行初始刷新
-            MarkPathAsDirty();
+            // 标记为脏以进行初始刷新（防抖延迟，避免加载瞬间卡顿）
+           MarkPathAsDirtyDebounced();
             CacheTransform();
         }
 
@@ -138,7 +133,8 @@ namespace MrPathV2.Editor.Inspectors
             }
 
             // 6. 额外防御：确保所有委托被清除
-            GC.Collect();
+           // GC.Collect();
+            // 避免在选择切换时强制 GC，防止卡顿；让 Unity 自己调度。
         }
 
         // 优化版：高效销毁编辑器的方法
@@ -185,8 +181,19 @@ namespace MrPathV2.Editor.Inspectors
 
             // 3. 使用 UI Toolkit 构建内嵌检查器（在 UpdateEmbeddedEditorUI 中完成）
 
-            // --- 初始化 UI 状态 ---
-            UpdateEmbeddedEditorUI(_targetCreator.profile);
+            // --- 初始化 UI 状态（延迟到下一帧，避免加载瞬间阻塞） ---
+            EditorApplication.delayCall += () =>
+            {
+                try
+                {
+                    if (this == null || _rootElement == null) return;
+                    UpdateEmbeddedEditorUI(_targetCreator ? _targetCreator.profile : null);
+                }
+                catch (Exception e)
+                {
+                   Debug.LogWarning($"[PathCreatorEditor] Delayed UI build failed: {e.Message}");
+                }
+            };
 
             return _rootElement;
         }
@@ -205,78 +212,8 @@ namespace MrPathV2.Editor.Inspectors
             // 更新 UI
             UpdateEmbeddedEditorUI(newProfile);
 
-            // 立即刷新
-            MarkPathAsDirty();
-        }
-
-        /// <summary>
-        ///     绘制 Profile 内嵌编辑器 (被 IMGUIContainer 调用)
-        /// </summary>
-        private void DrawEmbeddedProfileUI()
-        {
-            if (!_targetCreator.profile) return;
-
-            // [优雅] 重构为通用绘制方法
-            DrawEmbeddedEditor(
-                ref _profileEmbeddedEditor,
-                _targetCreator.profile,
-                ref _profileLocalExpanded,
-                "路径配置文件 (Profile)",
-                _targetCreator.NotifyProfileModified
-            );
-        }
-
-        /// <summary>
-        ///     绘制 Recipe 内嵌编辑器 (被 IMGUIContainer 调用)
-        /// </summary>
-        private void DrawEmbeddedRecipeUI()
-        {
-            if (!_targetCreator.profile || !_targetCreator.profile.roadRecipe) return;
-
-            // [优雅] 重构为通用绘制方法
-            DrawEmbeddedEditor(
-                ref _recipeEmbeddedEditor,
-                _targetCreator.profile.roadRecipe,
-                ref _recipeLocalExpanded,
-                "道路风格配方 (Stylized Road Recipe)",
-                _targetCreator.NotifyProfileModified
-            );
-        }
-
-        /// <summary>
-        ///     [优雅] 用于绘制内嵌编辑器的通用方法，减少代码重复
-        /// </summary>
-        private void DrawEmbeddedEditor(ref UnityEditor.Editor editor, Object targetAsset, ref bool foldoutState, string title, Action onEditAction)
-        {
-            if (!targetAsset) return;
-
-            // 检查编辑器是否需要重新创建 (例如切换了资产)
-            if (!editor || editor.target != targetAsset)
-            {
-                if (editor) DestroyImmediate(editor);
-                editor = CreateEditor(targetAsset);
-            }
-
-            if (!editor) return;
-
-            // [优化] 使用 IMGUI 的 "Box" 风格
-            using (new EditorGUILayout.VerticalScope("Box"))
-            {
-                foldoutState = EditorGUILayout.Foldout(foldoutState, title, true, EditorStyles.foldoutHeader);
-                if (!foldoutState) return;
-
-                EditorGUI.indentLevel++;
-
-                EditorGUI.BeginChangeCheck();
-                editor.OnInspectorGUI();
-                if (EditorGUI.EndChangeCheck())
-                {
-                    // 如果内嵌编辑器有修改，通知 targetCreator
-                    onEditAction?.Invoke();
-                }
-
-                EditorGUI.indentLevel--;
-            }
+            // 立即刷新 -> 改为防抖以降低切换卡顿
+            MarkPathAsDirtyDebounced();
         }
 
 
@@ -393,7 +330,6 @@ namespace MrPathV2.Editor.Inspectors
                     _recipeInspectorIMGUI = null;
                 }
                 SafeDestroyEditor(ref _recipeEmbeddedEditor);
-                _lastRecipeRef = null;
                 return;
             }
 
@@ -407,7 +343,6 @@ namespace MrPathV2.Editor.Inspectors
                     _recipeInspectorIMGUI = null;
                 }
                 SafeDestroyEditor(ref _recipeEmbeddedEditor);
-                _lastRecipeRef = currentRecipe;
                 return;
             }
 
@@ -421,7 +356,6 @@ namespace MrPathV2.Editor.Inspectors
                     _recipeInspectorIMGUI = null;
                 }
                 SafeDestroyEditor(ref _recipeEmbeddedEditor);
-                _lastRecipeRef = null;
                 return;
             }
 
@@ -451,30 +385,6 @@ namespace MrPathV2.Editor.Inspectors
                 _recipeEmbeddedContainer.Add(recipeImgui);
             }
 
-            _lastRecipeRef = currentRecipe;
-        }
-
-        /// <summary>
-        ///     同步一个编辑器实例(editor)以匹配一个目标对象(targetObject)。
-        ///     这个方法会处理所有的生命周期逻辑：创建、销毁、或在匹配时保留。
-        /// </summary>
-        /// <typeparam name="T">目标对象的类型 (必须是 UnityEngine.Object)</typeparam>
-        /// <param name="editor">对要管理的编辑器字段的引用 (例如 _profileEmbeddedEditor)</param>
-        /// <param name="targetObject">编辑器应该显示的目标对象 (如果为null，则会销毁编辑器)</param>
-        /// <param name="editorName">用于调试日志的编辑器名称 (例如 "Profile" 或 "Recipe")</param>
-        private void SyncEmbeddedEditor<T>(ref UnityEditor.Editor editor, T targetObject, string editorName) where T : Object
-        {
-
-            if (editor && editor.target == targetObject) return;
-            if (editor)
-            {
-                DestroyImmediate(editor);
-                editor = null;
-            }
-            if (targetObject)
-            {
-                editor = CreateEditor(targetObject);
-            }
         }
 
         #endregion
@@ -488,18 +398,29 @@ namespace MrPathV2.Editor.Inspectors
         {
             _targetCreator = target as PathCreator;
 
-            // 1. 守卫与上下文检查
-            if (!ContextIsValid())
+            // 仍保留原有的上下文检查与全局预览状态复位逻辑
+           if (!ContextIsValid())
             {
                 _ctx?.PreviewManager?.SetActive(false);
+                Preview.MultiPathPreviewRenderer.ActiveEditingId = 0;
+                Preview.MultiPathPreviewRenderer.IsDraggingActive = false;
                 return;
-            }
+           }
 
-            // 2. 激活预览
-            _ctx.PreviewManager.SetActive(true);
+            // 仅在使用本地预览时才激活预览管理器，避免空引用并减少不必要的状态切换
+           if (!Preview.MultiPathPreviewRenderer.PreferGlobalOnly && _ctx.PreviewManager != null)
+            {
+               _ctx.PreviewManager.SetActive(true);
+           }
 
             // 3. 检查是否有其他工具处于活动状态
-            if (IsOtherToolActive()) return;
+            if (IsOtherToolActive())
+            {
+                // 同步全局预览状态，避免残留拖拽标记
+                Preview.MultiPathPreviewRenderer.ActiveEditingId = 0;
+                Preview.MultiPathPreviewRenderer.IsDraggingActive = false;
+                return;
+            }
 
             var currentEvent = Event.current;
 
@@ -509,14 +430,34 @@ namespace MrPathV2.Editor.Inspectors
             // 5. 绘制句柄并处理输入
             ProcessSceneHandlesAndInput(currentEvent);
 
+            // 5.1 将拖拽状态同步到全局多路径预览
+            // ... 同步拖拽状态给全局渲染器（全局优先模式下不设置，避免跳过当前对象）
+
+
+                        if (!Preview.MultiPathPreviewRenderer.PreferGlobalOnly)
+                        {
+                            Preview.MultiPathPreviewRenderer.IsDraggingActive = _ctx.IsDraggingHandle;
+                            if (_targetCreator) Preview.MultiPathPreviewRenderer.ActiveEditingId = _ctx.IsDraggingHandle ? _targetCreator.GetInstanceID() : 0;
+                        }
+                        else
+                        {
+                            Preview.MultiPathPreviewRenderer.IsDraggingActive = false;
+                            Preview.MultiPathPreviewRenderer.ActiveEditingId = 0;
+                        }
+
             // 6. 更新预览网格
-            _ctx.PreviewManager.Update(_targetCreator, _ctx.HeightProvider);
+            // 启用全局预览时：拖拽中允许本地更新，仅避免重复绘制
+            // 未启用全局预览时：始终本地更新
+            if (!_targetCreator) return;
+
+                        if (!Preview.MultiPathPreviewRenderer.IsEnabled ||
+                            (!Preview.MultiPathPreviewRenderer.PreferGlobalOnly && _ctx.IsDraggingHandle))
+                        {
+                            _ctx.PreviewManager?.Update(_targetCreator, _ctx.HeightProvider);
+                        }
 
             // 7. 处理场景重绘
             HandleSceneRepainting(currentEvent);
-
-            // 8. 检查 Transform 变化
-            CheckForTransformChanges();
         }
 
         // --- OnSceneGUI 辅助方法 ---
@@ -557,26 +498,13 @@ namespace MrPathV2.Editor.Inspectors
             _ctx.InputHandler.HandleInputEvents(currentEvent, _targetCreator, context.HoveredPathT, context.HoveredPointIndex);
         }
 
-        private void HandleSceneRepainting(Event currentEvent)
+        private static void HandleSceneRepainting(Event currentEvent)
         {
             // [性能优化] 仅在必要时重绘
             if (currentEvent.type == EventType.MouseMove || currentEvent.type == EventType.MouseDrag)
             {
                 HandleUtility.Repaint();
             }
-        }
-
-        private void CheckForTransformChanges()
-        {
-            if (_targetCreator.transform.position == _lastPosition &&
-                _targetCreator.transform.rotation == _lastRotation &&
-                _targetCreator.transform.localScale == _lastScale)
-            {
-                return;
-            }
-
-            CacheTransform();
-            MarkPathAsDirty();
         }
 
         #endregion
@@ -589,7 +517,8 @@ namespace MrPathV2.Editor.Inspectors
         private void OnAppearanceChanged()
         {
             _ctx?.PreviewManager?.MarkMaterialsDirty();
-            _ctx?.RequestSceneViewRefresh();
+            _ctx?.RequestPreviewRefresh(true);
+            _ctx?.RequestSceneViewRefresh(true);
         }
         private void OnUndoRedo() => MarkPathAsDirty();
 
@@ -619,12 +548,14 @@ namespace MrPathV2.Editor.Inspectors
             _ctx?.MarkDirty();
         }
 
-        private void CacheTransform()
+        // 新增：防抖版本，避免加载与切换时的即时重计算
+        private void MarkPathAsDirtyDebounced()
         {
-            _lastPosition = _targetCreator.transform.position;
-            _lastRotation = _targetCreator.transform.rotation;
-            _lastScale = _targetCreator.transform.localScale;
+            _ctx?.MarkDirty(false);
         }
+
+        private void CacheTransform()
+        { }
 
         private void SubscribeToProfile(PathProfile profile)
         {

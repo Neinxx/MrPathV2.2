@@ -40,8 +40,8 @@ inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, f
     outColor.rgb = (abs(blendMode - 5.0) < 0.5) ? alphaBlendRgb : outColor.rgb;                                   // Lerp
     outColor.rgb = (abs(blendMode - 6.0) < 0.5) ? addRgb        : outColor.rgb;                                   // Additive
 
-    // Alpha preserved; preview alpha is computed separately
-    outColor.a = baseColor.a;
+    // 累积 Alpha（src-over）：base + (1 - base) * layerAlpha
+    outColor.a = saturate(baseColor.a + (1.0 - baseColor.a) * layerAlpha);
 
     return saturate(outColor);
 }

@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: DefaultPathProfile
   m_EditorClassIdentifier: 
   curveType: 1
-  longitudinalSegments: 100
-  roadWidth: 3.22
+  longitudinalSegments: 99
+  roadWidth: 4.2
   crossSection:
     serializedVersion: 2
     m_Curve:
@@ -39,7 +39,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  falloffWidth: 0.1
+  falloffWidth: 0
   falloffShape:
     serializedVersion: 2
     m_Curve:
@@ -77,9 +77,9 @@ MonoBehaviour:
   heightOffset: 0
   smoothness: 100
   forceHorizontal: 1
-  crossSectionSegments: 9
+  crossSectionSegments: 3
   showPreviewMesh: 1
   enableDepthTest: 0
   opaquePreview: 0
   maskTiling: {x: 4.34, y: 9.27}
-  roadRecipe: {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
+  roadRecipe: {fileID: 11400000, guid: efcb2312e8c88b54985fe39751470081, type: 2}

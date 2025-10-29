@@ -80,7 +80,7 @@ namespace MrPathV2.Editor.Tests
         public static void CreateTestPathCreator()
         {
             Debug.Log("[GpuPreviewTest] Creating test PathCreator...");
-            PathFactory.CreateDefaultPath("Test PathCreator");
+            PathFactory.CreateDefaultPath();
             // // 创建PathCreator GameObject
             // var go = new GameObject("Test PathCreator");
             // var pathCreator = go.AddComponent<PathCreator>();

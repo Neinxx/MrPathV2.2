@@ -1,24 +1,27 @@
-.reorderable-list-placeholder {
-    background-color: rgba(0, 150, 255, 0.2);
-    border-top-width: 2px;
-    border-bottom-width: 2px;
-    border-top-color: rgb(0, 150, 255);
-    border-bottom-color: rgb(0, 150, 255);
-    margin: 2px 0;
-}
-
 .reorderable-item {
-    flex-direction: row;
-    align-items: center;
-    background-color: rgb(50, 50, 50);
-    margin: 2px 0;
+    transition-property: all;
+    transition-duration: 30ms;
+    transition-timing-function: ease-in-out;
+    
 }
 
-.reorderable-item.ghost {
-    opacity: 0.7;
-    z-index: 100;
-    transition: none;
-    background-color: rgb(70, 70, 70);
-    border-width: 1px;
-    border-color: rgb(0, 150, 255);
+.dragging {
+    transition-property: top, left, transform, opacity, border;
+    transition-duration: 30ms;
+    transition-timing-function: ease-out;
+    opacity: 1;
+    flex: 999;
+    /* 添加蓝色外边框 */
+    border-color: rgba(78, 101, 149, 0.26);
+    border-width: 2px;
+    
+    /* 可选：添加一点内边距避免内容被边框挤压 */
+    padding: 2px;
+    /* 可选：添加边框圆角增强视觉效果 */
+    border-radius: 4px;
+}
+.placeholder-spacing-element {
+    transition-property: height; 
+    transition-duration: 10ms; /* 让它与列表项移动速度匹配 */
+    transition-timing-function: ease-in-out; 
 }

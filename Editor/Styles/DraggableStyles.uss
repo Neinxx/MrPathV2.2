@@ -1,25 +1,30 @@
-/* 拖放容器样式 */
-.drop-container {
-    background-color: rgba(50, 50, 50, 0.1);
-    border-radius: 4px;
-    border: 1px dashed rgba(100, 100, 100, 0.3);
+.drag-container {
+    flex-direction: column;
 }
 
-/* 可拖动项样式 */
 .draggable-item {
-    background-color: white;
-    border-radius: 3px;
-    border: 1px solid #ccc;
-    padding: 8px;
-    cursor: move;
-    transition: background-color 0.2s;
+    height: auto;
+    margin: 5px 0;
+    background-color: rgba(113, 113, 113, 0.02);
+    transition: margin-top 0.3s ease-out, margin-bottom 0.3s ease-out, translate 0.3s ease-out, opacity 0.2s ease, scale 0.2s ease;
+    flex-grow: 1;
+    border-top-left-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
 }
 
-.draggable-item:hover {
-    background-color: rgba(200, 200, 255, 0.1);
+.draggable-item--dragging {
+    transition: margin-top 0.3s ease-out, margin-bottom 0.3s ease-out, opacity 0.2s ease, scale 0.2s ease;
+    position: absolute;
+    width: 100%;
+    flex: 10;
+    opacity: 0.7;
+    scale: 1.05 1.05;
 }
-
-/* 拖动代理样式 */
-.draggable-item__proxy {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+/* 3. 占位符间距动画：控制占位符的伸缩 */
+.placeholder-spacing-element {
+    transition-property: height; 
+    transition-duration: 300ms; /* 让它与列表项移动速度匹配 */
+    transition-timing-function: ease-in-out; 
 }

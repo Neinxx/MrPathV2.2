@@ -32,9 +32,26 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         [Tooltip("每层振幅的衰减（Gain/Persistence，0..1）")]
         [Range(0f, 1f)] public float gain = 0.5f;
 
+        [Header("Smoothing / 非对称 Edge1/Edge2")]
+        [Tooltip("启用后使用非对称阈值进行平滑（SmoothStep(edgeLow, edgeHigh)）。关闭则使用对称 smooth 参数。")]
+        public bool useAsymmetricEdges = false;
+
+        [Range(0f, 1f), Tooltip("下阈值（Edge1）。建议 < EdgeHigh。")]
+        public float edgeLow = 0.25f;
+
+        [Range(0f, 1f), Tooltip("上阈值（Edge2）。建议 > EdgeLow。")]
+        public float edgeHigh = 0.75f;
+
         private void OnValidate()
         {
             if (uniformScale) noiseScale.y = noiseScale.x;
+            // 约束阈值范围并自动排序
+            edgeLow = Mathf.Clamp01(edgeLow);
+            edgeHigh = Mathf.Clamp01(edgeHigh);
+            if (edgeHigh < edgeLow)
+            {
+                var t = edgeLow; edgeLow = edgeHigh; edgeHigh = t;
+            }
         }
 
         /// <summary>
@@ -75,7 +92,28 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             var noise = norm > 1e-5f ? sum / norm : 0f; // 归一化到 0..1
 
             var rawValue = noise * strength;
-            return ApplySmoothing(Mathf.Clamp01(rawValue));
+            return ApplyNoiseSmoothing(Mathf.Clamp01(rawValue));
+        }
+
+        private float ApplyNoiseSmoothing(float maskValue)
+        {
+            // 与基类一致：先整体缩放
+            maskValue *= overallScale;
+
+            if (useAsymmetricEdges)
+            {
+                var e0 = Mathf.Clamp01(edgeLow);
+                var e1 = Mathf.Clamp01(edgeHigh);
+                if (e1 < e0) { var t = e0; e0 = e1; e1 = t; }
+                if (maskValue <= e0) return 0f;
+                if (maskValue >= e1) return 1f;
+                var t2 = (maskValue - e0) / Mathf.Max(1e-6f, e1 - e0);
+                var smoothed2 = t2 * t2 * (3f - 2f * t2);
+                return Mathf.Clamp01(smoothed2);
+            }
+
+            // 回退到原有对称平滑
+            return ApplySmoothing(maskValue);
         }
 
         // --- GPU 参数打包 ---
@@ -99,6 +137,10 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             dst.NoiseParams.Lacunarity = lacunarity;
             dst.NoiseParams.Gain = gain;
             dst.NoiseParams.AlgorithmId = (int)NoiseAlgorithmId.Perlin;
+            // 非对称平滑参数
+            dst.NoiseParams.UseAsymmetricEdges = useAsymmetricEdges;
+            dst.NoiseParams.EdgeLow = edgeLow;
+            dst.NoiseParams.EdgeHigh = edgeHigh;
         }
 
         private void OnNoiseScaleChanged()

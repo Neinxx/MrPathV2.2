@@ -15,6 +15,11 @@ MonoBehaviour:
   bezierStrategy: {fileID: 11400000, guid: ef9ab77836e51104cb4cb3dbe8ccda13, type: 2}
   catmullRomStrategy: {fileID: 11400000, guid: bd36c88b0765ed24aa6b868b64fc5642, type: 2}
   paintingBackend: 0
+  gpuAutoSwitchThreshold: 0
   enableMemoryTracking: 1
   rebuildBasemapInRealtimePreview: 0
   basemapSafetyMarginPixels: 8
+  gpuDebugMode: 2
+  gpuMaskThreshold: 0
+  gpuOverrideEdgeWidth: 0
+  gpuEdgeWidthWorld: 0.19

@@ -10,7 +10,7 @@ using UnityEngine;
 using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 // add near top
 
-namespace MrPathV2.Runtime.Jobs
+namespace MrPathV2
 {
     /// <summary>
     ///     将 StylizedRoadRecipe 的数据烘焙为 Job 友好的结构。
@@ -64,7 +64,7 @@ namespace MrPathV2.Runtime.Jobs
 /// </summary>
 private void InitializeBaseData(StylizedRoadRecipe recipe, Allocator allocator)
 {
-    var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
     Length = roadLayers.Length;
     TerrainLayerIndices = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
     BlendModes = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
@@ -92,7 +92,7 @@ private void InitializeBaseData(StylizedRoadRecipe recipe, Allocator allocator)
 private void InitializeLayerData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap,
                                 float roadWorldWidth, float roadWorldLength)
 {
-    var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
 
     for (var i = 0; i < Length; i++)
     {
@@ -119,7 +119,7 @@ private void InitializeLayerData(StylizedRoadRecipe recipe, Dictionary<TerrainLa
 /// </summary>
 private void InitializeGradientData(StylizedRoadRecipe recipe)
 {
-    var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
 
     // 计算总关键帧数
     var totalKeyframes = 0;
@@ -151,7 +151,7 @@ private void InitializeGradientData(StylizedRoadRecipe recipe)
 /// </summary>
 private void InitializeStripData(StylizedRoadRecipe recipe, float roadWorldWidth, float roadWorldLength)
 {
-    var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
     var stripOffset = 0;
 
     for (var i = 0; i < Length; i++)
@@ -186,7 +186,7 @@ private void InitializeStripData(StylizedRoadRecipe recipe, float roadWorldWidth
 /// </summary>
 private void InitializeMaskAtlasData(StylizedRoadRecipe recipe, float roadWorldWidth, float roadWorldLength)
 {
-    var roadLayers = recipe?.GetLayers()?.ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
 
     // 生成 2D MaskAtlas：
     // Y 方向先是 layer，再是 pathProgress 采样，共 Length * PathSamples 行。

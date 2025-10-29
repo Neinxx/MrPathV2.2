@@ -5,6 +5,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace MrPathV2.Runtime.Jobs
 {
@@ -21,8 +22,8 @@ namespace MrPathV2.Runtime.Jobs
         [ReadOnly] public int AlphamapResolution;
         [ReadOnly] public NativeArray<float2> RoadContour;
         [ReadOnly] public float4 ContourBounds;
-        [ReadOnly] public int2 CoverageMin;
-        [ReadOnly] public int2 CoverageMax;
+        [ReadOnly] public Vector2Int CoverageMin;
+        [ReadOnly] public Vector2Int CoverageMax;
 
         [WriteOnly] public NativeArray<RoadPixelInfo> PixelInfoMap;
 
@@ -37,25 +38,7 @@ namespace MrPathV2.Runtime.Jobs
             var x = CoverageMin.x + localX;
             var y = CoverageMin.y + localY;
 
-            if (y > CoverageMax.y)
-            {
-                PixelInfoMap[index] = new RoadPixelInfo
-                {
-                    IsInside = false
-                };
-                return;
-            }
-
-            if (!IsPixelInRoadContour(x, y, out var worldPos2D))
-            {
-                PixelInfoMap[index] = new RoadPixelInfo
-                {
-                    IsInside = false
-                };
-                return;
-            }
-
-            if (!CalculateDistanceAndProgress(worldPos2D, out var normalizedDist, out var pathProgress))
+            if (y > CoverageMax.y || !IsPixelInRoadContour(x, y, out var worldPos2D) || !CalculateDistanceAndProgress(worldPos2D, out var normalizedDist, out var pathProgress))
             {
                 PixelInfoMap[index] = new RoadPixelInfo
                 {

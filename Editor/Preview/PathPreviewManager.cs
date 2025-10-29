@@ -14,39 +14,39 @@ namespace MrPathV2.Editor.Preview
 
         private const float MaxRenderDistance = 1000f;
         private const float LodThreshold = 100f;
-        private static readonly int PreviewAlpha = Shader.PropertyToID("_PreviewAlpha");
-        private readonly float _alpha;
-        private readonly PreviewLineRenderer _line = new PreviewLineRenderer();
+        private static readonly int PreviewAlpha = PreviewShaderContracts.Properties.PreviewAlpha;
+        private readonly float m_Alpha;
+        private readonly PreviewLineRenderer m_Line = new PreviewLineRenderer();
 
-        private List<Material> _materials = new List<Material>();
-        private readonly PreviewMaterialManager _matMgr;
+        private List<Material> m_Materials = new List<Material>();
+        private readonly PreviewMaterialManager m_MatMgr;
 
-        private readonly PreviewRenderingOptimizer _optimizer = new PreviewRenderingOptimizer();
-        private readonly Material _template;
+        private readonly PreviewRenderingOptimizer m_Optimizer = new PreviewRenderingOptimizer();
+        private readonly Material m_Template;
 
-        private Bounds _bounds;
-        private int _lastProfileHash = -1;
-        private bool _materialsDirty = true;
-        private Mesh _mesh;
-        private bool _meshDirty = true;
-        private Camera _sceneCam;
-        private int _sceneCamId;
-        private MaterialPropertyBlock _singleMpb; // 缓存单材质渲染时的属性块，避免重复分配
-        private bool _spineDirty = true; // replaced previous _dirty
-        private int _lastGpuTerrainId; // 上次运行 GPU 预览所使用的 Terrain ID
-        private int _lastSpineHash;     // 上次运行时的脊线哈希
+        private Bounds m_Bounds;
+        private int m_LastProfileHash = -1;
+        private bool m_MaterialsDirty = true;
+        private Mesh m_Mesh;
+        private bool m_MeshDirty = true;
+        private Camera m_SceneCam;
+        private int m_SceneCamId;
+        private MaterialPropertyBlock m_SingleMpb; // 缓存单材质渲染时的属性块，避免重复分配
+        private bool m_SpineDirty = true; // replaced previous _dirty
+        private int m_LastGpuTerrainId; // 上次运行 GPU 预览所使用的 Terrain ID
+        private int m_LastSpineHash;     // 上次运行时的脊线哈希
 
         public PathPreviewManager(IPreviewGenerator gen, PreviewMaterialManager matMgr, Material template, float alpha)
         {
             Generator = gen ?? throw new ArgumentNullException(nameof(gen));
-            _matMgr = matMgr ?? throw new ArgumentNullException(nameof(matMgr));
-            _template = template;
-            _alpha = alpha;
+            m_MatMgr = matMgr ?? throw new ArgumentNullException(nameof(matMgr));
+            m_Template = template;
+            m_Alpha = alpha;
             
             // Ensure materials list is always initialized
-            if (_materials == null)
+            if (m_Materials == null)
             {
-                _materials = new List<Material>();
+                m_Materials = new List<Material>();
             }
         }
 
@@ -57,24 +57,25 @@ namespace MrPathV2.Editor.Preview
         public void Dispose()
         {
             Generator.Dispose();
-            _matMgr.Dispose();
-            _optimizer.Dispose();
-            _line.Dispose();
-            _materials.Clear();
+            m_MatMgr.Cleanup(); // 使用新的Cleanup方法释放CommandBuffer等资源
+            m_MatMgr.Dispose();
+            m_Optimizer.Dispose();
+            m_Line.Dispose();
+            m_Materials.Clear();
         }
-        public PreviewLineRenderer GetSharedLineRenderer() => _line;
+        public PreviewLineRenderer GetSharedLineRenderer() => m_Line;
 
         public void SetActive(bool value) => IsActive = value;
         public void MarkSpineDirty()
         {
-            _spineDirty = true;
+            m_SpineDirty = true;
         }
         // 网格只有在曲线(spine)发生变动时才重建，其他参数变化（如材质）无需重绘网格。
         public void MarkMeshDirty()
         {
-            _meshDirty = true;
+            m_MeshDirty = true;
         }
-        public void MarkMaterialsDirty() => _materialsDirty = true;
+        public void MarkMaterialsDirty() => m_MaterialsDirty = true;
         // Backwards compatibility
         public void MarkDirty() => MarkSpineDirty();
 
@@ -98,7 +99,7 @@ namespace MrPathV2.Editor.Preview
                     return;
                 }
 
-                if (_matMgr == null)
+                if (m_MatMgr == null)
                 {
                     Debug.LogError("[PathPreviewManager] Material manager is null, cannot update preview");
                     return;
@@ -110,7 +111,7 @@ namespace MrPathV2.Editor.Preview
                 // 这里暂不设置 _matMgr 的目标 Terrain，稍后在 GPU 预览阶段统一处理。
 #endif
 
-                if (_spineDirty)
+                if (m_SpineDirty)
                 {
                     try
                     {
@@ -119,16 +120,16 @@ namespace MrPathV2.Editor.Preview
                         {
                             Generator.StartMeshGeneration(LatestSpine.Value, creator.profile);
                         }
-                        _spineDirty = false;
-                        _meshDirty = false; // spine change implies mesh change
+                        m_SpineDirty = false;
+                        m_MeshDirty = false; // spine change implies mesh change
                     }
                     catch (Exception ex)
                     {
                         Debug.LogError($"[PathPreviewManager] Error during spine sampling: {ex.Message}");
-                        _spineDirty = false; // Prevent infinite retry
+                        m_SpineDirty = false; // Prevent infinite retry
                     }
                 }
-                else if (_meshDirty)
+                else if (m_MeshDirty)
                 {
                     try
                     {
@@ -141,7 +142,7 @@ namespace MrPathV2.Editor.Preview
                     {
                         Debug.LogError($"[PathPreviewManager] Error during mesh generation: {ex.Message}");
                     }
-                    _meshDirty = false;
+                    m_MeshDirty = false;
                 }
                 // 移除仅因非曲线变化而触发的网格重建逻辑，避免频繁重绘。
 
@@ -149,10 +150,10 @@ namespace MrPathV2.Editor.Preview
                 {
                     if (Generator.TryFinalizeMesh() || (Generator.PreviewMesh?.vertexCount ?? 0) > 0 && Generator.ForceFinalizeMesh())
                     {
-                        if (_mesh != Generator.PreviewMesh)
+                        if (m_Mesh != Generator.PreviewMesh)
                         {
-                            _mesh = Generator.PreviewMesh;
-                            _bounds = _mesh ? _mesh.bounds : default;
+                            m_Mesh = Generator.PreviewMesh;
+                            m_Bounds = m_Mesh ? m_Mesh.bounds : default;
                         }
                     }
                 }
@@ -165,10 +166,10 @@ namespace MrPathV2.Editor.Preview
                 {
                     // 计算路径长度并推送到材质管理器
                     var pathLen = ComputeSpineLength(LatestSpine);
-                    _matMgr.SetPathLength(pathLen > 0f ? pathLen : 100f);
+                    m_MatMgr.SetPathLength(pathLen > 0f ? pathLen : 100f);
 
                     // 统一UV语义：网格UV已归一化到0..1，材质重复设为1
-                    _matMgr.SetMeshRepeats(1f, 1f);
+                    m_MatMgr.SetMeshRepeats(1f, 1f);
                 }
                 catch (Exception ex)
                 {
@@ -244,7 +245,7 @@ namespace MrPathV2.Editor.Preview
                     }
                 }
 
-                _matMgr.SetTargetTerrain(targetTerrain);
+                m_MatMgr.SetTargetTerrain(targetTerrain);
 
                 // —— 仅在发生变化时运行 GPU 预览 ——
                 var profileHashNow = CalcProfileHash(creator.profile);
@@ -252,14 +253,14 @@ namespace MrPathV2.Editor.Preview
                 var spineHashNow = LatestSpine.HasValue ? CalcSpineHash(LatestSpine.Value) : 0;
                 var cacheHasRt = targetTerrain && MrPathV2.Editor.Terrain.GpuPreviewCache.TryGet(targetTerrain, out var cachedRt) && cachedRt;
                 var shouldRunGpu = PreviewMaterialManager.EnableGpuPreview && targetTerrain && LatestSpine.HasValue && (
-                    !cacheHasRt || terrainIdNow != _lastGpuTerrainId || spineHashNow != _lastSpineHash || profileHashNow != _lastProfileHash);
+                    !cacheHasRt || terrainIdNow != m_LastGpuTerrainId || spineHashNow != m_LastSpineHash || profileHashNow != m_LastProfileHash);
                 if (shouldRunGpu)
                 {
                     if (GpuPreviewRunner.TryRun(targetTerrain, LatestSpine.Value, creator.profile))
                     {
-                        _lastGpuTerrainId = terrainIdNow;
-                        _lastSpineHash = spineHashNow;
-                        _lastProfileHash = profileHashNow;
+                        m_LastGpuTerrainId = terrainIdNow;
+                        m_LastSpineHash = spineHashNow;
+                        m_LastProfileHash = profileHashNow;
                     }
                 }
 #endif
@@ -267,20 +268,20 @@ namespace MrPathV2.Editor.Preview
                 try
             {
                 // 更新材质并刷新缓存
-                if (_matMgr != null && creator?.profile != null)
+                if (m_MatMgr != null && creator?.profile != null)
                 {
-                    _matMgr.Update(creator.profile, _template, _alpha);
-                    if (_materialsDirty)
+                    m_MatMgr.Update(creator.profile, m_Template, m_Alpha);
+                    if (m_MaterialsDirty)
                     {
                         RefreshMaterialCache();
-                        _materialsDirty = false;
+                        m_MaterialsDirty = false;
                     }
                     else
                     {
                         // 如果内嵌 Mask 等资源变更导致材质实例被替换，也需要刷新缓存；通过检查引用变化实现。
-                        var renderMaterials = _matMgr.GetRenderMaterials();
+                        var renderMaterials = m_MatMgr.GetRenderMaterials();
                         var currentMatCount = renderMaterials?.Count ?? 0;
-                        if (currentMatCount != _materials.Count)
+                        if (currentMatCount != m_Materials.Count)
                         {
                             RefreshMaterialCache();
                         }
@@ -297,9 +298,9 @@ namespace MrPathV2.Editor.Preview
             }
 
                 // 更新用于判断 Profile 引用变化的哈希（不再决定是否调用 Update，仅用于脏标记优化）
-                _lastProfileHash = CalcProfileHash(creator.profile);
+                m_LastProfileHash = CalcProfileHash(creator.profile);
 
-                if (!creator.profile.showPreviewMesh || _mesh == null || _materials.Count == 0) return;
+                if (!creator.profile.showPreviewMesh || m_Mesh == null || m_Materials.Count == 0) return;
 
                 try
                 {
@@ -319,12 +320,12 @@ namespace MrPathV2.Editor.Preview
         private Camera SceneCamera()
         {
             var cam = SceneView.lastActiveSceneView?.camera;
-            if (cam == null || cam.GetInstanceID() != _sceneCamId)
+            if (cam == null || cam.GetInstanceID() != m_SceneCamId)
             {
-                _sceneCam = cam;
-                _sceneCamId = cam ? cam.GetInstanceID() : 0;
+                m_SceneCam = cam;
+                m_SceneCamId = cam ? cam.GetInstanceID() : 0;
             }
-            return _sceneCam;
+            return m_SceneCam;
         }
 
         private void Render()
@@ -332,49 +333,49 @@ namespace MrPathV2.Editor.Preview
             var cam = SceneCamera();
             if (cam == null) return;
 
-            var dist = Vector3.Distance(cam.transform.position, _bounds.center);
-            if (!GeometryUtility.TestPlanesAABB(GeometryUtility.CalculateFrustumPlanes(cam), _bounds) || dist > MaxRenderDistance) return;
+            var dist = Vector3.Distance(cam.transform.position, m_Bounds.center);
+            if (!GeometryUtility.TestPlanesAABB(GeometryUtility.CalculateFrustumPlanes(cam), m_Bounds) || dist > MaxRenderDistance) return;
 
-            var count = Mathf.Min(GetLodMaterialCount(dist), _materials.Count);
+            var count = Mathf.Min(GetLodMaterialCount(dist), m_Materials.Count);
             var matrix = Matrix4x4.identity;
 
             if (count > 1)
             {
-                _optimizer.ClearBatches();
-                _optimizer.SetGlobalProperty("_PreviewAlpha", _alpha);
-                for (var i = 0; i < count; i++) _optimizer.AddRenderItem(_mesh, _materials[i], matrix);
-                _optimizer.ExecuteBatchedRender(cam);
+                m_Optimizer.ClearBatches();
+                m_Optimizer.SetGlobalProperty("_PreviewAlpha", m_Alpha);
+                for (var i = 0; i < count; i++) m_Optimizer.AddRenderItem(m_Mesh, m_Materials[i], matrix);
+                m_Optimizer.ExecuteBatchedRender(cam);
             }
             else
             {
                 // 使用 MaterialPropertyBlock 而非全局 Shader 属性，避免因其他编辑器 UI 绘制修改全局状态导致闪烁。
-                if (_singleMpb == null)
-                    _singleMpb = new MaterialPropertyBlock();
-                _singleMpb.SetFloat(PreviewAlpha, _alpha);
-                Graphics.DrawMesh(_mesh, matrix, _materials[0], 0, cam, 0, _singleMpb);
+                if (m_SingleMpb == null)
+                    m_SingleMpb = new MaterialPropertyBlock();
+                m_SingleMpb.SetFloat(PreviewAlpha, m_Alpha);
+                Graphics.DrawMesh(m_Mesh, matrix, m_Materials[0], 0, cam, 0, m_SingleMpb);
             }
         }
 
-        private int GetLodMaterialCount(float dist) => dist > LodThreshold ? Mathf.Max(1, _materials.Count / 2) : _materials.Count;
+        private int GetLodMaterialCount(float dist) => dist > LodThreshold ? Mathf.Max(1, m_Materials.Count / 2) : m_Materials.Count;
 
         private void RefreshMaterialCache()
         {
             try
             {
-                _materials.Clear();
-                var list = _matMgr?.GetRenderMaterials();
+                m_Materials.Clear();
+                var list = m_MatMgr?.GetRenderMaterials();
                 if (list != null) 
                 {
-                    _materials.AddRange(list);
+                    m_Materials.AddRange(list);
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[PathPreviewManager] Error in RefreshMaterialCache: {ex.Message}\nStackTrace: {ex.StackTrace}");
                 // Ensure materials list is in a valid state even if refresh fails
-                if (_materials == null)
+                if (m_Materials == null)
                 {
-                    _materials = new List<Material>();
+                    m_Materials = new List<Material>();
                 }
             }
         }

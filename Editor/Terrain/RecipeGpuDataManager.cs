@@ -32,6 +32,9 @@ namespace MrPathV2.Editor.Terrain
         public float Lacunarity; // 频率倍增系数
         public float Gain; // 幅度衰减系数
         public int AlgorithmId; // 噪声算法调度 ID（0=Perlin，1=Simple）
+        public int UseAsymmetricEdges; // 是否启用非对称平滑
+        public float EdgeLow; // 低阈值（Edge1）
+        public float EdgeHigh; // 高阈值（Edge2）
         public float Pad1; // 对齐填充，保证 16B 对齐
     }
 
@@ -93,6 +96,15 @@ namespace MrPathV2.Editor.Terrain
         /// </summary>
         public int ActiveLayerCount => _cachedLayerParams?.Count ?? 0;
 
+        // 新增：统一的就绪检查，供调用方快速验证 GPU 数据有效性
+        public bool IsReady()
+        {
+            return ActiveLayerCount > 0 &&
+                   LayerParamsBuffer != null &&
+                   LayerParamsBuffer.IsValid() &&
+                   LayerParamsBuffer.count >= ActiveLayerCount;
+        }
+
         public void Dispose()
         {
             ReleaseBuffers();
@@ -151,6 +163,9 @@ namespace MrPathV2.Editor.Terrain
                 Lacunarity = dto.NoiseParams.Lacunarity,
                 Gain = dto.NoiseParams.Gain,
                 AlgorithmId = dto.NoiseParams.AlgorithmId,
+                UseAsymmetricEdges = dto.NoiseParams.UseAsymmetricEdges ? 1 : 0,
+                EdgeLow = dto.NoiseParams.EdgeLow,
+                EdgeHigh = dto.NoiseParams.EdgeHigh,
                 Pad1 = 0f
             };
 
@@ -673,7 +688,7 @@ namespace MrPathV2.Editor.Terrain
                     layer.contentLayer.tileSize.y != 0 ? layer.contentLayer.tileSize.y : 1f,
                     layer.contentLayer.tileOffset.x,
                     layer.contentLayer.tileOffset.y),
-                TintColor = Color.white,
+                TintColor = layer.contentLayer != null ? layer.contentLayer.specular : Color.white,
                 MaskParams = packedMask
             };
         }

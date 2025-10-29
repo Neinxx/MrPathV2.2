@@ -55,6 +55,9 @@ namespace MrPathV2.Editor.Settings
 
             var scanButton = content.Q<Button>("scan-assets-button");
             scanButton?.RegisterCallback<ClickEvent>(_ => ScanAndFillAllAssets());
+
+            // GPU Debug Panel
+            SetupDebugPanel(content);
         }
 
         private void SetupSettingsLink(VisualElement root, string propertyName, string mLabel, Type assetType, Label titleLabel)
@@ -246,6 +249,35 @@ namespace MrPathV2.Editor.Settings
                 arrayProp.InsertArrayElementAtIndex(i);
                 arrayProp.GetArrayElementAtIndex(i).objectReferenceValue = items[i];
             }
+        }
+
+        // --- GPU 调试面板嵌入 ---
+        private void SetupDebugPanel(VisualElement content)
+        {
+            var rootBox = content.Q<Box>("root");
+            if (rootBox == null) return;
+
+            var advProp = _settings.FindProperty("advancedSettings");
+            var advObj = advProp?.objectReferenceValue as MrPathAdvancedSettings;
+
+            var section = new Foldout { text = "GPU 调试面板" };
+            section.value = false; // 默认折叠
+
+            if (advObj != null)
+            {
+                var advSO = new SerializedObject(advObj);
+                section.Add(new PropertyField(advSO.FindProperty("gpuDebugMode"), "调试模式 (0=正常,1=MaskUV,2=边缘)"));
+                section.Add(new PropertyField(advSO.FindProperty("gpuMaskThreshold"), "遮罩门槛 [0-1]"));
+                section.Add(new PropertyField(advSO.FindProperty("gpuOverrideEdgeWidth"), "覆盖过渡宽度"));
+                section.Add(new PropertyField(advSO.FindProperty("gpuEdgeWidthWorld"), "过渡宽度(米)"));
+                section.Bind(advSO);
+            }
+            else
+            {
+                section.Add(new Label("未设置 '高级设置' 资产。请先在上方创建/关联后使用调试面板。"));
+            }
+
+            rootBox.Add(section);
         }
     }
 }

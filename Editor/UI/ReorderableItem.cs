@@ -8,38 +8,39 @@ namespace MrPathV2.Editor.UI
 {
     public class ReorderableItem : VisualElement
     {
+        // --- UXML/工厂定义 ---
         public new class UxmlFactory : UxmlFactory<ReorderableItem, UxmlTraits> { }
         public new class UxmlTraits : VisualElement.UxmlTraits { }
 
+        // --- 构造函数 ---
+
         public ReorderableItem()
         {
-            // 设置可拖拽的光标
-            style.cursor = new StyleCursor(Cursorer.DefaultCursor(Cursorer.CursorType.Arrow));
-            
-         // 3. 注册鼠标按下事件来开始拖动
+            // 设置可拖拽光标
+            style.cursor = new StyleCursor(Cursorer.DefaultCursor(Cursorer.CursorType.MoveArrow));
             RegisterCallback<PointerDownEvent>(OnPointerDown);
+            // 给元素添加类名，以便应用 USS 样式
+            AddToClassList("reorderable-item"); 
         }
 
         private void OnPointerDown(PointerDownEvent evt)
         {
-          if (evt.button != 0 || !(parent is ReorderableContainer))
+            if (evt.button != 0 || !(parent is ReorderableContainer))
             {
                 return;
             }
             
-            // 准备拖放
             DragAndDrop.PrepareStartDrag();
-            // 存储对此项的引用，以便容器可以识别它
             DragAndDrop.SetGenericData("ReorderableItem", this);
-            // 开始拖动
             DragAndDrop.StartDrag("Reordering");
 
             evt.StopPropagation();
         }
-
+        
+        // --- Cursorer 辅助类 (保持不变) ---
         public static class Cursorer
         {
-
+            // ... (内部反射逻辑和 CursorType 枚举保持不变)
             public static Cursor DefaultCursor(CursorType cursorType)
             {
                 var ret = (object)new Cursor();
@@ -61,26 +62,11 @@ namespace MrPathV2.Editor.UI
 
             public enum CursorType
             {
-                Arrow = 0,
-                Text = 1,
-                ResizeVertical = 2,
-                ResizeHorizontal = 3,
-                Link = 4,
-                SlideArrow = 5,
-                ResizeUpRight = 6,
-                ResizeUpLeft = 7,
-                MoveArrow = 8,
-                RotateArrow = 9,
-                ScaleArrow = 10,
-                ArrowPlus = 11,
-                ArrowMinus = 12,
-                Pan = 13,
-                Orbit = 14,
-                Zoom = 15,
-                FPS = 16,
-                CustomCursor = 17,
-                SplitResizeUpDown = 18,
-                SplitResizeLeftRight = 19
+                Arrow = 0, Text = 1, ResizeVertical = 2, ResizeHorizontal = 3, Link = 4,
+                SlideArrow = 5, ResizeUpRight = 6, ResizeUpLeft = 7, MoveArrow = 8,
+                RotateArrow = 9, ScaleArrow = 10, ArrowPlus = 11, ArrowMinus = 12,
+                Pan = 13, Orbit = 14, Zoom = 15, FPS = 16, CustomCursor = 17,
+                SplitResizeUpDown = 18, SplitResizeLeftRight = 19
             }
         }
     }

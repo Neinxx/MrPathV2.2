@@ -23,8 +23,8 @@ namespace MrPathV2.Runtime.Core
         ///     若 mask 为空，返回 1。
         /// </summary>
         public static float EvaluateMask(float pos, float pathProgress, float worldWidth, float pathLength, BlendMaskBase mask) =>
-            // 当未指定遮罩时返回 1，表示全权重，将直接使用图层自身的不透明度
-            mask == null ? 1f : Mathf.Clamp01(mask.Evaluate(pos, pathProgress, worldWidth, pathLength));
+            // 当未指定遮罩时返回 0，表示无权重，避免整片矩形覆盖
+            (mask == null) ? 0f : Mathf.Clamp01(mask.Evaluate(pos, pathProgress, worldWidth, pathLength));
 
         /// <summary>
         ///     兼容旧接口：若未提供 pathProgress，则使用 0.5f 作为默认值（路径中点）

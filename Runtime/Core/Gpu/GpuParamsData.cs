@@ -33,6 +33,10 @@ namespace MrPathV2.Runtime.Core.Gpu
         public float Lacunarity;
         public float Gain;
         public int AlgorithmId; // 统一调度的算法ID
+        // 非对称平滑支持
+        public bool UseAsymmetricEdges;
+        public float EdgeLow;
+        public float EdgeHigh;
     }
 
     // 定义噪声算法的统一枚举，避免魔法数字

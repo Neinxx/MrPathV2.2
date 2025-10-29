@@ -375,6 +375,7 @@ private void RestoreUIState(Button clickedButton)
 
 /// <summary>
 /// (辅助方法) 尝试获取预览网格的2D边界。
+/// 注意：PreviewMesh的顶点是在世界坐标系中生成的，mesh.bounds已经是世界坐标
 /// </summary>
 private bool TryGetPreviewBoundsXZ(out Vector4 bounds)
 {
@@ -391,6 +392,8 @@ private bool TryGetPreviewBoundsXZ(out Vector4 bounds)
     // 使用明确的 > 0 检查，可读性比属性模式稍好
     if (b.size.x > 0 && b.size.z > 0)
     {
+        // PreviewMesh的顶点已经在世界坐标系中，mesh.bounds直接就是世界坐标边界
+        // 无需进行坐标转换，直接使用即可
         bounds = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
         return true;
     }

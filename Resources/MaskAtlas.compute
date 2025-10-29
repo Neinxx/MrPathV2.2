@@ -36,6 +36,9 @@ struct GpuNoiseMaskParams {
 	float  Lacunarity;
 	float  Gain;
 	int    AlgorithmId; // 统一算法调度 ID
+	int    UseAsymmetricEdges;
+	float  EdgeLow;
+	float  EdgeHigh;
 	float  Pad1;
 };
 
@@ -143,7 +146,6 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
 		}
 		else
 		{
-			// Default Perlin
 			sample = PerlinNoise(ruv * frequency, 1.0);
 		}
 		sum += sample * amplitude;
@@ -155,6 +157,14 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
 
 	// Match CPU ApplySmoothing: scale then smooth
 	float valuePre = saturate(n * p.Strength) * p.OverallScale;
+	// 优先使用非对称边界
+	if(p.UseAsymmetricEdges != 0)
+	{
+		float e0 = p.EdgeLow;
+		float e1 = p.EdgeHigh;
+		if(e0 > e1){ float t = e0; e0 = e1; e1 = t; }
+		return saturate(smoothstep(e0, e1, valuePre));
+	}
 	if(p.Smooth <= 1e-5)
 	{
 		return saturate(valuePre);
@@ -173,7 +183,7 @@ float EvaluateGradientMask(float progress, float strength)
 // --- Main unified EvaluateMask ---
 float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth, float pathLen)
 {
-	float maskValue = 1.0;
+	float maskValue = 0.0;
 	switch(maskParams.maskType)
 	{
 	case MASK_TYPE_SHOULDER:
@@ -185,16 +195,14 @@ float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, fl
 	case MASK_TYPE_GRADIENT:
 		maskValue = EvaluateGradientMask(progress, 1.0);
 		break;
-	case MASK_TYPE_NONE:
 	default:
-		maskValue = 1.0;
+		maskValue = 0.0;
 		break;
 	}
 	return saturate(maskValue * maskParams.strength);
 }
 
 // --- Backward-compatible wrapper (old signature) ---
-// Maps posAcross/pathProgress/worldW/pathLen to new API.
 float EvaluateMask(float posAcross, float pathProgress, float worldW, float pathLen, GpuMaskParams p)
 {
 	float  distanceFromPath = posAcross * (worldW * 0.5);
@@ -235,7 +243,6 @@ void BuildAtlas(uint3 id : SV_DispatchThreadID)
 	GpuMaskParams p = _MaskParams[layerIndex];
 	float         weight = EvaluateMask(posAcross, pathProgress, _WorldWidth, _PathLength, p);
 	float         opacity = _Opacities[layerIndex];
-	weight = saturate(weight * opacity);
 
 	_Atlas[int2(idxX, idxY)] = float4(weight, 0, 0, 1);
 }

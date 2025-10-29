@@ -15,6 +15,9 @@ struct GpuNoiseMaskParams {
 	float  Lacunarity; // 频率增长系数
 	float  Gain; // 幅度衰减系数
 	int    AlgorithmId; // 0=Perlin, 1=Simple
+	int    UseAsymmetricEdges; // 是否启用非对称平滑
+	float  EdgeLow; // Edge1（低阈值）
+	float  EdgeHigh; // Edge2（高阈值）
 	float  Pad1; // 对齐
 };
 
@@ -133,10 +136,22 @@ inline float EvaluateNoise(float progress, float signedDistance, float roadWidth
 
 	// 与 CPU ApplySmoothing 一致：先整体缩放，再做平滑
 	float pre = saturate(n01 * p.Strength) * p.OverallScale;
-	if (p.Smooth <= 1e-5)
+	if (p.Smooth <= 1e-5 && p.UseAsymmetricEdges == 0)
 	{
 		return saturate(pre);
 	}
+	// 非对称优先：当启用时直接使用 EdgeLow/EdgeHigh
+	if (p.UseAsymmetricEdges != 0)
+	{
+		float e0 = p.EdgeLow;
+		float e1 = p.EdgeHigh;
+		if (e0 > e1)
+		{
+			float t = e0; e0 = e1; e1 = t;
+		}
+		return saturate(smoothstep(e0, e1, pre));
+	}
+	// 退回对称 Smooth 模式
 	float edge0 = p.Smooth * 0.5;
 	float edge1 = 1.0 - p.Smooth * 0.5;
 	return saturate(smoothstep(edge0, edge1, pre));
@@ -169,7 +184,7 @@ inline float EvaluateShoulder(float signedDistance, float roadWidth, GpuShoulder
 // 主评估函数（统一坐标）：使用 progress / signedDistance / roadWidth
 inline float EvaluateMask(float progress, float signedDistance, float roadWidth, GpuMaskParams mask)
 {
-	if(mask.Type == MASK_TYPE_NONE) return 1.0;
+	if(mask.Type == MASK_TYPE_NONE) return 0.0;
 
 	float m = 1.0;
 	if(mask.Type == MASK_TYPE_SHOULDER)

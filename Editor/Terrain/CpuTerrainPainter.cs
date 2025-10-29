@@ -23,8 +23,8 @@ namespace MrPathV2.Editor.Terrain
             RecipeGpuDataManager recipeGpuData, // Not used
             NativeArray<float2> roadContour,
             float4 contourBounds,
-            int2 coverageMin,
-            int2 coverageMax,
+            Vector2Int coverageMin,
+            Vector2Int coverageMax,
             CancellationToken token)
         {
             var td = terrain.terrainData;
@@ -36,14 +36,17 @@ namespace MrPathV2.Editor.Terrain
             var resolution = td.alphamapResolution;
             var layers = td.alphamapLayers;
 
-            var alphamaps3D = td.GetAlphamaps(0, 0, resolution, resolution);
-            var alphamaps1D = NativeArrayExtensions.CreateTracked<float>(alphamaps3D.Length, Allocator.Persistent);
-            // 将原有地形Alpha数据复制到可写的一维数组，避免未覆盖区域被清零
-            ConvertAlphamaps3DTo1D(alphamaps3D, alphamaps1D);
-
-            var numPixelsX = coverageMax.x - coverageMin.x + 1;
-            var numPixelsY = coverageMax.y - coverageMin.y + 1;
+            // 仅读取覆盖区域，避免整张控制纹理的昂贵复制
+            var startX = Mathf.Clamp(coverageMin.x, 0, resolution - 1);
+            var startY = Mathf.Clamp(coverageMin.y, 0, resolution - 1);
+            var numPixelsX = Mathf.Clamp(coverageMax.x - coverageMin.x + 1, 0, resolution - startX);
+            var numPixelsY = Mathf.Clamp(coverageMax.y - coverageMin.y + 1, 0, resolution - startY);
             var totalPixelsInBounds = numPixelsX * numPixelsY;
+
+            var alphamaps3D = td.GetAlphamaps(startX, startY, numPixelsX, numPixelsY);
+            var alphamaps1D = NativeArrayExtensions.CreateTracked<float>(alphamaps3D.Length, Allocator.Persistent);
+            // 将区域内现有Alpha复制到一维数组，保持未覆盖区权重
+            ConvertAlphamaps3DTo1D(alphamaps3D, alphamaps1D);
 
             NativeArray<RoadPixelInfo> pixelInfoMap = default;
 
@@ -104,7 +107,7 @@ namespace MrPathV2.Editor.Terrain
 
                 await Task.Yield(); // 确保在主线程
                 ConvertAlphamaps1DTo3D(alphamaps1D, alphamaps3D);
-                td.SetAlphamaps(0, 0, alphamaps3D);
+                td.SetAlphamaps(startX, startY, alphamaps3D);
                 terrain.Flush();
                 EditorUtility.SetDirty(td);
             }

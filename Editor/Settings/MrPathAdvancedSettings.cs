@@ -30,6 +30,10 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
                  "GPU_Compute: 速度最快，利用 GPU 加速，但需要 Compute Shader 支持且可能对显卡有要求。")]
         public PaintTerrainCommand.PaintingBackend paintingBackend = PaintTerrainCommand.PaintingBackend.CPUJobTwoPass; // 默认使用 CPU
 
+        [Tooltip("自动切换到 GPU 绘制的像素阈值。当绘制区域超过此像素数时，将自动选用 GPU 后端（如果支持）。设置为 0 可禁用自动切换。")]
+        [Min(0)]
+        public int gpuAutoSwitchThreshold = 256 * 256; // 默认 256x256 像素
+
         [Header("性能与调试")]
         [Tooltip("启用内存跟踪器 (MemoryTracker)，会带来少量性能开销，建议仅在开发或调试时开启。")]
         public bool enableMemoryTracking; // 默认关闭
@@ -40,5 +44,22 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
 
         [Tooltip("Basemap 重建时在对齐矩形外扩的安全边距（像素），用于读回与回写，避免边界失配。建议为线程组大小的倍数，例如 8、16。")]
         public int basemapSafetyMarginPixels = 8;
+
+        // --- GPU 调试 (Compute Shader) ---
+        [Header("GPU 调试 (Compute Shader)")]
+        [Tooltip("Compute 调试模式：0=正常；1=Mask UV；2=边缘衰减")]
+        [Range(0, 2)]
+        public int gpuDebugMode = 0;
+
+        [Tooltip("道路轮廓遮罩门槛，越高越严格，建议 0.5–0.95")]
+        [Range(0f, 1f)]
+        public float gpuMaskThreshold = 0.5f;
+
+        [Tooltip("是否用下列数值覆盖边缘过渡宽度（单位：米）")]
+        public bool gpuOverrideEdgeWidth = false;
+
+        [Tooltip("用于覆盖的边缘过渡宽度（米）")]
+        [Min(0.001f)]
+        public float gpuEdgeWidthWorld = 1.0f;
     }
 }

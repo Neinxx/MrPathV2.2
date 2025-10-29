@@ -23,10 +23,14 @@ namespace MrPathV2.Runtime.Jobs
                 return false; // 无效点直接返回false
             }
 
-            // 处理边界无效的情况
+            // 处理边界无效的情况：尝试从轮廓重建边界并继续后续检查
             if (!IsValidBounds(bounds))
             {
-                return HandleInvalidBounds(contour, ref bounds);
+                if (!HandleInvalidBounds(contour, ref bounds))
+                {
+                    return false; // 无法修复边界则判定为不在轮廓内
+                }
+                // 如果成功修复边界，不要提前返回，继续下面的 AABB 和轮廓检测
             }
 
             // 当多边形轮廓不可用（长度不足）时，退化为仅使用 AABB 粗裁剪。

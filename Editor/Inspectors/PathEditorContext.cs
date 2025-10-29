@@ -1,4 +1,5 @@
 using System;
+
 using MrPathV2.Editor.Input;
 using MrPathV2.Editor.Preview;
 using MrPathV2.Editor.Settings;
@@ -16,13 +17,13 @@ namespace MrPathV2.Editor.Inspectors
     /// </summary>
     public class PathEditorContext : IDisposable
     {
-        private MrPathProjectSettings _mrPathProjectSettings;
-        private EditorRefreshManager _refreshManager;
+        private MrPathProjectSettings m_MrPathProjectSettings;
+        private EditorRefreshManager m_RefreshManager;
 
         public PathEditorContext(PathCreator target)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
-            _refreshManager = new EditorRefreshManager();
+            m_RefreshManager = new EditorRefreshManager();
 #if UNITY_EDITOR
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
 #endif
@@ -32,7 +33,7 @@ namespace MrPathV2.Editor.Inspectors
         // 编辑器状态
         private int HoveredPointIdx { get; set; } = -1;
         private int HoveredSegmentIdx { get; set; } = -1;
-        private bool IsDraggingHandle { get; set; }
+        public bool IsDraggingHandle { get; set; }
 
         // 公共属性
         public PathCreator Target { get; }
@@ -60,14 +61,15 @@ namespace MrPathV2.Editor.Inspectors
         public void Dispose()
         {
             // 取消所有待执行的刷新操作
-            _refreshManager?.ClearAllPendingRefreshes();
+            m_RefreshManager?.ClearAllPendingRefreshes();
 
             // 释放各个组件
             PreviewManager?.Dispose();
             HeightProvider?.Dispose();
+            MaterialManager?.Cleanup(); // 使用新的Cleanup方法释放CommandBuffer等资源
             MaterialManager?.Dispose();
             TerrainHandler?.Dispose();
-            _refreshManager?.Dispose();
+            m_RefreshManager?.Dispose();
 
 #if UNITY_EDITOR
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
@@ -78,7 +80,7 @@ namespace MrPathV2.Editor.Inspectors
             HeightProvider = null;
             MaterialManager = null;
             TerrainHandler = null;
-            _refreshManager = null;
+            m_RefreshManager = null;
         }
 
         /// <summary>
@@ -92,52 +94,15 @@ namespace MrPathV2.Editor.Inspectors
         {
             try
             {
-                // 先获取项目设置，供后续依赖初始化使用
-                _mrPathProjectSettings = MrPathProjectSettings.GetOrCreateSettings();
+                InitializeSettings();
+                InitializeHeightProvider();
 
-                // 初始化高度提供器
-                HeightProvider = new TerrainHeightProvider();
-
-                // 初始化材质管理器
-                MaterialManager = new PreviewMaterialManager();
-
-                // 初始化预览管理器
-                var generator = new DefaultPreviewGenerator();
-                var appearance = _mrPathProjectSettings.appearanceDefaults;
-                var template = appearance?.previewMaterialTemplate;
-                var alpha = 1f;
-
-                // 运行时强制使用多层预览 Shader（若为空或非多层，自动回退/升级）
-                var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");
-                if (multiShader != null)
+                if (!MultiPathPreviewRenderer.PreferGlobalOnly)
                 {
-                    if (template == null || template.shader == null || !template.shader.name.Contains("PathPreviewSplatMulti"))
-                    {
-                        if (template != null && template.shader != null)
-                        {
-                            // 就地升级已有模板的 shader 引用
-                            template.shader = multiShader;
-                            EditorUtility.SetDirty(template);
-                        }
-                        else
-                        {
-                            // 为空时创建一个运行时材质实例用于预览
-                            template = new Material(multiShader)
-                            {
-                                name = "DefaultPreviewMaterialTemplate"
-                            };
-                        }
-                    }
+                    InitializeLocalPreviewComponents();
                 }
 
-                PreviewManager = new PathPreviewManager(generator, MaterialManager, template, alpha);
-
-                // 初始化地形操作处理器
-                TerrainHandler = new TerrainOperationHandler(HeightProvider);
-
-                // 初始化输入处理器
-                InputHandler = new PathInputHandler();
-
+                InitializeSharedComponents();
             }
             catch (Exception ex)
             {
@@ -147,18 +112,87 @@ namespace MrPathV2.Editor.Inspectors
             }
         }
 
+        private void InitializeSettings()
+        {
+            m_MrPathProjectSettings = MrPathProjectSettings.GetOrCreateSettings();
+        }
+
+        private void InitializeHeightProvider()
+        {
+            HeightProvider = new TerrainHeightProvider();
+        }
+
+        private void InitializeLocalPreviewComponents()
+        {
+            MaterialManager = new PreviewMaterialManager();
+
+            var generator = new DefaultPreviewGenerator();
+            var template = GetPreviewMaterialTemplate();
+            const float alpha = 1f;
+
+            PreviewManager = new PathPreviewManager(generator, MaterialManager, template, alpha);
+        }
+
+        private Material GetPreviewMaterialTemplate()
+        {
+            var appearance = m_MrPathProjectSettings.appearanceDefaults;
+            var template = appearance?.previewMaterialTemplate;
+
+            // 运行时强制使用多层预览 Shader（若为空或非多层，自动回退/升级）
+            var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");
+            if (multiShader == null) return template;
+
+            if (template == null || template.shader == null || !template.shader.name.Contains("MrPath/PathPreviewSplatMulti"))
+            {
+                if (template != null && template.shader != null)
+                {
+                    // 就地升级已有模板的 shader 引用
+                    template.shader = multiShader;
+                    EditorUtility.SetDirty(template);
+                }
+                else
+                {
+                    // 为空时创建一个运行时材质实例用于预览
+                    template = new Material(multiShader)
+                    {
+                        name = "DefaultPreviewMaterialTemplate"
+                    };
+                }
+            }
+
+            return template;
+        }
+
+        private void InitializeSharedComponents()
+        {
+            // 初始化地形操作处理器和输入处理器（全局/本地都需要）
+            TerrainHandler = new TerrainOperationHandler(HeightProvider);
+            InputHandler = new PathInputHandler();
+        }
+
+
         /// <summary>
         ///     请求刷新预览，使用防抖动机制
         /// </summary>
-        private void RequestPreviewRefresh(bool forceImmediate = false)
+        public void RequestPreviewRefresh(bool forceImmediate = false)
         {
             if (PreviewManager == null) return;
 
-            _refreshManager.RequestRefresh("preview_refresh", () =>
+            m_RefreshManager.RequestRefresh("preview_refresh", () =>
             {
                 try
                 {
-                    PreviewManager.Update(Target, HeightProvider);
+                    // 全局预览启用时，统一走全局脏标记；仅在关闭全局或特殊本地模式下才本地更新
+
+                    if (MultiPathPreviewRenderer.IsEnabled &&
+                        (MultiPathPreviewRenderer.PreferGlobalOnly || !IsDraggingHandle))
+                    {
+                        MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: true, mesh: true, materials: true);
+                    }
+                    else
+                    {
+                        PreviewManager.Update(Target, HeightProvider);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -172,7 +206,7 @@ namespace MrPathV2.Editor.Inspectors
         /// </summary>
         public void RequestSceneViewRefresh(bool forceImmediate = false)
         {
-            _refreshManager.RequestRefresh("scene_view_refresh", SceneView.RepaintAll, forceImmediate);
+            m_RefreshManager.RequestRefresh("scene_view_refresh", SceneView.RepaintAll, forceImmediate);
         }
 
         /// <summary>
@@ -180,7 +214,7 @@ namespace MrPathV2.Editor.Inspectors
         /// </summary>
         public void RequestInspectorRefresh(bool forceImmediate = false)
         {
-            _refreshManager.RequestRefresh("inspector_refresh", () =>
+            m_RefreshManager.RequestRefresh("inspector_refresh", () =>
             {
                 if (Target)
                 {
@@ -199,13 +233,14 @@ namespace MrPathV2.Editor.Inspectors
         /// <summary>
         ///     标记预览为脏，并请求刷新。
         /// </summary>
-        public void MarkDirty()
+        public void MarkDirty(bool forceImmediate = true)
         {
             // 当路径或外观参数变更时，同时标记脊线、网格与材质为脏，确保 UV 等属性得到重新计算
             PreviewManager?.MarkSpineDirty();
             PreviewManager?.MarkMeshDirty();
             PreviewManager?.MarkMaterialsDirty(); // Ensure material updates when parameters change
-            RequestPreviewRefresh();
+            RequestPreviewRefresh(forceImmediate);
+            RequestSceneViewRefresh(forceImmediate);
         }
 
         public PathEditorHandles.HandleDrawContext CreateHandleContext() => new PathEditorHandles.HandleDrawContext
@@ -230,7 +265,7 @@ namespace MrPathV2.Editor.Inspectors
         {
             try
             {
-                _refreshManager?.Dispose();
+                m_RefreshManager?.Dispose();
             }
             catch
             {

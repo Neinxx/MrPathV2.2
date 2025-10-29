@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
+using UnityEngine;
 // For PathSpine, PathProfile etc.
 
 namespace MrPathV2.Editor.Terrain // Or Runtime.Interfaces
@@ -35,8 +36,8 @@ namespace MrPathV2.Editor.Terrain // Or Runtime.Interfaces
             RecipeGpuDataManager recipeGpuData, // For GPU path
             NativeArray<float2> roadContour,
             float4 contourBounds,
-            int2 coverageMin,
-            int2 coverageMax,
+            Vector2Int coverageMin,
+            Vector2Int coverageMax,
             CancellationToken token
         );
     }

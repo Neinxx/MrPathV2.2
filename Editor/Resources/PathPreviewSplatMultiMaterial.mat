@@ -48,6 +48,8 @@ Material:
     - _AtlasInvHeight: 1
     - _MaskThreshold: 0
     - _AcrossScale: 1
+    - _MeshRepeatAcross: 1
+    - _MeshRepeatAlong: 1
     - _LayerCount: 0
     - _PathSamples: 64
     m_Colors:

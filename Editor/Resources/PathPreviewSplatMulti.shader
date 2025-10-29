@@ -7,7 +7,7 @@ Shader "MrPath/PathPreviewSplatMulti"
         [Header(Render State)]
         [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8 // Default to Always (8). Use LEqual (4) for normal depth.
         [Space]
-        _PreviewAlpha("Preview Alpha", Range(0, 1)) = 0.6
+        _PreviewAlpha("Preview Alpha", Range(0, 1)) = 1.0
         _MaskStrength("Mask Strength", Range(0, 4)) = 1
         [Toggle] _OpaquePreview ("Opaque Preview", Float) = 0
 
@@ -81,6 +81,8 @@ Shader "MrPath/PathPreviewSplatMulti"
         _PathSamples("Path Samples", Float) = 64
         _MeshRepeatAcross ("Mesh Repeat Across", Float) = 1
         _MeshRepeatAlong ("Mesh Repeat Along", Float) = 1
+        [HideInInspector] _UseLayerTexArray ("Use Layer Tex Array", Float) = 0
+        [NoScaleOffset][HideInInspector] _LayerTextures ("Layer Textures", 2DArray) = "" {}
     }
 
     SubShader
@@ -162,7 +164,9 @@ Shader "MrPath/PathPreviewSplatMulti"
             half4 _Layer14_Color;
             TEXTURE2D(_Layer15_Texture);
             half4 _Layer15_Color;
-
+            // 新增：统一的图层贴图数组（Texture2DArray），用于替代逐层采样
+            TEXTURE2D_ARRAY(_LayerTextures);
+            
             // Mask atlas and other properties
             TEXTURE2D(_MaskAtlas);
             // 新增：GPU 计算的地形权重数组
@@ -189,6 +193,8 @@ Shader "MrPath/PathPreviewSplatMulti"
                 float2 _AlphamapResolution;
                 float  _LayerSplatIndices[16];
                 float  _UseSplatWeights;
+                // 新增：是否使用图层贴图数组采样
+               float  _UseLayerTexArray;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -202,30 +208,33 @@ Shader "MrPath/PathPreviewSplatMulti"
                 return output;
             }
 
-            // NOTE : These switch - based helper functions are inefficient but necessary
-            // due to the verbose property structure. Refactoring would require
-            // changing to uniform arrays and a C# controller script.
+            // Removed legacy per-layer switch sampler; using array-based sampler below.
             half4 SampleLayerTexture(int layerIndex, float2 uv)
             {
-
+                // 优先使用 Texture2DArray 采样，提升一致性与效率
+                if (_UseLayerTexArray > 0.5)
+                {
+                    return SAMPLE_TEXTURE2D_ARRAY_LOD(_LayerTextures, sampler_LinearRepeat, uv, layerIndex, 0);
+                }
+                // 回退到逐层纹理属性采样（用于编辑器无法构建数组或尺寸/格式不一致的情况）
                 switch(layerIndex)
                 {
-                case 0: return SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0) * _Layer0_Color;
-                case 1: return SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0) * _Layer1_Color;
-                case 2: return SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0) * _Layer2_Color;
-                case 3: return SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0) * _Layer3_Color;
-                case 4: return SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0) * _Layer4_Color;
-                case 5: return SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0) * _Layer5_Color;
-                case 6: return SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0) * _Layer6_Color;
-                case 7: return SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0) * _Layer7_Color;
-                case 8: return SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0) * _Layer8_Color;
-                case 9: return SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0) * _Layer9_Color;
-                case 10: return SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0) * _Layer10_Color;
-                case 11: return SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0) * _Layer11_Color;
-                case 12: return SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0) * _Layer12_Color;
-                case 13: return SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0) * _Layer13_Color;
-                case 14: return SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0) * _Layer14_Color;
-                case 15: return SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0) * _Layer15_Color;
+                case 0:  return SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0);
+               case 1:  return SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0);
+                case 2:  return SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0);
+                case 3:  return SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0);
+                case 4:  return SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0);
+                case 5:  return SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0);
+                case 6:  return SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0);
+                case 7:  return SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0);
+                case 8:  return SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0);
+                case 9:  return SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0);
+                case 10: return SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0);
+                case 11: return SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0);
+                case 12: return SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0);
+                case 13: return SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0);
+                case 14: return SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0);
+                case 15: return SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0);
                 default: return half4(1, 1, 1, 1);
                 }
             }
@@ -243,6 +252,31 @@ Shader "MrPath/PathPreviewSplatMulti"
             float GetLayerBlendMode(int layerIndex)
             {
                 return _LayerBlendModes[layerIndex];
+            }
+
+            // 每层颜色（Tint）采样，匹配材质属性 _LayerN_Color
+            half4 GetLayerTint(int layerIndex)
+            {
+                switch(layerIndex)
+                {
+                case 0:  return _Layer0_Color;
+                case 1:  return _Layer1_Color;
+                case 2:  return _Layer2_Color;
+                case 3:  return _Layer3_Color;
+                case 4:  return _Layer4_Color;
+                case 5:  return _Layer5_Color;
+                case 6:  return _Layer6_Color;
+                case 7:  return _Layer7_Color;
+                case 8:  return _Layer8_Color;
+                case 9:  return _Layer9_Color;
+                case 10: return _Layer10_Color;
+                case 11: return _Layer11_Color;
+                case 12: return _Layer12_Color;
+                case 13: return _Layer13_Color;
+                case 14: return _Layer14_Color;
+                case 15: return _Layer15_Color;
+                default: return half4(1,1,1,1);
+                }
             }
 
             // Legacy BlendLayer replaced by shared ApplyBlend in BlendLayer.hlsl
@@ -304,79 +338,44 @@ Shader "MrPath/PathPreviewSplatMulti"
                 int maxLayers = min(_LayerCount, 16);
                 float compositeAlpha = 0.0; // 汇总各层归一化权重 * 不透明度
 
-                // 若使用 GPU 权重，则先收集所有层权重并进行全局归一化，确保与最终地形结果一致
-                if (_UseSplatWeights > 0.5)
+                // 统一路径：采样所有层权重并归一化，不区分来源（GPU 或 MaskAtlas）
+                float weights[16];
+                float total = 0.0;
+                for (int i = 0; i < maxLayers; i++)
                 {
-                    float weights[16];
-                    float total = 0.0;
-                    for (int i = 0; i < maxLayers; i++)
-                    {
-                        float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
-                        weights[i] = w;
-                        total += w;
-                    }
-
-                    float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
-
-                    for (int i = 0; i < maxLayers; i++)
-                    {
-                        float weight = (invTotal > 0.0) ? saturate(weights[i] * invTotal) : 0.0;
-                        if (weight < 0.0004) continue;
-
-                        float2 layerTiling = GetLayerTiling(i);
-                        float2 layerUV = input.worldUV * layerTiling;
-                        half4  layerColor = SampleLayerTexture(i, layerUV);
-
-                        layerColor.a *= weight;
-
-                        float layerOpacity = GetLayerOpacity(i);
-                        float blendMode = GetLayerBlendMode(i);
-                        float blendOpacity = layerOpacity;
-
-                        finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
-                        compositeAlpha += weight * layerOpacity;
-                    }
+                    float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
+                    weights[i] = w;
+                    total += w;
                 }
-                else
+
+                float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
+
+                for (int i = 0; i < maxLayers; i++)
                 {
-                    // Fallback: 从 MaskAtlas 采样并进行跨层归一化，确保预览与最终地形一致
-                    float weights[16];
-                    float total = 0.0;
-                    for (int i = 0; i < maxLayers; i++)
-                    {
-                        float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
-                        weights[i] = w;
-                        total += w;
-                    }
+                    float weight = (invTotal > 0.0) ? saturate(weights[i] * invTotal) : 0.0;
+                    if (weight < 0.0004) continue;
 
-                    float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
+                    float2 layerTiling = GetLayerTiling(i);
+                    float2 layerUV = input.worldUV * layerTiling;
+                    half4  layerColor = SampleLayerTexture(i, layerUV);
+                    layerColor *= GetLayerTint(i);
+                    layerColor.a *= weight;
 
-                    for (int i = 0; i < maxLayers; i++)
-                    {
-                        float weight = (invTotal > 0.0) ? saturate(weights[i] * invTotal) : 0.0;
-                        if (weight < 0.0004) continue;
+                    float layerOpacity = GetLayerOpacity(i);
+                    float blendMode = GetLayerBlendMode(i);
+                    float blendOpacity = layerOpacity;
 
-                        float2 layerTiling = GetLayerTiling(i);
-                        float2 layerUV = input.worldUV * layerTiling;
-                        half4  layerColor = SampleLayerTexture(i, layerUV);
-
-                        layerColor.a *= weight;
-
-                        float layerOpacity = GetLayerOpacity(i);
-                        float blendMode = GetLayerBlendMode(i);
-                        float blendOpacity = layerOpacity;
-
-                        finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
-                        compositeAlpha += weight * layerOpacity;
-                    }
+                    finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                    compositeAlpha += weight * layerOpacity;
                 }
 
                 // 透明度与滑块结合：按合成权重驱动显示强度，避免因颜色暗导致过度透明
                 finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(compositeAlpha) * saturate(_PreviewAlpha);
-                return finalColor;
-            }
-            ENDHLSL
-        }
-    }
-    FallBack "Hidden/Universal Render Pipeline/FallbackError"
-}
+              //  finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(finalColor.a) * saturate(_PreviewAlpha);
+                 return finalColor;
+             }
+             ENDHLSL
+         }
+     }
+     FallBack "Hidden/Universal Render Pipeline/FallbackError"
+ }

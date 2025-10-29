@@ -176,26 +176,27 @@ namespace MrPathV2.Runtime.Core
             var layerCount = layers.Count;
             var atlasHeight = layerCount * pathSamples;
 
+            // Init pixels
             var pixels = new Color32[atlasWidth * atlasHeight];
-            for (var li = 0; li < layerCount; li++)
+            for (var i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, 255);
+
+            for (var layerIndex = 0; layerIndex < layerCount; layerIndex++)
             {
-                var layer = layers[li];
-                if (layer.Opacity <= 0f) continue;
+                var layer = layers[layerIndex];
+                var mask = layer.Mask;
                 var opacity = Mathf.Clamp01(layer.Opacity);
 
                 for (var py = 0; py < pathSamples; py++)
                 {
-                    var pathProgress = pathSamples > 1 ? py / (float)(pathSamples - 1) : 0.5f;
-                    var rowIndex = li * pathSamples + py;
-
-                    for (var x = 0; x < atlasWidth; x++)
+                    var progress = (float)py / Mathf.Max(1, pathSamples - 1);
+                    for (var px = 0; px < atlasWidth; px++)
                     {
-                        var across = atlasWidth > 1 ? x / (float)(atlasWidth - 1) : 0f;
-                        var posAcross = across * 2f - 1f;
-                        var w = PreviewPipelineUtility.EvaluateMask(posAcross, pathProgress, worldWidth, pathLength, layer.Mask);
-                        w = Mathf.Clamp01(w * opacity);
-                        var idx = rowIndex * atlasWidth + x;
-                        pixels[idx] = new Color32((byte)Mathf.RoundToInt(w * 255f), 0, 0, 255);
+                        var across01 = (float)px / Mathf.Max(1, atlasWidth - 1);
+                        var across = across01 * 2.0f - 1.0f;
+                        var value = mask != null ? mask.Evaluate(across, progress, worldWidth, pathLength) : 1.0f;
+                        var finalValue = Mathf.Clamp01(value * opacity);
+                        var idx = py + layerIndex * pathSamples;
+                        pixels[px + idx * atlasWidth] = new Color32((byte)(finalValue * 255.0f), 0, 0, 255);
                     }
                 }
             }
@@ -249,6 +250,9 @@ namespace MrPathV2.Runtime.Core
                 Lacunarity = dto.NoiseParams.Lacunarity,
                 Gain = dto.NoiseParams.Gain,
                 AlgorithmId = dto.NoiseParams.AlgorithmId,
+                UseAsymmetricEdges = dto.NoiseParams.UseAsymmetricEdges ? 1 : 0,
+                EdgeLow = dto.NoiseParams.EdgeLow,
+                EdgeHigh = dto.NoiseParams.EdgeHigh,
                 Pad1 = 0f
             };
 
@@ -287,6 +291,9 @@ namespace MrPathV2.Runtime.Core
             public float Lacunarity;
             public float Gain;
             public int AlgorithmId;
+            public int UseAsymmetricEdges;
+            public float EdgeLow;
+            public float EdgeHigh;
             public float Pad1;
         }
 
