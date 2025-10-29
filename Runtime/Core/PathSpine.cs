@@ -1,0 +1,56 @@
+using UnityEngine;
+
+namespace MrPathV2.Runtime.Core
+{
+    /// <summary>
+    ///     【最终纯净版】路径骨架数据结构。
+    ///     包含了从IPath曲线采样后，用于生成网格所需的所有几何信息。
+    ///     这是一个纯粹、凝练的数据容器。
+    /// </summary>
+    public readonly struct PathSpine
+    {
+        #region 数据字段 (Data Fields)
+
+        /// <summary>
+        ///     骨架上所有点的位置（已吸附地形）。
+        /// </summary>
+        public readonly Vector3[] Points;
+
+        /// <summary>
+        ///     骨架上每个点处的切线方向（前进方向）。
+        /// </summary>
+        public readonly Vector3[] Tangents;
+
+        /// <summary>
+        ///     骨架上每个点下方的地形表面法线（上方向）。
+        /// </summary>
+        public readonly Vector3[] SurfaceNormals;
+
+        /// <summary>
+        ///     骨架上每个点对应的归一化时间戳（0到1）。
+        /// </summary>
+        public readonly float[] Timestamps;
+
+        #endregion
+
+        #region 属性与构造 (Properties & Constructor)
+
+        /// <summary>
+        ///     骨架中的顶点总数。
+        /// </summary>
+        public readonly int VertexCount => Points?.Length ?? 0;
+
+        /// <summary>
+        ///     唯一的构造函数，用于创建一个完整的路径骨架实例。
+        /// </summary>
+        public PathSpine(Vector3[] points, Vector3[] tangents, Vector3[] surfaceNormals, float[] timestamps)
+        {
+            this.Points = points;
+            this.Tangents = tangents;
+            this.SurfaceNormals = surfaceNormals;
+            this.Timestamps = timestamps;
+        }
+
+        #endregion
+    }
+}

@@ -1,0 +1,30 @@
+.drag-container {
+    flex-direction: column;
+}
+
+.draggable-item {
+    height: auto;
+    margin: 5px 0;
+    background-color: rgba(113, 113, 113, 0.02);
+    transition: margin-top 0.3s ease-out, margin-bottom 0.3s ease-out, translate 0.3s ease-out, opacity 0.2s ease, scale 0.2s ease;
+    flex-grow: 1;
+    border-top-left-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
+
+.draggable-item--dragging {
+    transition: margin-top 0.3s ease-out, margin-bottom 0.3s ease-out, opacity 0.2s ease, scale 0.2s ease;
+    position: absolute;
+    width: 100%;
+    flex: 10;
+    opacity: 0.7;
+    scale: 1.05 1.05;
+}
+/* 3. 占位符间距动画：控制占位符的伸缩 */
+.placeholder-spacing-element {
+    transition-property: height; 
+    transition-duration: 300ms; /* 让它与列表项移动速度匹配 */
+    transition-timing-function: ease-in-out; 
+}

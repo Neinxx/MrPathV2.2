@@ -1,0 +1,248 @@
+// Compute: Build per-layer mask atlas using unified HLSL EvaluateMask
+#pragma kernel BuildAtlas
+
+// Inlined BlendMaskLibrary.hlsl (to ensure compute compilation without external includes)
+// Mask types (keep consistent across editor/runtime)
+#define MASK_TYPE_NONE 0
+#define MASK_TYPE_SHOULDER 1
+#define MASK_TYPE_NOISE 2
+#define MASK_TYPE_GRADIENT 3
+
+// --- GPU Structs (must match C# memory layout exactly) ---
+struct GpuShoulderMaskParams {
+	float  ShoulderWidthRatio;
+	float  ShoulderStrength;
+	float  EdgeFalloff;
+	int    EnableLeftShoulder;
+	int    EnableRightShoulder;
+	float2 Tiling;
+	float2 Offset;
+	float  OverallScale;
+	float  Smooth;
+	float  Pad1;
+	float  Pad2;
+};
+
+struct GpuNoiseMaskParams {
+	float  Strength;
+	float  Seed;
+	float2 Tiling;
+	float2 Offset;
+	float  OverallScale;
+	float  Smooth;
+	float2 NoiseScale;
+	float  RotationRad;
+	int    Octaves;
+	float  Lacunarity;
+	float  Gain;
+	int    AlgorithmId; // 统一算法调度 ID
+	int    UseAsymmetricEdges;
+	float  EdgeLow;
+	float  EdgeHigh;
+	float  Pad1;
+};
+
+struct GpuMaskParams {
+	int                   maskType; // C#: MaskType
+	float                 strength; // C#: Strength
+	float2                padding; // C#: Pad2, Pad3
+	GpuNoiseMaskParams    noiseParams;
+	GpuShoulderMaskParams shoulderParams;
+};
+
+// Removed alias macros to avoid field name collisions across structs
+
+// --- Simple noise helpers (placeholder, fast pseudo-perlin) ---
+float SimpleNoise(float2 uv)
+{
+	return frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+float PerlinNoise(float2 uv, float scale)
+{
+	uv *= max(1e-5, scale);
+	float2 i = floor(uv);
+	float2 f = frac(uv);
+
+	float a = SimpleNoise(i);
+	float b = SimpleNoise(i + float2(1.0, 0.0));
+	float c = SimpleNoise(i + float2(0.0, 1.0));
+	float d = SimpleNoise(i + float2(1.0, 1.0));
+
+	float2 u = f * f * (3.0 - 2.0 * f);
+	float  res = lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+	return res;
+}
+
+// --- Smoothing helper ---
+float ApplySmoothing(float value, float smoothing)
+{
+	return smoothstep(0.0, 1.0, value * (1.0 + smoothing));
+}
+
+// --- Evaluate shoulder mask (distance-based, unified) ---
+float EvaluateShoulderMask(GpuShoulderMaskParams p, float distanceFromPath, float roadWidth)
+{
+	// Inside road core: no shoulder
+	float coreHalfWidth = roadWidth * 0.5;
+	float d = abs(distanceFromPath) - coreHalfWidth;
+	if(d <= 0.0) return 0.0;
+
+	// Shoulder span
+	float shoulderWidth = max(1e-5, p.ShoulderWidthRatio * roadWidth);
+	if(d <= shoulderWidth) return saturate(p.ShoulderStrength);
+
+	// Edge falloff beyond shoulder
+	float beyond = d - shoulderWidth;
+	float falloff = 1.0 - saturate(beyond / max(1e-5, p.EdgeFalloff));
+	return saturate(falloff * p.ShoulderStrength);
+}
+
+// --- Evaluate procedural noise mask (UV semantics aligned with CPU TransformPosition/PathPosition) ---
+float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, float pathLength)
+{
+	float tileX = p.Tiling.x;
+	float tileY = p.Tiling.y;
+	float denomX = (abs(tileX) < 1e-4) ? (1e-4 * ((tileX == 0.0) ? 1.0 : sign(tileX))) : tileX;
+	float denomY = (abs(tileY) < 1e-4) ? (1e-4 * ((tileY == 0.0) ? 1.0 : sign(tileY))) : tileY;
+
+	// Map worldPos to normalized across (-1..1) and along (0..1)
+	float posAcross = worldPos.x / max(1e-5, roadWidth); // -1..1
+	float pathProgress = (pathLength > 1e-5) ? (worldPos.y / pathLength) : 0.0; // 0..1
+
+	float uNorm = 0.5 * (posAcross + 1.0);
+	float vNorm = saturate(pathProgress);
+
+	// CPU semantics: repeat counts, not meters
+	float2 uv;
+	uv.x = uNorm * denomX + p.Offset.x;
+	uv.y = vNorm * denomY + p.Offset.y;
+
+	// Detail scaling & rotation
+	float2 uvScaled = float2(uv.x * max(1e-5, p.NoiseScale.x), uv.y * max(1e-5, p.NoiseScale.y));
+
+	float  cosR = cos(p.RotationRad);
+	float  sinR = sin(p.RotationRad);
+	float2 ruv = float2(uvScaled.x * cosR - uvScaled.y * sinR, uvScaled.x * sinR + uvScaled.y * cosR);
+
+	// Deterministic seed offset
+	float  sx = abs(sin(p.Seed * 12.9898) * 43758.5453);
+	float  sy = abs(sin(p.Seed * 78.233) * 12345.678);
+	float2 seedOffset = float2(sx - floor(sx), sy - floor(sy));
+	ruv += seedOffset;
+
+	// fBm sampling
+	float amplitude = 1.0;
+	float frequency = 1.0;
+	float sum = 0.0;
+	float norm = 0.0;
+	int   oct = max(1, p.Octaves);
+	for(int i = 0; i < oct; ++i)
+	{
+		float sample = 0.0;
+		if(p.AlgorithmId == 1)
+		{
+			sample = SimpleNoise(ruv * frequency);
+		}
+		else
+		{
+			sample = PerlinNoise(ruv * frequency, 1.0);
+		}
+		sum += sample * amplitude;
+		norm += amplitude;
+		frequency *= max(1.0, p.Lacunarity);
+		amplitude *= saturate(p.Gain);
+	}
+	float n = (norm > 1e-5) ? (sum / norm) : 0.0;
+
+	// Match CPU ApplySmoothing: scale then smooth
+	float valuePre = saturate(n * p.Strength) * p.OverallScale;
+	// 优先使用非对称边界
+	if(p.UseAsymmetricEdges != 0)
+	{
+		float e0 = p.EdgeLow;
+		float e1 = p.EdgeHigh;
+		if(e0 > e1){ float t = e0; e0 = e1; e1 = t; }
+		return saturate(smoothstep(e0, e1, valuePre));
+	}
+	if(p.Smooth <= 1e-5)
+	{
+		return saturate(valuePre);
+	}
+	float edge0 = p.Smooth * 0.5;
+	float edge1 = 1.0 - p.Smooth * 0.5;
+	return saturate(smoothstep(edge0, edge1, valuePre));
+}
+
+// --- Evaluate gradient (progress parameter) ---
+float EvaluateGradientMask(float progress, float strength)
+{
+	return progress * strength;
+}
+
+// --- Main unified EvaluateMask ---
+float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth, float pathLen)
+{
+	float maskValue = 0.0;
+	switch(maskParams.maskType)
+	{
+	case MASK_TYPE_SHOULDER:
+		maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
+		break;
+	case MASK_TYPE_NOISE:
+		maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos, roadWidth, pathLen);
+		break;
+	case MASK_TYPE_GRADIENT:
+		maskValue = EvaluateGradientMask(progress, 1.0);
+		break;
+	default:
+		maskValue = 0.0;
+		break;
+	}
+	return saturate(maskValue * maskParams.strength);
+}
+
+// --- Backward-compatible wrapper (old signature) ---
+float EvaluateMask(float posAcross, float pathProgress, float worldW, float pathLen, GpuMaskParams p)
+{
+	float  distanceFromPath = posAcross * (worldW * 0.5);
+	float2 worldPos = float2(posAcross * worldW, pathProgress * pathLen);
+	return EvaluateMask(p, worldPos, pathProgress, distanceFromPath, worldW, pathLen);
+}
+
+StructuredBuffer<GpuMaskParams> _MaskParams;
+StructuredBuffer<float>         _Opacities;
+
+RWTexture2D<float4> _Atlas;
+
+int   _AtlasWidth;
+int   _LayerCount;
+int   _PathSamples;
+float _WorldWidth;
+float _PathLength;
+
+[numthreads(8,8,1)]
+void BuildAtlas(uint3 id : SV_DispatchThreadID)
+{
+	int idxX = (int)id.x;
+	int idxY = (int)id.y;
+	if(idxX >= _AtlasWidth || idxY >= _LayerCount * _PathSamples) return;
+
+	// Compute layerIndex/pathRow using fast uint division/modulo
+	uint uIdxY = (uint)idxY;
+	uint uSamples = (uint)max(_PathSamples, 1);
+	uint uLayerIndex = uIdxY / uSamples;
+	uint uPathRow = uIdxY % uSamples;
+	int  layerIndex = (int)uLayerIndex;
+	int  pathRow = (int)uPathRow;
+
+	float across = (float)idxX / max(1, _AtlasWidth - 1); // 0..1
+	float posAcross = across * 2.0 - 1.0; // -1..1, center=0
+	float pathProgress = (float)pathRow / max(1, _PathSamples - 1);
+
+	GpuMaskParams p = _MaskParams[layerIndex];
+	float         weight = EvaluateMask(posAcross, pathProgress, _WorldWidth, _PathLength, p);
+	float         opacity = _Opacities[layerIndex];
+
+	_Atlas[int2(idxX, idxY)] = float4(weight, 0, 0, 1);
+}

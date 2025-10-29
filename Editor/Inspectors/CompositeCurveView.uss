@@ -1,0 +1,34 @@
+/* CompositeCurveView.uss */
+
+.composite-curve-view {
+  padding: 6px;
+  border-radius: 6px;
+  border-width: 1px;
+  border-color: rgba(255,255,255,0.08);
+  background-color: rgba(0,0,0,0.15);
+  overflow: hidden; /* 防止子元素溢出 */
+}
+
+.composite-curve-view .unity-toolbar {
+  width: 100%;
+  flex-wrap: wrap; /* 超出時自動換行 */
+  overflow-x: hidden; /* 禁止水平溢出 */
+  border-bottom-width: 1px;
+  border-bottom-color: rgba(255,255,255,0.06);
+  background-color: rgba(0,0,0,0.20);
+}
+
+.composite-curve-view .unity-toolbar .unity-toggle {
+  margin-right: 8px;
+  margin-bottom: 4px; /* 換行後的行距 */
+  flex-shrink: 0; /* 避免被擠壓 */
+}
+
+.composite-curve-canvas {
+  margin-top: 6px;
+  padding: 6px;
+  border-radius: 6px;
+  border-width: 1px;
+  border-color: rgba(255,255,255,0.10);
+  background-color: rgba(20,20,20,0.55);
+}

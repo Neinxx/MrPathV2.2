@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MrPathV2 更改预览</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Microsoft Yahei", sans-serif; margin: 32px; line-height: 1.6; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    h2 { font-size: 16px; margin-top: 24px; }
+    code { background: #f3f4f7; padding: 2px 6px; border-radius: 4px; }
+    .ok { color: #0a7; }
+    .file { color: #36c; }
+    ul { margin: 8px 0 8px 20px; }
+  </style>
+</head>
+<body>
+  <h1>MrPathV2 预览与性能更改概览</h1>
+
+  <h2>CPU 绘制优化</h2>
+  <ul>
+    <li>改为 <strong>局部 alphamap 读写</strong>，避免整张读取与写回。</li>
+    <li><code>PaintSplatmapJob</code> 索引改为 <strong>局部数组布局</strong>（<code>index * layerCount</code>）。</li>
+    <li>减少数组复制与 <code>TerrainData.SetAlphamaps</code> 的写回开销。</li>
+  </ul>
+
+  <h2>仅绘制道路覆盖区域（最新）</h2>
+  <ul>
+    <li>CPU 路径：像素级 <code>IsInside</code> 裁剪，<strong>未触及道路像素不做归一化与写入</strong>。</li>
+    <li>GPU 路径：计算着色器以 <code>coverageMin/Max</code> + 道路遮罩<strong>限定混合范围</strong>。</li>
+  </ul>
+
+  <h2>最优算法自适应（最新）</h2>
+  <ul>
+    <li>新增 <code>gpuAutoSwitchThreshold</code>：覆盖面积超过阈值且支持 Compute 时<strong>自动切换 GPU</strong>。</li>
+    <li>小面积沿用 CPU，两阶段 Job，避免不必要的 GPU 读写与同步。</li>
+  </ul>
+
+  <h2>预览可见性</h2>
+  <ul>
+    <li>取消全局渲染的跳过逻辑：编辑点曲线与 Transform 时 <strong>不再隐藏</strong> 预览。</li>
+    <li>文件：<span class="file">Editor/Preview/MultiPathPreviewRenderer.cs</span> 中 <code>ShouldSkipCreatorRendering</code> 始终返回 <code>false</code>。</li>
+  </ul>
+
+  <h2>建议验证</h2>
+  <ul>
+    <li>Unity Profiler 中观察 CPU 时间：<code>TerrainData.SetAlphamaps</code> 峰值应显著下降。</li>
+    <li>场景内拖拽控制点和执行 Transform 时，预览网格保持可见。</li>
+  </ul>
+
+  <p class="ok">准备就绪：可在项目中进行实际验证。</p>
+</body>
+</html>

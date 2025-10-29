@@ -1,0 +1,4 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="reorderable-item-handle" />
+    <ui:VisualElement name="reorderable-item-content" />
+</ui:UXML>
