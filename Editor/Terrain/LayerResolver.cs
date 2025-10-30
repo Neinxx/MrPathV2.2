@@ -211,5 +211,114 @@ namespace MrPathV2.Editor.Terrain
             }
             return -1;
         }
+
+        // 智能解析：优先匹配地形中等价的图层，若无则添加
+        public static Dictionary<TerrainLayer, int> ResolveEnsurePresentSmart(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        {
+            if (!IsInputValid(terrain, recipe))
+            {
+                return new Dictionary<TerrainLayer, int>();
+            }
+
+            var td = terrain.terrainData;
+            var layers = new List<TerrainLayer>(td.terrainLayers ?? Array.Empty<TerrainLayer>());
+
+            var result = GetExistingLayerMapping(layers);
+
+            foreach (var roadLayer in recipe.GetLayers())
+            {
+                if (!IsRoadLayerValid(roadLayer)) continue;
+
+                var target = roadLayer.contentLayer;
+
+                // 已存在同一实例
+                if (result.ContainsKey(target))
+                {
+                    continue;
+                }
+
+                // 查找地形中等价的图层（按贴图匹配）
+                var eqIndex = FindEquivalentLayerIndex(layers, target);
+                if (eqIndex >= 0)
+                {
+                    result[target] = eqIndex;
+                }
+                else
+                {
+                    // 不存在等价图层，则添加配方中的图层
+                    AddMissingLayer(target, layers, result, td);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     在已有地形图层中查找与配方图层等价的条目（优先按贴图引用匹配）
+        /// </summary>
+        private static int FindEquivalentLayerIndex(List<TerrainLayer> layers, TerrainLayer target)
+        {
+            if (!target) return -1;
+            var targetDiffuse = target.diffuseTexture;
+            var targetNormal = target.normalMapTexture;
+
+            for (var i = 0; i < layers.Count; i++)
+            {
+                var l = layers[i];
+                if (!l) continue;
+
+                // 引用相同
+                if (ReferenceEquals(l, target)) return i;
+
+                // 贴图完全一致（优先）
+                if (l.diffuseTexture == targetDiffuse && l.normalMapTexture == targetNormal) return i;
+
+                // 仅漫反射贴图一致（次优）
+                if (l.diffuseTexture == targetDiffuse) return i;
+
+                // 无漫反射贴图时用名称兜底
+                if (!targetDiffuse && !l.diffuseTexture && l.name == target.name) return i;
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        ///     对多地形进行智能解析，并输出道路覆盖到的所有唯一图层引用（union）
+        /// </summary>
+        public static Dictionary<UnityEngine.Terrain, Dictionary<TerrainLayer, int>> ResolveAcrossTerrainsSmart(
+            List<UnityEngine.Terrain> terrains,
+            StylizedRoadRecipe recipe,
+            out List<TerrainLayer> unionLayers)
+        {
+            var perTerrain = new Dictionary<UnityEngine.Terrain, Dictionary<TerrainLayer, int>>();
+            var union = new List<TerrainLayer>();
+            var seen = new HashSet<int>();
+
+            if (terrains != null)
+            {
+                foreach (var t in terrains)
+                {
+                    if (!IsInputValid(t, recipe)) continue;
+
+                    // 先对每个地形进行智能解析（优先使用已有等价图层，缺失则添加）
+                    var map = ResolveEnsurePresentSmart(t, recipe);
+                    perTerrain[t] = map;
+
+                    // 累积 union 列表
+                    var tls = t.terrainData.terrainLayers;
+                    if (tls == null) continue;
+                    foreach (var l in tls)
+                    {
+                        if (!l) continue;
+                        var id = l.GetInstanceID();
+                        if (seen.Add(id)) union.Add(l);
+                    }
+                }
+            }
+
+            unionLayers = union;
+            return perTerrain;
+        }
     }
 }

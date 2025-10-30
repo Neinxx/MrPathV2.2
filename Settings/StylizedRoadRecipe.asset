@@ -18,7 +18,7 @@ MonoBehaviour:
     enabled: 1
     blendMode: 0
     opacity: 1
-    contentLayer: {fileID: 8574412962073106934, guid: 3d14c2b5f080748cb879668bf87736af,
+    contentLayer: {fileID: 8574412962073106934, guid: 52f82616f8155f24e93a4b7b9cf3b2dd,
       type: 2}
     layerMask: {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}
   width: 5

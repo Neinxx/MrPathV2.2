@@ -181,6 +181,8 @@ private void RefreshContent()
     {
         _content.Add(btn);
     }
+
+
 }
 
 /// <summary>

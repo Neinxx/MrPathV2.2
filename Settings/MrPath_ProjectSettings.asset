@@ -21,5 +21,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
   roadRecipes:
   - {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
+  - {fileID: 11400000, guid: efcb2312e8c88b54985fe39751470081, type: 2}
   masks:
-  - {fileID: 11400000, guid: 57bcf2af1267cc847a8705f56de09fd0, type: 2}
+  - {fileID: 11400000, guid: 9d0650fa383412f4bafcadd32da430f7, type: 2}
+  - {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}

@@ -84,7 +84,23 @@ namespace MrPathV2.Runtime.Core
             }
             try
             {
-                method.Invoke(null, new object[] { this, contentLayer });
+                // 尝试获取当前选中的PathCreator作为上下文
+                PathCreator contextPathCreator = null;
+                var selectionType = System.Type.GetType("UnityEditor.Selection, UnityEditor");
+                if (selectionType != null)
+                {
+                    var activeGameObjectProperty = selectionType.GetProperty("activeGameObject");
+                    if (activeGameObjectProperty != null)
+                    {
+                        var activeGameObject = activeGameObjectProperty.GetValue(null) as UnityEngine.GameObject;
+                        if (activeGameObject != null)
+                        {
+                            contextPathCreator = activeGameObject.GetComponent<PathCreator>();
+                        }
+                    }
+                }
+                
+                method.Invoke(null, new object[] { this, contentLayer, contextPathCreator });
             }
             catch (Exception e)
             {

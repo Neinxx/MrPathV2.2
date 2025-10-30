@@ -199,7 +199,7 @@ namespace MrPathV2.Editor.Terrain
                     continue;
                 }
 
-                var layerMap = LayerResolver.Resolve(terrain, Creator.profile.roadRecipe);
+                var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, Creator.profile.roadRecipe);
                 var roadWorldWidth = Creator.profile.roadWidth;
                 var roadWorldLength = Creator.GetPathLength();
 
@@ -312,7 +312,7 @@ namespace MrPathV2.Editor.Terrain
                 gpuDataManager = new RecipeGpuDataManager();
                 if (Creator.profile?.roadRecipe != null)
                 {
-                    var terrainLayerMap = LayerResolver.ResolveEnsurePresent(terrain, Creator.profile.roadRecipe);
+                    var terrainLayerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, Creator.profile.roadRecipe);
                     gpuDataManager.UpdateData(Creator.profile.roadRecipe, terrainLayerMap);
                 }
                 painter = new GpuTerrainPainter();

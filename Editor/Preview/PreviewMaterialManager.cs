@@ -202,7 +202,7 @@ namespace MrPathV2.Editor.Preview
 
                 // 推送每层颜色（TerrainLayer.specular 作为 tint）
 
-                Current.SetColor($"_Layer{i}_Color", tl.specular);
+                Current.SetColor($"_Layer{i}_Color", GetTerrainLayerTint(tl));
 
                 // 尝试收集数组纹理
                 var tex = tl && tl.diffuseTexture ? tl.diffuseTexture : null;
@@ -488,7 +488,7 @@ namespace MrPathV2.Editor.Preview
                     tex,
                     tiling,
                     Vector2.zero,
-                    Color.white,
+                    GetTerrainLayerTint(tLayer),
                     Mathf.Clamp01(roadLayer.opacity * recipe.masterOpacity),
                     roadLayer.blendMode,
                     roadLayer.layerMask);
@@ -540,13 +540,13 @@ namespace MrPathV2.Editor.Preview
                 if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
                 var tiling = LayerTilingUtility.CalcLayerTiling(profile.roadWidth, layer);
                 Current.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
-                Current.SetColor(LayerTint, Color.white);
+                Current.SetColor(LayerTint, GetTerrainLayerTint(layer));
             }
             else
             {
                 Current.SetTexture(LayerTex, Texture2D.whiteTexture);
                 Current.SetVector(LayerTiling, Vector4.one);
-                Current.SetColor(LayerTint, Color.white);
+                Current.SetColor(LayerTint, GetTerrainLayerTint(layer));
             }
 
             // 关键：为风格化预览提供透明的上一帧结果，避免默认 blackTexture 的 Alpha=1 导致整片矩形
@@ -595,12 +595,12 @@ namespace MrPathV2.Editor.Preview
                 if (tex != null)
                 {
                     Current.SetTexture($"_Layer{index}_Texture", tex);
-                    Current.SetColor($"_Layer{index}_Color", Color.white);
+                    Current.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
                 }
                 else
                 {
                     Current.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                    Current.SetColor($"_Layer{index}_Color", Color.white);
+                    Current.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
                 }
             }
             catch (Exception ex)
@@ -631,6 +631,40 @@ namespace MrPathV2.Editor.Preview
         // GPU 预览目标 Terrain（仅在 Editor 环境下使用）
 #if UNITY_EDITOR
         private UnityEngine.Terrain m_TargetTerrain;
+
+// 从 Terrain 中已加载的 Layer 解析 Tint 颜色（URP 的 DiffuseRemapMax）
+private Color GetTerrainLayerTint(TerrainLayer layer)
+{
+    try
+    {
+        if (!layer) return Color.white;
+        TerrainLayer source = layer;
+#if UNITY_EDITOR
+        if (m_TargetTerrain && m_TargetTerrain.terrainData && m_TargetTerrain.terrainData.terrainLayers != null)
+        {
+            var loaded = m_TargetTerrain.terrainData.terrainLayers;
+            for (int i = 0; i < loaded.Length; i++)
+            {
+                if (loaded[i] == layer)
+                {
+                    source = loaded[i];
+                    break;
+                }
+            }
+        }
+#endif
+#if UNITY_2019_1_OR_NEWER
+        var max = source.diffuseRemapMax; // Vector4
+        return new Color(max.x, max.y, max.z, 1f);
+#else
+        return Color.white;
+#endif
+    }
+    catch
+    {
+        return Color.white;
+    }
+}
         /// <summary>
         ///     全局开关：是否启用 GPU 实时预览。
         ///     后续可替换为 ProjectSettings / ScriptableObject 配置。

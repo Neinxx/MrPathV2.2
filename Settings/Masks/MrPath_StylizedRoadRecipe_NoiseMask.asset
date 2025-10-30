@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: MrPath_StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 1.21, y: 0.33}
+  tiling: {x: 0.67, y: 0.61}
   offset: {x: 0, y: 0}
-  overallScale: 0.974
+  overallScale: 0.83
   strength: 1
   seed: 0
   noiseScale: {x: 8.59, y: 8.59}

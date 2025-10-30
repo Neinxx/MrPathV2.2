@@ -9,16 +9,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e04b7c342983437498be8436feb5d265, type: 3}
+  m_Script: {fileID: 11500000, guid: 2e94586aa4628dd47ad29c5db14f46ad, type: 3}
   m_Name: MrPath_StylizedRoadRecipe
   m_EditorClassIdentifier: 
   masterOpacity: 1
-  layers:
-  - name: Layer 2
-    enabled: 1
-    blendMode: 0
-    opacity: 1
-    contentLayer: {fileID: 8574412962073106934, guid: df05d0fa721accd4198d38691cf181d7,
-      type: 2}
-    layerMask: {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}
+  layers: []
   width: 5
