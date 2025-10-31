@@ -1,10 +1,10 @@
 // PathSampler.cs (已修正平滑算法调用)
 
 using System.Collections.Generic;
-using MrPathV2.Runtime.Interfaces;
+using __temp.MrPathV2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     public static class PathSampler
     {
@@ -15,7 +15,21 @@ namespace MrPathV2.Runtime.Core
         {
             using (ProfilingMarkers.PathSamplerSamplePath.Auto())
             {
-                if (creator == null || creator.profile == null) return new PathSpine();
+                // Comprehensive null checks to prevent null reference exceptions
+                if (creator == null || creator.profile == null || creator.pathData == null) return new PathSpine();
+                
+                // Additional validation for transform and path data integrity
+                if (creator.transform == null)
+                {
+                    Debug.LogWarning("[PathSampler] PathCreator transform is null, cannot sample path");
+                    return new PathSpine();
+                }
+                
+                if (creator.NumPoints < 2)
+                {
+                    Debug.LogWarning("[PathSampler] PathCreator has insufficient points for sampling");
+                    return new PathSpine();
+                }
 
                 // 1. 生成理想的、平滑的局部空间脊线
                 var localSpine = GenerateIdealSpine(creator, creator.profile.longitudinalSegments);

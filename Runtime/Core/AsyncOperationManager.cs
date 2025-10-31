@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     异步操作管理器：提供统一的异步操作管理、取消令牌支持和资源清理
@@ -38,8 +38,8 @@ namespace MrPathV2.Runtime.Core
             // 取消所有活动操作
             CancelAllOperations();
 
-            // 等待短时间让操作有机会清理
-            Task.Delay(100).Wait();
+            // 移除不必要的延迟等待，直接进行资源清理
+            // Task.Delay(100).Wait(); // 这个延迟导致了性能问题
 
             lock (_lock)
             {

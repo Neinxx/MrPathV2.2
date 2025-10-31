@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Core.BlendMasks;
-using MrPathV2.Runtime.Jobs.Extensions;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 // add near top
 
-namespace MrPathV2
+namespace __temp.MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     将 StylizedRoadRecipe 的数据烘焙为 Job 友好的结构。

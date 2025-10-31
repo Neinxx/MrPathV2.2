@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using MrPathV2.Runtime.Core.BlendMasks;
-using MrPathV2.Runtime.Core.Gpu;
+using __temp.MrPathV2.Runtime.Core.BlendMasks;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     Generates a 2-D mask atlas containing the 1-D mask lookup for every blend layer *and*

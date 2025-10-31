@@ -1,13 +1,13 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2.Runtime.Jobs;
+using __temp.MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 // For PathSpine, PathProfile etc.
 
-namespace MrPathV2.Editor.Terrain // Or Runtime.Interfaces
+namespace __temp.MrPathV2.Editor.Terrain // Or Runtime.Interfaces
 {
     /// <summary>
     ///     Interface for terrain painting strategies (CPU or GPU).
@@ -33,7 +33,6 @@ namespace MrPathV2.Editor.Terrain // Or Runtime.Interfaces
             PathJobsUtility.SpineData spineData,
             PathJobsUtility.ProfileData profileData,
             RecipeData recipeData, // For CPU path
-            RecipeGpuDataManager recipeGpuData, // For GPU path
             NativeArray<float2> roadContour,
             float4 contourBounds,
             Vector2Int coverageMin,

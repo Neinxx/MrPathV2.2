@@ -1,7 +1,7 @@
 using Sirenix.OdinInspector;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core.BlendMasks
+namespace __temp.MrPathV2.Runtime.Core.BlendMasks
 {
     public abstract class ProceduralMaskBase : BlendMaskBase
     {

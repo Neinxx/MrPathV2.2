@@ -1,8 +1,8 @@
 #if UNITY_EDITOR
-using MrPathV2.Runtime.Memory;
+using __temp.MrPathV2.Runtime.Memory;
 using UnityEditor;
 
-namespace MrPathV2.Editor.Memory
+namespace __temp.MrPathV2.Editor.Memory
 {
     /// <summary>
     /// Ensures UnifiedMemoryManager is disposed during editor domain reloads and on editor quit.

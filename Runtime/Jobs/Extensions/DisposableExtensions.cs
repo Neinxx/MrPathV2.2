@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Jobs.Extensions
+namespace __temp.MrPathV2.Runtime.Jobs.Extensions
 {
     /// <summary>
     /// 通用的 IDisposable 安全释放扩展，统一 try/catch 并在 Editor/Dev 环境下做轻量日志。

@@ -3,9 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using MrPathV2.Editor.Operations;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Core.BlendMasks;
+using __temp.MrPathV2.Editor.Operations;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -13,7 +13,7 @@ using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
-namespace MrPathV2.Editor.Settings
+namespace __temp.MrPathV2.Editor.Settings
 {
     class MrPathSettingsProvider : SettingsProvider
     {

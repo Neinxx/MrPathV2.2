@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using MrPathV2.Editor.Operations;
-using MrPathV2.Editor.Settings;
+using __temp.MrPathV2.Editor.Operations;
+using __temp.MrPathV2.Editor.Settings;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Inspectors
+namespace __temp.MrPathV2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathTerrainOperations))]
     public class MrPathTerrainOperationsEditor : UnityEditor.Editor

@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 // 保留以兼容可能的 Task 用法（若不需要可后续移除）
 
-namespace MrPathV2.Runtime.Settings
+namespace __temp.MrPathV2.Runtime.Settings
 {
     /// <summary>
     ///     路径策略注册中心：负责管理CurveType与PathStrategy的映射关系

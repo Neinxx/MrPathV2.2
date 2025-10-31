@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Performance
+namespace __temp.MrPathV2.Editor.Performance
 {
     /// <summary>
     ///     多层性能管理器：监控和优化大量层时的内存使用和渲染性能
@@ -109,10 +109,13 @@ namespace MrPathV2.Editor.Performance
         /// </summary>
         private static string FormatBytes(long bytes)
         {
-            if (bytes < 1024) return $"{bytes} B";
-            if (bytes < 1024 * 1024) return $"{bytes / 1024f:F1} KB";
-            if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024f * 1024f):F1} MB";
-            return $"{bytes / (1024f * 1024f * 1024f):F1} GB";
+            return bytes switch
+            {
+                < 1024 => $"{bytes} B",
+                < 1024 * 1024 => $"{bytes / 1024f:F1} KB",
+                < 1024 * 1024 * 1024 => $"{bytes / (1024f * 1024f):F1} MB",
+                _ => $"{bytes / (1024f * 1024f * 1024f):F1} GB"
+            };
         }
 
         /// <summary>
@@ -123,7 +126,7 @@ namespace MrPathV2.Editor.Performance
             PerformanceCache.Clear();
         }
 
-        public struct PerformanceMetrics
+        private struct PerformanceMetrics
         {
             public int LayerCount;
             public long MemoryUsage;

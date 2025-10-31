@@ -1,10 +1,11 @@
 // PathCommands.cs
 
 using System.Collections.Generic;
-using MrPathV2.Runtime.Settings;
+using __temp.MrPathV2.Runtime;
+using __temp.MrPathV2.Runtime.Settings;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【第一步：铸造敕令】

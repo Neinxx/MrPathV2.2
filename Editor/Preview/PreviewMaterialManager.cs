@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using __temp.MrPathV2.Editor.Terrain;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Preview;
 using MrPathV2.Editor.Terrain;
-using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using BlendMode = __temp.MrPathV2.Runtime.Core.BlendMode;
 using Object = UnityEngine.Object;
 #if UNITY_EDITOR
 using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
@@ -177,8 +180,8 @@ namespace MrPathV2.Editor.Preview
             for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
             {
                 TerrainLayer tl = null;
-                float layerOpacity = 0f;
-                var blendMode = MrPathV2.Runtime.Core.BlendMode.Normal;
+                var layerOpacity = 0f;
+                var blendMode = BlendMode.Normal;
 
                 if (layers != null && i < layers.Count)
                 {

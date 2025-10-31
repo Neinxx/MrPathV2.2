@@ -1,7 +1,7 @@
-using MrPathV2.Runtime.Jobs;
+using __temp.MrPathV2.Runtime.Jobs;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Mask
+namespace __temp.MrPathV2.Runtime.Mask
 {
     /// <summary>
     ///     生成用于道路遮罩渲染的简洁网格（沿脊线的四边形条）。

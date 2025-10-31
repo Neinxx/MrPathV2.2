@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Memory;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Jobs
+namespace __temp.MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     Job资源管理器：统一管理Job相关的NativeArray和其他IDisposable资源

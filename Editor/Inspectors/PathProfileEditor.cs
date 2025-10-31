@@ -1,19 +1,15 @@
 // ReSharper disable InconsistentNaming
-using System.Collections.Generic;
-using System.Linq;
-using MrPathV2.Editor.Terrain;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Providers;
+
+using __temp.MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.UIElements;
-using UnityEngine;
 using UnityEngine.UIElements;
 // 确保引用了 PathProfile
 using objiect = UnityEngine.Object;
 // 确保引用了 UIResourceLoader
 // 引入刷新管理器
 
-namespace MrPathV2.Editor.Inspectors
+namespace __temp.MrPathV2.Editor.Inspectors
 {
 
     [CustomEditor(typeof(PathProfile))]
@@ -51,7 +47,7 @@ namespace MrPathV2.Editor.Inspectors
         private void OnEnable()
         {
             _subscribedProfile = target as PathProfile;
-            if (_subscribedProfile != null)
+            if (_subscribedProfile)
             {
                 _subscribedProfile.ProfileModified += OnProfileAssetModified;
             }
@@ -61,14 +57,14 @@ namespace MrPathV2.Editor.Inspectors
         private void OnDisable()
         {
             // 取消订阅，避免多次触发或泄漏
-            if (_subscribedProfile != null)
+            if (_subscribedProfile)
             {
                 _subscribedProfile.ProfileModified -= OnProfileAssetModified;
                 _subscribedProfile = null;
             }
 
             // 清理可能存在的嵌入式编辑器
-            if (_recipeEditor != null)
+            if (_recipeEditor)
             {
                 DestroyImmediate(_recipeEditor);
                 _recipeEditor = null;
@@ -82,11 +78,9 @@ namespace MrPathV2.Editor.Inspectors
             }
 
             // 清理复合视图
-            if (_compositeView != null)
-            {
-                _compositeView.RemoveFromHierarchy();
-                _compositeView = null;
-            }
+            if (_compositeView == null) return;
+            _compositeView.RemoveFromHierarchy();
+            _compositeView = null;
         }
 
         public override VisualElement CreateInspectorGUI()
@@ -176,11 +170,9 @@ namespace MrPathV2.Editor.Inspectors
         /// </summary>
         private void SetupObjectFieldTypes()
         {
-            if (_recipeField != null)
-            {
-                _recipeField.objectType = typeof(StylizedRoadRecipe);
-                _recipeField.allowSceneObjects = false; // 通常 ScriptableObject 不允许场景引用
-            }
+            if (_recipeField == null) return;
+            _recipeField.objectType = typeof(StylizedRoadRecipe);
+            _recipeField.allowSceneObjects = false; // 通常 ScriptableObject 不允许场景引用
         }
 
         /// <summary>
@@ -188,17 +180,14 @@ namespace MrPathV2.Editor.Inspectors
         /// </summary>
         private void SetupEventHandlers()
         {
-            RegisterSimpleRefreshEvents();
+
             RegisterComplexEvents();
         }
 
         /// <summary>
         ///     仅做 UI 联动，不处理刷新（依赖数据层 OnValidate）。
         /// </summary>
-        private void RegisterSimpleRefreshEvents()
-        {
-            // 不做任何刷新调用，序列化绑定会驱动数据变更，PathProfile.OnValidate 负责刷新
-        }
+
 
         /// <summary>
         ///     注册那些有特殊交互逻辑的控件（纯 UI 联动）。
@@ -244,22 +233,20 @@ namespace MrPathV2.Editor.Inspectors
                 uxmlMount.Clear();
                 uxmlMount.Add(_compositeView);
             }
-            else if (_previewContent != null)
+            else
             {
                 // 兜底：插入到 preview-content 顶部，避免无容器时丢失视图
-                _previewContent.Insert(0, _compositeView);
+                _previewContent?.Insert(0, _compositeView);
             }
         }
 
         // 根据绑定后的初始值设置控件状态（仅 UI 联动）
         private void InitializeControlStates()
         {
-            if (_snappingToggle != null)
-            {
-                var isSnappingEnabled = _snappingToggle.value;
-                _heightOffsetField?.SetEnabled(isSnappingEnabled);
-                _smoothnessSlider?.SetEnabled(isSnappingEnabled);
-            }
+            if (_snappingToggle == null) return;
+            var isSnappingEnabled = _snappingToggle.value;
+            _heightOffsetField?.SetEnabled(isSnappingEnabled);
+            _smoothnessSlider?.SetEnabled(isSnappingEnabled);
         }
 
         // 当 ProfileModified 被触发（来自 OnValidate 或 Recipe 变更）时，仅重绘
@@ -307,11 +294,9 @@ namespace MrPathV2.Editor.Inspectors
 
             _recipeContainer = new IMGUIContainer(() =>
             {
-                if (_recipeEditor && _recipeEditor.target)
-                {
-                    EditorGUILayout.LabelField("Stylized Road Recipe", EditorStyles.boldLabel);
-                    _recipeEditor.OnInspectorGUI();
-                }
+                if (!_recipeEditor || !_recipeEditor.target) return;
+                EditorGUILayout.LabelField("Stylized Road Recipe", EditorStyles.boldLabel);
+                _recipeEditor.OnInspectorGUI();
             })
             {
                 style =

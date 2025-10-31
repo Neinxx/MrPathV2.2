@@ -4,18 +4,20 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2.Editor.Settings;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Interfaces;
-using MrPathV2.Runtime.Jobs;
-using MrPathV2.Runtime.Jobs.Extensions;
+using __temp.MrPathV2.Editor.GPU;
+using __temp.MrPathV2.Editor.Settings;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Interfaces;
+using __temp.MrPathV2.Runtime.Jobs;
+using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using BlendMode = __temp.MrPathV2.Runtime.Core.BlendMode;
 // <-- 修正：添加 using
 
 // 确保 Painter 命名空间可访问
-namespace MrPathV2.Editor.Terrain
+namespace __temp.MrPathV2.Editor.Terrain
 {
     public class PaintTerrainCommand : TerrainCommandBase
     {
@@ -40,7 +42,7 @@ namespace MrPathV2.Editor.Terrain
 
         #endregion
 
-        #region 核心处理方法
+
 
         /// <summary>
         ///     处理地形绘制，采用提前返回风格和单一职责原则
@@ -294,7 +296,6 @@ namespace MrPathV2.Editor.Terrain
         {
             ITerrainPainter painter;
             RecipeData cpuRecipeData = default;
-            RecipeGpuDataManager gpuDataManager = null;
 
             if (backend == PaintingBackend.CPUJobTwoPass)
             {
@@ -308,18 +309,12 @@ namespace MrPathV2.Editor.Terrain
             }
             else // GPU_Compute
             {
-                // 为每个地形创建独立的GPU数据管理器
-                gpuDataManager = new RecipeGpuDataManager();
-                if (Creator.profile?.roadRecipe != null)
-                {
-                    var terrainLayerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, Creator.profile.roadRecipe);
-                    gpuDataManager.UpdateData(Creator.profile.roadRecipe, terrainLayerMap);
-                }
-                painter = new GpuTerrainPainter();
+                // 使用新的GPU管线V2
+                painter = GpuTerrainPainterV2.Instance;
             }
 
             return ExecutePainterAsync(painter, terrain, sharedData.SpineData, sharedData.ProfileData,
-                cpuRecipeData, gpuDataManager, sharedData.RoadContour, sharedData.FinalBounds,
+                cpuRecipeData, sharedData.RoadContour, sharedData.FinalBounds,
                 coverageMin, coverageMax, token);
         }
 
@@ -346,24 +341,37 @@ namespace MrPathV2.Editor.Terrain
         private static async Task ExecutePainterAsync(
             ITerrainPainter painter, UnityEngine.Terrain terrain,
             PathJobsUtility.SpineData spineData, PathJobsUtility.ProfileData profileData,
-            RecipeData cpuRecipeData, RecipeGpuDataManager gpuDataManager,
-            NativeArray<float2> roadContour, float4 finalBounds,
+            RecipeData cpuRecipeData, NativeArray<float2> roadContour, float4 finalBounds,
             Vector2Int coverageMin, Vector2Int coverageMax, CancellationToken token)
         {
             try
             {
-                await painter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, gpuDataManager, roadContour, finalBounds, coverageMin, coverageMax, token);
+                switch (painter)
+                {
+                    // 检查是否为新的GPU管线V2
+                    case GpuTerrainPainterV2 gpuV2Painter:
+                    {
+                        // 使用标准的ITerrainPainter接口方法
+                        await gpuV2Painter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, roadContour, finalBounds, coverageMin, coverageMax, token);
+                        break;
+                    }
+                    case CpuTerrainPainter cpuPainter:
+                        // 使用CPU画笔的完整参数版本
+                        await cpuPainter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, roadContour, finalBounds, coverageMin, coverageMax, token);
+                        break;
+                    default:
+                        Debug.LogError($"[PaintTerrainCommand] 未知的画笔类型: {painter.GetType().Name}");
+                        break;
+                }
             }
             finally
             {
-                painter?.Dispose();
                 // CPU RecipeData 是为这个特定任务创建的，在这里释放
                 if (cpuRecipeData.IsCreated && painter is CpuTerrainPainter)
                 {
                     cpuRecipeData.Dispose();
                 }
-                // GPU 数据管理器按地形单独创建，在此释放避免共享资源冲突
-                gpuDataManager?.Dispose();
+                // GPU V2 管线不需要额外的数据管理器清理
             }
         }
 
@@ -399,7 +407,7 @@ namespace MrPathV2.Editor.Terrain
             pixelMaxX = Mathf.Clamp(pixelMaxX, 0, resolution - 1);
             pixelMaxZ = Mathf.Clamp(pixelMaxZ, 0, resolution - 1);
 
-            return (true, new   (pixelMinX, pixelMinZ), new (pixelMaxX, pixelMaxZ));
+            return (true, new(pixelMinX, pixelMinZ), new(pixelMaxX, pixelMaxZ));
         }
 
 
@@ -458,8 +466,7 @@ namespace MrPathV2.Editor.Terrain
             return PaintingBackend.CPUJobTwoPass;
         }
 
-        #endregion
-
-
     }
+
+
 }

@@ -1,9 +1,8 @@
-using MrPathV2.Runtime.Core.Gpu;
 using Sirenix.OdinInspector;
 using UnityEngine;
 // for GpuMaskParamsData
 
-namespace MrPathV2.Runtime.Core.BlendMasks
+namespace __temp.MrPathV2.Runtime.Core.BlendMasks
 {
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Perlin Noise Mask")]
     public class PerlinNoiseMask : ProceduralMaskBase

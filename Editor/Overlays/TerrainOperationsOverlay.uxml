@@ -9,6 +9,7 @@
         <ui:VisualElement name="operationsContainerWrapper">
             <ui:VisualElement name="operationsContainer"/>
         </ui:VisualElement>
-        <ui:Toggle name="gpuPreviewToggle" text="实时GPU预览"/>
+        <!-- GPU预览功能已移除 -->
+        <!-- <ui:Toggle name="gpuPreviewToggle" text="实时GPU预览"/> -->
     </ui:VisualElement>
 </ui:UXML>

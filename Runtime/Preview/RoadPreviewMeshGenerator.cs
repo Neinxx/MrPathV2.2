@@ -1,14 +1,14 @@
 using System;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Jobs;
-using MrPathV2.Runtime.Jobs.Extensions;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Jobs;
+using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace MrPathV2.Runtime.Preview
+namespace __temp.MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     负责生成道路预览网格数据的纯 Job 调度器，仅负责数据计算，不涉及 Mesh 对象或渲染。

@@ -6,7 +6,7 @@ using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Jobs
+namespace __temp.MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     安全的Job执行器：提供异常安全的Job调度和内存管理

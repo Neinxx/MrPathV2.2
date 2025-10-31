@@ -1,9 +1,9 @@
 using System;
-using MrPathV2.Runtime.Components;
+using __temp.MrPathV2.Runtime.Components;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "NewPathProfile", menuName = "MrPath/Path Profile")]
     public class PathProfile : ScriptableObject
@@ -56,6 +56,8 @@ namespace MrPathV2.Runtime.Core
 
         private StylizedRoadRecipe _subscribedRecipe;
 
+
+
         private void OnEnable()
         {
             SubscribeToRecipe();
@@ -64,6 +66,8 @@ namespace MrPathV2.Runtime.Core
         private void OnDisable()
         {
             UnsubscribeFromRecipe();
+            // 注意：不在OnDisable中清理实例化Recipe，因为这可能在编辑器中频繁触发
+            // 实例化Recipe的清理由OnValidate和ClearInstancedRecipe方法负责
         }
 
         private void OnValidate()
@@ -92,7 +96,9 @@ namespace MrPathV2.Runtime.Core
         {
             UnsubscribeFromRecipe(); // 确保不会重复订阅
 
+            // 直接使用roadRecipe
             if (!roadRecipe) return;
+            
             _subscribedRecipe = roadRecipe;
             _subscribedRecipe.RecipeChanged += OnRecipeChanged;
         }

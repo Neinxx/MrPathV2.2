@@ -1,7 +1,7 @@
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Interfaces
+namespace __temp.MrPathV2.Runtime.Interfaces
 {
 
     /// <summary>

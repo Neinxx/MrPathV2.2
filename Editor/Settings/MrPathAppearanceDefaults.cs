@@ -1,7 +1,7 @@
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Settings
+namespace __temp.MrPathV2.Editor.Settings
 {
     /// <summary>
     ///     负责路径的默认视觉表现，包括Profile和预览材质。

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【第三步：万法归一的容器】
@@ -18,9 +18,9 @@ namespace MrPathV2.Runtime.Core
     {
 
         // --- 核心数据存储：SoA 布局 ---
-        [SerializeField] private List<Vector3> positions = new List<Vector3>();
-        [SerializeField] private List<Vector3> tangentsIn = new List<Vector3>();
-        [SerializeField] private List<Vector3> tangentsOut = new List<Vector3>();
+        [SerializeField] public List<Vector3> positions = new List<Vector3>();
+        [SerializeField] public List<Vector3> tangentsIn = new List<Vector3>();
+        [SerializeField] public List<Vector3> tangentsOut = new List<Vector3>();
 
         /// <summary>
         ///     Knot (节点) - 一个只读的结构体，作为访问SoA数据的便捷“视图”。

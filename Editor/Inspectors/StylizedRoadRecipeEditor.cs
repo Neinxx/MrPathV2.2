@@ -1,14 +1,14 @@
 using System;
 using System.IO;
 using System.Linq;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Core.BlendMasks;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core.BlendMasks;
 using Sirenix.OdinInspector.Editor;
 using Sirenix.Utilities.Editor;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Inspectors
+namespace __temp.MrPathV2.Editor.Inspectors
 {
     [CustomEditor(typeof(StylizedRoadRecipe))]
     public class StylizedRoadRecipeEditor : OdinEditor

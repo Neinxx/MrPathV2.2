@@ -1,7 +1,7 @@
 #ifndef BLEND_MASK_LIBRARY_INCLUDED
 #define BLEND_MASK_LIBRARY_INCLUDED
 
-// 与 C# 侧 RecipeGpuDataManager.cs 的结构对齐
+// GPU数据结构定义，与新GPU管线V2对齐
 struct GpuNoiseMaskParams {
 	float  Strength;
 	float  Seed;

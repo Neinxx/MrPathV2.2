@@ -1,8 +1,8 @@
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Input
+namespace __temp.MrPathV2.Editor.Input
 {
     /// <summary>
     ///     【不动明王之掌 • 终极版】
@@ -16,7 +16,7 @@ namespace MrPathV2.Editor.Input
         /// <summary>
         ///     处理所有输入事件，并根据解析出的意图，对PathCreator执行操作。
         /// </summary>
-        public void HandleInputEvents(Event evt, PathCreator creator, float hoveredPathT, int hoveredPointIndex)
+        public void HandleInputEvents(Event evt, Runtime.Core.PathCreator creator, float hoveredPathT, int hoveredPointIndex)
         {
             // 注册控件ID以接收输入事件
             if (evt.type == EventType.Layout)

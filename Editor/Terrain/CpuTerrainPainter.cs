@@ -1,26 +1,43 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2.Runtime.Jobs;
-using MrPathV2.Runtime.Jobs.Extensions;
+using __temp.MrPathV2.Runtime.Jobs;
+using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 // <-- 确保 using
-using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace MrPathV2.Editor.Terrain
+namespace __temp.MrPathV2.Editor.Terrain
 {
     public class CpuTerrainPainter : ITerrainPainter
     {
+        // ITerrainPainter 接口实现
         public async Task ExecuteAsync(
             UnityEngine.Terrain terrain,
             PathJobsUtility.SpineData spineData,
             PathJobsUtility.ProfileData profileData,
+            RecipeData recipeData,
+            NativeArray<float2> roadContour,
+            float4 contourBounds,
+            Vector2Int coverageMin,
+            Vector2Int coverageMax,
+            CancellationToken token)
+        {
+            await ExecuteAsyncInternal(terrain, spineData, profileData, recipeData, roadContour, contourBounds, coverageMin, coverageMax, token);
+        }
+
+
+
+        // 保留原有的完整参数版本供内部使用
+        private static async Task ExecuteAsyncInternal(
+            UnityEngine.Terrain terrain,
+            PathJobsUtility.SpineData spineData,
+            PathJobsUtility.ProfileData profileData,
             RecipeData recipeData, // CPU uses this
-            RecipeGpuDataManager recipeGpuData, // Not used
             NativeArray<float2> roadContour,
             float4 contourBounds,
             Vector2Int coverageMin,

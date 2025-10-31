@@ -1,10 +1,10 @@
 using System.IO;
-using MrPathV2.Editor.Settings;
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Editor.Settings;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Inspectors
+namespace __temp.MrPathV2.Editor.Inspectors
 {
     [CustomEditor(typeof(MrPathAppearanceDefaults))]
     public class MrPathAppearanceDefaultsEditor : UnityEditor.Editor

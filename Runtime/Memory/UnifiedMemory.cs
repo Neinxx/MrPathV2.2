@@ -1,4 +1,4 @@
-namespace MrPathV2.Runtime.Memory
+namespace __temp.MrPathV2.Runtime.Memory
 {
     /// <summary>
     ///     静态访问点，便于在代码中快速访问统一的内存管理器。

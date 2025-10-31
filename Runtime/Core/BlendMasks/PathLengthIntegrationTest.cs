@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core.BlendMasks
+namespace __temp.MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     路径长度集成测试脚本

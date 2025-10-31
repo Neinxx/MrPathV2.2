@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【最终圆满版 • 法则基石】

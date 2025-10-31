@@ -13,5 +13,19 @@ MonoBehaviour:
   m_Name: MrPath_StylizedRoadRecipe
   m_EditorClassIdentifier: 
   masterOpacity: 1
-  layers: []
+  layers:
+  - name: Layer 1
+    enabled: 1
+    blendMode: 0
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: 7c86a2c90d25cc54f956bc1e649c6c37,
+      type: 2}
+    layerMask: {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}
+  - name: Layer 2
+    enabled: 1
+    blendMode: 0
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: a2b47f93212882e41a89e14f3a8be9bc,
+      type: 2}
+    layerMask: {fileID: 11400000, guid: b7dfecc4d4a2b624dbf8affac382bb88, type: 2}
   width: 5

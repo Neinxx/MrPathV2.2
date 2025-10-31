@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Stores
+namespace __temp.MrPathV2.Editor.Stores
 {
     [CreateAssetMenu(fileName = "TerrainLayerPickerStore", menuName = "MrPath/Editor/TerrainLayerPickerStore")] 
     public class TerrainLayerPickerStore : ScriptableObject

@@ -97,11 +97,12 @@
     opacity: 0.66; /*  */
 }
 
-/* <--- 更改：为新的 Toggle 添加样式 */
+/* GPU预览功能已移除，以下样式不再需要：
 #gpuPreviewToggle {
-    flex-shrink: 0; /* <--- 不允许 Toggle 缩放 */
-    margin-left: 6px; /* <--- 从 C# 移过来的样式 */
+    flex-shrink: 0;
+    margin-left: 6px;
 }
+*/
 
 #operationsContainerWrapper {
     flex-grow: 0;

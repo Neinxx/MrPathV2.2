@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Interfaces;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Interfaces;
+using __temp.MrPathV2.Runtime.Preview;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
@@ -254,15 +255,7 @@ namespace MrPathV2.Editor.Preview
                 var cacheHasRt = targetTerrain && MrPathV2.Editor.Terrain.GpuPreviewCache.TryGet(targetTerrain, out var cachedRt) && cachedRt;
                 var shouldRunGpu = PreviewMaterialManager.EnableGpuPreview && targetTerrain && LatestSpine.HasValue && (
                     !cacheHasRt || terrainIdNow != m_LastGpuTerrainId || spineHashNow != m_LastSpineHash || profileHashNow != m_LastProfileHash);
-                if (shouldRunGpu)
-                {
-                    if (GpuPreviewRunner.TryRun(targetTerrain, LatestSpine.Value, creator.profile))
-                    {
-                        m_LastGpuTerrainId = terrainIdNow;
-                        m_LastSpineHash = spineHashNow;
-                        m_LastProfileHash = profileHashNow;
-                    }
-                }
+
 #endif
 
                 try

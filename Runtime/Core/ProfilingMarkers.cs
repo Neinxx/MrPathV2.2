@@ -1,6 +1,6 @@
 using Unity.Profiling;
 
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     Centralized repository for <see cref="ProfilerMarker" /> instances used across MrPath.

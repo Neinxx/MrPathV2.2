@@ -1,8 +1,8 @@
-using MrPathV2.Runtime.Core.Gpu;
 using Sirenix.OdinInspector;
 using UnityEngine;
+using System.Runtime.InteropServices;
 
-namespace MrPathV2.Runtime.Core.BlendMasks
+namespace __temp.MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     所有遮罩类型的基类，提供通用的 UV 变换、平滑及整体缩放等功能。
@@ -129,4 +129,48 @@ namespace MrPathV2.Runtime.Core.BlendMasks
 
         #endregion
     }
+}
+
+// 在类定义之前添加以下结构体定义
+[StructLayout(LayoutKind.Sequential)]
+public struct GpuShoulderMaskParamsData
+{
+    public float ShoulderWidthRatio;
+    public float ShoulderStrength;
+    public float EdgeFalloff;
+    public bool EnableLeftShoulder;
+    public bool EnableRightShoulder;
+    public Vector2 Tiling;
+    public Vector2 Offset;
+    public float OverallScale;
+    public float Smooth;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct GpuNoiseMaskParamsData
+{
+    public float Strength;
+    public float Seed;
+    public Vector2 Tiling;
+    public Vector2 Offset;
+    public float OverallScale;
+    public float Smooth;
+    public Vector2 NoiseScale;
+    public float RotationRad;
+    public int Octaves;
+    public float Lacunarity;
+    public float Gain;
+    public int AlgorithmId;
+    public bool UseAsymmetricEdges;
+    public float EdgeLow;
+    public float EdgeHigh;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct GpuMaskParamsData
+{
+    public int MaskType;
+    public float Strength;
+    public GpuNoiseMaskParamsData NoiseParams;
+    public GpuShoulderMaskParamsData ShoulderParams;
 }

@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2.Runtime.Core;
 using Sirenix.OdinInspector;
 using Sirenix.Utilities.Editor;
 using UnityEditor;
 using UnityEngine;
 
-namespace MrPathV2
+namespace __temp.MrPathV2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "StylizedRoadRecipe", menuName = "MrPath/Stylized Road Recipe")]
     public class StylizedRoadRecipe : ScriptableObject

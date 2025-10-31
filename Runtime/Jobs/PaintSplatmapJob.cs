@@ -7,7 +7,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Jobs
+namespace __temp.MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     两阶段地形绘制的第二阶段：读取缓存信息并执行混合。

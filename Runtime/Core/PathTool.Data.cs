@@ -1,4 +1,4 @@
-namespace MrPathV2.Runtime.Core
+namespace __temp.MrPathV2.Runtime.Core
 {
 
     #region 枚举定义

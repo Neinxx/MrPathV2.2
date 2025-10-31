@@ -1,10 +1,10 @@
 using System;
-using MrPathV2.Runtime.Memory;
+using __temp.MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace MrPathV2.Runtime.Jobs.Extensions
+namespace __temp.MrPathV2.Runtime.Jobs.Extensions
 {
     /// <summary>
     ///     NativeArray扩展方法，提供内存跟踪和安全释放功能

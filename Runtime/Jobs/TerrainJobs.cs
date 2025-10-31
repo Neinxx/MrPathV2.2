@@ -5,7 +5,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace MrPathV2.Runtime.Jobs
+namespace __temp.MrPathV2.Runtime.Jobs
 {
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = true)]
     public struct ModifyHeightsJob : IJobParallelFor

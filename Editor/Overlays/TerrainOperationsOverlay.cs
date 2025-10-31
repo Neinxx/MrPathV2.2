@@ -1,31 +1,32 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MrPathV2.Editor.Inspectors;
-using MrPathV2.Editor.Operations;
-using MrPathV2.Editor.Preview;
-using MrPathV2.Editor.Settings;
-using MrPathV2.Editor.Terrain;
-using MrPathV2.Runtime.Core;
-using MrPathV2.Runtime.Settings;
+using __temp.MrPathV2.Editor.Inspectors;
+using __temp.MrPathV2.Editor.Operations;
+using __temp.MrPathV2.Editor.Settings;
+using __temp.MrPathV2.Editor.Terrain;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Settings;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace MrPathV2.Editor.Overlays
+namespace __temp.MrPathV2.Editor.Overlays
 {
     [Overlay(typeof(SceneView), "MrPath.TerrainOperationsOverlay", "Modify Terrain Operations")]
     public class TerrainOperationsOverlay : Overlay
     {
 
-        private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
+        // GPU预览功能已移除
+        // private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
 
 
         private const string ElCpuOrGpu = "CpuOrGpu";
         private const string ElOperationsContainer = "operationsContainer";
-        private const string ElGpuPreviewToggle = "gpuPreviewToggle";
+        // GPU预览功能已移除
+        // private const string ElGpuPreviewToggle = "gpuPreviewToggle";
 
         private static readonly string[] BackendChoices =
         {
@@ -39,7 +40,8 @@ namespace MrPathV2.Editor.Overlays
         private DropdownField _backendDropdown;
         private VisualElement _content;
         private PathEditorContext _ctx;
-        private Toggle _gpuPreviewToggle;
+        // GPU预览功能已移除
+        // private Toggle _gpuPreviewToggle;
 
         /// <summary>
         ///     跟踪当前是否有地形操作正在异步执行
@@ -61,11 +63,13 @@ namespace MrPathV2.Editor.Overlays
 
             // <--- 更改：从 UXML 查询元素，而不是手动创建
             _backendDropdown = _root.Q<DropdownField>(ElCpuOrGpu);
-            _gpuPreviewToggle = _root.Q<Toggle>(ElGpuPreviewToggle);
+            // GPU预览功能已移除
+            // _gpuPreviewToggle = _root.Q<Toggle>(ElGpuPreviewToggle);
             _content = _root.Q<VisualElement>(ElOperationsContainer);
 
             InitializeBackendDropdown(); // <--- 更改：方法现在只负责注册回调和设置初始值
-            InitializeGpuPreviewToggleFromUxml(); // <--- 更改：新方法，用于绑定 UXML 中的 Toggle
+            // GPU预览功能已移除
+            // InitializeGpuPreviewToggleFromUxml(); // <--- 更改：新方法，用于绑定 UXML 中的 Toggle
 
             // <--- 更改：移除了手动删除 "refreshButton" 的代码
             // var staleRefreshBtn = _root.Q<Button>("refreshButton");
@@ -108,29 +112,8 @@ namespace MrPathV2.Editor.Overlays
             EditorUtility.SetDirty(advanced);
         }
 
-        // <--- 更改：重命名并简化了 GpuPreviewToggle 的初始化
-        private void InitializeGpuPreviewToggleFromUxml()
-        {
-            if (_gpuPreviewToggle == null)
-            {
-                ErrorHandler.LogWarning("TerrainOperationsOverlay: 未在 UXML 中找到 'gpuPreviewToggle' 元素。");
-                return;
-            }
-
-            _gpuPreviewToggle.value = EditorPrefs.GetBool(GpuPreviewPrefKey, true);
-
-            _gpuPreviewToggle.RegisterValueChangedCallback(evt =>
-            {
-                PreviewMaterialManager.EnableGpuPreview = evt.newValue;
-                EditorPrefs.SetBool(GpuPreviewPrefKey, evt.newValue);
-
-                // Force SceneView to refresh so the preview updates immediately
-                SceneView.RepaintAll();
-            });
-
-            // 初始同步
-            PreviewMaterialManager.EnableGpuPreview = _gpuPreviewToggle.value;
-        }
+        // GPU预览功能已移除，以下方法不再需要：
+        // private void InitializeGpuPreviewToggleFromUxml() { ... }
 
 
       /// <summary>

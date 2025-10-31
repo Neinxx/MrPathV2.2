@@ -4,12 +4,12 @@
 
 #if UNITY_EDITOR
 using System;
-using MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 
-namespace MrPathV2.Editor.Tools
+namespace __temp.MrPathV2.Editor.Tools
 {
     [EditorTool("Path Creator Tool", typeof(PathCreator))]
     public class PathCreatorTool : EditorTool

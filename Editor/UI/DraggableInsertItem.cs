@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace MrPathV2.Editor.UI
+namespace __temp.MrPathV2.Editor.UI
 {
     public class DraggableInsertItem : VisualElement
     {

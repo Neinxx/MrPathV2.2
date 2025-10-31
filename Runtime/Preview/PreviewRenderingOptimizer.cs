@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MrPathV2.Runtime.Preview
+namespace __temp.MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     预览渲染优化器：提供批量渲染、GPU实例化和渲染状态缓存
