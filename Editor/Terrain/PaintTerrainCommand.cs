@@ -13,6 +13,7 @@ using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEditor;
 using BlendMode = __temp.MrPathV2.Runtime.Core.BlendMode;
 // <-- 修正：添加 using
 
@@ -200,8 +201,14 @@ namespace __temp.MrPathV2.Editor.Terrain
                 {
                     continue;
                 }
-
-                var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, Creator.profile.roadRecipe);
+                // 在非预览绘制到地形前进行缺失图层确认
+                var layerMap = ResolveLayersWithConfirm(terrain, Creator.profile.roadRecipe);
+                if (layerMap == null)
+                {
+                    // 用户取消
+                    Debug.LogWarning($"[PaintTerrainCommand] 用户取消为地形 {terrain.name} 添加图层，跳过该地形。");
+                    continue;
+                }
                 var roadWorldWidth = Creator.profile.roadWidth;
                 var roadWorldLength = Creator.GetPathLength();
 
@@ -309,6 +316,13 @@ namespace __temp.MrPathV2.Editor.Terrain
             }
             else // GPU_Compute
             {
+                // GPU 绘制前同样进行缺失图层确认（用于添加或跳过添加）
+                var confirmMap = ResolveLayersWithConfirm(terrain, Creator.profile.roadRecipe);
+                if (confirmMap == null)
+                {
+                    Debug.LogWarning($"[PaintTerrainCommand] 用户取消为地形 {terrain.name} 添加图层，跳过该地形。");
+                    return Task.CompletedTask;
+                }
                 // 使用新的GPU管线V2
                 painter = GpuTerrainPainterV2.Instance;
             }
@@ -316,6 +330,49 @@ namespace __temp.MrPathV2.Editor.Terrain
             return ExecutePainterAsync(painter, terrain, sharedData.SpineData, sharedData.ProfileData,
                 cpuRecipeData, sharedData.RoadContour, sharedData.FinalBounds,
                 coverageMin, coverageMax, token);
+        }
+
+        /// <summary>
+        ///     当绘制到地形时，检测缺失图层并弹出确认框：
+        ///     - 选择“添加并继续”：调用 EnsurePresentSmart 添加缺失图层
+        ///     - 选择“仅使用已有图层”：不添加，按现有映射绘制
+        ///     - 选择“取消”：返回 null，调用方跳过当前地形
+        /// </summary>
+        private static Dictionary<TerrainLayer, int> ResolveLayersWithConfirm(UnityEngine.Terrain terrain, __temp.MrPathV2.Runtime.Core.StylizedRoadRecipe recipe)
+        {
+            // 计算缺失图层
+            var missing = LayerResolver.GetMissingLayersSmart(terrain, recipe);
+
+            // 没有缺失则直接智能映射
+            if (missing.Count == 0)
+            {
+                return LayerResolver.ResolveSmart(terrain, recipe);
+            }
+
+            // 组装提示信息
+            var names = new List<string>();
+            foreach (var tl in missing)
+            {
+                if (tl == null) continue;
+                names.Add(tl.name);
+            }
+
+            var message = "检测到以下配方图层在当前地形中缺失：\n\n" + string.Join("\n", names) +
+                          "\n\n是否将缺失图层添加到地形？";
+            var title = "添加缺失的地形图层";
+
+            // 0: 添加并继续, 1: 仅使用已有图层, 2: 取消
+            var choice = EditorUtility.DisplayDialogComplex(title, message, "添加并继续", "仅使用已有图层", "取消");
+
+            switch (choice)
+            {
+                case 0:
+                    return LayerResolver.ResolveEnsurePresentSmart(terrain, recipe);
+                case 1:
+                    return LayerResolver.ResolveSmart(terrain, recipe);
+                default:
+                    return null; // 取消
+            }
         }
 
         /// <summary>

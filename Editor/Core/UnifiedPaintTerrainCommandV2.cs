@@ -201,8 +201,9 @@ namespace __temp.MrPathV2.Editor.Core
                     _activePainters.Add(painter);
                 }
 
-                // 4. 执行绘制
-                var result = await painter.PaintAsync(terrain, pathData, pathProfile, isPreview, cancellationToken);
+                // 4. 执行绘制 - 使用新的接口设计
+                var tempPathCreator = CreateTemporaryPathCreator(terrain, pathData, pathProfile);
+                var result = await painter.PaintAsync(tempPathCreator, isPreview, cancellationToken);
 
                 UnityEngine.Debug.Log($"[UnifiedPaintTerrainCommandV2] 地形 '{terrain.name}' 绘制完成 - {result.GetType()}, 耗时 {result.ExecutionTimeMs:F2}ms");
 
@@ -225,6 +226,27 @@ namespace __temp.MrPathV2.Editor.Core
                     painter.Dispose();
                 }
             }
+        }
+
+        private PathCreator CreateTemporaryPathCreator(UnityEngine.Terrain terrain, PathData pathData, PathProfile pathProfile)
+        {
+            // 创建一个临时的PathCreator对象，用于传递给绘制器
+            var gameObject = new GameObject("TempPathCreator");
+            gameObject.hideFlags = HideFlags.HideAndDontSave;
+            
+            // 设置位置为地形中心
+            var terrainPos = terrain.transform.position;
+            var terrainSize = terrain.terrainData.size;
+            gameObject.transform.position = terrainPos + new Vector3(terrainSize.x * 0.5f, 0, terrainSize.z * 0.5f);
+            
+            // 添加PathCreator组件
+            var pathCreator = gameObject.AddComponent<PathCreator>();
+            
+            // 设置PathData和PathProfile
+            pathCreator.pathData = pathData;
+            pathCreator.profile = pathProfile;
+            
+            return pathCreator;
         }
 
         private static bool IsPathIntersectingTerrain(UnityEngine.Terrain terrain, PathData pathData)

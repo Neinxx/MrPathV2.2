@@ -466,13 +466,12 @@ namespace __temp.MrPathV2.Editor.Windows
             var isCurrent = s_CurrentValue && layer == s_CurrentValue;
             var chooseLabel = isCurrent ? "已选择" : "选择";
 
-            EditorGUI.BeginDisabledGroup(isCurrent);
+            // 允许点击当前项的“已选择”按钮以重新确认选择（修复灰色不可点击问题）
             if (GUILayout.Button(chooseLabel, GUILayout.Width(60)))
             {
                 _selectedLayerForAssign = layer;
                 ApplySelection(layer);
             }
-            EditorGUI.EndDisabledGroup();
         }
 
         private void DrawSmartAssignButton(TerrainLayer layer, bool isRoadCovered)

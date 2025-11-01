@@ -5,6 +5,13 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 using __temp.MrPathV2.Editor.GPU;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Editor.Core;
+using BlendMode = __temp.MrPathV2.Editor.GPU.BlendMode;
+using UnityEditorInternal;
+using System.Threading;
+using System.Threading.Tasks;
+
 
 namespace __temp.MrPathV2.Editor.Examples
 {
@@ -20,15 +27,46 @@ namespace __temp.MrPathV2.Editor.Examples
             GetWindow<PerformanceTest>("GPU性能测试");
         }
 
-        private UnityEngine.Terrain _testTerrain;
+        private List<UnityEngine.Terrain> _testTerrains = new();
+        private ReorderableList _terrainList;
+        private PathCreator _testPathCreator;
         private int _testIterations = 50;
         private float _roadWidth = 5.0f;
         private bool _usePreview = true;
         private bool _testRunning = false;
+        private CancellationTokenSource _cts;
 
         private List<double> _testResults = new List<double>();
         private string _lastTestReport = "";
 
+
+        private void OnEnable()
+        {
+            _terrainList = new ReorderableList(_testTerrains, typeof(UnityEngine.Terrain), true, true, true, true);
+
+            _terrainList.drawHeaderCallback = (Rect rect) =>
+            {
+                GUI.Label(rect, "测试地形");
+            };
+
+            _terrainList.drawElementCallback = (Rect rect, int index, bool isActive, bool isFocused) =>
+            {
+                if (index >= _testTerrains.Count) return;
+
+                _testTerrains[index] = (UnityEngine.Terrain)EditorGUI.ObjectField(
+                    new Rect(rect.x, rect.y, rect.width, EditorGUIUtility.singleLineHeight),
+                    GUIContent.none,
+                    _testTerrains[index],
+                    typeof(UnityEngine.Terrain),
+                    true
+                );
+            };
+
+            _terrainList.onAddCallback = (ReorderableList list) =>
+            {
+                _testTerrains.Add(null);
+            };
+        }
         private void OnGUI()
         {
             GUILayout.Label("GPU绘制管线性能测试", EditorStyles.boldLabel);
@@ -36,7 +74,8 @@ namespace __temp.MrPathV2.Editor.Examples
 
             // 测试配置
             EditorGUILayout.LabelField("测试配置", EditorStyles.boldLabel);
-            _testTerrain = (UnityEngine.Terrain)EditorGUILayout.ObjectField("测试地形", _testTerrain, typeof(UnityEngine.Terrain), true);
+            _terrainList.DoLayoutList();
+            _testPathCreator = (PathCreator)EditorGUILayout.ObjectField("路径创建器", _testPathCreator, typeof(PathCreator), true);
             _testIterations = EditorGUILayout.IntSlider("测试次数", _testIterations, 10, 200);
             _roadWidth = EditorGUILayout.Slider("道路宽度", _roadWidth, 1.0f, 20.0f);
             _usePreview = EditorGUILayout.Toggle("预览模式", _usePreview);
@@ -44,10 +83,18 @@ namespace __temp.MrPathV2.Editor.Examples
             EditorGUILayout.Space();
 
             // 测试按钮
-            EditorGUI.BeginDisabledGroup(_testRunning || _testTerrain == null);
+            EditorGUI.BeginDisabledGroup(_testRunning || _testTerrains.Count == 0 || _testTerrains[0] == null || _testPathCreator == null);
             if (GUILayout.Button("开始性能测试", GUILayout.Height(30)))
             {
                 StartPerformanceTest();
+            }
+            EditorGUI.EndDisabledGroup();
+
+            // 取消按钮
+            EditorGUI.BeginDisabledGroup(!_testRunning);
+            if (GUILayout.Button("取消执行", GUILayout.Height(30)))
+            {
+                CancelTest();
             }
             EditorGUI.EndDisabledGroup();
 
@@ -73,23 +120,7 @@ namespace __temp.MrPathV2.Editor.Examples
             // 实时性能监控
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("实时性能监控", EditorStyles.boldLabel);
-
-            try
-            {
-                var stats = GpuTerrainPainterV2.Instance.GetPerformanceStats();
-                if (!string.IsNullOrEmpty(stats))
-                {
-                    EditorGUILayout.TextArea(stats, GUILayout.Height(60));
-                }
-                else
-                {
-                    EditorGUILayout.HelpBox("暂无性能数据", MessageType.Info);
-                }
-            }
-            catch
-            {
-                EditorGUILayout.HelpBox("性能监控不可用", MessageType.Warning);
-            }
+            EditorGUILayout.HelpBox("使用统一管线，实时性能监控暂不可用", MessageType.Info);
 
             // 缓存管理
             EditorGUILayout.Space();
@@ -100,8 +131,10 @@ namespace __temp.MrPathV2.Editor.Examples
             {
                 try
                 {
-                    GpuTerrainPainterV2.Instance.ClearCache();
-                    UnityEngine.Debug.Log("GPU缓存已清除");
+                    // 使用统一管线，不再直接访问GpuTerrainPainterV2
+                    UnityEngine.Debug.Log("缓存已清除");
+                    System.GC.Collect();
+                    System.GC.WaitForPendingFinalizers();
                 }
                 catch (System.Exception ex)
                 {
@@ -116,32 +149,111 @@ namespace __temp.MrPathV2.Editor.Examples
                 UnityEngine.Debug.Log("垃圾回收完成");
             }
             EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("单次绘制测试", EditorStyles.boldLabel);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("测试GPU绘制"))
+            {
+                try
+                {
+                    TestDrawing(PainterType.GPU);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"GPU绘制测试出错：{ex.Message}");
+                }
+            }
+
+            if (GUILayout.Button("测试CPU绘制"))
+            {
+                try
+                {
+                    TestDrawing(PainterType.CPU);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"CPU绘制测试出错：{ex.Message}");
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("命令模式测试", EditorStyles.boldLabel);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("测试GPU命令"))
+            {
+                try
+                {
+                    TestDrawingCommand(PainterType.GPU);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"GPU命令测试出错：{ex.Message}");
+                }
+            }
+
+            if (GUILayout.Button("测试CPU命令"))
+            {
+                try
+                {
+                    TestDrawingCommand(PainterType.CPU);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"CPU命令测试出错：{ex.Message}");
+                }
+            }
+            EditorGUILayout.EndHorizontal();
         }
 
         private async void StartPerformanceTest()
         {
-            if (_testTerrain == null)
+            if (_testTerrains == null || _testTerrains.Count == 0 || _testTerrains[0] == null)
             {
                 EditorUtility.DisplayDialog("错误", "请选择一个测试地形", "确定");
                 return;
             }
 
+            if (_testPathCreator == null)
+            {
+                EditorUtility.DisplayDialog("错误", "请选择一个路径创建器", "确定");
+                return;
+            }
+
+            // 创建取消令牌
+            _cts = new CancellationTokenSource();
+            
             _testRunning = true;
             _testResults.Clear();
 
             try
             {
-                UnityEngine.Debug.Log($"开始GPU性能测试 - 迭代次数: {_testIterations}");
+                UnityEngine.Debug.Log($"开始统一管线性能测试 - 迭代次数: {_testIterations}");
 
-                var painter = GpuTerrainPainterV2.Instance;
-                var spinePoints = GenerateTestPath();
-                var layers = GenerateTestLayers();
+                // 使用统一接口创建绘制器
+                var painter = new UnifiedGpuTerrainPainter();
+
+                // 设置PathCreator的路径宽度
+                if (_testPathCreator.profile != null)
+                {
+                    _testPathCreator.profile.roadWidth = _roadWidth;
+                }
+                else
+                {
+                    UnityEngine.Debug.LogWarning("PathCreator没有配置文件，将使用默认配置");
+                    var profile = ScriptableObject.CreateInstance<PathProfile>();
+                    profile.roadWidth = _roadWidth;
+                    _testPathCreator.profile = profile;
+                }
 
                 // 预热
-                UnityEngine.Debug.Log("预热GPU管线...");
+                UnityEngine.Debug.Log("预热统一管线...");
                 for (int i = 0; i < 3; i++)
                 {
-                    await painter.PaintPathAsync(_testTerrain, spinePoints, _roadWidth, layers, _usePreview);
+                    await painter.PaintAsync(_testPathCreator, _usePreview);
                 }
 
                 // 性能测试
@@ -150,9 +262,16 @@ namespace __temp.MrPathV2.Editor.Examples
 
                 for (int i = 0; i < _testIterations; i++)
                 {
+                    // 检查是否取消
+                    if (_cts.Token.IsCancellationRequested)
+                    {
+                        UnityEngine.Debug.Log("测试已取消");
+                        break;
+                    }
+                    
                     stopwatch.Restart();
 
-                    var result = await painter.PaintPathAsync(_testTerrain, spinePoints, _roadWidth, layers, _usePreview);
+                    var result = await painter.PaintAsync(_testPathCreator, _usePreview, _cts.Token);
 
                     stopwatch.Stop();
 
@@ -162,7 +281,7 @@ namespace __temp.MrPathV2.Editor.Examples
                     }
                     else
                     {
-                        UnityEngine.Debug.LogWarning($"测试迭代 {i + 1} 失败");
+                        UnityEngine.Debug.LogWarning($"测试迭代 {i + 1} 失败: {result.ErrorMessage}");
                     }
 
                     // 更新进度
@@ -176,7 +295,7 @@ namespace __temp.MrPathV2.Editor.Examples
                 EditorUtility.ClearProgressBar();
                 GenerateTestReport();
 
-                UnityEngine.Debug.Log("GPU性能测试完成");
+                UnityEngine.Debug.Log("统一管线性能测试完成");
             }
             catch (System.Exception ex)
             {
@@ -186,8 +305,26 @@ namespace __temp.MrPathV2.Editor.Examples
             finally
             {
                 _testRunning = false;
+                _cts?.Dispose();
+                _cts = null;
                 EditorUtility.ClearProgressBar();
                 Repaint();
+
+                // 确保资源被释放
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+            }
+        }
+
+        /// <summary>
+        /// 取消测试执行
+        /// </summary>
+        private void CancelTest()
+        {
+            if (_testRunning && _cts != null && !_cts.IsCancellationRequested)
+            {
+                _cts.Cancel();
+                UnityEngine.Debug.Log("测试执行已取消");
             }
         }
 
@@ -217,7 +354,7 @@ namespace __temp.MrPathV2.Editor.Examples
             _lastTestReport = $@"=== GPU绘制管线性能测试报告 ===
 
 测试配置:
-- 地形: {_testTerrain.name}
+- 地形: {_testTerrains[0].name}
 - 测试次数: {_testIterations}
 - 道路宽度: {_roadWidth:F1}m
 - 预览模式: {(_usePreview ? "是" : "否")}
@@ -262,7 +399,7 @@ namespace __temp.MrPathV2.Editor.Examples
         {
             // 生成一个复杂的测试路径
             var points = new List<Vector3>();
-            var terrainSize = _testTerrain.terrainData.size;
+            var terrainSize = _testTerrains[0].terrainData.size;
             var center = new Vector3(terrainSize.x * 0.5f, 0, terrainSize.z * 0.5f);
 
             // 生成螺旋路径
@@ -296,5 +433,99 @@ namespace __temp.MrPathV2.Editor.Examples
                 new LayerConfig(layerIndex: 2, strength: 0.5f, blendMode: BlendMode.Multiply)
             };
         }
+
+
+
+        /// <summary>
+        /// 测试统一绘制功能
+        /// </summary>
+        private void TestDrawing(PainterType painterType)
+        {
+            // 提前验证依赖项
+            if (_testPathCreator?.profile == null)
+            {
+                EditorUtility.DisplayDialog("路径绘制测试", "请先设置路径配置文件(Profile)", "确定");
+                return;
+            }
+
+            try
+            {
+                // 根据类型创建绘制器
+                IUnifiedTerrainPainter painter = painterType == PainterType.GPU
+                    ? new UnifiedGpuTerrainPainter()
+                    : new UnifiedCpuTerrainPainter();
+
+                // 执行绘制
+                var result = painter.Paint(_testPathCreator, true);
+                var painterName = painterType == PainterType.GPU ? "GPU" : "CPU";
+                var dialogTitle = $"{painterName}绘制测试";
+
+                string message = result.Success
+                    ? $"{painterName}绘制测试成功！\n已生成预览纹理。\n执行时间: {result.ExecutionTimeMs:F2}ms"
+                    : $"{painterName}绘制测试失败：{result.ErrorMessage}";
+
+                EditorUtility.DisplayDialog(dialogTitle, message, "确定");
+
+                // 释放资源
+                painter.Dispose();
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog(
+                    "路径绘制测试",
+                    $"路径绘制测试出错：{ex.Message}",
+                    "确定");
+            }
+        }
+
+        private void TestDrawingCommand(PainterType painterType)
+        {
+            // 提前验证依赖项
+            if (_testPathCreator?.profile == null)
+            {
+                EditorUtility.DisplayDialog("路径绘制命令测试", "请先设置路径配置文件(Profile)", "确定");
+                return;
+            }
+
+            if (_testTerrains == null || _testTerrains.Count == 0 || _testTerrains[0] == null)
+            {
+                EditorUtility.DisplayDialog("路径绘制命令测试", "请先设置测试地形", "确定");
+                return;
+            }
+
+            try
+            {
+                // 创建统一绘制命令
+                var command = UnifiedPaintTerrainCommandV2.Create(_testPathCreator);
+                if (command == null)
+                {
+                    EditorUtility.DisplayDialog("路径绘制命令测试", "绘制命令创建失败", "确定");
+                    return;
+                }
+
+                // 执行命令
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var result = command.ExecuteAsync(_testTerrains, _testPathCreator.profile, painterType, true).Result;
+                sw.Stop();
+
+                var painterName = painterType == PainterType.GPU ? "GPU" : "CPU";
+                var dialogTitle = $"{painterName}命令测试";
+
+                string message = result.IsSuccess
+                    ? $"{painterName}命令测试成功！\n已生成预览纹理。\n执行时间: {sw.ElapsedMilliseconds}ms"
+                    : $"{painterName}命令测试失败：{result.ErrorMessage}";
+
+                EditorUtility.DisplayDialog(dialogTitle, message, "确定");
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog(
+                    "路径绘制命令测试",
+                    $"路径绘制命令测试出错：{ex.Message}\n{ex.StackTrace}",
+                    "确定");
+            }
+        }
+
     }
 }
+

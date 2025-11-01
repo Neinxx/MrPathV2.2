@@ -56,7 +56,7 @@ namespace __temp.MrPathV2.Editor.Examples
             UnityEngine.Debug.Log($"新GPU系统耗时: {newSystemTime:F2} ms");
 
             // 显示结果
-            EditorUtility.DisplayDialog("性能测试结果", 
+            EditorUtility.DisplayDialog("性能测试结果",
                 $"新GPU绘制系统:\n" +
                 $"平均耗时: {newSystemTime:F2} ms\n" +
                 $"性能提升显著！", "确定");
@@ -232,18 +232,18 @@ namespace __temp.MrPathV2.Editor.Examples
         private static void MonitorPerformance()
         {
             _frameCount++;
-            
+
             // 每5秒检查一次
             if (EditorApplication.timeSinceStartup - _lastCheckTime > 5.0)
             {
                 _lastCheckTime = EditorApplication.timeSinceStartup;
-                
+
                 try
                 {
                     var stats = GpuTerrainPainterV2.Instance.GetPerformanceStats();
                     if (!string.IsNullOrEmpty(stats))
                     {
-                        UnityEngine.Debug.Log($"[GPU性能监控] {stats}");
+                        //                        UnityEngine.Debug.Log($"[GPU性能监控] {stats}");
                     }
                 }
                 catch

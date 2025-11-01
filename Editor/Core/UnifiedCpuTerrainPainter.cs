@@ -25,12 +25,21 @@ namespace __temp.MrPathV2.Editor.Core
         #region Public API
 
         public async Task<TerrainPaintResult> PaintAsync(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             bool isPreview = false,
             CancellationToken cancellationToken = default)
         {
+            if (pathCreator == null)
+                throw new ArgumentNullException(nameof(pathCreator));
+                
+            var pathData = pathCreator.pathData;
+            var pathProfile = pathCreator.profile;
+            
+            // 查找最近的地形
+            var terrain = FindNearestTerrain(pathCreator.transform.position);
+            if (terrain == null)
+                return TerrainPaintResult.CreateFailure("无法找到附近的地形", PainterType.CPU);
+
             ValidateInputs(terrain, pathData, pathProfile);
 
             var stopwatch = Stopwatch.StartNew();
@@ -61,11 +70,20 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         public TerrainPaintResult Paint(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             bool isPreview = false)
         {
+            if (pathCreator == null)
+                throw new ArgumentNullException(nameof(pathCreator));
+                
+            var pathData = pathCreator.pathData;
+            var pathProfile = pathCreator.profile;
+            
+            // 查找最近的地形
+            var terrain = FindNearestTerrain(pathCreator.transform.position);
+            if (terrain == null)
+                return TerrainPaintResult.CreateFailure("无法找到附近的地形", PainterType.CPU);
+
             ValidateInputs(terrain, pathData, pathProfile);
 
             var stopwatch = Stopwatch.StartNew();
@@ -101,6 +119,50 @@ namespace __temp.MrPathV2.Editor.Core
         #endregion
 
         #region Core Implementation
+
+        private UnityEngine.Terrain FindNearestTerrain(Vector3 position)
+        {
+            // 获取场景中所有地形
+            var terrains = UnityEngine.Terrain.activeTerrains;
+            if (terrains.Length == 0)
+                return null;
+
+            // 如果只有一个地形，直接返回
+            if (terrains.Length == 1)
+                return terrains[0];
+
+            // 查找包含位置的地形
+            foreach (var terrain in terrains)
+            {
+                var terrainPos = terrain.transform.position;
+                var terrainSize = terrain.terrainData.size;
+                
+                // 检查位置是否在地形范围内
+                if (position.x >= terrainPos.x && position.x <= terrainPos.x + terrainSize.x &&
+                    position.z >= terrainPos.z && position.z <= terrainPos.z + terrainSize.z)
+                {
+                    return terrain;
+                }
+            }
+
+            // 如果没有找到包含位置的地形，返回最近的地形
+            UnityEngine.Terrain nearestTerrain = null;
+            float nearestDistance = float.MaxValue;
+
+            foreach (var terrain in terrains)
+            {
+                var terrainCenter = terrain.transform.position + terrain.terrainData.size * 0.5f;
+                var distance = Vector3.Distance(position, terrainCenter);
+                
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestTerrain = terrain;
+                }
+            }
+
+            return nearestTerrain;
+        }
 
         private TerrainPaintResult ExecutePaint(
             UnityEngine.Terrain terrain,

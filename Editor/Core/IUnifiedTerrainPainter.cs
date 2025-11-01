@@ -14,33 +14,25 @@ namespace __temp.MrPathV2.Editor.Core
     public interface IUnifiedTerrainPainter
     {
         /// <summary>
-        /// 绘制路径到地形（使用统一的CPU数据源）
+        /// 绘制路径到地形
         /// </summary>
-        /// <param name="terrain">目标地形</param>
-        /// <param name="pathData">CPU路径数据</param>
-        /// <param name="pathProfile">路径配置文件</param>
+        /// <param name="pathCreator">路径创建器，包含所有必要的路径数据和配置</param>
         /// <param name="isPreview">是否为预览模式</param>
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>绘制结果</returns>
         Task<TerrainPaintResult> PaintAsync(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             bool isPreview = false,
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 同步绘制方法（为了向后兼容）
+        /// 同步绘制方法
         /// </summary>
-        /// <param name="terrain">目标地形</param>
-        /// <param name="pathData">CPU路径数据</param>
-        /// <param name="pathProfile">路径配置文件</param>
+        /// <param name="pathCreator">路径创建器，包含所有必要的路径数据和配置</param>
         /// <param name="isPreview">是否为预览模式</param>
         /// <returns>绘制结果</returns>
         TerrainPaintResult Paint(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             bool isPreview = false);
 
         /// <summary>

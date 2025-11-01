@@ -14,7 +14,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
     {
         private readonly PathCreatorEditor _editor;
         private readonly PathCreator _targetCreator;
-        
+
         // UI元素引用
         private VisualElement _rootElement;
         private VisualElement _profileMissingWarning;
@@ -23,7 +23,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private VisualElement _recipeEmbeddedContainer;
         private VisualElement _profileInspectorUI;
         private IMGUIContainer _recipeInspectorIMGUI;
-        
+
         // 内嵌编辑器
         private UnityEditor.Editor _profileEmbeddedEditor;
         private UnityEditor.Editor _recipeEmbeddedEditor;
@@ -37,7 +37,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         public VisualElement CreateInspectorGUI(SerializedObject serializedObject)
         {
             _rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
-            
+
             // 自动将 SerializedObject 绑定到 UXML
             _rootElement.Bind(serializedObject);
 
@@ -78,7 +78,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             return _rootElement;
         }
-        
+
         /// <summary>
         /// 当 Profile 属性在 Inspector 中被更改时调用
         /// </summary>
@@ -122,7 +122,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 // 使用批量样式更新，减少重绘次数
                 _profileMissingWarning.style.display = hasValidProfile ? DisplayStyle.None : DisplayStyle.Flex;
                 _profileEmbeddedContainer.style.display = hasValidProfile ? DisplayStyle.Flex : DisplayStyle.None;
-                
+
                 // 强制立即应用样式变更，避免延迟导致的闪烁
                 _rootElement.MarkDirtyRepaint();
             }
@@ -313,21 +313,21 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             // 通知编辑器更新
             _editor.OnProfileCreated(newProfile);
-            
+
             EditorGUIUtility.PingObject(newProfile);
         }
-        
+
         public void OnDestroy()
         {
             _editor.SafeDestroyEditor(ref _profileEmbeddedEditor);
             _editor.SafeDestroyEditor(ref _recipeEmbeddedEditor);
-            
+
             if (_profileInspectorUI != null)
             {
                 _profileInspectorUI.RemoveFromHierarchy();
                 _profileInspectorUI = null;
             }
-            
+
             if (_recipeInspectorIMGUI != null)
             {
                 _recipeInspectorIMGUI.RemoveFromHierarchy();

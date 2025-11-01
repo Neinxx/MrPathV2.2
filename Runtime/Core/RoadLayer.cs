@@ -2,6 +2,10 @@ using System;
 using __temp.MrPathV2.Runtime.Core.BlendMasks;
 using Sirenix.OdinInspector;
 using UnityEngine;
+// Editor 相关仅在编辑器下编译
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 // 确保 using 正确
 // ... (其他 using) ...
 
@@ -48,10 +52,55 @@ namespace __temp.MrPathV2.Runtime.Core
         /// </summary>
         [BoxGroup("LayerContent")]
         [Space(5)]
-        [LabelText("Content Layer")]
-        [AssetsOnly]
-        [InlineButton(nameof(OpenLayerPicker), "选择")]
+        [HideInInspector]
         public TerrainLayer contentLayer;
+
+#if UNITY_EDITOR
+        // 现代化的 Content 行布局：左侧缩略图，中间只读名称，右侧定位/清空/选择
+        [BoxGroup("LayerContent")]
+        [HorizontalGroup("LayerContent/ContentRow", Width = 0.2f)]
+        [HideLabel]
+        [ShowInInspector]
+        [PreviewField(48, ObjectFieldAlignment.Left)]
+        [PropertyOrder(0)]
+        private Texture2D ContentLayerPreview
+        {
+            get
+            {
+                if (!contentLayer) return null;
+                var tex = contentLayer.diffuseTexture;
+                var preview = tex ? (Texture2D)(AssetPreview.GetAssetPreview(tex) ?? AssetPreview.GetMiniThumbnail(tex))
+                                  : (Texture2D)(AssetPreview.GetAssetPreview(contentLayer) ?? AssetPreview.GetMiniThumbnail(contentLayer));
+                return preview;
+            }
+        }
+
+        // 使缩略图可点击：点击直接打开选择窗口
+        [BoxGroup("LayerContent")]
+        [PropertyOrder(1)]
+        [OnInspectorGUI]
+        private void MakePreviewClickable()
+        {
+            var rect = GUILayoutUtility.GetLastRect();
+            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
+            {
+                OpenLayerPicker();
+                Event.current.Use();
+            }
+            // 也提供一个透明按钮覆盖，保证可点击性
+            if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
+            {
+                OpenLayerPicker();
+            }
+        }
+
+        [HorizontalGroup("LayerContent/ContentRow", Width = 0.8f)]
+        [LabelText("Content Layer")]
+        [ShowInInspector]
+        [DisplayAsString]
+        [PropertyOrder(2)]
+        private string ContentLayerDisplay => contentLayer ? contentLayer.name : "未选择";
+#endif
 
         /// <summary>
         ///     4. Layer Mask 属性。
@@ -69,16 +118,22 @@ namespace __temp.MrPathV2.Runtime.Core
         private void OpenLayerPicker()
         {
             // 通过反射调用 Editor 窗口，避免 runtime 对 Editor 程序集的编译期依赖
-            var type = System.Type.GetType("MrPathV2.Editor.Windows.TerrainLayerPickerWindow, Assembly-CSharp-Editor");
+            // 优先尝试新的选择窗口
+            var type = System.Type.GetType("MrPathV2.Editor.Windows.SelectTerrainLayerWindow, Assembly-CSharp-Editor");
             if (type == null)
             {
-                Debug.LogWarning("TerrainLayerPickerWindow 类型未找到 (Assembly-CSharp-Editor)。");
-                return; // 早退
+                // 回退到旧类型（如果存在）
+                type = System.Type.GetType("MrPathV2.Editor.Windows.TerrainLayerPickerWindow, Assembly-CSharp-Editor");
+                if (type == null)
+                {
+                    Debug.LogWarning("SelectTerrainLayerWindow/TerrainLayerPickerWindow 类型均未找到 (Assembly-CSharp-Editor)。");
+                    return; // 早退
+                }
             }
             var method = type.GetMethod("Open", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
             if (method == null)
             {
-                Debug.LogWarning("TerrainLayerPickerWindow.Open 方法未找到。");
+                Debug.LogWarning("选择窗口 Open 方法未找到。");
                 return; // 早退
             }
             try
@@ -105,6 +160,17 @@ namespace __temp.MrPathV2.Runtime.Core
             {
                 Debug.LogError($"打开 TerrainLayerPickerWindow 失败: {e.Message}");
             }
+        }
+
+        private void PingContentLayer()
+        {
+            if (!contentLayer) return;
+            EditorGUIUtility.PingObject(contentLayer);
+        }
+
+        private void ClearContentLayer()
+        {
+            contentLayer = null;
         }
 #endif
 

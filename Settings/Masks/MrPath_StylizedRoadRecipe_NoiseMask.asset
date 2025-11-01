@@ -12,18 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
   m_Name: MrPath_StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
-  smooth: 0.978
-  tiling: {x: 0.67, y: 1.7}
-  offset: {x: 0, y: 0.45}
-  overallScale: 1.82
+  smooth: 1
+  tiling: {x: -2.87, y: 0.35}
+  offset: {x: 0, y: 0}
+  overallScale: 1.689
   strength: 1
-  seed: 0
-  noiseScale: {x: 8.59, y: 8.59}
+  seed: 6.41
+  noiseScale: {x: 5.87, y: 5.87}
   uniformScale: 1
-  rotationDeg: 87
+  rotationDeg: -45
   octaves: 1
-  lacunarity: 2.93
-  gain: 0.835
-  useAsymmetricEdges: 1
-  edgeLow: 0.61
-  edgeHigh: 1
+  lacunarity: 3.06
+  gain: 0.687
+  useAsymmetricEdges: 0
+  edgeLow: 0.25
+  edgeHigh: 0.75

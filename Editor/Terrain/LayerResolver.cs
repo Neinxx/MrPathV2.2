@@ -254,6 +254,75 @@ namespace __temp.MrPathV2.Editor.Terrain
         }
 
         /// <summary>
+        ///     智能解析（不添加缺失图层）：优先匹配地形中等价的图层，缺失则跳过。
+        ///     用于用户拒绝添加新图层时的非破坏性映射。
+        /// </summary>
+        public static Dictionary<TerrainLayer, int> ResolveSmart(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        {
+            if (!IsInputValid(terrain, recipe))
+            {
+                return new Dictionary<TerrainLayer, int>();
+            }
+
+            var td = terrain.terrainData;
+            var layers = new List<TerrainLayer>(td.terrainLayers ?? Array.Empty<TerrainLayer>());
+            var result = GetExistingLayerMapping(layers);
+
+            foreach (var roadLayer in recipe.GetLayers())
+            {
+                if (!IsRoadLayerValid(roadLayer)) continue;
+
+                var target = roadLayer.contentLayer;
+
+                // 已存在同一实例
+                if (result.ContainsKey(target))
+                {
+                    continue;
+                }
+
+                // 查找地形中等价的图层（按贴图匹配）
+                var eqIndex = FindEquivalentLayerIndex(layers, target);
+                if (eqIndex >= 0)
+                {
+                    result[target] = eqIndex;
+                }
+                // 缺失等价图层则不添加，保持未映射
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        ///     获取配方中在当前地形上缺失（且无等价项）的图层列表。
+        ///     用于弹窗汇总提示。
+        /// </summary>
+        public static List<TerrainLayer> GetMissingLayersSmart(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        {
+            var missing = new List<TerrainLayer>();
+            if (!IsInputValid(terrain, recipe)) return missing;
+
+            var td = terrain.terrainData;
+            var layers = new List<TerrainLayer>(td.terrainLayers ?? Array.Empty<TerrainLayer>());
+            var existing = GetExistingLayerMapping(layers);
+
+            foreach (var roadLayer in recipe.GetLayers())
+            {
+                if (!IsRoadLayerValid(roadLayer)) continue;
+                var target = roadLayer.contentLayer;
+
+                if (existing.ContainsKey(target)) continue;
+
+                var eqIndex = FindEquivalentLayerIndex(layers, target);
+                if (eqIndex < 0)
+                {
+                    missing.Add(target);
+                }
+            }
+
+            return missing;
+        }
+
+        /// <summary>
         ///     在已有地形图层中查找与配方图层等价的条目（优先按贴图引用匹配）
         /// </summary>
         private static int FindEquivalentLayerIndex(List<TerrainLayer> layers, TerrainLayer target)

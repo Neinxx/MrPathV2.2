@@ -12,9 +12,7 @@ namespace __temp.MrPathV2.Editor.Core
     /// </summary>
     public class UnifiedPaintTerrainCommand : IDisposable
     {
-        private readonly UnityEngine.Terrain _terrain;
-        private readonly PathData _pathData;
-        private readonly PathProfile _pathProfile;
+        private readonly PathCreator _pathCreator;
         private readonly bool _isPreview;
         private readonly PainterType _preferredPainterType;
         
@@ -24,15 +22,11 @@ namespace __temp.MrPathV2.Editor.Core
         #region Construction
 
         public UnifiedPaintTerrainCommand(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             bool isPreview = false,
             PainterType preferredPainterType = PainterType.GPU)
         {
-            _terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
-            _pathData = pathData ?? throw new ArgumentNullException(nameof(pathData));
-            _pathProfile = pathProfile ?? throw new ArgumentNullException(nameof(pathProfile));
+            _pathCreator = pathCreator ?? throw new ArgumentNullException(nameof(pathCreator));
             _isPreview = isPreview;
             _preferredPainterType = preferredPainterType;
 
@@ -61,7 +55,7 @@ namespace __temp.MrPathV2.Editor.Core
                 }
 
                 // 执行绘制
-                var result = await _painter.PaintAsync(_terrain, _pathData, _pathProfile, _isPreview, cancellationToken);
+                var result = await _painter.PaintAsync(_pathCreator, _isPreview, cancellationToken);
                 
                 LogResult(result);
                 return result;
@@ -97,7 +91,7 @@ namespace __temp.MrPathV2.Editor.Core
                 }
 
                 // 执行绘制
-                var result = _painter.Paint(_terrain, _pathData, _pathProfile, _isPreview);
+                var result = _painter.Paint(_pathCreator, _isPreview);
                 
                 LogResult(result);
                 return result;
@@ -128,10 +122,22 @@ namespace __temp.MrPathV2.Editor.Core
         {
             try
             {
+                // 获取PathData和PathProfile
+                var pathData = _pathCreator.pathData;
+                var pathProfile = _pathCreator.profile;
+                
+                // 查找最近的地形
+                var terrain = FindNearestTerrain(_pathCreator.transform.position);
+                if (terrain == null)
+                {
+                    UnityEngine.Debug.LogError("[UnifiedPaintTerrainCommand] 无法找到附近的地形");
+                    return null;
+                }
+                
                 return UnifiedPainterFactory.CreatePainter(
                     _preferredPainterType,
-                    _terrain,
-                    CalculatePathBounds()
+                    terrain,
+                    CalculatePathBounds(pathData, pathProfile)
                 );
             }
             catch (Exception ex)
@@ -141,22 +147,66 @@ namespace __temp.MrPathV2.Editor.Core
             }
         }
 
-        private Bounds CalculatePathBounds()
+        private UnityEngine.Terrain FindNearestTerrain(Vector3 position)
         {
-            if (_pathData.positions.Count == 0)
+            // 获取场景中所有地形
+            var terrains = UnityEngine.Terrain.activeTerrains;
+            if (terrains.Length == 0)
+                return null;
+
+            // 如果只有一个地形，直接返回
+            if (terrains.Length == 1)
+                return terrains[0];
+
+            // 查找包含位置的地形
+            foreach (var terrain in terrains)
+            {
+                var terrainPos = terrain.transform.position;
+                var terrainSize = terrain.terrainData.size;
+                
+                // 检查位置是否在地形范围内
+                if (position.x >= terrainPos.x && position.x <= terrainPos.x + terrainSize.x &&
+                    position.z >= terrainPos.z && position.z <= terrainPos.z + terrainSize.z)
+                {
+                    return terrain;
+                }
+            }
+
+            // 如果没有找到包含位置的地形，返回最近的地形
+            UnityEngine.Terrain nearestTerrain = null;
+            float nearestDistance = float.MaxValue;
+
+            foreach (var terrain in terrains)
+            {
+                var terrainCenter = terrain.transform.position + terrain.terrainData.size * 0.5f;
+                var distance = Vector3.Distance(position, terrainCenter);
+                
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestTerrain = terrain;
+                }
+            }
+
+            return nearestTerrain;
+        }
+
+        private Bounds CalculatePathBounds(PathData pathData, PathProfile pathProfile)
+        {
+            if (pathData.positions.Count == 0)
                 return new Bounds();
 
-            var min = _pathData.positions[0];
-            var max = _pathData.positions[0];
+            var min = pathData.positions[0];
+            var max = pathData.positions[0];
 
-            foreach (var position in _pathData.positions)
+            foreach (var position in pathData.positions)
             {
                 min = Vector3.Min(min, position);
                 max = Vector3.Max(max, position);
             }
 
             // 扩展边界以包含道路宽度
-            var expansion = Vector3.one * (_pathProfile.roadWidth * 0.5f + _pathProfile.falloffWidth);
+            var expansion = Vector3.one * (pathProfile.roadWidth * 0.5f + pathProfile.falloffWidth);
             min -= expansion;
             max += expansion;
 
@@ -168,17 +218,26 @@ namespace __temp.MrPathV2.Editor.Core
 
         private void ValidateInputs()
         {
-            if (_terrain.terrainData == null)
-                throw new ArgumentException("Terrain.terrainData 不能为空", nameof(_terrain));
+            if (_pathCreator == null)
+                throw new ArgumentNullException(nameof(_pathCreator));
+                
+            var pathData = _pathCreator.pathData;
+            var pathProfile = _pathCreator.profile;
+            
+            if (pathData == null)
+                throw new ArgumentException("PathCreator.pathData 不能为空", nameof(_pathCreator));
+                
+            if (pathData.positions.Count == 0)
+                throw new ArgumentException("PathData.positions 不能为空", nameof(_pathCreator));
 
-            if (_pathData.positions.Count == 0)
-                throw new ArgumentException("PathData.positions 不能为空", nameof(_pathData));
+            if (pathProfile == null)
+                throw new ArgumentException("PathCreator.profile 不能为空", nameof(_pathCreator));
+                
+            if (pathProfile.roadRecipe == null)
+                throw new ArgumentException("PathProfile.roadRecipe 不能为空", nameof(_pathCreator));
 
-            if (_pathProfile.roadRecipe == null)
-                throw new ArgumentException("PathProfile.roadRecipe 不能为空", nameof(_pathProfile));
-
-            if (_pathProfile.roadWidth <= 0)
-                throw new ArgumentException("PathProfile.roadWidth 必须大于0", nameof(_pathProfile));
+            if (pathProfile.roadWidth <= 0)
+                throw new ArgumentException("PathProfile.roadWidth 必须大于0", nameof(_pathCreator));
         }
 
         private void LogResult(TerrainPaintResult result)
@@ -201,25 +260,21 @@ namespace __temp.MrPathV2.Editor.Core
         /// 创建道路绘制命令
         /// </summary>
         public static UnifiedPaintTerrainCommand CreateRoadPaintCommand(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             bool isPreview = false,
             PainterType preferredPainterType = PainterType.GPU)
         {
-            return new UnifiedPaintTerrainCommand(terrain, pathData, pathProfile, isPreview, preferredPainterType);
+            return new UnifiedPaintTerrainCommand(pathCreator, isPreview, preferredPainterType);
         }
 
         /// <summary>
         /// 创建预览绘制命令
         /// </summary>
         public static UnifiedPaintTerrainCommand CreatePreviewCommand(
-            UnityEngine.Terrain terrain,
-            PathData pathData,
-            PathProfile pathProfile,
+            PathCreator pathCreator,
             PainterType preferredPainterType = PainterType.GPU)
         {
-            return new UnifiedPaintTerrainCommand(terrain, pathData, pathProfile, true, preferredPainterType);
+            return new UnifiedPaintTerrainCommand(pathCreator, true, preferredPainterType);
         }
 
         #endregion
@@ -230,27 +285,13 @@ namespace __temp.MrPathV2.Editor.Core
     /// </summary>
     public class UnifiedPaintCommandBuilder
     {
-        private UnityEngine.Terrain _terrain;
-        private PathData _pathData;
-        private PathProfile _pathProfile;
+        private PathCreator _pathCreator;
         private bool _isPreview = false;
         private PainterType _preferredPainterType = PainterType.GPU;
 
-        public UnifiedPaintCommandBuilder ForTerrain(UnityEngine.Terrain terrain)
+        public UnifiedPaintCommandBuilder ForPathCreator(PathCreator pathCreator)
         {
-            _terrain = terrain;
-            return this;
-        }
-
-        public UnifiedPaintCommandBuilder WithPath(PathData pathData)
-        {
-            _pathData = pathData;
-            return this;
-        }
-
-        public UnifiedPaintCommandBuilder WithProfile(PathProfile pathProfile)
-        {
-            _pathProfile = pathProfile;
+            _pathCreator = pathCreator;
             return this;
         }
 
@@ -268,7 +309,7 @@ namespace __temp.MrPathV2.Editor.Core
 
         public UnifiedPaintTerrainCommand Build()
         {
-            return new UnifiedPaintTerrainCommand(_terrain, _pathData, _pathProfile, _isPreview, _preferredPainterType);
+            return new UnifiedPaintTerrainCommand(_pathCreator, _isPreview, _preferredPainterType);
         }
 
         /// <summary>
