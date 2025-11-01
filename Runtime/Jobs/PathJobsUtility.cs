@@ -51,6 +51,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
             [ReadOnly] public readonly float RoadWidth;
             [ReadOnly] public readonly float FalloffWidth;
             [ReadOnly] public readonly bool ForceHorizontal;
+            [ReadOnly] public readonly bool OpaquePreview; // 是否启用不透明绘制（与预览开关保持一致）
             [ReadOnly] public int CrossSectionSegments;
 
             private NativeArray<float> _bakedCrossSection;
@@ -65,6 +66,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 RoadWidth = profile.roadWidth;
                 FalloffWidth = profile.falloffWidth;
                 ForceHorizontal = profile.forceHorizontal;
+                OpaquePreview = profile != null && profile.opaquePreview;
                 CrossSectionSegments = profile.crossSectionSegments;
 
                 _bakedCrossSection = NativeArrayExtensions.CreateTracked<float>(BakeResolution, allocator);

@@ -28,6 +28,7 @@ namespace MrPathV2.Editor.Windows
         private readonly List<TerrainLayer> _coveredLayers = new();
 
         private string _search = string.Empty;
+        private string _debouncedSearch = string.Empty;
         private Vector2 _scroll;
         private TerrainLayer _selected;
         private bool _applied;
@@ -41,6 +42,17 @@ namespace MrPathV2.Editor.Windows
         private readonly Dictionary<int, int> _coverageStats = new();
         private enum FilterMode { All, HeldOnly, MissingOnly }
         private FilterMode _filterMode = FilterMode.All;
+
+        // 性能优化：缓存与防抖
+        private readonly Dictionary<int, Texture2D> _thumbnailCache = new();
+        private double _lastSearchTime;
+        private const double SearchDebounce = 0.25; // 250ms 防抖
+        private double _lastPreviewTime;
+        private const double PreviewDebounce = 0.1; // 100ms
+
+        // 选中项持有地形缓存，避免每次重绘都计算
+        private int _selectedHoldersId;
+        private List<UnityEngine.Terrain> _selectedHolders = new List<UnityEngine.Terrain>();
 
         // 单一视图，不再使用 Covered 标签页
 
@@ -71,6 +83,11 @@ namespace MrPathV2.Editor.Windows
             // 设置初始选中并进行一次预览赋值
             _selected = current; // 保持当前选择
             PreviewAssign(_selected);
+
+            // 预热缩略图缓存
+            PrewarmThumbnailCache();
+
+            _debouncedSearch = _search;
         }
 
         private void OnGUI()
@@ -87,6 +104,12 @@ namespace MrPathV2.Editor.Windows
             DrawDetailsPanel();
 
             DrawFooterActions();
+        }
+
+        private void OnDestroy()
+        {
+            // 清理缓存，避免内存泄漏
+            _thumbnailCache.Clear();
         }
 
         // 点击非窗口区域（失去焦点）自动关闭，统一与 Unity 同类窗口行为
@@ -122,8 +145,18 @@ namespace MrPathV2.Editor.Windows
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.Label("筛选:", GUILayout.Width(40));
-                _search = EditorGUILayout.TextField(_search, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
-                // GUILayout.FlexibleSpace();
+                EditorGUI.BeginChangeCheck();
+                var newSearch = EditorGUILayout.TextField(_search, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
+                if (EditorGUI.EndChangeCheck())
+                {
+                    _search = newSearch;
+                    _lastSearchTime = EditorApplication.timeSinceStartup;
+                }
+                // 根据防抖时间更新实际执行的筛选关键词
+                if (EditorApplication.timeSinceStartup - _lastSearchTime >= SearchDebounce)
+                {
+                    _debouncedSearch = _search;
+                }
             }
         }
         private void DrawGrid(List<TerrainLayer> list)
@@ -135,7 +168,7 @@ namespace MrPathV2.Editor.Windows
                 return; // 提前返回
             }
 
-            var filtered = Filter(list, _search).ToList();
+            var filtered = Filter(list, _debouncedSearch).ToList();
 
             // 预置一个“None”项
             DrawNoneTile();
@@ -167,7 +200,7 @@ namespace MrPathV2.Editor.Windows
             }
 
             var prioritized = PrioritizeLayers(_assetLayers, _coveredLayers);
-            var filtered = Filter(prioritized, _search).ToList();
+            var filtered = Filter(prioritized, _debouncedSearch).ToList();
             // 应用筛选模式
             if (_filterMode == FilterMode.HeldOnly)
                 filtered = filtered.Where(IsLayerHeldByCoveredTerrains).ToList();
@@ -264,7 +297,7 @@ namespace MrPathV2.Editor.Windows
         {
             if (!tl) return; // 提前返回
 
-            var preview = AssetPreview.GetAssetPreview(tl) as Texture2D ?? AssetPreview.GetMiniThumbnail(tl) as Texture2D;
+            var preview = GetThumbnail(tl);
             EditorGUILayout.BeginVertical(GUILayout.Width(_thumbSize + TilePadding));
 
             var rect = GUILayoutUtility.GetRect(_thumbSize, _thumbSize, GUILayout.Width(_thumbSize), GUILayout.Height(_thumbSize));
@@ -346,7 +379,7 @@ namespace MrPathV2.Editor.Windows
                 return; // 提前返回
             }
 
-            var previewTex = AssetPreview.GetAssetPreview(tl) ?? AssetPreview.GetMiniThumbnail(tl);
+            var previewTex = GetThumbnail(tl);
             EditorGUILayout.BeginHorizontal();
             // 左侧预览
             var pRect = GUILayoutUtility.GetRect(64, 64, GUILayout.Width(64), GUILayout.Height(64));
@@ -374,7 +407,8 @@ namespace MrPathV2.Editor.Windows
             GUILayout.Space(2);
             GUILayout.Label($"覆盖数：{cov}/{total}", EditorStyles.miniLabel);
 
-            var holders = GetTerrainHoldersForLayer(tl);
+            EnsureSelectedHoldersComputed();
+            var holders = _selectedHolders;
             if (holders.Count > 0)
             {
                 EditorGUILayout.BeginHorizontal();
@@ -402,6 +436,58 @@ namespace MrPathV2.Editor.Windows
             EditorGUILayout.EndVertical();
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
+        }
+
+        private void EnsureSelectedHoldersComputed()
+        {
+            var tl = _selected;
+            if (!tl)
+            {
+                _selectedHoldersId = 0;
+                _selectedHolders.Clear();
+                return; // 提前返回
+            }
+            var id = tl.GetInstanceID();
+            if (_selectedHoldersId == id && _selectedHolders != null)
+            {
+                return; // 已缓存
+            }
+            _selectedHoldersId = id;
+            _selectedHolders = GetTerrainHoldersForLayer(tl);
+        }
+
+        private Texture2D GetThumbnail(TerrainLayer tl)
+        {
+            if (!tl) return null;
+            var id = tl.GetInstanceID();
+            if (_thumbnailCache.TryGetValue(id, out var tex) && tex)
+            {
+                return tex;
+            }
+            // 优先使用 MiniThumbnail（性能更好），必要时才回退到 AssetPreview
+            tex = AssetPreview.GetMiniThumbnail(tl) as Texture2D;
+            if (!tex)
+            {
+                tex = AssetPreview.GetAssetPreview(tl) as Texture2D;
+            }
+            if (tex)
+            {
+                _thumbnailCache[id] = tex;
+            }
+            return tex;
+        }
+
+        private void PrewarmThumbnailCache()
+        {
+            // 仅预热前 64 个，避免阻塞主线程
+            if (_assetLayers == null || _assetLayers.Count == 0) return;
+            int count = Mathf.Min(64, _assetLayers.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var tl = _assetLayers[i];
+                if (!tl) continue;
+                var _ = GetThumbnail(tl);
+            }
         }
 
         private List<UnityEngine.Terrain> GetTerrainHoldersForLayer(TerrainLayer tl)
@@ -683,6 +769,10 @@ namespace MrPathV2.Editor.Windows
 
             // 重建覆盖统计
             RebuildCoverageStats();
+
+            // 刷新后重建缩略图缓存
+            _thumbnailCache.Clear();
+            PrewarmThumbnailCache();
         }
 
         private void RebuildCoverageStats()
@@ -792,7 +882,13 @@ namespace MrPathV2.Editor.Windows
         {
             if (_targetRoadLayer == null) return; // 提前返回
             _targetRoadLayer.contentLayer = tl;
-            MarkPreviewDirty();
+            // 防抖：减少高频预览刷新导致的卡顿
+            var now = EditorApplication.timeSinceStartup;
+            if (now - _lastPreviewTime >= PreviewDebounce)
+            {
+                _lastPreviewTime = now;
+                MarkPreviewDirty();
+            }
         }
 
         private void MarkPreviewDirty()

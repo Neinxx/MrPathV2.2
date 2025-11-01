@@ -1,0 +1,20 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="project://database/Assets/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor" />
+    <ui:VisualElement style="flex-direction: row; justify-content: space-between; height: 20px; flex-grow: 0; margin-bottom: 6px;">
+        <ui:Button text="Button" display-tooltip-when-elided="true" name="all" style="flex-shrink: 1; flex-grow: 1;" />
+        <ui:Button text="Button" display-tooltip-when-elided="true" name="holded" style="flex-shrink: 1; flex-grow: 1;" />
+        <ui:Button text="Button" display-tooltip-when-elided="true" name="notHolded" style="flex-shrink: 1; flex-grow: 1;" />
+        <ui:VisualElement style="flex-grow: 1; width: 200px;" />
+        <ui:Button text="Button" display-tooltip-when-elided="true" name="refresh" style="flex-shrink: 1; flex-grow: 1;" />
+    </ui:VisualElement>
+    <ui:VisualElement class="object-field" style="padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px; flex-grow: 0; height: 36px;">
+        <ui:TextField picking-mode="Ignore" label="search" value="filler text" text="filler text" style="flex-shrink: 1; flex-grow: 1;" />
+    </ui:VisualElement>
+    <ui:VisualElement class="settings-group" style="flex-grow: 1; margin-left: 10px; margin-right: 10px; margin-top: 10px; margin-bottom: 5px; padding-top: 12px;">
+        <ui:ListView focusable="true" />
+    </ui:VisualElement>
+    <ui:GroupBox class="settings-group" style="height: 96px; flex-direction: row; margin-left: 10px; margin-right: 10px; margin-top: 5px; margin-bottom: 10px;">
+        <ui:VisualElement name="Icon" style="width: 81px; height: 74px;" />
+    </ui:GroupBox>
+    <ui:SliderInt picking-mode="Ignore" label="SliderInt" value="42" high-value="100" name="thumb" style="margin-bottom: 3px; padding-left: 6px; padding-right: 6px; padding-top: 6px; padding-bottom: 6px;" />
+</ui:UXML>

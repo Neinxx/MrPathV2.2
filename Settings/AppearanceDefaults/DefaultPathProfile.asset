@@ -73,7 +73,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  snapToTerrain: 0
+  snapToTerrain: 1
   heightOffset: 0
   smoothness: 100
   forceHorizontal: 1

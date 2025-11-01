@@ -20,6 +20,9 @@ namespace __temp.MrPathV2.Runtime.Jobs
         [ReadOnly] public RecipeData Recipe;
         [ReadOnly] public int AlphamapResolution;
         [ReadOnly] public int AlphamapLayerCount;
+        // 不透明绘制开关与阈值（当开启时应用 alpha clip）
+        [ReadOnly] public bool OpaquePainting;
+        [ReadOnly] public float AlphaClipThreshold; // 建议与预览保持一致：0.2f
 
         // --- 核心输入：缓存的像素信息 ---
         [ReadOnly] public NativeArray<RoadPixelInfo> PixelInfoMap;
@@ -74,11 +77,14 @@ namespace __temp.MrPathV2.Runtime.Jobs
             if (!ValidateAlphaIndexRange(baseAlphaIndex))
                 return;
 
-            // 直接进行每层alpha混合：遮罩参与混合，不做像素级clip
+            // 根据开关：不透明时使用 alpha clip；否则保持透明混合
             var (anyLayerPainted, firstValidSplatIndex) = ApplyLayerBlending(baseAlphaIndex, normalizedDist, pathProgress);
 
-            // 不再清除非配方层，保留原始地形权重实现“混合而非裁剪”
-            // HandleUnpaintedLayers 仍保持空实现
+            // 不透明绘制：当确实涂绘到图层时，将非配方层权重清零以避免与底层混合
+            if (OpaquePainting && anyLayerPainted)
+            {
+                ZeroOutNonRecipeLayers(baseAlphaIndex);
+            }
 
             // 若未涂绘任何图层，直接返回以避免不必要的标准化开销
             if (!anyLayerPainted) return;
@@ -138,18 +144,28 @@ namespace __temp.MrPathV2.Runtime.Jobs
                     firstValidSplatIndex = splatIndex;
 
                 var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
-                if (maskAlpha <= SmallWeightCutoff)
-                    continue;
-
-                anyLayerPainted = true;
-
-                var alphaMapIndex = baseAlphaIndex + splatIndex;
-                var baseAlpha = Alphamaps[alphaMapIndex];
-
-                // 以统一Blend函数进行“权重alpha”的混合（遮罩为overlay强度）
-                var blended = TerrainJobsUtility.Blend(baseAlpha, maskAlpha, Recipe.BlendModes[layerIndex]);
-
-                Alphamaps[alphaMapIndex] = blended;
+                if (!OpaquePainting)
+                {
+                    // 透明混合：小权重直接忽略，使用统一 Blend 函数
+                    if (maskAlpha <= SmallWeightCutoff)
+                        continue;
+                    anyLayerPainted = true;
+                    var alphaMapIndex = baseAlphaIndex + splatIndex;
+                    var baseAlpha = Alphamaps[alphaMapIndex];
+                    var blended = TerrainJobsUtility.Blend(baseAlpha, maskAlpha, Recipe.BlendModes[layerIndex]);
+                    // 截断极小权重，避免黑边
+                    if (blended < SmallWeightCutoff) blended = 0f;
+                    Alphamaps[alphaMapIndex] = blended;
+                }
+                else
+                {
+                    // 不透明绘制：应用 alpha clip，超过阈值直接写满（1），否则忽略
+                    if (maskAlpha < AlphaClipThreshold)
+                        continue;
+                    anyLayerPainted = true;
+                    var alphaMapIndex = baseAlphaIndex + splatIndex;
+                    Alphamaps[alphaMapIndex] = 1f;
+                }
             }
 
             return (anyLayerPainted, firstValidSplatIndex);

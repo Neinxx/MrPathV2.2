@@ -104,7 +104,10 @@ namespace __temp.MrPathV2.Editor.Terrain
                         PixelInfoMap = pixelInfoMap, // <-- Fix: 字段已存在
                         CoverageMin = coverageMin,
                         CoverageMax = coverageMax,
-                        Alphamaps = alphamaps1D
+                        Alphamaps = alphamaps1D,
+                        // 传递不透明绘制开关与阈值（与预览保持一致：阈值 0.2）
+                        OpaquePainting = profileData.OpaquePreview,
+                        AlphaClipThreshold = profileData.OpaquePreview ? 0.2f : 0f
                     };
                     combinedHandle = job2.Schedule(totalPixelsInBounds, 128, handle1);
                 }
