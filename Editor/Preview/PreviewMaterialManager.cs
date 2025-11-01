@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using __temp.MrPathV2.Editor.Terrain;
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Preview;
-using MrPathV2.Editor.Terrain;
-using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;

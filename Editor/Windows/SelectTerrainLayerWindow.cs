@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Editor.Terrain;
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Providers;
 using UnityEditor;
@@ -90,10 +89,16 @@ namespace MrPathV2.Editor.Windows
             DrawFooterActions();
         }
 
+        // 点击非窗口区域（失去焦点）自动关闭，统一与 Unity 同类窗口行为
+        private void OnLostFocus()
+        {
+            Close();
+        }
+
         private void DrawToolbar()
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            GUILayout.Label("Assets（已持有优先，绿色标识）", EditorStyles.miniLabel);
+            //GUILayout.Label("Assets（已持有优先，绿色标识）", EditorStyles.miniLabel);
             GUILayout.Space(8);
             // 筛选开关：全部/仅已持有/仅未持有
             var newFilterIndex = GUILayout.Toolbar((int)_filterMode, new[] { "全部", "仅已持有", "仅未持有" }, EditorStyles.toolbarButton, GUILayout.Width(220));
@@ -117,8 +122,8 @@ namespace MrPathV2.Editor.Windows
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.Label("筛选:", GUILayout.Width(40));
-                _search = EditorGUILayout.TextField(_search);
-                GUILayout.FlexibleSpace();
+                _search = EditorGUILayout.TextField(_search, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
+                // GUILayout.FlexibleSpace();
             }
         }
         private void DrawGrid(List<TerrainLayer> list)
@@ -597,11 +602,11 @@ namespace MrPathV2.Editor.Windows
             using (new EditorGUILayout.HorizontalScope())
             {
                 // 仅保留应用按钮
-                var applyLabel = _selected ? "应用" : "清空";
-                if (GUILayout.Button(applyLabel, GUILayout.Height(24)))
-                {
-                    ApplySelection(_selected);
-                }
+                // var applyLabel = _selected ? "应用" : "清空";
+                // if (GUILayout.Button(applyLabel, GUILayout.Height(24)))
+                // {
+                //     ApplySelection(_selected);
+                // }
 
                 GUILayout.FlexibleSpace();
                 // 右下角缩略图缩放滑条（类似Unity原生）

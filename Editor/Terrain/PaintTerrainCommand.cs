@@ -14,7 +14,6 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEditor;
-using BlendMode = __temp.MrPathV2.Runtime.Core.BlendMode;
 // <-- 修正：添加 using
 
 // 确保 Painter 命名空间可访问

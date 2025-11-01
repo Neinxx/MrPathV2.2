@@ -20,6 +20,7 @@ namespace __temp.MrPathV2.Runtime.Core
         [HideInInspector]
         public bool enabled = true;
 
+        private const int imageSize = 22;
         // --- 统一的盒子开始了 ---
 
         /// <summary>
@@ -61,7 +62,7 @@ namespace __temp.MrPathV2.Runtime.Core
         [HorizontalGroup("LayerContent/ContentRow", Width = 0.2f)]
         [HideLabel]
         [ShowInInspector]
-        [PreviewField(48, ObjectFieldAlignment.Left)]
+        [PreviewField(imageSize, ObjectFieldAlignment.Left)]
         [PropertyOrder(0)]
         private Texture2D ContentLayerPreview
         {
@@ -95,7 +96,7 @@ namespace __temp.MrPathV2.Runtime.Core
         }
 
         [HorizontalGroup("LayerContent/ContentRow", Width = 0.8f)]
-        [LabelText("Content Layer")]
+        [LabelText("")]
         [ShowInInspector]
         [DisplayAsString]
         [PropertyOrder(2)]
@@ -109,12 +110,61 @@ namespace __temp.MrPathV2.Runtime.Core
         [BoxGroup("LayerContent")]
         [LabelText("Layer Mask")]
         [AssetsOnly]
-        [InlineEditor(Expanded = false)]
+        [HideInInspector]
         public BlendMaskBase layerMask;
 
         // --- 统一的盒子结束了 ---
 
 #if UNITY_EDITOR
+        // Mask 行：左侧图标 + 右侧只读名称；整行可点击打开 LayerMaskSelectWindow
+        [BoxGroup("LayerContent")]
+        [HorizontalGroup("LayerContent/MaskRow", Width = 0.2f)]
+        [HideLabel]
+        [ShowInInspector]
+        [PreviewField(imageSize, ObjectFieldAlignment.Left)]
+        [PropertyOrder(3)]
+        private Texture2D LayerMaskIcon
+        {
+            get
+            {
+                if (!layerMask) return null;
+                return AssetPreview.GetMiniThumbnail(layerMask) as Texture2D;
+            }
+        }
+
+        [BoxGroup("LayerContent")]
+        [PropertyOrder(4)]
+        [OnInspectorGUI]
+        private void MakeMaskRowClickable()
+        {
+            var rect = GUILayoutUtility.GetLastRect();
+            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
+            {
+                OpenLayerMaskSelect();
+                Event.current.Use();
+            }
+            if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
+            {
+                OpenLayerMaskSelect();
+            }
+        }
+
+        [HorizontalGroup("LayerContent/MaskRow", Width = 0.8f)]
+        [LabelText("")]
+        [ShowInInspector]
+        [DisplayAsString]
+        [PropertyOrder(5)]
+        private string LayerMaskDisplay => layerMask ? GetNameSuffix(layerMask.name, imageSize) : "未选择";
+
+        // 超长名称仅显示后缀，避免布局挤占；例如显示 …VeryLongSuffix
+        private static string GetNameSuffix(string name, int maxSuffixLen = 16)
+        {
+            if (string.IsNullOrEmpty(name)) return string.Empty;
+            if (name.Length <= maxSuffixLen) return name;
+            var start = Mathf.Max(0, name.Length - maxSuffixLen);
+            return "…" + name.Substring(start);
+        }
+
         private void OpenLayerPicker()
         {
             // 通过反射调用 Editor 窗口，避免 runtime 对 Editor 程序集的编译期依赖
@@ -153,7 +203,7 @@ namespace __temp.MrPathV2.Runtime.Core
                         }
                     }
                 }
-                
+
                 method.Invoke(null, new object[] { this, contentLayer, contextPathCreator });
             }
             catch (Exception e)
@@ -171,6 +221,30 @@ namespace __temp.MrPathV2.Runtime.Core
         private void ClearContentLayer()
         {
             contentLayer = null;
+        }
+
+        private void OpenLayerMaskSelect()
+        {
+            var type = System.Type.GetType("MrPathV2.Editor.Windows.LayerMaskSelectWindow, Assembly-CSharp-Editor");
+            if (type == null)
+            {
+                Debug.LogWarning("LayerMaskSelectWindow 类型未找到 (Assembly-CSharp-Editor)。");
+                return; // 早退
+            }
+            var method = type.GetMethod("Open", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (method == null)
+            {
+                Debug.LogWarning("LayerMaskSelectWindow.Open 方法未找到。");
+                return; // 早退
+            }
+            try
+            {
+                method.Invoke(null, new object[] { this, layerMask });
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"打开 LayerMaskSelectWindow 失败: {e.Message}");
+            }
         }
 #endif
 

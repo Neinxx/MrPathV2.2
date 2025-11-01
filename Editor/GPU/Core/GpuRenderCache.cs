@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using __temp.MrPathV2.Editor.GPU.Core;
-using MrPath.Editor.GPU;
 using UnityEngine;
 
 namespace __temp.MrPathV2.Editor.GPU

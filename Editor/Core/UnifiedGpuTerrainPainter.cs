@@ -1,10 +1,8 @@
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using __temp.MrPathV2.Editor.Terrain;
 using __temp.MrPathV2.Runtime.Core;
-using Unity.Mathematics;
 using UnityEngine;
 
 namespace __temp.MrPathV2.Editor.Core
@@ -70,19 +68,19 @@ namespace __temp.MrPathV2.Editor.Core
 
             var pathProfile = pathCreator.profile;
             var pathData = pathCreator.pathData;
-            
+
             if (pathProfile == null)
             {
                 return TerrainPaintResult.CreateFailure("PathProfile为空", PainterType.GPU);
             }
-            
+
             // 查找与PathCreator关联的地形
             var terrain = FindNearestTerrain(pathCreator.transform.position);
             if (terrain == null)
             {
                 return TerrainPaintResult.CreateFailure("无法找到相关地形", PainterType.GPU);
             }
-            
+
             var computeParams = new GpuComputeParams
             {
                 Resolution = new Vector2Int(terrain.terrainData.alphamapResolution, terrain.terrainData.alphamapResolution),
@@ -96,16 +94,16 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 // 1. 生成真实路径遮罩
                 var roadMask = GenerateRoadMaskFromPath(terrain, pathData, pathProfile);
-                
+
                 // 2. 执行着色器
                 var rt = ExecuteComputeShader(computeParams, roadMask, pathData, terrain, isPreview);
-                
+
                 // 3. 应用到地形
                 if (!isPreview)
                 {
                     ApplyToTerrain(terrain, rt, pathProfile);
                 }
-                
+
                 // 4. 创建预览纹理
                 Texture2D previewTexture = null;
                 if (isPreview)
@@ -114,11 +112,11 @@ namespace __temp.MrPathV2.Editor.Core
                     global::MrPathV2.Editor.Terrain.GpuPreviewCache.Register(terrain, rt);
                     previewTexture = CreatePreviewTexture(rt);
                 }
-                
+
                 // 5. 清理资源
                 if (roadMask != null) UnityEngine.Object.DestroyImmediate(roadMask);
                 if (!isPreview && rt != null) rt.Release();
-                
+
                 return TerrainPaintResult.CreateSuccess(PainterType.GPU, 0f, previewTexture);
             }
             catch (Exception ex)
@@ -138,14 +136,14 @@ namespace __temp.MrPathV2.Editor.Core
             // 创建遮罩纹理
             var maskTexture = new Texture2D(resolution, resolution, TextureFormat.R8, false);
             var pixels = new byte[resolution * resolution];
-            
+
             // 使用路径数据生成真实的道路遮罩
             if (pathData != null && pathProfile != null)
             {
                 // 创建路径脊线 - 修复构造函数调用
                 var knotCount = pathData.KnotCount;
                 if (knotCount == 0) return maskTexture;
-                
+
                 var points = new Vector3[knotCount];
                 var tangents = new Vector3[knotCount];
                 var normals = new Vector3[knotCount];
@@ -166,12 +164,12 @@ namespace __temp.MrPathV2.Editor.Core
                 }
 
                 var spine = new PathSpine(points, tangents, normals, timestamps);
-                
+
                 // 获取路径宽度参数
                 float roadWidth = pathProfile.roadWidth;
                 float falloffWidth = pathProfile.falloffWidth;
                 float totalWidth = roadWidth + falloffWidth * 2;
-                
+
                 // 计算每个像素
                 for (int y = 0; y < resolution; y++)
                 {
@@ -181,10 +179,10 @@ namespace __temp.MrPathV2.Editor.Core
                         float worldX = terrainPos.x + (float)x / resolution * terrainSize.x;
                         float worldZ = terrainPos.z + (float)y / resolution * terrainSize.z;
                         Vector3 worldPos = new Vector3(worldX, 0, worldZ);
-                        
+
                         // 计算到路径的最短距离 - 修复方法调用
                         float distance = CalculateDistanceToPath(spine, worldPos);
-                        
+
                         // 计算遮罩值
                         byte maskValue = 0;
                         if (distance <= roadWidth * 0.5f)
@@ -198,7 +196,7 @@ namespace __temp.MrPathV2.Editor.Core
                             float t = 1.0f - (distance - roadWidth * 0.5f) / falloffWidth;
                             maskValue = (byte)(t * 255);
                         }
-                        
+
                         pixels[y * resolution + x] = maskValue;
                     }
                 }
@@ -209,28 +207,28 @@ namespace __temp.MrPathV2.Editor.Core
 
             return maskTexture;
         }
-        
+
         // 添加计算到路径最短距离的方法
         private float CalculateDistanceToPath(PathSpine spine, Vector3 worldPos)
         {
             if (spine.Points == null || spine.Points.Length < 2)
                 return float.MaxValue;
-                
+
             float minDistance = float.MaxValue;
             Vector3 worldPos2D = new Vector3(worldPos.x, 0, worldPos.z);
-            
+
             // 遍历所有路径段，找到最短距离
             for (int i = 0; i < spine.Points.Length - 1; i++)
             {
                 Vector3 segmentStart = new Vector3(spine.Points[i].x, 0, spine.Points[i].z);
                 Vector3 segmentEnd = new Vector3(spine.Points[i + 1].x, 0, spine.Points[i + 1].z);
-                
+
                 // 计算点到线段的最短距离
                 Vector3 segmentVector = segmentEnd - segmentStart;
                 Vector3 pointVector = worldPos2D - segmentStart;
-                
+
                 float segmentLengthSq = Vector3.Dot(segmentVector, segmentVector);
-                
+
                 // 处理极短线段
                 if (segmentLengthSq < 0.0001f)
                 {
@@ -238,38 +236,38 @@ namespace __temp.MrPathV2.Editor.Core
                     minDistance = Mathf.Min(minDistance, distToPoint);
                     continue;
                 }
-                
+
                 // 计算投影点参数 t
                 float t = Mathf.Clamp01(Vector3.Dot(pointVector, segmentVector) / segmentLengthSq);
-                
+
                 // 计算投影点
                 Vector3 closestPoint = segmentStart + t * segmentVector;
-                
+
                 // 计算距离
                 float distance = Vector3.Distance(worldPos2D, closestPoint);
                 minDistance = Mathf.Min(minDistance, distance);
             }
-            
+
             return minDistance;
         }
-        
+
         private void ApplyToTerrain(UnityEngine.Terrain terrain, RenderTexture rt, PathProfile pathProfile)
         {
             if (rt == null || terrain == null || pathProfile == null || pathProfile.roadRecipe == null)
                 return;
-                
+
             var terrainData = terrain.terrainData;
             var resolution = terrainData.alphamapResolution;
             var layerCount = terrainData.alphamapLayers;
-            
+
             // 解析地形层映射
             var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, pathProfile.roadRecipe);
             if (layerMap == null || layerMap.Count == 0)
                 return;
-                
+
             // 读取当前地形纹理
             var alphamaps = terrainData.GetAlphamaps(0, 0, resolution, resolution);
-            
+
             if (rt.dimension == UnityEngine.Rendering.TextureDimension.Tex2DArray)
             {
                 // 从每个切片读取权重（使用R通道），写入对应层
@@ -343,7 +341,7 @@ namespace __temp.MrPathV2.Editor.Core
                 UnityEngine.Object.DestroyImmediate(tempTexture);
             }
         }
-        
+
         private void NormalizeWeights(float[,,] alphamaps, int y, int x, int layerCount)
         {
             float sum = 0;
@@ -351,7 +349,7 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 sum += alphamaps[y, x, i];
             }
-            
+
             if (sum > 0.01f)
             {
                 for (int i = 0; i < layerCount; i++)
@@ -360,12 +358,12 @@ namespace __temp.MrPathV2.Editor.Core
                 }
             }
         }
-        
+
         private Texture2D CreatePreviewTexture(RenderTexture rt)
         {
             if (rt == null)
                 return null;
-                
+
             var resolution = rt.width;
             var previewTexture = new Texture2D(resolution, resolution, TextureFormat.RGBA32, false);
 
@@ -409,47 +407,47 @@ namespace __temp.MrPathV2.Editor.Core
             var terrains = UnityEngine.Terrain.activeTerrains;
             if (terrains == null || terrains.Length == 0)
                 return null;
-                
+
             // 如果只有一个地形，直接返回
             if (terrains.Length == 1)
                 return terrains[0];
-                
+
             // 查找最近的地形
             UnityEngine.Terrain nearestTerrain = null;
             float nearestDistance = float.MaxValue;
-            
+
             foreach (var terrain in terrains)
             {
                 if (terrain == null)
                     continue;
-                    
+
                 // 检查点是否在地形范围内
                 var terrainPos = terrain.transform.position;
                 var terrainSize = terrain.terrainData.size;
-                
+
                 // 如果点在地形范围内，直接返回该地形
                 if (position.x >= terrainPos.x && position.x <= terrainPos.x + terrainSize.x &&
                     position.z >= terrainPos.z && position.z <= terrainPos.z + terrainSize.z)
                 {
                     return terrain;
                 }
-                
+
                 // 计算到地形中心的距离
                 var terrainCenter = terrainPos + new Vector3(terrainSize.x * 0.5f, 0, terrainSize.z * 0.5f);
-                var distance = Vector3.Distance(new Vector3(position.x, 0, position.z), 
+                var distance = Vector3.Distance(new Vector3(position.x, 0, position.z),
                                               new Vector3(terrainCenter.x, 0, terrainCenter.z));
-                
+
                 if (distance < nearestDistance)
                 {
                     nearestDistance = distance;
                     nearestTerrain = terrain;
                 }
             }
-            
+
             return nearestTerrain;
         }
-        
-       private RenderTexture ExecuteComputeShader(GpuComputeParams computeParams, Texture2D roadMask, PathData pathData, UnityEngine.Terrain terrain, bool isPreview)
+
+        private RenderTexture ExecuteComputeShader(GpuComputeParams computeParams, Texture2D roadMask, PathData pathData, UnityEngine.Terrain terrain, bool isPreview)
         {
             var kernelIndex = _paintShader.FindKernel("paint_terrain");
             if (kernelIndex < 0)

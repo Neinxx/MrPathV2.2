@@ -10,7 +10,6 @@ using __temp.MrPathV2.Editor.Core;
 using BlendMode = __temp.MrPathV2.Editor.GPU.BlendMode;
 using UnityEditorInternal;
 using System.Threading;
-using System.Threading.Tasks;
 
 
 namespace __temp.MrPathV2.Editor.Examples
