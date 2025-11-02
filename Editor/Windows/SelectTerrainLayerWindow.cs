@@ -1,61 +1,59 @@
 #if UNITY_EDITOR
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Providers;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 using MrPathV2.Editor.Preview;
-using __temp.MrPathV2.Editor.Inspectors; // 用于通知刷新
 
 namespace MrPathV2.Editor.Windows
 {
     /// <summary>
-    /// SelectTerrainLayer：简化为 ObjectPicker 风格的选择窗口。
+    /// TerrainLayer 选择窗口（UITK）。
     /// - 单一职责：选择并应用 TerrainLayer 到 RoadLayer。
     /// - 提前返回：所有空引用与异常情况快速退出。
-    /// - 实时预览：选择变更时刷新 PathCreator 的预览材质。
-    /// - 视图：统一 Assets 列表，优先展示覆盖地形已持有的图层并以绿色标识。
+    /// - 高效简洁：基于 UITK，支持最小缩略图自动切换到列表样式。
+    /// - 预览联动：选择变化立即刷新场景预览网格（材料）。
     /// </summary>
     public class SelectTerrainLayerWindow : EditorWindow
     {
+        // 上下文
         private RoadLayer _targetRoadLayer;
         private TerrainLayer _originalLayer;
         private PathCreator _contextPathCreator;
 
+        // 数据
         private readonly List<TerrainLayer> _assetLayers = new();
         private readonly List<TerrainLayer> _coveredLayers = new();
+        private readonly Dictionary<int, int> _coverageStats = new();
+        private int _coveredTerrainTotal = 0;
 
-        private string _search = string.Empty;
-        private string _debouncedSearch = string.Empty;
-        private Vector2 _scroll;
         private TerrainLayer _selected;
         private bool _applied;
-        private int _thumbSize = 72; // 缩略图尺寸（可调）
+
+        // UI 与状态
         private const int ThumbMin = 48;
         private const int ThumbMax = 128;
-        private const int TilePadding = 8;
+        private const int DetailIconSize = 64; // 详情图标较小，提升紧凑度
+        private int _thumbSize = 72;
 
-        // 覆盖统计与筛选模式
-        private int _coveredTerrainTotal = 0;
-        private readonly Dictionary<int, int> _coverageStats = new();
         private enum FilterMode { All, HeldOnly, MissingOnly }
         private FilterMode _filterMode = FilterMode.All;
+        private string _search = string.Empty;
 
-        // 性能优化：缓存与防抖
-        private readonly Dictionary<int, Texture2D> _thumbnailCache = new();
-        private double _lastSearchTime;
-        private const double SearchDebounce = 0.25; // 250ms 防抖
-        private double _lastPreviewTime;
-        private const double PreviewDebounce = 0.1; // 100ms
+        private ToolbarSearchField _searchField;
+        private Label _nameLabel, _covLabel;
+        private Label _sizeLabel, _terrainLabel, _pathLabel;
+        private VisualElement _detailIcon;
+        private SliderInt _thumbSlider;
+        private VisualElement _contentRoot;
+        private Button _tabAll, _tabHeld; // 顶部两个标签
 
-        // 选中项持有地形缓存，避免每次重绘都计算
-        private int _selectedHoldersId;
-        private List<UnityEngine.Terrain> _selectedHolders = new List<UnityEngine.Terrain>();
+        private readonly List<TerrainLayer> _visibleList = new();
 
-        // 单一视图，不再使用 Covered 标签页
-
+        // 入口保持兼容
         public static void Open(RoadLayer roadLayer, TerrainLayer current, PathCreator contextPathCreator)
         {
             var win = GetWindow<SelectTerrainLayerWindow>(true, "Select Terrain Layer", true);
@@ -70,591 +68,488 @@ namespace MrPathV2.Editor.Windows
             _originalLayer = current;
             _contextPathCreator = context;
 
-            // 收集图层列表（资产与覆盖地形）
             _assetLayers.Clear();
             _assetLayers.AddRange(CollectProjectLayers());
 
             _coveredLayers.Clear();
             _coveredLayers.AddRange(CollectCoveredTerrainLayers(_contextPathCreator));
 
-            // 初始化覆盖统计
             RebuildCoverageStats();
-
-            // 设置初始选中并进行一次预览赋值
-            _selected = current; // 保持当前选择
-            PreviewAssign(_selected);
-
-            // 预热缩略图缓存
-            PrewarmThumbnailCache();
-
-            _debouncedSearch = _search;
+            _selected = current;
+            // 若未传入当前选中，则回退到 RoadLayer 的持有层，保证打开后保持选中状态
+            if (_selected == null && _targetRoadLayer != null)
+                _selected = _targetRoadLayer.contentLayer;
         }
 
-        private void OnGUI()
+        public void CreateGUI()
         {
-            HandleShortcuts();
-            DrawToolbar();
-            DrawSearchBar();
-            _scroll = EditorGUILayout.BeginScrollView(_scroll);
-            // 使用栅格缩略图布局，点击缩略图直接预览（统一视图，优先展示持有图层）
-            DrawGridPrioritized();
-            EditorGUILayout.EndScrollView();
+            var root = rootVisualElement;
+            root.style.flexDirection = FlexDirection.Column;
+            root.style.paddingLeft = 4;
+            root.style.paddingRight = 4;
+            root.style.paddingTop = 4;
+            root.style.paddingBottom = 4;
+            // 引入统一样式表以提升观感
+            try
+            {
+                var ss = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/MrPathV2/Editor/Inspectors/PathProfileEditor.uss");
+                if (ss) root.styleSheets.Add(ss);
+                var selSs = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/MrPathV2/Editor/Styles/SelectTerrainLayerWindow.uss");
+                if (selSs) root.styleSheets.Add(selSs);
+                root.AddToClassList("root-container");
+            }
+            catch { /* ignore style load errors */ }
 
-            // 底部详情面板：显示选中图层的详细信息
-            DrawDetailsPanel();
+            // 顶部区域：第一行搜索，第二行两个标签（全部 / 仅已持有）
+            _searchField = new ToolbarSearchField();
+            _searchField.style.flexGrow = 1;
+            _searchField.RegisterValueChangedCallback(ev =>
+            {
+                _search = ev.newValue ?? string.Empty;
+                RebuildVisibleList();
+            });
 
-            DrawFooterActions();
+            var top = new VisualElement { name = "top" };
+            top.style.flexDirection = FlexDirection.Column;
+            top.style.marginLeft = 8; top.style.marginRight = 8; top.style.marginTop = 6; top.style.marginBottom = 0;
+
+            var searchRow = new VisualElement { name = "search-row" };
+            searchRow.style.flexDirection = FlexDirection.Row;
+            searchRow.style.alignItems = Align.Center;
+            searchRow.Add(_searchField);
+            top.Add(searchRow);
+
+            var tabBar = new VisualElement { name = "tab-bar" };
+            tabBar.style.flexDirection = FlexDirection.Row; tabBar.style.alignItems = Align.Center;
+
+            _tabAll = new Button(() => SetFilterMode(FilterMode.All)) { text = "全部" };
+            _tabHeld = new Button(() => SetFilterMode(FilterMode.HeldOnly)) { text = "仅已持有" };
+            ApplyTabStyles(_tabAll, true); ApplyTabStyles(_tabHeld, false);
+            tabBar.Add(_tabAll);
+            tabBar.Add(_tabHeld);
+            top.Add(tabBar);
+
+            root.Add(top);
+
+            // 内容区域（网格或列表）
+            _contentRoot = new VisualElement { name = "content-root" };
+            _contentRoot.style.flexGrow = 1;
+            _contentRoot.style.marginLeft = 8; _contentRoot.style.marginRight = 8; _contentRoot.style.marginTop = 8; _contentRoot.style.marginBottom = 4;
+            root.Add(_contentRoot);
+
+            // 详情面板（固定高度，图标固定尺寸）
+            var details = new VisualElement { name = "details" };
+            details.style.flexDirection = FlexDirection.Column; // 外层采用 settings-group 的列式布局
+            details.style.alignItems = Align.FlexStart;
+            details.style.marginLeft = 8; details.style.marginRight = 8; details.style.marginTop = 4; details.style.marginBottom = 8;
+            details.style.height = 80; // 更紧凑的详情高度
+            details.style.flexShrink = 0;
+            // 应用 PathProfileEditor.uss 中的 .settings-group 视觉风格
+            details.AddToClassList("settings-group");
+            // 内层行为行：左图标右信息
+            var detailRow = new VisualElement { name = "detail-row" };
+            detailRow.style.flexDirection = FlexDirection.Row;
+            detailRow.style.alignItems = Align.Center;
+
+            _detailIcon = new VisualElement { name = "icon" };
+            _detailIcon.style.width = DetailIconSize; _detailIcon.style.height = DetailIconSize;
+            _detailIcon.style.marginRight = 12; _detailIcon.style.marginLeft = 4;
+            _detailIcon.style.borderBottomWidth = 1; _detailIcon.style.borderTopWidth = 1; _detailIcon.style.borderLeftWidth = 1; _detailIcon.style.borderRightWidth = 1;
+            _detailIcon.style.borderBottomColor = Color.gray; _detailIcon.style.borderTopColor = Color.gray; _detailIcon.style.borderLeftColor = Color.gray; _detailIcon.style.borderRightColor = Color.gray;
+            // 点击图标 Ping 到资产
+            _detailIcon.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0) return; // 提前返回
+                var tl = _selected;
+                if (tl) EditorGUIUtility.PingObject(tl);
+            });
+
+            var info = new VisualElement { name = "info" };
+            info.style.flexGrow = 1;
+            info.style.flexDirection = FlexDirection.Column;
+
+            _nameLabel = new Label("未选择图层") { name = "name" };
+            _sizeLabel = new Label("尺寸：N/A") { name = "size" };
+            _terrainLabel = new Label("地形覆盖：0/0") { name = "terrain" };
+            _pathLabel = new Label("路径：-") { name = "path" };
+
+            info.Add(_nameLabel);
+            info.Add(_sizeLabel);
+            info.Add(_terrainLabel);
+            info.Add(_pathLabel);
+            detailRow.Add(_detailIcon);
+            detailRow.Add(info);
+            details.Add(detailRow);
+            root.Add(details);
+
+            // 缩略图大小滑块独立放置在详情面板下方
+            _thumbSlider = new SliderInt("缩略图大小", ThumbMin, ThumbMax);
+            _thumbSlider.value = _thumbSize;
+            _thumbSlider.style.marginTop = 6; _thumbSlider.style.marginBottom = 4;
+            _thumbSlider.RegisterValueChangedCallback(ev =>
+            {
+                _thumbSize = Mathf.Clamp(ev.newValue, ThumbMin, ThumbMax);
+                RebuildContent();
+            });
+            root.Add(_thumbSlider);
+            // 初始构建
+            // 打开窗口时主动刷新一遍数据与内容
+            RefreshLists();
+            RebuildVisibleList();
+            RebuildContent();
+            UpdateSelectionStyles();
+            UpdateDetailsPanel();
         }
 
-        private void OnDestroy()
+        // 顶部标签样式：对齐截图所示的暗色卡片风格
+        private void ApplyTabStyles(Button btn, bool active)
         {
-            // 清理缓存，避免内存泄漏
-            _thumbnailCache.Clear();
+            if (btn == null) return; // 提前返回
+            btn.style.height = 22;
+            btn.style.marginTop = 6;
+            btn.style.marginRight = 6;
+            btn.style.paddingLeft = 10; btn.style.paddingRight = 10;
+            btn.style.borderTopLeftRadius = 6; btn.style.borderTopRightRadius = 6; btn.style.borderBottomLeftRadius = 6; btn.style.borderBottomRightRadius = 6;
+            btn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            btn.style.color = Color.white;
+            btn.style.borderBottomWidth = 1; btn.style.borderTopWidth = 1; btn.style.borderLeftWidth = 1; btn.style.borderRightWidth = 1;
+            var bg = active ? new Color(0.22f, 0.22f, 0.22f) : new Color(0.18f, 0.18f, 0.18f);
+            var bd = active ? new Color(0.35f, 0.35f, 0.35f) : new Color(0.25f, 0.25f, 0.25f);
+            btn.style.backgroundColor = bg;
+            btn.style.borderBottomColor = bd; btn.style.borderTopColor = bd; btn.style.borderLeftColor = bd; btn.style.borderRightColor = bd;
         }
 
-        // 点击非窗口区域（失去焦点）自动关闭，统一与 Unity 同类窗口行为
-        private void OnLostFocus()
+        // 根据当前过滤模式更新标签的激活视觉
+        private void UpdateTabActive()
         {
-            Close();
+            ApplyTabStyles(_tabAll, _filterMode == FilterMode.All);
+            ApplyTabStyles(_tabHeld, _filterMode == FilterMode.HeldOnly);
         }
 
-        private void DrawToolbar()
+        private bool IsListMode() => _thumbSize <= ThumbMin;
+
+        private void RebuildContent()
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            //GUILayout.Label("Assets（已持有优先，绿色标识）", EditorStyles.miniLabel);
-            GUILayout.Space(8);
-            // 筛选开关：全部/仅已持有/仅未持有
-            var newFilterIndex = GUILayout.Toolbar((int)_filterMode, new[] { "全部", "仅已持有", "仅未持有" }, EditorStyles.toolbarButton, GUILayout.Width(220));
-            var newFilter = (FilterMode)newFilterIndex;
-            if (newFilter != _filterMode)
+            // 保留滚动位置，避免刷新导致跳回顶部
+            var prevScroll = _contentRoot.Q<ScrollView>("scroll");
+            float prevOffset = 0f;
+            if (prevScroll != null && prevScroll.verticalScroller != null)
+                prevOffset = prevScroll.verticalScroller.value;
+
+            _contentRoot.Clear();
+            var scroll = new ScrollView(ScrollViewMode.Vertical) { name = "scroll" };
+            scroll.style.flexGrow = 1;
+            // 隐藏滚动条以匹配参考图（仍可滚轮滚动）
+            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            _contentRoot.Add(scroll);
+
+            // NullLayer 选项始终存在
+            if (IsListMode())
             {
-                _filterMode = newFilter;
-                Repaint();
-            }
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("刷新", EditorStyles.toolbarButton, GUILayout.Width(60)))
-            {
-                RefreshLists();
-                Repaint();
-            }
-            EditorGUILayout.EndHorizontal();
-        }
-
-        private void DrawSearchBar()
-        {
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                GUILayout.Label("筛选:", GUILayout.Width(40));
-                EditorGUI.BeginChangeCheck();
-                var newSearch = EditorGUILayout.TextField(_search, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
-                if (EditorGUI.EndChangeCheck())
-                {
-                    _search = newSearch;
-                    _lastSearchTime = EditorApplication.timeSinceStartup;
-                }
-                // 根据防抖时间更新实际执行的筛选关键词
-                if (EditorApplication.timeSinceStartup - _lastSearchTime >= SearchDebounce)
-                {
-                    _debouncedSearch = _search;
-                }
-            }
-        }
-        private void DrawGrid(List<TerrainLayer> list)
-        {
-            if (list == null || list.Count == 0)
-            {
-                var msg = "未检测到可展示的 TerrainLayer（项目或覆盖地形为空）。";
-                EditorGUILayout.HelpBox(msg, MessageType.Info);
-                return; // 提前返回
-            }
-
-            var filtered = Filter(list, _debouncedSearch).ToList();
-
-            // 预置一个“None”项
-            DrawNoneTile();
-
-            float viewWidth = position.width - 20f; // 预留滚动条/边距
-            int tileWidth = _thumbSize + TilePadding;
-            int cols = Mathf.Max(1, Mathf.FloorToInt(viewWidth / tileWidth));
-
-            int i = 0;
-            while (i < filtered.Count)
-            {
-                EditorGUILayout.BeginHorizontal();
-                for (int c = 0; c < cols && i < filtered.Count; c++, i++)
-                {
-                    DrawTile(filtered[i]);
-                }
-                EditorGUILayout.EndHorizontal();
-            }
-        }
-
-        // 统一视图的优先栅格绘制：覆盖地形已持有的图层靠前
-        private void DrawGridPrioritized()
-        {
-            // 若资产列表为空，提示并返回
-            if (_assetLayers == null || _assetLayers.Count == 0)
-            {
-                EditorGUILayout.HelpBox("项目中未发现 TerrainLayer 资源。", MessageType.Info);
-                return; // 提前返回
-            }
-
-            var prioritized = PrioritizeLayers(_assetLayers, _coveredLayers);
-            var filtered = Filter(prioritized, _debouncedSearch).ToList();
-            // 应用筛选模式
-            if (_filterMode == FilterMode.HeldOnly)
-                filtered = filtered.Where(IsLayerHeldByCoveredTerrains).ToList();
-            else if (_filterMode == FilterMode.MissingOnly)
-                filtered = filtered.Where(l => !IsLayerHeldByCoveredTerrains(l)).ToList();
-            if (filtered.Count == 0)
-            {
-                EditorGUILayout.HelpBox("筛选条件下无匹配图层。", MessageType.Info);
-                return; // 提前返回
-            }
-
-            // 预置一个“None”项
-            DrawNoneTile();
-
-            float viewWidth = position.width - 20f; // 预留滚动条/边距
-            int tileWidth = _thumbSize + TilePadding;
-            int cols = Mathf.Max(1, Mathf.FloorToInt(viewWidth / tileWidth));
-
-            int i = 0;
-            while (i < filtered.Count)
-            {
-                EditorGUILayout.BeginHorizontal();
-                for (int c = 0; c < cols && i < filtered.Count; c++, i++)
-                {
-                    DrawTile(filtered[i]);
-                }
-                EditorGUILayout.EndHorizontal();
-            }
-        }
-
-        private List<TerrainLayer> PrioritizeLayers(List<TerrainLayer> assets, List<TerrainLayer> covered)
-        {
-            var result = new List<TerrainLayer>();
-            if (assets == null || assets.Count == 0) return result; // 提前返回
-
-            // 覆盖排序：绿色(全持有) > 黄色(部分持有) > 默认(未持有)
-            int total = _coveredTerrainTotal;
-            if (total <= 0)
-            {
-                // 无覆盖地形上下文，按名称返回
-                return assets.Where(a => a).OrderBy(a => a.name).ToList();
-            }
-
-            var full = new List<TerrainLayer>();
-            var partial = new List<TerrainLayer>();
-            var none = new List<TerrainLayer>();
-
-            foreach (var a in assets)
-            {
-                if (!a) continue;
-                int cov = GetCoverageCount(a);
-                if (cov >= total)
-                {
-                    full.Add(a);
-                }
-                else if (cov > 0)
-                {
-                    partial.Add(a);
-                }
-                else
-                {
-                    none.Add(a);
-                }
-            }
-
-            result.AddRange(full.OrderBy(x => x.name));
-            result.AddRange(partial.OrderBy(x => x.name));
-            result.AddRange(none.OrderBy(x => x.name));
-            return result;
-        }
-
-        private void DrawNoneTile()
-        {
-            var nameStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                alignment = TextAnchor.MiddleCenter
-            };
-
-            EditorGUILayout.BeginVertical(GUILayout.Width(_thumbSize + TilePadding));
-            var rect = GUILayoutUtility.GetRect(_thumbSize, _thumbSize, GUILayout.Width(_thumbSize), GUILayout.Height(_thumbSize));
-            if (GUI.Button(rect, new GUIContent("None")))
-            {
-                if (_selected != null)
-                {
-                    _selected = null;
-                    PreviewAssign(null);
-                }
-            }
-            GUILayout.Label("None", nameStyle, GUILayout.Width(_thumbSize));
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawTile(TerrainLayer tl)
-        {
-            if (!tl) return; // 提前返回
-
-            var preview = GetThumbnail(tl);
-            EditorGUILayout.BeginVertical(GUILayout.Width(_thumbSize + TilePadding));
-
-            var rect = GUILayoutUtility.GetRect(_thumbSize, _thumbSize, GUILayout.Width(_thumbSize), GUILayout.Height(_thumbSize));
-            // 现代卡片背景与悬停/选中高亮
-            bool isHover = rect.Contains(Event.current.mousePosition);
-            bool isSelected = _selected == tl;
-            var bgColor = isSelected ? new Color(0.2f, 0.6f, 0.2f, 0.15f) : (isHover ? new Color(1f, 1f, 1f, 0.08f) : new Color(1f, 1f, 1f, 0.04f));
-            var bgRect = new Rect(rect.x - 2f, rect.y - 2f, rect.width + 4f, rect.height + 4f);
-            EditorGUI.DrawRect(bgRect, bgColor);
-            if (isSelected)
-            {
-                var border = new Color(0.2f, 0.8f, 0.2f, 0.8f);
-                EditorGUI.DrawRect(new Rect(bgRect.x, bgRect.y, bgRect.width, 1f), border);
-                EditorGUI.DrawRect(new Rect(bgRect.x, bgRect.yMax - 1f, bgRect.width, 1f), border);
-                EditorGUI.DrawRect(new Rect(bgRect.x, bgRect.y, 1f, bgRect.height), border);
-                EditorGUI.DrawRect(new Rect(bgRect.xMax - 1f, bgRect.y, 1f, bgRect.height), border);
-            }
-            // 双击检测优先（避免与按钮冲突）
-            var e = Event.current;
-            if (e.type == EventType.MouseDown && rect.Contains(e.mousePosition))
-            {
-                if (e.clickCount == 2)
-                {
-                    HandleDoubleClickOnTile(tl);
-                    e.Use();
-                }
-            }
-            if (preview)
-            {
-                GUI.DrawTexture(rect, preview, ScaleMode.ScaleToFit);
-            }
-            if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
-            {
-                _selected = tl;
-                PreviewAssign(tl);
-            }
-
-            var nameStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                wordWrap = true
-            };
-            // 名称加粗，并按持有比例着色：全持有=绿色，部分持有=黄色
-            nameStyle.fontStyle = FontStyle.Bold;
-            int cov = GetCoverageCount(tl);
-            int total = _coveredTerrainTotal;
-            if (total > 0)
-            {
-                if (cov >= total)
-                {
-                    // 全部持有
-                    var col = new Color(0.2f, 0.8f, 0.2f);
-                    nameStyle.normal.textColor = col;
-                    nameStyle.hover.textColor = col;
-                }
-                else if (cov > 0)
-                {
-                    // 部分持有
-                    var col = new Color(0.95f, 0.75f, 0.15f);
-                    nameStyle.normal.textColor = col;
-                    nameStyle.hover.textColor = col;
-                }
-                // 未持有保持默认颜色（更轻量、更优雅）
-            }
-            GUILayout.Label(tl.name, nameStyle, GUILayout.Width(_thumbSize));
-            EditorGUILayout.EndVertical();
-        }
-
-        // 底部详情面板：显示选中图层信息（缩略图、名称、覆盖数、首个地形名可点击）
-        private void DrawDetailsPanel()
-        {
-            GUILayout.Space(4);
-            EditorGUILayout.BeginVertical("box");
-            var tl = _selected;
-            if (!tl)
-            {
-                GUILayout.Label("未选择图层", EditorStyles.miniLabel);
-                EditorGUILayout.EndVertical();
-                return; // 提前返回
-            }
-
-            var previewTex = GetThumbnail(tl);
-            EditorGUILayout.BeginHorizontal();
-            // 左侧预览
-            var pRect = GUILayoutUtility.GetRect(64, 64, GUILayout.Width(64), GUILayout.Height(64));
-            if (previewTex) GUI.DrawTexture(pRect, previewTex, ScaleMode.ScaleToFit);
-
-            // 右侧详情
-            EditorGUILayout.BeginVertical();
-            var nameStyle = new GUIStyle(EditorStyles.label) { fontStyle = FontStyle.Bold };
-            int cov = GetCoverageCount(tl);
-            int total = _coveredTerrainTotal;
-            if (total > 0)
-            {
-                if (cov >= total)
-                {
-                    var col = new Color(0.2f, 0.8f, 0.2f);
-                    nameStyle.normal.textColor = col;
-                }
-                else if (cov > 0)
-                {
-                    var col = new Color(0.95f, 0.75f, 0.15f);
-                    nameStyle.normal.textColor = col;
-                }
-            }
-            GUILayout.Label(tl.name, nameStyle);
-            GUILayout.Space(2);
-            GUILayout.Label($"覆盖数：{cov}/{total}", EditorStyles.miniLabel);
-
-            EnsureSelectedHoldersComputed();
-            var holders = _selectedHolders;
-            if (holders.Count > 0)
-            {
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.Label("持有它的地形：", EditorStyles.miniLabel, GUILayout.Width(96));
-                var firstName = holders[0].name;
-                var linkStyle = EditorStyles.linkLabel ?? EditorStyles.miniLabel;
-                if (GUILayout.Button(firstName, linkStyle))
-                {
-                    if (holders.Count == 1)
-                    {
-                        LocateTerrain(holders[0]);
-                    }
-                    else
-                    {
-                        var linkRect = GUILayoutUtility.GetLastRect();
-                        PopupWindow.Show(linkRect, new TerrainListPopup(holders, LocateTerrain));
-                    }
-                }
-                EditorGUILayout.EndHorizontal();
+                scroll.Add(MakeListRow(null));
             }
             else
             {
-                GUILayout.Label("持有它的地形：无", EditorStyles.miniLabel);
+                // grid 区域增加 settings-group 底板
+                var group = new VisualElement { name = "grid-group" };
+                group.AddToClassList("settings-group");
+                group.style.marginLeft = 8; group.style.marginRight = 8; group.style.marginTop = 4; group.style.marginBottom = 4;
+                group.style.paddingLeft = 12; group.style.paddingRight = 12; group.style.paddingTop = 12; group.style.paddingBottom = 12;
+                group.style.flexDirection = FlexDirection.Column;
+                // Grid 底板铺满对齐
+                group.style.height = StyleKeyword.Auto;
+                group.style.flexGrow = 1;
+                scroll.Add(group);
+
+                // 顶部标签“Assets”，与参考样式一致的简洁标签
+                var tag = new Label("Assets");
+                tag.style.unityFontStyleAndWeight = FontStyle.Bold;
+                tag.style.marginBottom = 8;
+                tag.style.paddingLeft = 8; tag.style.paddingRight = 8; tag.style.paddingTop = 2; tag.style.paddingBottom = 2;
+                tag.style.backgroundColor = new Color(0.18f, 0.18f, 0.18f);
+                tag.style.borderTopLeftRadius = 4; tag.style.borderTopRightRadius = 4; tag.style.borderBottomLeftRadius = 4; tag.style.borderBottomRightRadius = 4;
+                group.Add(tag);
+
+                var grid = new VisualElement { name = "grid" };
+                grid.style.flexDirection = FlexDirection.Row;
+                grid.style.flexWrap = Wrap.Wrap;
+                grid.style.alignContent = Align.FlexStart;
+                grid.style.justifyContent = Justify.FlexStart;
+                grid.AddToClassList("mrp-grid");
+                group.Add(grid);
+                grid.Add(MakeGridTile(null));
+                foreach (var tl in _visibleList)
+                {
+                    grid.Add(MakeGridTile(tl));
+                }
+                // 让底板最小高度等于视口高度，实现“铺满”效果
+                scroll.RegisterCallback<GeometryChangedEvent>(ev =>
+                {
+                    var g = scroll.Q<VisualElement>("grid-group");
+                    if (g != null) g.style.minHeight = ev.newRect.height;
+                });
+                // 恢复滚动位置
+                if (scroll.verticalScroller != null)
+                    scroll.verticalScroller.value = prevOffset;
+                return;
             }
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
+
+            foreach (var tl in _visibleList)
+            {
+                scroll.Add(MakeListRow(tl));
+            }
+
+            // 恢复滚动位置
+            if (scroll.verticalScroller != null)
+                scroll.verticalScroller.value = prevOffset;
         }
 
-        private void EnsureSelectedHoldersComputed()
+        // 仅更新选中样式，避免因重建导致滚动跳跃
+        private void UpdateSelectionStyles()
+        {
+            var scroll = _contentRoot.Q<ScrollView>("scroll");
+            if (scroll == null) return; // 提前返回
+            // 通用：直接更新当前 ScrollView 内所有 tile 与 row
+            var tiles = scroll.Query<VisualElement>(name: "tile").ToList();
+            foreach (var tile in tiles)
+            {
+                var tl = tile.userData as TerrainLayer;
+                SetTileSelected(tile, tl == _selected);
+            }
+
+            var rows = scroll.Query<VisualElement>(name: "row").ToList();
+            foreach (var row in rows)
+            {
+                var tl = row.userData as TerrainLayer;
+                SetTileSelected(row, tl == _selected);
+            }
+        }
+
+        private VisualElement MakeGridTile(TerrainLayer tl)
+        {
+            int tileSize = _thumbSize;
+            var tile = new VisualElement { name = "tile" };
+            tile.style.width = tileSize + 8; // 更紧凑的容器宽度
+            tile.style.height = tileSize + 28;
+            tile.style.marginLeft = 12; tile.style.marginRight = 12; tile.style.marginTop = 12; tile.style.marginBottom = 12; // 与截图一致的均匀间距
+            tile.style.flexDirection = FlexDirection.Column;
+            tile.style.alignItems = Align.Center;
+            tile.style.justifyContent = Justify.FlexStart;
+            tile.style.borderBottomWidth = 0; tile.style.borderTopWidth = 0; tile.style.borderLeftWidth = 0; tile.style.borderRightWidth = 0; // tile 背景清爽
+            tile.style.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明以露出 group 底板
+            tile.userData = tl; // 记录所属图层，便于更新选中样式
+
+            var icon = new VisualElement { name = "icon" };
+            icon.style.width = tileSize; icon.style.height = tileSize;
+            icon.style.marginTop = 4; icon.style.marginBottom = 8;
+            icon.style.borderTopLeftRadius = 6; icon.style.borderTopRightRadius = 6; icon.style.borderBottomLeftRadius = 6; icon.style.borderBottomRightRadius = 6;
+            icon.AddToClassList("tile-icon");
+
+            var name = new Label { name = "name" };
+            name.style.unityTextAlign = TextAnchor.MiddleCenter;
+            name.style.whiteSpace = WhiteSpace.Normal;
+            name.style.fontSize = 12; // 与截图一致的小号标题
+            name.style.color = Color.white;
+
+            Texture2D tex = GetLayerThumbnail(tl);
+            icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
+
+            // 名称过长使用省略号，并将 NullLayer 改为 Null
+            var rawName = tl ? tl.name : "Null";
+            var displayName = TruncateEnd(rawName, Mathf.Clamp(tileSize / 8, 6, 20));
+            name.text = displayName;
+            name.style.whiteSpace = WhiteSpace.NoWrap;
+            bool held = IsLayerHeldByCoveredTerrains(tl);
+            name.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : Color.white;
+
+            // 悬停高亮改由 USS :hover 控制，避免内联样式覆盖 selected 视觉
+
+            // 选择与应用
+            tile.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0) return; // 提前返回
+                SelectLayer(tl);
+                if (evt.clickCount == 2)
+                {
+                    TryApplyByDoubleClick(tl);
+                }
+            });
+
+            tile.Add(icon);
+            tile.Add(name);
+            if (_selected == tl) SetTileSelected(tile, true);
+            return tile;
+        }
+
+        private VisualElement MakeListRow(TerrainLayer tl)
+        {
+            var row = new VisualElement { name = "row" };
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.height = Mathf.Max(ThumbMin + 12, 64);
+            row.style.marginLeft = 4; row.style.marginRight = 4; row.style.marginTop = 2; row.style.marginBottom = 2;
+            row.style.borderBottomWidth = 1; row.style.borderTopWidth = 1; row.style.borderLeftWidth = 1; row.style.borderRightWidth = 1;
+            row.style.borderBottomColor = new Color(0.25f, 0.25f, 0.25f); row.style.borderTopColor = new Color(0.25f, 0.25f, 0.25f); row.style.borderLeftColor = new Color(0.25f, 0.25f, 0.25f); row.style.borderRightColor = new Color(0.25f, 0.25f, 0.25f);
+            row.style.backgroundColor = new Color(0.13f, 0.13f, 0.13f);
+            row.AddToClassList("mrp-list-row");
+            row.userData = tl; // 记录所属图层，便于更新选中样式
+
+            var icon = new VisualElement { name = "icon" };
+            icon.style.width = ThumbMin; icon.style.height = ThumbMin; // 列表模式固定采用最小缩略图尺寸
+            icon.style.marginLeft = 6; icon.style.marginRight = 8;
+            icon.style.borderTopLeftRadius = 4; icon.style.borderTopRightRadius = 4; icon.style.borderBottomLeftRadius = 4; icon.style.borderBottomRightRadius = 4;
+            icon.AddToClassList("mrp-icon");
+            icon.AddToClassList("tile-icon");
+
+            var content = new VisualElement { name = "content" };
+            content.style.flexGrow = 1;
+            content.style.flexDirection = FlexDirection.Column;
+            var text = new Label { name = "name" };
+            text.style.unityTextAlign = TextAnchor.MiddleLeft;
+            text.AddToClassList("mrp-name");
+
+            Texture2D tex = GetLayerThumbnail(tl);
+            icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
+
+            text.text = tl ? tl.name : "Null";
+            bool held = IsLayerHeldByCoveredTerrains(tl);
+            text.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : Color.white;
+
+            // 子信息行：状态与覆盖数
+            var sub = new VisualElement { name = "sub-info" };
+            sub.style.flexDirection = FlexDirection.Row;
+            var status = new Label { name = "status" };
+            status.text = held ? "已持有" : "未持有";
+            status.style.color = held ? new Color(0.2f, 0.9f, 0.2f) : new Color(1f, 0.7f, 0.2f);
+            status.style.marginRight = 10;
+            var covLabel = new Label { name = "cov" };
+            var total = _coveredTerrainTotal;
+            covLabel.text = tl ? $"覆盖：{GetCoverageCount(tl)}/{total}" : "覆盖：0/" + total;
+            covLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
+            sub.Add(status);
+            sub.Add(covLabel);
+
+            // 悬停高亮改由 USS :hover 控制，避免内联样式覆盖 selected 视觉
+
+            // 选择与应用
+            row.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0) return; // 提前返回
+                SelectLayer(tl);
+                if (evt.clickCount == 2)
+                {
+                    TryApplyByDoubleClick(tl);
+                }
+            });
+
+            row.Add(icon);
+            content.Add(text);
+            content.Add(sub);
+            row.Add(content);
+            if (_selected == tl) SetTileSelected(row, true);
+            return row;
+        }
+
+        // 悬停样式统一交给 USS 处理，无需代码干预
+
+        private void SetTileSelected(VisualElement ve, bool selected)
+        {
+            // 使用 USS 过渡：仅切换 selected 类，动画由样式表驱动
+            var icon = ve.Q<VisualElement>("icon");
+            if (icon != null)
+            {
+                // 不做任何内联边框赋值，避免覆盖 USS 动画
+            }
+
+            // 名称颜色保持“已持有为绿色，否则白色”，选中不改变名称颜色
+            var nameLabel = ve.Q<Label>("name");
+            if (nameLabel != null)
+            {
+                var tl = ve.userData as TerrainLayer;
+                bool held = IsLayerHeldByCoveredTerrains(tl);
+                nameLabel.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : Color.white;
+            }
+
+            if (selected) ve.AddToClassList("selected");
+            else ve.RemoveFromClassList("selected");
+        }
+
+        // 移除 C# 动画；动画改由 USS transition 实现
+
+
+        private Texture2D GetLayerThumbnail(TerrainLayer tl)
+        {
+            if (!tl) return null; // 提前返回
+            var tex = tl.diffuseTexture as Texture2D;
+            if (tex) return tex;
+            tex = AssetPreview.GetAssetPreview(tl) as Texture2D;
+            if (tex) return tex;
+            return AssetPreview.GetMiniThumbnail(tl) as Texture2D;
+        }
+
+        private void SelectLayer(TerrainLayer tl)
+        {
+            _selected = tl;
+            // 预览联动：更新 RoadLayer 的 contentLayer 并立即刷新材料
+            if (_targetRoadLayer != null)
+            {
+                _targetRoadLayer.contentLayer = tl;
+                // 选择 Null 时不刷新材质，避免 Texture2DArray 警告
+                MarkPreviewDirty(materials: tl != null);
+            }
+            // 轻量：不重建内容，只更新选中样式与详情，避免滚动跳跃
+            UpdateSelectionStyles();
+            UpdateDetailsPanel();
+        }
+
+        private void UpdateDetailsPanel()
         {
             var tl = _selected;
             if (!tl)
             {
-                _selectedHoldersId = 0;
-                _selectedHolders.Clear();
-                return; // 提前返回
+                _nameLabel.text = "未选择图层";
+                if (_terrainLabel != null) _terrainLabel.text = "地形覆盖：0/0";
+                if (_sizeLabel != null) _sizeLabel.text = "尺寸：N/A";
+                if (_pathLabel != null) _pathLabel.text = "路径：-";
+                _detailIcon.style.backgroundImage = null;
+                return; // 早退
             }
-            var id = tl.GetInstanceID();
-            if (_selectedHoldersId == id && _selectedHolders != null)
+            _nameLabel.text = tl.name;
+            var cov = GetCoverageCount(tl);
+            var total = _coveredTerrainTotal;
+            if (_terrainLabel != null) _terrainLabel.text = $"地形覆盖：{cov}/{total}";
+            var texSize = tl.diffuseTexture as Texture2D;
+            if (_sizeLabel != null) _sizeLabel.text = texSize ? $"尺寸：{texSize.width}x{texSize.height}" : "尺寸：N/A";
+            if (_pathLabel != null)
             {
-                return; // 已缓存
+                var ap = AssetDatabase.GetAssetPath(tl);
+                int maxPath = Mathf.Clamp((int)(position.width / 10f), 24, 60);
+                var displayPath = string.IsNullOrEmpty(ap) ? "-" : TruncateMiddle(ap, maxPath);
+                _pathLabel.text = $"路径：{displayPath}";
             }
-            _selectedHoldersId = id;
-            _selectedHolders = GetTerrainHoldersForLayer(tl);
+            var tex = GetLayerThumbnail(tl);
+            _detailIcon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
         }
 
-        private Texture2D GetThumbnail(TerrainLayer tl)
+        // ---------- 文本省略工具 ----------
+        private static string TruncateEnd(string s, int max)
         {
-            if (!tl) return null;
-            var id = tl.GetInstanceID();
-            if (_thumbnailCache.TryGetValue(id, out var tex) && tex)
-            {
-                return tex;
-            }
-            // 优先使用 MiniThumbnail（性能更好），必要时才回退到 AssetPreview
-            tex = AssetPreview.GetMiniThumbnail(tl) as Texture2D;
-            if (!tex)
-            {
-                tex = AssetPreview.GetAssetPreview(tl) as Texture2D;
-            }
-            if (tex)
-            {
-                _thumbnailCache[id] = tex;
-            }
-            return tex;
+            if (string.IsNullOrEmpty(s) || max <= 0) return string.Empty;
+            if (s.Length <= max) return s;
+            if (max <= 3) return new string('.', max);
+            return s.Substring(0, max - 3) + "...";
         }
 
-        private void PrewarmThumbnailCache()
+        private static string TruncateMiddle(string s, int max)
         {
-            // 仅预热前 64 个，避免阻塞主线程
-            if (_assetLayers == null || _assetLayers.Count == 0) return;
-            int count = Mathf.Min(64, _assetLayers.Count);
-            for (int i = 0; i < count; i++)
-            {
-                var tl = _assetLayers[i];
-                if (!tl) continue;
-                var _ = GetThumbnail(tl);
-            }
-        }
-
-        private List<UnityEngine.Terrain> GetTerrainHoldersForLayer(TerrainLayer tl)
-        {
-            var result = new List<UnityEngine.Terrain>();
-            if (!tl) return result; // 提前返回
-            var terrains = GetCoveredTerrains(_contextPathCreator);
-            if (terrains == null || terrains.Count == 0) return result; // 提前返回
-            foreach (var t in terrains)
-            {
-                if (!t || !t.terrainData) continue;
-                var layers = t.terrainData.terrainLayers ?? Array.Empty<TerrainLayer>();
-                if (layers.Any(l => l == tl)) result.Add(t);
-            }
-            return result;
-        }
-
-        private void LocateTerrain(UnityEngine.Terrain terrain)
-        {
-            if (!terrain) return; // 提前返回
-            Selection.activeGameObject = terrain.gameObject;
-            EditorGUIUtility.PingObject(terrain.gameObject);
-            var sv = SceneView.lastActiveSceneView;
-            if (sv) sv.FrameSelected();
-        }
-
-        private class TerrainListPopup : PopupWindowContent
-        {
-            private readonly List<UnityEngine.Terrain> _terrains;
-            private readonly Action<UnityEngine.Terrain> _onChoose;
-            private Vector2 _scroll;
-
-            public TerrainListPopup(List<UnityEngine.Terrain> terrains, Action<UnityEngine.Terrain> onChoose)
-            {
-                _terrains = terrains ?? new List<UnityEngine.Terrain>();
-                _onChoose = onChoose;
-            }
-
-            public override Vector2 GetWindowSize()
-            {
-                int rows = Mathf.Max(1, _terrains.Count);
-                float height = Mathf.Min(300f, rows * 24f + 8f);
-                return new Vector2(240f, height);
-            }
-
-            public override void OnGUI(Rect rect)
-            {
-                GUILayout.Label("持有它的地形", EditorStyles.boldLabel);
-                _scroll = EditorGUILayout.BeginScrollView(_scroll);
-                foreach (var t in _terrains)
-                {
-                    if (!t) continue;
-                    var rowRect = GUILayoutUtility.GetRect(1f, 26f, GUILayout.ExpandWidth(true));
-                    bool hover = rowRect.Contains(Event.current.mousePosition);
-                    var bg = hover ? new Color(1f, 1f, 1f, 0.08f) : new Color(1f, 1f, 1f, 0.04f);
-                    EditorGUI.DrawRect(rowRect, bg);
-
-                    // 图标
-                    Texture icon = AssetPreview.GetMiniThumbnail(t) ?? EditorGUIUtility.ObjectContent(t, typeof(UnityEngine.Terrain)).image;
-                    var iconRect = new Rect(rowRect.x + 6f, rowRect.y + 3f, 20f, 20f);
-                    if (icon) GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit);
-
-                    // 名称（链接风格）
-                    var labelRect = new Rect(iconRect.xMax + 6f, rowRect.y + 4f, rowRect.width - (iconRect.width + 24f), 18f);
-                    var linkStyle = EditorStyles.linkLabel ?? EditorStyles.miniLabel;
-                    EditorGUIUtility.AddCursorRect(labelRect, MouseCursor.Link);
-                    GUI.Label(labelRect, t.name, linkStyle);
-
-                    if (GUI.Button(rowRect, GUIContent.none, GUIStyle.none))
-                    {
-                        _onChoose?.Invoke(t);
-                        editorWindow.Close();
-                    }
-                }
-                EditorGUILayout.EndScrollView();
-            }
-        }
-
-        private void HandleDoubleClickOnTile(TerrainLayer tl)
-        {
-            if (!tl) return; // 提前返回
-            // 智能双击：若覆盖地形全部已持有，直接选中并关闭；否则仅为缺失地形添加，先确认
-            var terrains = GetCoveredTerrains(_contextPathCreator);
-            int total = terrains?.Count ?? 0;
-            int coveredCount = 0;
-            if (total > 0)
-            {
-                foreach (var t in terrains)
-                {
-                    if (!t || !t.terrainData) continue;
-                    var layers = t.terrainData.terrainLayers ?? Array.Empty<TerrainLayer>();
-                    if (layers.Any(l => l == tl)) coveredCount++;
-                }
-            }
-            int missingCount = Mathf.Max(0, total - coveredCount);
-
-            if (missingCount == 0)
-            {
-                // 全部已持有：直接应用选择
-                ApplySelection(tl);
-                return;
-            }
-
-            // 部分或全部缺失：确认是否补齐缺失地形
-            var ok = EditorUtility.DisplayDialog(
-                "添加地形图层",
-                $"该图层在覆盖地形中的持有情况：{coveredCount}/{total}\n是否为缺失的 {missingCount} 个地形添加该图层？",
-                "为缺失地形添加",
-                "取消");
-
-            if (!ok) return; // 取消则不处理
-
-            AddLayerToCoveredTerrains(tl); // 仅为缺失地形添加（方法内已跳过已存在）
-            RefreshLists();
-            ApplySelection(tl);
-        }
-
-        private bool IsLayerHeldByCoveredTerrains(TerrainLayer tl)
-        {
-            if (!tl || _coveredLayers == null || _coveredLayers.Count == 0) return false; // 提前返回
-            int id = tl.GetInstanceID();
-            foreach (var l in _coveredLayers)
-            {
-                if (l && l.GetInstanceID() == id) return true;
-            }
-            return false;
-        }
-
-        private int GetCoverageCount(TerrainLayer tl)
-        {
-            if (!tl) return 0;
-            var id = tl.GetInstanceID();
-            return _coverageStats.TryGetValue(id, out var cnt) ? cnt : 0;
-        }
-
-        private void AddLayerToCoveredTerrains(TerrainLayer tl)
-        {
-            if (!tl || !_contextPathCreator) return; // 提前返回
-
-            var terrains = GetCoveredTerrains(_contextPathCreator);
-            if (terrains == null || terrains.Count == 0) return;
-
-            foreach (var terrain in terrains)
-            {
-                if (!terrain || !terrain.terrainData) continue;
-
-                var td = terrain.terrainData;
-                var layers = td.terrainLayers ?? Array.Empty<TerrainLayer>();
-                // 已存在则跳过
-                var exists = layers.Any(l => l == tl);
-                if (exists) continue;
-
-                var newLayers = new TerrainLayer[layers.Length + 1];
-                Array.Copy(layers, newLayers, layers.Length);
-                newLayers[layers.Length] = tl;
-
-                Undo.RecordObject(td, "Add TerrainLayer");
-                td.terrainLayers = newLayers;
-                EditorUtility.SetDirty(td);
-            }
-
-            // 通知刷新：窗口/Inspector 刷新，方便后续 Paint 识别到新列表
-            EditorRefresh.Instance.RequestRefresh("terrain_layers_refresh", () =>
-            {
-                Repaint();
-                EditorRefresh.Instance.RequestInspectorRefresh();
-            }, forceImmediate: true);
+            if (string.IsNullOrEmpty(s) || max <= 0) return string.Empty;
+            if (s.Length <= max) return s;
+            if (max <= 5) return TruncateEnd(s, max);
+            int keep = max - 3;
+            int head = Mathf.CeilToInt(keep * 0.6f);
+            int tail = keep - head;
+            return s.Substring(0, head) + "..." + s.Substring(s.Length - tail);
         }
 
         private void ApplySelection(TerrainLayer tl)
@@ -665,49 +560,111 @@ namespace MrPathV2.Editor.Windows
                 return; // 提前返回
             }
 
-            // 记录撤销并应用选择
             var owner = _contextPathCreator ? _contextPathCreator.profile : null;
-            if (owner)
-            {
-                Undo.RecordObject(owner, "Select Terrain Layer");
-            }
-
+            if (owner) Undo.RecordObject(owner, "Select Terrain Layer");
             _targetRoadLayer.contentLayer = tl;
-
-            if (owner)
-            {
-                EditorUtility.SetDirty(owner);
-            }
+            if (owner) EditorUtility.SetDirty(owner);
             _applied = true;
-            MarkPreviewDirty();
+            // 应用 Null 时不刷新材质
+            MarkPreviewDirty(materials: tl != null);
             Close();
         }
 
-        private void DrawFooterActions()
+        // 双击应用前的确认逻辑（仅当不在已持有集合时弹窗）。
+        private void TryApplyByDoubleClick(TerrainLayer tl)
         {
-            using (new EditorGUILayout.HorizontalScope())
+            if (tl == null)
             {
-                // 仅保留应用按钮
-                // var applyLabel = _selected ? "应用" : "清空";
-                // if (GUILayout.Button(applyLabel, GUILayout.Height(24)))
-                // {
-                //     ApplySelection(_selected);
-                // }
+                // 双击 Null：清空当前 RoadLayer 的地形图层插槽
+                ApplySelection(null);
+                return; // 提前返回
+            }
+            if (IsLayerHeldByCoveredTerrains(tl))
+            {
+                ApplySelection(tl);
+                return; // 提前返回
+            }
 
-                GUILayout.FlexibleSpace();
-                // 右下角缩略图缩放滑条（类似Unity原生）
-                GUILayout.Label("缩略图", GUILayout.Width(48));
-                int newSize = Mathf.RoundToInt(GUILayout.HorizontalSlider(_thumbSize, ThumbMin, ThumbMax, GUILayout.Width(160)));
-                if (newSize != _thumbSize)
-                {
-                    _thumbSize = newSize;
-                    Repaint();
-                }
-                GUILayout.Label(_thumbSize.ToString(), GUILayout.Width(32));
+            // 系统标准对话框，默认焦点在“取消”（第一个按钮）
+            bool okIsCancel = EditorUtility.DisplayDialog(
+                "添加图层到地形确认",
+                "您正在尝试将新地形Layer添加到地形，是否继续？",
+                "取消",
+                "确认添加");
+
+            if (!okIsCancel)
+            {
+                ApplySelection(tl);
             }
         }
 
-        // 工具方法：收集项目中的全部 TerrainLayer 资源
+        private void MarkPreviewDirty(bool spine = false, bool mesh = false, bool materials = true)
+        {
+            // 直接使用全局预览渲染器刷新指定 PathCreator
+            try
+            {
+                if (_contextPathCreator)
+                {
+                    MultiPathPreviewRenderer.MarkCreatorDirty(_contextPathCreator, spine, mesh, materials);
+                    SceneView.RepaintAll();
+                }
+            }
+            catch { /* 忽略预览更新异常 */ }
+        }
+
+        private void OnLostFocus() => Close();
+
+        private void OnDisable()
+        {
+            if (!_applied && _targetRoadLayer != null)
+            {
+                _targetRoadLayer.contentLayer = _originalLayer;
+                // 回滚到 Null 时也不刷新材质
+                MarkPreviewDirty(materials: _originalLayer != null);
+            }
+        }
+
+        // -------- 过滤与数据 ---------
+        private void SetFilterMode(FilterMode mode)
+        {
+            _filterMode = mode;
+            UpdateTabActive();
+            RebuildVisibleList();
+        }
+
+        private void RefreshLists()
+        {
+            _assetLayers.Clear();
+            _assetLayers.AddRange(CollectProjectLayers());
+            _coveredLayers.Clear();
+            _coveredLayers.AddRange(CollectCoveredTerrainLayers(_contextPathCreator));
+            RebuildCoverageStats();
+        }
+
+        private void RebuildVisibleList()
+        {
+            _visibleList.Clear();
+            IEnumerable<TerrainLayer> seq = _assetLayers;
+            if (!string.IsNullOrEmpty(_search))
+            {
+                var s = _search.ToLowerInvariant();
+                seq = seq.Where(l => l && l.name != null && l.name.ToLowerInvariant().Contains(s));
+            }
+            switch (_filterMode)
+            {
+                case FilterMode.HeldOnly:
+                    seq = seq.Where(IsLayerHeldByCoveredTerrains);
+                    break;
+                case FilterMode.MissingOnly:
+                    seq = seq.Where(l => !IsLayerHeldByCoveredTerrains(l));
+                    break;
+            }
+            _visibleList.AddRange(seq);
+            RebuildContent();
+            // 重建后立即同步选中样式，确保列表/网格状态一致
+            UpdateSelectionStyles();
+        }
+
         private static List<TerrainLayer> CollectProjectLayers()
         {
             var guids = AssetDatabase.FindAssets("t:TerrainLayer");
@@ -718,7 +675,6 @@ namespace MrPathV2.Editor.Windows
                 var tl = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
                 if (tl) result.Add(tl);
             }
-            // 去重（按实例ID）
             var distinct = new List<TerrainLayer>();
             var seen = new HashSet<int>();
             foreach (var l in result)
@@ -729,184 +685,72 @@ namespace MrPathV2.Editor.Windows
             return distinct.OrderBy(l => l.name).ToList();
         }
 
-        private static IEnumerable<TerrainLayer> Filter(IEnumerable<TerrainLayer> src, string q)
+        private List<TerrainLayer> CollectCoveredTerrainLayers(PathCreator ctx)
         {
-            if (string.IsNullOrEmpty(q)) return src;
-            q = q.Trim();
-            return src.Where(l => l && l.name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0);
-        }
-
-        // 收集道路覆盖地形所持有的全部图层
-        private static List<TerrainLayer> CollectCoveredTerrainLayers(PathCreator creator)
-        {
-            var result = new List<TerrainLayer>();
-            var terrains = GetCoveredTerrains(creator);
-            if (terrains == null || terrains.Count == 0) return result; // 提前返回
-
-            var set = new HashSet<int>();
+            var res = new List<TerrainLayer>();
+            var terrains = GameObject.FindObjectsOfType<UnityEngine.Terrain>();
+            _coveredTerrainTotal = terrains?.Length ?? 0;
+            if (terrains == null || terrains.Length == 0) return res; // 早退
             foreach (var t in terrains)
             {
-                if (!t?.terrainData?.terrainLayers?.Any() ?? true) continue;
-                foreach (var l in t.terrainData.terrainLayers)
+                var data = t.terrainData;
+                if (!data) continue;
+                var tls = data.terrainLayers;
+                if (tls == null || tls.Length == 0) continue;
+                foreach (var l in tls)
                 {
-                    if (!l) continue;
-                    var id = l.GetInstanceID();
-                    if (set.Add(id)) result.Add(l);
+                    if (l) res.Add(l);
                 }
             }
-
-            return result.OrderBy(l => l.name).ToList();
-        }
-
-        private void RefreshLists()
-        {
-            // 统一刷新资产与覆盖地形列表
-            _assetLayers.Clear();
-            _assetLayers.AddRange(CollectProjectLayers());
-
-            _coveredLayers.Clear();
-            _coveredLayers.AddRange(CollectCoveredTerrainLayers(_contextPathCreator));
-
-            // 重建覆盖统计
-            RebuildCoverageStats();
-
-            // 刷新后重建缩略图缓存
-            _thumbnailCache.Clear();
-            PrewarmThumbnailCache();
+            // 去重
+            var distinct = new List<TerrainLayer>();
+            var seen = new HashSet<int>();
+            foreach (var l in res)
+            {
+                var id = l.GetInstanceID();
+                if (seen.Add(id)) distinct.Add(l);
+            }
+            return distinct.OrderBy(l => l.name).ToList();
         }
 
         private void RebuildCoverageStats()
         {
             _coverageStats.Clear();
-            _coveredTerrainTotal = 0;
-            var terrains = GetCoveredTerrains(_contextPathCreator);
-            if (terrains == null || terrains.Count == 0) return; // 提前返回
-            _coveredTerrainTotal = terrains.Count;
-            foreach (var terrain in terrains)
+            var terrains = GameObject.FindObjectsOfType<UnityEngine.Terrain>();
+            _coveredTerrainTotal = terrains?.Length ?? 0;
+            if (terrains == null || terrains.Length == 0) return;
+            foreach (var t in terrains)
             {
-                if (!terrain || !terrain.terrainData) continue;
-                var layers = terrain.terrainData.terrainLayers ?? Array.Empty<TerrainLayer>();
-                foreach (var l in layers)
+                var data = t.terrainData;
+                if (!data) continue;
+                var tls = data.terrainLayers;
+                if (tls == null || tls.Length == 0) continue;
+                foreach (var l in tls)
                 {
                     if (!l) continue;
                     var id = l.GetInstanceID();
-                    _coverageStats[id] = _coverageStats.TryGetValue(id, out var cnt) ? (cnt + 1) : 1;
+                    if (_coverageStats.TryGetValue(id, out var cnt)) _coverageStats[id] = cnt + 1;
+                    else _coverageStats[id] = 1;
                 }
             }
         }
 
-        private void HandleShortcuts()
+        private int GetCoverageCount(TerrainLayer tl)
         {
-            var e = Event.current;
-            if (e == null) return;
-            if (e.type == EventType.KeyDown)
-            {
-                if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
-                {
-                    ApplySelection(_selected);
-                    e.Use();
-                }
-                else if (e.keyCode == KeyCode.Escape)
-                {
-                    Close();
-                    e.Use();
-                }
-            }
+            if (!tl) return 0;
+            var id = tl.GetInstanceID();
+            return _coverageStats.TryGetValue(id, out var cnt) ? cnt : 0;
         }
 
-        // ------- 道路覆盖地形计算 & 辅助方法 -------
-        private static List<UnityEngine.Terrain> GetCoveredTerrains(PathCreator creator)
+        private bool IsLayerHeldByCoveredTerrains(TerrainLayer tl)
         {
-            var result = new List<UnityEngine.Terrain>();
-            if (!creator || !creator.profile || creator.pathData == null || creator.pathData.KnotCount < 2)
-                return result; // 提前返回
-
-            try
+            if (!tl || _coveredLayers == null || _coveredLayers.Count == 0) return false;
+            int id = tl.GetInstanceID();
+            foreach (var l in _coveredLayers)
             {
-                var heightProvider = new TerrainHeightProvider();
-                var spine = PathSampler.SamplePath(creator, heightProvider);
-                var bounds = GetExpandedXZBounds(spine, creator.profile);
-
-                var terrains = UnityEngine.Terrain.activeTerrains;
-                foreach (var terrain in terrains)
-                {
-                    if (!terrain?.terrainData) continue;
-                    var tb = GetTerrainBounds(terrain);
-                    if (BoundsOverlap(bounds, tb))
-                    {
-                        result.Add(terrain);
-                    }
-                }
+                if (l && l.GetInstanceID() == id) return true;
             }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[SelectTerrainLayerWindow] GetCoveredTerrains: {ex.Message}");
-            }
-
-            return result;
-        }
-
-        private static Vector4 GetExpandedXZBounds(PathSpine spine, PathProfile profile)
-        {
-            if (spine.VertexCount == 0)
-                return new Vector4(0, 0, 0, 0);
-
-            var halfWidth = (profile.roadWidth * 0.5f) + profile.falloffWidth;
-            float minX = float.MaxValue, minZ = float.MaxValue;
-            float maxX = float.MinValue, maxZ = float.MinValue;
-            for (int i = 0; i < spine.VertexCount; i++)
-            {
-                var p = spine.Points[i];
-                minX = Mathf.Min(minX, p.x - halfWidth);
-                minZ = Mathf.Min(minZ, p.z - halfWidth);
-                maxX = Mathf.Max(maxX, p.x + halfWidth);
-                maxZ = Mathf.Max(maxZ, p.z + halfWidth);
-            }
-            return new Vector4(minX, minZ, maxX, maxZ);
-        }
-
-        private static Vector4 GetTerrainBounds(UnityEngine.Terrain terrain)
-        {
-            var pos = terrain.transform.position;
-            var size = terrain.terrainData.size;
-            return new Vector4(pos.x, pos.z, pos.x + size.x, pos.z + size.z);
-        }
-
-        private static bool BoundsOverlap(Vector4 a, Vector4 b)
-        {
-            return !(a.z <= b.x || a.x >= b.z || a.w <= b.y || a.y >= b.w);
-        }
-
-        // ------- 实时预览赋值与回滚 -------
-        private void PreviewAssign(TerrainLayer tl)
-        {
-            if (_targetRoadLayer == null) return; // 提前返回
-            _targetRoadLayer.contentLayer = tl;
-            // 防抖：减少高频预览刷新导致的卡顿
-            var now = EditorApplication.timeSinceStartup;
-            if (now - _lastPreviewTime >= PreviewDebounce)
-            {
-                _lastPreviewTime = now;
-                MarkPreviewDirty();
-            }
-        }
-
-        private void MarkPreviewDirty()
-        {
-            if (_contextPathCreator)
-            {
-                MultiPathPreviewRenderer.MarkCreatorDirty(_contextPathCreator, spine: false, mesh: false, materials: true);
-            }
-        }
-
-        private void OnDisable()
-        {
-            // 关闭时未应用则回滚
-            if (!_applied && _targetRoadLayer != null)
-            {
-                _targetRoadLayer.contentLayer = _originalLayer;
-                MarkPreviewDirty();
-            }
+            return false;
         }
     }
 }

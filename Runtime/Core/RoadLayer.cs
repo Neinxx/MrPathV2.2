@@ -95,12 +95,31 @@ namespace __temp.MrPathV2.Runtime.Core
             }
         }
 
-        [HorizontalGroup("LayerContent/ContentRow", Width = 0.8f)]
+        [HorizontalGroup("LayerContent/ContentRow", Width = 0.6f)]
         [LabelText("")]
         [ShowInInspector]
         [DisplayAsString]
         [PropertyOrder(2)]
         private string ContentLayerDisplay => contentLayer ? contentLayer.name : "未选择";
+#if UNITY_EDITOR
+        [BoxGroup("LayerContent")]
+        [HorizontalGroup("LayerContent/ContentRow", Width = 0.2f)]
+        [PropertyOrder(3)]
+        [OnInspectorGUI]
+        private void DrawContentRowActions()
+        {
+            EditorGUILayout.BeginHorizontal();
+            // 仅保留小型清空按钮，匹配 UXML 中的 "C" 样式
+            using (new EditorGUI.DisabledScope(!contentLayer))
+            {
+                if (GUILayout.Button("C", EditorStyles.miniButton, GUILayout.Width(20)))
+                {
+                    ClearContentLayer();
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+#endif
 #endif
 
         /// <summary>
@@ -149,12 +168,32 @@ namespace __temp.MrPathV2.Runtime.Core
             }
         }
 
-        [HorizontalGroup("LayerContent/MaskRow", Width = 0.8f)]
+        [HorizontalGroup("LayerContent/MaskRow", Width = 0.6f)]
         [LabelText("")]
         [ShowInInspector]
         [DisplayAsString]
         [PropertyOrder(5)]
         private string LayerMaskDisplay => layerMask ? GetNameSuffix(layerMask.name, imageSize) : "未选择";
+
+#if UNITY_EDITOR
+        [BoxGroup("LayerContent")]
+        [HorizontalGroup("LayerContent/MaskRow", Width = 0.2f)]
+        [PropertyOrder(6)]
+        [OnInspectorGUI]
+        private void DrawMaskRowActions()
+        {
+            EditorGUILayout.BeginHorizontal();
+            // 仅保留小型清空按钮，匹配 UXML 中的 "C" 样式
+            using (new EditorGUI.DisabledScope(!layerMask))
+            {
+                if (GUILayout.Button("C", EditorStyles.miniButton, GUILayout.Width(20)))
+                {
+                    ClearLayerMask();
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+#endif
 
         // 超长名称仅显示后缀，避免布局挤占；例如显示 …VeryLongSuffix
         private static string GetNameSuffix(string name, int maxSuffixLen = 16)
@@ -221,6 +260,17 @@ namespace __temp.MrPathV2.Runtime.Core
         private void ClearContentLayer()
         {
             contentLayer = null;
+        }
+
+        private void PingLayerMask()
+        {
+            if (!layerMask) return;
+            EditorGUIUtility.PingObject(layerMask);
+        }
+
+        private void ClearLayerMask()
+        {
+            layerMask = null;
         }
 
         private void OpenLayerMaskSelect()

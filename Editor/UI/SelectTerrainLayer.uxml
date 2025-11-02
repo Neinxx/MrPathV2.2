@@ -1,20 +1,76 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
     <Style src="project://database/Assets/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor" />
-    <ui:VisualElement style="flex-direction: row; justify-content: space-between; height: 20px; flex-grow: 0; margin-bottom: 6px;">
-        <ui:Button text="Button" display-tooltip-when-elided="true" name="all" style="flex-shrink: 1; flex-grow: 1;" />
-        <ui:Button text="Button" display-tooltip-when-elided="true" name="holded" style="flex-shrink: 1; flex-grow: 1;" />
-        <ui:Button text="Button" display-tooltip-when-elided="true" name="notHolded" style="flex-shrink: 1; flex-grow: 1;" />
-        <ui:VisualElement style="flex-grow: 1; width: 200px;" />
-        <ui:Button text="Button" display-tooltip-when-elided="true" name="refresh" style="flex-shrink: 1; flex-grow: 1;" />
+    <ui:VisualElement style="padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; margin-left: 6px; margin-right: 6px; margin-top: 6px; margin-bottom: 6px; flex-grow: 0; height: 24px;">
+        <ui:TextField picking-mode="Ignore" value="filler text" text="filler text" style="flex-shrink: 1; flex-grow: 1;" />
     </ui:VisualElement>
-    <ui:VisualElement class="object-field" style="padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px; flex-grow: 0; height: 36px;">
-        <ui:TextField picking-mode="Ignore" label="search" value="filler text" text="filler text" style="flex-shrink: 1; flex-grow: 1;" />
+    <ui:VisualElement style="flex-direction: row; justify-content: flex-start; height: 20px; flex-grow: 0; margin-bottom: 0; margin-left: 10px; margin-right: 10px;">
+        <ui:VisualElement style="flex-grow: 1; width: 200px; background-color: rgba(0, 0, 0, 0.18); margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; min-width: 66px; max-width: 99px;">
+            <ui:Label text="All" display-tooltip-when-elided="true" style="-unity-text-align: middle-center; white-space: nowrap; -unity-font-style: bold; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0;" />
+        </ui:VisualElement>
+        <ui:VisualElement style="flex-grow: 1; width: 200px; background-color: rgba(0, 0, 0, 0.18); margin-left: 3px; margin-right: 1px; margin-top: 0; margin-bottom: 0; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; min-width: 66px; max-width: 99px;">
+            <ui:Label text="SceneLayer" display-tooltip-when-elided="true" style="-unity-text-align: middle-center; white-space: nowrap; -unity-font-style: bold; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; color: rgba(210, 210, 210, 0.47);" />
+        </ui:VisualElement>
     </ui:VisualElement>
-    <ui:VisualElement class="settings-group" style="flex-grow: 1; margin-left: 10px; margin-right: 10px; margin-top: 10px; margin-bottom: 5px; padding-top: 12px;">
-        <ui:ListView focusable="true" />
+    <ui:VisualElement class="settings-group" style="flex-grow: 1; margin-left: 10px; margin-right: 10px; margin-top: 0; margin-bottom: 5px; padding-top: 12px;">
+        <ui:VisualElement style="height: 117px; flex-direction: row;">
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: none; padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgba(137, 136, 135, 0.19); border-right-color: rgba(137, 136, 135, 0.19); border-top-color: rgba(137, 136, 135, 0.19); border-bottom-color: rgba(137, 136, 135, 0.19); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px; background-color: rgba(0, 0, 0, 0.21);" />
+                <ui:Label text="Null" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement style="height: 117px; flex-direction: row;">
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement style="height: 117px; flex-direction: row;">
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(137, 136, 135); border-right-color: rgb(137, 136, 135); border-top-color: rgb(137, 136, 135); border-bottom-color: rgb(137, 136, 135); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+            <ui:VisualElement style="align-items: center; margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
+                <ui:VisualElement style="width: 90px; height: 90px; background-image: url(&apos;project://database/Assets/MrPathV2/Data/road_1.jpg?fileID=2800000&amp;guid=8b86f28fe0f6647e0a55f8c6490b8ae3&amp;type=3#road_1&apos;); padding-left: 5px; padding-right: 5px; padding-top: 5px; padding-bottom: 5px; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; border-left-color: rgb(255, 167, 45); border-right-color: rgb(255, 167, 45); border-top-color: rgb(255, 167, 45); border-bottom-color: rgb(255, 167, 45); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-top-left-radius: 14px; border-bottom-left-radius: 14px; border-top-right-radius: 14px; border-bottom-right-radius: 14px;" />
+                <ui:Label text="Name" display-tooltip-when-elided="true" style="align-items: center; justify-content: center; margin-top: 0; -unity-font-style: bold;" />
+            </ui:VisualElement>
+        </ui:VisualElement>
     </ui:VisualElement>
     <ui:GroupBox class="settings-group" style="height: 96px; flex-direction: row; margin-left: 10px; margin-right: 10px; margin-top: 5px; margin-bottom: 10px;">
-        <ui:VisualElement name="Icon" style="width: 81px; height: 74px;" />
+        <ui:VisualElement name="Icon" style="width: 81px; height: 74px; background-image: url(&apos;project://database/Assets/Samples/Universal%20RP/12.1.12/URP%20Package%20Samples/Shaders/Lit/Textures/Coins_Base.png?fileID=2800000&amp;guid=b163bf2a288dd46efa3cc7460d5f9cd8&amp;type=3#Coins_Base&apos;); border-top-left-radius: 10px; border-bottom-left-radius: 10px; border-top-right-radius: 10px; border-bottom-right-radius: 10px;" />
+        <ui:VisualElement style="align-items: center; justify-content: center;">
+            <ui:Label text="Name" display-tooltip-when-elided="true" style="width: 312px; margin-left: 19px;" />
+            <ui:Label text="Size" display-tooltip-when-elided="true" style="width: 312px; margin-left: 19px;" />
+            <ui:Label text="Terrain" display-tooltip-when-elided="true" style="width: 312px; margin-left: 19px;" />
+            <ui:Label text="Path" display-tooltip-when-elided="true" enable-rich-text="false" style="width: 312px; margin-left: 19px;" />
+        </ui:VisualElement>
     </ui:GroupBox>
     <ui:SliderInt picking-mode="Ignore" label="SliderInt" value="42" high-value="100" name="thumb" style="margin-bottom: 3px; padding-left: 6px; padding-right: 6px; padding-top: 6px; padding-bottom: 6px;" />
 </ui:UXML>

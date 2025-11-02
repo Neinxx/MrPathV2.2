@@ -13,17 +13,17 @@ MonoBehaviour:
   m_Name: MrPath_StylizedRoadRecipe_NoiseMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: -0.38, y: -0.46}
+  tiling: {x: 0.18, y: 0.28}
   offset: {x: 0, y: 0}
-  overallScale: 2
-  strength: 1
-  seed: 9.9
-  noiseScale: {x: 8.67, y: 8.67}
+  overallScale: 0.924
+  strength: 0.819
+  seed: 11.05
+  noiseScale: {x: 40.23, y: 40.23}
   uniformScale: 1
-  rotationDeg: -87
+  rotationDeg: 15
   octaves: 1
-  lacunarity: 3.06
-  gain: 0.687
+  lacunarity: 2.73
+  gain: 0.61
   useAsymmetricEdges: 1
-  edgeLow: 0.54
-  edgeHigh: 0.758
+  edgeLow: 0.281
+  edgeHigh: 0.668

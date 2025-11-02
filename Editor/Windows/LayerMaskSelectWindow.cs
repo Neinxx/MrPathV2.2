@@ -27,6 +27,12 @@ namespace MrPathV2.Editor.Windows
         private Vector2 _paramScroll;
         private string _search = string.Empty;
 
+        // 新建遮罩相关
+        private Type[] _availableMaskTypes = Array.Empty<Type>();
+        private int _createTypeIndex = 0;
+        private string _newMaskName = "NewMask";
+        private const string DefaultMaskFolder = "Assets/MrPathV2/Masks";
+
         // 可拖拽分割条
         private float _listTopHeight = 240f;
         private bool _resizing;
@@ -44,6 +50,9 @@ namespace MrPathV2.Editor.Windows
         {
             _targetLayer = layer;
             _selected = current;
+            _availableMaskTypes = FindAvailableMaskTypes();
+            if (_availableMaskTypes == null || _availableMaskTypes.Length == 0)
+                _availableMaskTypes = new[] { typeof(BlendMaskBase) };
             RebuildList();
             RecreateEditor();
         }
@@ -115,9 +124,22 @@ namespace MrPathV2.Editor.Windows
                 return; // 提前返回
             }
 
+            EditorGUILayout.BeginVertical(GUILayout.Height(height));
             _listScroll = EditorGUILayout.BeginScrollView(_listScroll, GUILayout.ExpandHeight(true));
             foreach (var m in filtered) DrawMaskRow(m);
             EditorGUILayout.EndScrollView();
+
+            // 底部“新建遮罩”区域（底对齐）
+            EditorGUILayout.BeginHorizontal();
+            var typeNames = _availableMaskTypes.Select(t => t.Name).ToArray();
+            _createTypeIndex = EditorGUILayout.Popup(_createTypeIndex, typeNames, GUILayout.Width(140));
+            _newMaskName = EditorGUILayout.TextField(_newMaskName, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("新建遮罩", GUILayout.Width(88)))
+            {
+                CreateNewMaskAsset(_availableMaskTypes[Mathf.Clamp(_createTypeIndex, 0, _availableMaskTypes.Length - 1)], _newMaskName);
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndVertical();
         }
 
         private void DrawMaskRow(BlendMaskBase m)
@@ -218,6 +240,63 @@ namespace MrPathV2.Editor.Windows
         {
             if (_selectedEditor) { DestroyImmediate(_selectedEditor); _selectedEditor = null; }
             if (_selected) _selectedEditor = UnityEditor.Editor.CreateEditor(_selected);
+        }
+
+        // --- 新建遮罩工具 ---
+        private static Type[] FindAvailableMaskTypes()
+        {
+            return AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(a => a.GetTypes())
+                .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
+                .ToArray();
+        }
+
+        private void CreateNewMaskAsset(Type maskType, string nameHint)
+        {
+            if (maskType == null || !typeof(BlendMaskBase).IsAssignableFrom(maskType))
+            {
+                EditorUtility.DisplayDialog("错误", "无效的遮罩类型。", "确定");
+                return; // 提前返回
+            }
+
+            // 确保目标文件夹存在
+            EnsureFolderExists(DefaultMaskFolder);
+            var cleanName = string.IsNullOrWhiteSpace(nameHint) ? maskType.Name : nameHint.Trim();
+            var assetPath = AssetDatabase.GenerateUniqueAssetPath($"{DefaultMaskFolder}/{cleanName}.asset");
+
+            var instance = ScriptableObject.CreateInstance(maskType) as BlendMaskBase;
+            if (!instance)
+            {
+                EditorUtility.DisplayDialog("错误", "创建遮罩实例失败。", "确定");
+                return; // 提前返回
+            }
+
+            AssetDatabase.CreateAsset(instance, assetPath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            // 更新列表并应用到目标图层
+            _masks.Add(instance);
+            _iconCache[instance.GetInstanceID()] = AssetPreview.GetMiniThumbnail(instance);
+            ApplySelection(instance);
+            Repaint();
+        }
+
+        private static void EnsureFolderExists(string fullPath)
+        {
+            // fullPath 形如 Assets/AAA/BBB
+            var parts = fullPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return;
+            var current = parts[0]; // 应为 Assets
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var next = parts[i];
+                if (!AssetDatabase.IsValidFolder($"{current}/{next}"))
+                {
+                    AssetDatabase.CreateFolder(current, next);
+                }
+                current = $"{current}/{next}";
+            }
         }
 
         private void DrawHeightSplitter()

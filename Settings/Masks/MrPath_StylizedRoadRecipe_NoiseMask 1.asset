@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
   m_Name: MrPath_StylizedRoadRecipe_NoiseMask 1
   m_EditorClassIdentifier: 
-  smooth: 0.645
-  tiling: {x: 1.91, y: 1.73}
+  smooth: 0.927
+  tiling: {x: 1.91, y: 1.3}
   offset: {x: 0, y: 0}
   overallScale: 1
   strength: 0.931
