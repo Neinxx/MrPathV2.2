@@ -138,6 +138,60 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
+        ///     仅请求脊线(Spine)相关的刷新：会隐含导致网格重建，但不触发材质重建。
+        /// </summary>
+        public void RequestSpineRefresh(bool forceImmediate = false)
+        {
+            m_RefreshManager.RequestRefresh("preview_spine_refresh", () =>
+            {
+                try
+                {
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: true, mesh: true, materials: false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Spine refresh failed: {ex.Message}");
+                }
+            }, forceImmediate);
+        }
+
+        /// <summary>
+        ///     仅请求网格(Mesh)刷新：用于依赖最新脊线完成网格重算的场景，不触发材质重建。
+        /// </summary>
+        public void RequestMeshRefresh(bool forceImmediate = false)
+        {
+            m_RefreshManager.RequestRefresh("preview_mesh_refresh", () =>
+            {
+                try
+                {
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: false, mesh: true, materials: false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Mesh refresh failed: {ex.Message}");
+                }
+            }, forceImmediate);
+        }
+
+        /// <summary>
+        ///     仅请求材质(Materials)刷新：不重建脊线与网格，适用于外观参数变化。
+        /// </summary>
+        public void RequestMaterialsRefresh(bool forceImmediate = false)
+        {
+            m_RefreshManager.RequestRefresh("preview_materials_refresh", () =>
+            {
+                try
+                {
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: false, mesh: false, materials: true);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Materials refresh failed: {ex.Message}");
+                }
+            }, forceImmediate);
+        }
+
+        /// <summary>
         ///     请求刷新场景视图
         /// </summary>
         public void RequestSceneViewRefresh(bool forceImmediate = false)

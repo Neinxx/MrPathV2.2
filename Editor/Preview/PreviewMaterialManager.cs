@@ -439,7 +439,22 @@ namespace MrPathV2.Editor.Preview
             // 推送通用预览参数（不透明、阈值、深度等）
             PushCommonPreviewParams(profile, layerCount, alpha);
             // 准备遮罩纹理（MaskAtlas 或 GPU 权重）
+#if UNITY_EDITOR
+            // 若GPU权重可用，则跳过MaskAtlas构建（提前返回）
+            var gpuPreviewAvailable = EnableGpuPreview && m_TargetTerrain && EditorGpuPreviewCache.TryGet(m_TargetTerrain, out var rt) && rt;
+            if (!gpuPreviewAvailable)
+            {
+                SetupMaskTextures(profile);
+            }
+            else
+            {
+                // 绑定最简占位，避免着色器依赖MaskAtlas时退化为不透明矩形
+                if (Current.HasProperty(MaskAtlas)) Current.SetTexture(MaskAtlas, Texture2D.blackTexture);
+                if (Current.HasProperty(AtlasInvHeight)) Current.SetFloat(AtlasInvHeight, 1f);
+            }
+#else
             SetupMaskTextures(profile);
+#endif
         }
 
         /// <summary>
@@ -627,6 +642,9 @@ namespace MrPathV2.Editor.Preview
         private static readonly int TerrainSizeID = Shader.PropertyToID("_TerrainSize");
         private static readonly int AlphamapResolutionID = Shader.PropertyToID("_AlphamapResolution");
         private static readonly int LayerSplatIndicesArr = Shader.PropertyToID("_LayerSplatIndices");
+        // 绑定缓存：避免重复设置同一 RT 与 Terrain
+        private int m_LastBoundSplatRtId = 0;
+        private int m_LastBoundTerrainId = 0;
 #endif
 
         // GPU 预览目标 Terrain（仅在 Editor 环境下使用）
@@ -928,12 +946,21 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
             {
                 if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 0);
                 if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, null);
+                m_LastBoundSplatRtId = 0;
+                m_LastBoundTerrainId = 0;
                 return;
             }
 
             // 从缓存获取 RenderTextureArray
             if (EditorGpuPreviewCache.TryGet(m_TargetTerrain, out var rt) && rt)
             {
+                var rtId = rt.GetInstanceID();
+                var terrainId = m_TargetTerrain.GetInstanceID();
+                // 若已绑定同一资源，提前返回避免重复设置
+                if (rtId == m_LastBoundSplatRtId && terrainId == m_LastBoundTerrainId)
+                {
+                    return;
+                }
                 // 绑定 GPU 生成的权重纹理
                 if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, rt);
                 if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 1);
@@ -949,12 +976,16 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                     var res = td.alphamapResolution;
                     Current.SetVector(AlphamapResolutionID, new Vector4(res, res, 0f, 0f));
                 }
+                m_LastBoundSplatRtId = rtId;
+                m_LastBoundTerrainId = terrainId;
             }
             else
             {
                 // 无缓存：解除绑定，回退到 MaskAtlas
                 if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 0);
                 if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, null);
+                m_LastBoundSplatRtId = 0;
+                m_LastBoundTerrainId = 0;
             }
         }
 #endif

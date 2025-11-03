@@ -93,7 +93,7 @@ namespace MrPathV2.Editor.Windows
             // 保持窗口，不执行 Close()
         }
 
-        
+
 
         // --- UITK: 构建界面 ---
         public void CreateGUI()
@@ -159,59 +159,43 @@ namespace MrPathV2.Editor.Windows
                 });
             }
 
-            // 动态生成 MaskEnum（替换 UXML 中的占位 EnumField）
+
             _availableMaskTypes = FindAvailableMaskTypes();
             var typeNames = (_availableMaskTypes ?? Array.Empty<Type>()).Select(t => t.Name).ToList();
             if (typeNames.Count == 0) typeNames.Add("BlendMaskBase");
-            var enumPlaceholder = _rootElement.Query<EnumField>().First();
-            _maskEnumDropdown = new DropdownField { name = "MaskEnum", choices = typeNames };
-            _maskEnumDropdown.value = typeNames[Mathf.Clamp(_createTypeIndex, 0, typeNames.Count - 1)];
-            _maskEnumDropdown.style.flexGrow = 0;
-            _maskEnumDropdown.style.flexShrink = 0;
-            _maskEnumDropdown.style.width = new StyleLength(new Length(36, LengthUnit.Percent));
-            _maskEnumDropdown.RegisterValueChangedCallback(ev =>
+            //var enumPlaceholder = _rootElement.Query<EnumField>().First();
+            var maskDropdown = _rootElement.Q<DropdownField>("MaskDropDownField");
+            maskDropdown.name = "Masks";
+            maskDropdown.choices = typeNames;
+            maskDropdown.value = typeNames[Mathf.Clamp(_createTypeIndex, 0, typeNames.Count - 1)];
+            maskDropdown.RegisterValueChangedCallback(ev =>
             {
                 var idx = typeNames.IndexOf(ev.newValue);
                 _createTypeIndex = Mathf.Clamp(idx, 0, typeNames.Count - 1);
             });
-            if (enumPlaceholder != null && enumPlaceholder.parent != null)
-            {
-                var p = enumPlaceholder.parent;
-                var i = p.IndexOf(enumPlaceholder);
-                p.Insert(Mathf.Max(0, i), _maskEnumDropdown);
-                enumPlaceholder.RemoveFromHierarchy();
-            }
-            else
-            {
-                _rootElement.Add(_maskEnumDropdown);
-            }
 
-            // 绑定名称输入（若 UXML 提供）
-            _nameField = _rootElement.Query<TextField>().ToList().FirstOrDefault(tf => !string.IsNullOrEmpty(tf.text) || !string.IsNullOrEmpty(tf.value));
-            if (_nameField != null)
+
+            _rootElement.Add(_maskEnumDropdown);
+
+
+
+            _nameField = _rootElement.Query<TextField>("MaskName");
+            if (_nameField == null)
             {
-                _nameField.style.flexGrow = 0;
-                _nameField.style.flexShrink = 0;
-                _nameField.style.width = new StyleLength(new Length(44, LengthUnit.Percent));
-                _nameField.style.minHeight = 22;
+                Debug.Log("TextField name is not matching!");
             }
 
             // 使用固定缩略图尺寸 40x40
             _thumbSize = 40f;
 
-            // 可选：绑定“新建噪声”按钮（若存在）
-            _newBtn = _rootElement.Query<Button>().ToList().FirstOrDefault(b => string.Equals(b.text, "新建噪声"));
-            if (_newBtn != null)
-            {
-                _newBtn.style.flexGrow = 0;
-                _newBtn.style.flexShrink = 0;
-                _newBtn.style.width = new StyleLength(new Length(20, LengthUnit.Percent));
-                _newBtn.style.minHeight = 22;
-            }
+
+            _newBtn = _rootElement.Q<Button>("CreateMask");
+
             if (_newBtn != null)
             {
                 _newBtn.clicked += () =>
                 {
+
                     var types = _availableMaskTypes ?? Array.Empty<Type>();
                     var idx = Mathf.Clamp(_createTypeIndex, 0, types.Length - 1);
                     var type = types.Length > 0 ? types[idx] : typeof(BlendMaskBase);
@@ -296,11 +280,53 @@ namespace MrPathV2.Editor.Windows
             var icon = element.Q<Image>("icon");
             var name = element.Q<Label>("name");
             var sub = element.Q<Label>("sub");
-            icon.image = GetMaskThumbnail(m);
-            icon.style.width = _thumbSize; icon.style.height = _thumbSize; // 应用当前缩略图尺寸
-            name.text = m ? m.name : "空 (清空遮罩)";
-            sub.text = m ? m.GetType().Name : "None";
-            // 移除选中样式，避免橙色高亮
+
+            // 处理图标显示，为null时使用半透明黑色圆角图标
+            if (m == null)
+            {
+                // 设置默认的半透明黑色圆角图标
+                icon.image = CreateNullIcon();
+                name.text = "Null";
+                sub.text = "None";
+            }
+            else
+            {
+                // 使用正常的缩略图
+                icon.image = GetMaskThumbnail(m);
+                name.text = m.name;
+                sub.text = m.GetType().Name;
+            }
+
+            // 统一应用缩略图尺寸
+            icon.style.width = _thumbSize;
+            icon.style.height = _thumbSize;
+            // 添加圆角样式
+            icon.style.borderTopLeftRadius = 8;
+            icon.style.borderTopRightRadius = 8;
+            icon.style.borderBottomLeftRadius = 8;
+            icon.style.borderBottomRightRadius = 8;
+        }
+
+        // 创建半透明黑色圆角图标
+        private Texture2D CreateNullIcon()
+        {
+            // 创建一个简单的2D纹理作为默认图标
+            int size = 32; // 图标尺寸
+            Texture2D nullIcon = new Texture2D(size, size);
+            Color32[] pixels = new Color32[size * size];
+
+            // 设置半透明黑色 (alpha值设为100，范围0-255)
+            Color32 nullColor = new(0, 0, 0, 42);
+
+            // 填充所有像素
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = nullColor;
+            }
+
+            nullIcon.SetPixels32(pixels);
+            nullIcon.Apply();
+            return nullIcon;
         }
 
         private Texture2D GetMaskThumbnail(BlendMaskBase m)
@@ -362,32 +388,7 @@ namespace MrPathV2.Editor.Windows
             };
         }
 
-        // 已移除选中样式的高亮更新
 
-        private void DrawToolbar()
-        {
-            // IMGUI 绘制已移除，保留空实现以避免误用
-        }
-
-        private void DrawMaskList(float height)
-        {
-            // IMGUI 绘制已移除
-        }
-
-        private void DrawMaskRow(BlendMaskBase m)
-        {
-            // IMGUI 绘制已移除
-        }
-
-        private void DrawParamsPanel()
-        {
-            // IMGUI 绘制已移除
-        }
-
-        private void DrawFooter()
-        {
-            // IMGUI 绘制已移除
-        }
 
         private void ApplySelection(BlendMaskBase m)
         {

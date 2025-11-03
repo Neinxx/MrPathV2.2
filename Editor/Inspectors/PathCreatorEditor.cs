@@ -159,11 +159,17 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         #region 事件处理器
 
-        private void OnCurveDefinitionChanged() => MarkPathAsDirty();
+        private void OnCurveDefinitionChanged()
+        {
+            // 曲线定义变化：只需刷新脊线(隐含网格重建)，避免不必要的材质重建
+            _ctx?.RequestSpineRefresh(true);
+            _ctx?.RequestSceneViewRefresh(true);
+        }
 
         private void OnAppearanceChanged()
         {
-            _ctx?.RequestPreviewRefresh(true);
+            // 外观参数变化：仅刷新材质，避免脊线/网格重复重算
+            _ctx?.RequestMaterialsRefresh(true);
             _ctx?.RequestSceneViewRefresh(true);
         }
         

@@ -36,6 +36,8 @@ namespace MrPathV2.Editor.Preview
         private bool m_SpineDirty = true; // replaced previous _dirty
         private int m_LastGpuTerrainId; // 上次运行 GPU 预览所使用的 Terrain ID
         private int m_LastSpineHash;     // 上次运行时的脊线哈希
+        private int m_LastBoundsHash;    // 上次道路包围盒哈希（量化）
+        private UnityEngine.Terrain m_TargetTerrain; // 缓存选中的目标地形
 
         public PathPreviewManager(IPreviewGenerator gen, PreviewMaterialManager matMgr, Material template, float alpha)
         {
@@ -43,7 +45,7 @@ namespace MrPathV2.Editor.Preview
             m_MatMgr = matMgr ?? throw new ArgumentNullException(nameof(matMgr));
             m_Template = template;
             m_Alpha = alpha;
-            
+
             // Ensure materials list is always initialized
             if (m_Materials == null)
             {
@@ -178,8 +180,9 @@ namespace MrPathV2.Editor.Preview
                 }
 
 #if UNITY_EDITOR
+                int boundsHashNow = 0;
                 // 基于脊线包围盒选择目标 Terrain（优先相交，其次最近），并仅在变化时运行 GPU 预览
-                UnityEngine.Terrain targetTerrain = null;
+                UnityEngine.Terrain targetTerrain = m_TargetTerrain;
                 var activeTerrains = UnityEngine.Terrain.activeTerrains;
                 if (activeTerrains != null && activeTerrains.Length > 0)
                 {
@@ -200,31 +203,36 @@ namespace MrPathV2.Editor.Preview
                             var center = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
                             var size = new Vector3(Mathf.Max(0.01f, (maxX - minX) + margin * 2f), 10000f, Mathf.Max(0.01f, (maxZ - minZ) + margin * 2f));
                             var roadBounds = new Bounds(center, size);
-
-                            UnityEngine.Terrain bestTerrain = null;
-                            var bestOverlap = -1f;
-                            var bestDist = float.MaxValue;
-                            foreach (var t in activeTerrains)
+                            boundsHashNow = CalcBoundsHash(roadBounds);
+                            var needRetarget = (targetTerrain == null) || (boundsHashNow != m_LastBoundsHash);
+                            if (needRetarget)
                             {
-                                if (t == null || t.terrainData == null) continue;
-                                var tb = new Bounds(t.GetPosition() + t.terrainData.size / 2f, t.terrainData.size);
-                                if (tb.Intersects(roadBounds))
+
+                                UnityEngine.Terrain bestTerrain = null;
+                                var bestOverlap = -1f;
+                                var bestDist = float.MaxValue;
+                                foreach (var t in activeTerrains)
                                 {
-                                    var ixMin = Mathf.Max(tb.min.x, roadBounds.min.x);
-                                    var izMin = Mathf.Max(tb.min.z, roadBounds.min.z);
-                                    var ixMax = Mathf.Min(tb.max.x, roadBounds.max.x);
-                                    var izMax = Mathf.Min(tb.max.z, roadBounds.max.z);
-                                    var overlapArea = Mathf.Max(0f, (ixMax - ixMin) * (izMax - izMin));
-                                    var dist = (center - t.GetPosition()).sqrMagnitude;
-                                    if (overlapArea > bestOverlap || (Mathf.Approximately(overlapArea, bestOverlap) && dist < bestDist))
+                                    if (t == null || t.terrainData == null) continue;
+                                    var tb = new Bounds(t.GetPosition() + t.terrainData.size / 2f, t.terrainData.size);
+                                    if (tb.Intersects(roadBounds))
                                     {
-                                        bestOverlap = overlapArea;
-                                        bestDist = dist;
-                                        bestTerrain = t;
+                                        var ixMin = Mathf.Max(tb.min.x, roadBounds.min.x);
+                                        var izMin = Mathf.Max(tb.min.z, roadBounds.min.z);
+                                        var ixMax = Mathf.Min(tb.max.x, roadBounds.max.x);
+                                        var izMax = Mathf.Min(tb.max.z, roadBounds.max.z);
+                                        var overlapArea = Mathf.Max(0f, (ixMax - ixMin) * (izMax - izMin));
+                                        var dist = (center - t.GetPosition()).sqrMagnitude;
+                                        if (overlapArea > bestOverlap || (Mathf.Approximately(overlapArea, bestOverlap) && dist < bestDist))
+                                        {
+                                            bestOverlap = overlapArea;
+                                            bestDist = dist;
+                                            bestTerrain = t;
+                                        }
                                     }
                                 }
+                                targetTerrain = bestTerrain;
                             }
-                            targetTerrain = bestTerrain;
                         }
                     }
 
@@ -247,6 +255,9 @@ namespace MrPathV2.Editor.Preview
                 }
 
                 m_MatMgr.SetTargetTerrain(targetTerrain);
+                // 更新缓存以供后续帧复用
+                m_TargetTerrain = targetTerrain;
+                m_LastBoundsHash = boundsHashNow;
 
                 // —— 仅在发生变化时运行 GPU 预览 ——
                 var profileHashNow = CalcProfileHash(creator.profile);
@@ -258,37 +269,79 @@ namespace MrPathV2.Editor.Preview
 
 #endif
 
-                try
-            {
-                // 更新材质并刷新缓存
-                if (m_MatMgr != null && creator?.profile != null)
+#if UNITY_EDITOR
+                // 在材质更新之前执行 GPU 预览，以便本帧材质能绑定到最新的权重 RT
+                if (shouldRunGpu)
                 {
-                    m_MatMgr.Update(creator.profile, m_Template, m_Alpha);
-                    if (m_MaterialsDirty)
+                    try
                     {
-                        RefreshMaterialCache();
-                        m_MaterialsDirty = false;
+                        var pts = LatestSpine.Value.Points;
+                        if (pts == null || pts.Length < 2)
+                        {
+                            // 脊线无效，提前返回
+                            goto SkipGpuRun;
+                        }
+
+                        // 构造层配置（根据 RoadRecipe + Terrain 实际层索引）
+                        var layerConfigs = BuildLayerConfigs(targetTerrain, creator.profile.roadRecipe);
+                        if (layerConfigs == null || layerConfigs.Length == 0)
+                        {
+                            // 没有有效图层，提前返回
+                            goto SkipGpuRun;
+                        }
+
+                        var width = Mathf.Max(0.1f, creator.profile.roadWidth);
+                        var result = __temp.MrPathV2.Editor.GPU.GpuTerrainPainterV2.Instance
+                            .PaintPathAsync(targetTerrain, pts, width, layerConfigs, true)
+                            .GetAwaiter().GetResult();
+
+                        if (result != null && result.Success && result.RenderTexture)
+                        {
+                            MrPathV2.Editor.Terrain.GpuPreviewCache.Register(targetTerrain, result.RenderTexture);
+                            m_LastGpuTerrainId = terrainIdNow;
+                            m_LastSpineHash = spineHashNow;
+                            m_LastProfileHash = profileHashNow;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[PathPreviewManager] GPU 预览执行失败: {ex.Message}");
+                    }
+                }
+            SkipGpuRun:;
+#endif
+
+                try
+                {
+                    // 更新材质并刷新缓存
+                    if (m_MatMgr != null && creator?.profile != null)
+                    {
+                        m_MatMgr.Update(creator.profile, m_Template, m_Alpha);
+                        if (m_MaterialsDirty)
+                        {
+                            RefreshMaterialCache();
+                            m_MaterialsDirty = false;
+                        }
+                        else
+                        {
+                            // 如果内嵌 Mask 等资源变更导致材质实例被替换，也需要刷新缓存；通过检查引用变化实现。
+                            var renderMaterials = m_MatMgr.GetRenderMaterials();
+                            var currentMatCount = renderMaterials?.Count ?? 0;
+                            if (currentMatCount != m_Materials.Count)
+                            {
+                                RefreshMaterialCache();
+                            }
+                        }
                     }
                     else
                     {
-                        // 如果内嵌 Mask 等资源变更导致材质实例被替换，也需要刷新缓存；通过检查引用变化实现。
-                        var renderMaterials = m_MatMgr.GetRenderMaterials();
-                        var currentMatCount = renderMaterials?.Count ?? 0;
-                        if (currentMatCount != m_Materials.Count)
-                        {
-                            RefreshMaterialCache();
-                        }
+                        Debug.LogWarning("[PathPreviewManager] Skipping material update - missing material manager or profile");
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Debug.LogWarning("[PathPreviewManager] Skipping material update - missing material manager or profile");
+                    Debug.LogError($"[PathPreviewManager] Error during material update: {ex.Message}\nStackTrace: {ex.StackTrace}");
                 }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[PathPreviewManager] Error during material update: {ex.Message}\nStackTrace: {ex.StackTrace}");
-            }
 
                 // 更新用于判断 Profile 引用变化的哈希（不再决定是否调用 Update，仅用于脏标记优化）
                 m_LastProfileHash = CalcProfileHash(creator.profile);
@@ -357,7 +410,7 @@ namespace MrPathV2.Editor.Preview
             {
                 m_Materials.Clear();
                 var list = m_MatMgr?.GetRenderMaterials();
-                if (list != null) 
+                if (list != null)
                 {
                     m_Materials.AddRange(list);
                 }
@@ -396,6 +449,26 @@ namespace MrPathV2.Editor.Preview
             return len;
         }
 
+        // 新增：稳定的包围盒哈希，用于判断道路边界是否变化
+        private static int CalcBoundsHash(Bounds b)
+        {
+            unchecked
+            {
+                // 量化到0.5米精度，避免浮点微抖导致频繁变化
+                int q = 2; // 1/q 米分辨率 -> 0.5m
+                var minX = Mathf.RoundToInt(b.min.x * q);
+                var minZ = Mathf.RoundToInt(b.min.z * q);
+                var maxX = Mathf.RoundToInt(b.max.x * q);
+                var maxZ = Mathf.RoundToInt(b.max.z * q);
+                var h = 17;
+                h = h * 31 + minX;
+                h = h * 31 + minZ;
+                h = h * 31 + maxX;
+                h = h * 31 + maxZ;
+                return h;
+            }
+        }
+
         // 新增：稳定的脊线哈希，用于仅在变化时触发 GPU 预览
         private static int CalcSpineHash(PathSpine spine)
         {
@@ -417,5 +490,55 @@ namespace MrPathV2.Editor.Preview
                 return h;
             }
         }
+
+#if UNITY_EDITOR
+        // 将 RoadRecipe 映射为 GPU 渲染所需的 LayerConfig 数组（包含目标 Terrain 的 layer 索引）
+        private static __temp.MrPathV2.Editor.GPU.LayerConfig[] BuildLayerConfigs(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        {
+            if (!terrain || recipe == null) return Array.Empty<__temp.MrPathV2.Editor.GPU.LayerConfig>();
+            var layers = recipe.GetLayers();
+            if (layers == null || layers.Count == 0)
+            {
+                return Array.Empty<__temp.MrPathV2.Editor.GPU.LayerConfig>();
+            }
+
+            var resolved = __temp.MrPathV2.Editor.Terrain.LayerResolver.ResolveEnsurePresent(terrain, recipe);
+            var list = new List<__temp.MrPathV2.Editor.GPU.LayerConfig>(layers.Count);
+            var master = Mathf.Clamp01(recipe.masterOpacity);
+            for (int i = 0; i < layers.Count; i++)
+            {
+                var rl = layers[i];
+                if (rl == null || !rl.enabled) continue;
+                var tl = rl.contentLayer;
+                if (!tl) continue;
+                if (!resolved.TryGetValue(tl, out var layerIndex)) continue;
+                var strength = Mathf.Clamp01(rl.opacity * master);
+                var blend = MapBlendMode(rl.blendMode);
+                list.Add(new __temp.MrPathV2.Editor.GPU.LayerConfig(layerIndex, strength, blend));
+            }
+
+            return list.Count > 0 ? list.ToArray() : Array.Empty<__temp.MrPathV2.Editor.GPU.LayerConfig>();
+        }
+
+        private static __temp.MrPathV2.Editor.GPU.BlendMode MapBlendMode(__temp.MrPathV2.Runtime.Core.BlendMode mode)
+        {
+            switch (mode)
+            {
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Add:
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Additive:
+                    return __temp.MrPathV2.Editor.GPU.BlendMode.Add;
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Multiply:
+                    return __temp.MrPathV2.Editor.GPU.BlendMode.Multiply;
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Overlay:
+                    return __temp.MrPathV2.Editor.GPU.BlendMode.Overlay;
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Screen:
+                    return __temp.MrPathV2.Editor.GPU.BlendMode.Add; // 近似替代
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Lerp:
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Normal:
+                default:
+                    return __temp.MrPathV2.Editor.GPU.BlendMode.Replace;
+            }
+        }
+#endif
     }
 }

@@ -467,8 +467,8 @@ MonoBehaviour:
   pathData:
     positions:
     - {x: 0, y: 0, z: 0}
-    - {x: -17.345657, y: 0, z: 0.5778923}
-    - {x: -10.738041, y: 0, z: -18.082767}
+    - {x: 4.5746174, y: 0, z: -6.0458603}
+    - {x: 19.455927, y: 0, z: -34.28058}
     tangentsIn:
     - {x: 0, y: 0, z: 0}
     - {x: 0, y: 0, z: 0}
@@ -485,7 +485,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1817313579}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 45.039364, y: 0, z: 41.272285}
+  m_LocalPosition: {x: 22.641539, y: 0, z: 44.71518}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
