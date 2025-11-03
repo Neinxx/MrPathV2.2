@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using __temp.MrPathV2.Runtime.Core;
@@ -6,60 +7,67 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
-using MrPathV2.Editor.Preview;
+using __temp.MrPathV2.Editor.Terrain;
 
 namespace MrPathV2.Editor.Windows
 {
     /// <summary>
-    /// TerrainLayer 选择窗口（UITK）。
+    /// 基于 UITK + UXML 的 TerrainLayer 选择窗口。
     /// - 单一职责：选择并应用 TerrainLayer 到 RoadLayer。
     /// - 提前返回：所有空引用与异常情况快速退出。
-    /// - 高效简洁：基于 UITK，支持最小缩略图自动切换到列表样式。
-    /// - 预览联动：选择变化立即刷新场景预览网格（材料）。
+    /// - 高效：使用紧凑网格、仅必要刷新与最小化 GC。
+    /// - 现代：UI Toolkit 布局与事件、双击应用与预览更新。
+    /// 兼容：保持与原 Open(...) 签名一致，供外部调用。
     /// </summary>
     public class SelectTerrainLayerWindow : EditorWindow
     {
-        // 选择成功事件：让外部（Inspector）做行级更新，避免全量刷新
-        public static event System.Action<__temp.MrPathV2.Runtime.Core.RoadLayer, UnityEngine.TerrainLayer> OnContentLayerApplied;
-        // 上下文
+        // 选择成功事件：供 StylizedRoadRecipeEditor 局部刷新行使用
+        public static event System.Action<RoadLayer, TerrainLayer> OnContentLayerApplied;
+        // 目标对象与上下文
         private RoadLayer _targetRoadLayer;
         private TerrainLayer _originalLayer;
         private PathCreator _contextPathCreator;
 
-        // 数据
+        // 数据缓存
         private readonly List<TerrainLayer> _assetLayers = new();
         private readonly List<TerrainLayer> _coveredLayers = new();
         private readonly Dictionary<int, int> _coverageStats = new();
-        private int _coveredTerrainTotal = 0;
 
+        // 状态
         private TerrainLayer _selected;
         private bool _applied;
 
-        // UI 与状态
+        // UI 缩略图尺寸
+        private int _thumbSize = 72;
         private const int ThumbMin = 48;
         private const int ThumbMax = 128;
-        private const int DetailIconSize = 64; // 详情图标较小，提升紧凑度
-        private int _thumbSize = 72;
 
+        // 过滤模式
         private enum FilterMode { All, HeldOnly, MissingOnly }
         private FilterMode _filterMode = FilterMode.All;
         private string _search = string.Empty;
+        private int _coveredTerrainTotal = 0;
 
+        // UXML 控件引用
         private ToolbarSearchField _searchField;
-        private Label _nameLabel, _covLabel;
-        private Label _sizeLabel, _terrainLabel, _pathLabel;
-        private VisualElement _detailIcon;
+        private ToolbarPopupSearchField _searchFieldPopup;
+        private Button _btnAll, _btnHeld;
+        private GroupBox _layerBox;
+        private VisualElement _iconBox;
+        private Label _nameLabel, _sizeLabel, _covLabel, _pathLabel;
         private SliderInt _thumbSlider;
-        private VisualElement _contentRoot;
-        private Button _tabAll, _tabHeld; // 顶部两个标签
+        private Slider _thumbSliderFloat;
+        private ScrollView _gridScroll;
+        private VisualElement _grid;
 
+        // 可见列表
         private readonly List<TerrainLayer> _visibleList = new();
 
-        // 入口保持兼容
+        // 对外 API：保持签名一致
         public static void Open(RoadLayer roadLayer, TerrainLayer current, PathCreator contextPathCreator)
         {
             var win = GetWindow<SelectTerrainLayerWindow>(true, "Select Terrain Layer", true);
-            win.minSize = new Vector2(420, 320);
+            win.minSize = new Vector2(420, 340);
             win.Initialize(roadLayer, current, contextPathCreator);
             win.Show();
         }
@@ -70,581 +78,122 @@ namespace MrPathV2.Editor.Windows
             _originalLayer = current;
             _contextPathCreator = context;
 
+            // 收集数据
             _assetLayers.Clear();
             _assetLayers.AddRange(CollectProjectLayers());
 
             _coveredLayers.Clear();
-            _coveredLayers.AddRange(CollectCoveredTerrainLayers(_contextPathCreator));
+            _coveredLayers.AddRange(CollectCoveredTerrainLayers());
 
             RebuildCoverageStats();
             _selected = current;
-            // 若未传入当前选中，则回退到 RoadLayer 的持有层，保证打开后保持选中状态
-            if (_selected == null && _targetRoadLayer != null)
-                _selected = _targetRoadLayer.contentLayer;
         }
 
         public void CreateGUI()
         {
-            var root = rootVisualElement;
-            root.style.flexDirection = FlexDirection.Column;
-            root.style.paddingLeft = 4;
-            root.style.paddingRight = 4;
-            root.style.paddingTop = 4;
-            root.style.paddingBottom = 4;
-            // 引入统一样式表以提升观感
-            try
+            // 加载 UXML 布局
+            var vta = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+                "Assets/__temp/MrPathV2/Editor/Windows/SelectTerrainLayerWindow.uxml");
+            if (!vta)
             {
-                var ss = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/MrPathV2/Editor/Inspectors/PathProfileEditor.uss");
-                if (ss) root.styleSheets.Add(ss);
-                var selSs = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/MrPathV2/Editor/Styles/SelectTerrainLayerWindow.uss");
-                if (selSs) root.styleSheets.Add(selSs);
-                root.AddToClassList("root-container");
+                rootVisualElement.Add(new Label("缺少 UXML: SelectTerrainLayerWindow.uxml"));
+                return; // 早退
             }
-            catch { /* ignore style load errors */ }
+            vta.CloneTree(rootVisualElement);
 
-            // 顶部区域：第一行搜索，第二行两个标签（全部 / 仅已持有）
-            _searchField = new ToolbarSearchField();
-            _searchField.style.flexGrow = 1;
-            _searchField.RegisterValueChangedCallback(ev =>
+            // 不再使用外部图标模板，全部通过代码构建 tile（更灵活）
+
+            // 查询控件
+            _searchFieldPopup = rootVisualElement.Q<ToolbarPopupSearchField>(name: "ToolbarPopupSearchField");
+            _searchField = rootVisualElement.Q<ToolbarSearchField>();
+            _btnAll = rootVisualElement.Q<Button>(name: "All");
+            _btnHeld = rootVisualElement.Q<Button>(name: "Holded");
+            _layerBox = rootVisualElement.Q<GroupBox>(name: "LayerBox");
+
+            _iconBox = rootVisualElement.Q<VisualElement>(name: "IconBox");
+            _nameLabel = rootVisualElement.Q<Label>(name: "Name");
+            _sizeLabel = rootVisualElement.Q<Label>(name: "Szie"); // UXML 拼写为 Szie
+            _covLabel = rootVisualElement.Q<Label>(name: "CoverTerrain");
+            _pathLabel = rootVisualElement.Q<Label>(name: "Path");
+            _thumbSlider = rootVisualElement.Q<SliderInt>(name: "IconScale");
+            _thumbSliderFloat = rootVisualElement.Q<Slider>(name: "IconScale");
+
+            // 构建网格滚动容器
+            _gridScroll = new ScrollView(ScrollViewMode.Vertical) { name = "GridScroll" };
+            _gridScroll.style.flexGrow = 1;
+            _grid = new VisualElement { name = "Grid" };
+            _grid.style.flexDirection = FlexDirection.Row;
+            _grid.style.flexWrap = Wrap.Wrap;
+            _grid.style.alignContent = Align.FlexStart;
+            _grid.style.justifyContent = Justify.FlexStart;
+            _gridScroll.Add(_grid);
+            if (_layerBox != null)
             {
-                _search = ev.newValue ?? string.Empty;
-                RebuildVisibleList();
-            });
-
-            var top = new VisualElement { name = "top" };
-            top.style.flexDirection = FlexDirection.Column;
-            top.style.marginLeft = 8; top.style.marginRight = 8; top.style.marginTop = 6; top.style.marginBottom = 0;
-
-            var searchRow = new VisualElement { name = "search-row" };
-            searchRow.style.flexDirection = FlexDirection.Row;
-            searchRow.style.alignItems = Align.Center;
-            searchRow.Add(_searchField);
-            top.Add(searchRow);
-
-            var tabBar = new VisualElement { name = "tab-bar" };
-            tabBar.style.flexDirection = FlexDirection.Row; tabBar.style.alignItems = Align.Center;
-
-            _tabAll = new Button(() => SetFilterMode(FilterMode.All)) { text = "全部" };
-            _tabHeld = new Button(() => SetFilterMode(FilterMode.HeldOnly)) { text = "仅已持有" };
-            ApplyTabStyles(_tabAll, true); ApplyTabStyles(_tabHeld, false);
-            tabBar.Add(_tabAll);
-            tabBar.Add(_tabHeld);
-            top.Add(tabBar);
-
-            root.Add(top);
-
-            // 内容区域（网格或列表）
-            _contentRoot = new VisualElement { name = "content-root" };
-            _contentRoot.style.flexGrow = 1;
-            _contentRoot.style.marginLeft = 8; _contentRoot.style.marginRight = 8; _contentRoot.style.marginTop = 8; _contentRoot.style.marginBottom = 4;
-            root.Add(_contentRoot);
-
-            // 详情面板（固定高度，图标固定尺寸）
-            var details = new VisualElement { name = "details" };
-            details.style.flexDirection = FlexDirection.Column; // 外层采用 settings-group 的列式布局
-            details.style.alignItems = Align.FlexStart;
-            details.style.marginLeft = 8; details.style.marginRight = 8; details.style.marginTop = 4; details.style.marginBottom = 8;
-            details.style.height = 80; // 更紧凑的详情高度
-            details.style.flexShrink = 0;
-            // 应用 PathProfileEditor.uss 中的 .settings-group 视觉风格
-            details.AddToClassList("settings-group");
-            // 内层行为行：左图标右信息
-            var detailRow = new VisualElement { name = "detail-row" };
-            detailRow.style.flexDirection = FlexDirection.Row;
-            detailRow.style.alignItems = Align.Center;
-
-            _detailIcon = new VisualElement { name = "icon" };
-            _detailIcon.style.width = DetailIconSize; _detailIcon.style.height = DetailIconSize;
-            _detailIcon.style.marginRight = 12; _detailIcon.style.marginLeft = 4;
-            _detailIcon.style.borderBottomWidth = 1; _detailIcon.style.borderTopWidth = 1; _detailIcon.style.borderLeftWidth = 1; _detailIcon.style.borderRightWidth = 1;
-            _detailIcon.style.borderBottomColor = Color.gray; _detailIcon.style.borderTopColor = Color.gray; _detailIcon.style.borderLeftColor = Color.gray; _detailIcon.style.borderRightColor = Color.gray;
-            // 点击图标 Ping 到资产
-            _detailIcon.RegisterCallback<MouseDownEvent>(evt =>
-            {
-                if (evt.button != 0) return; // 提前返回
-                var tl = _selected;
-                if (tl) EditorGUIUtility.PingObject(tl);
-            });
-
-            var info = new VisualElement { name = "info" };
-            info.style.flexGrow = 1;
-            info.style.flexDirection = FlexDirection.Column;
-
-            _nameLabel = new Label("未选择图层") { name = "name" };
-            _sizeLabel = new Label("尺寸：N/A") { name = "size" };
-            _terrainLabel = new Label("地形覆盖：0/0") { name = "terrain" };
-            _pathLabel = new Label("路径：-") { name = "path" };
-
-            info.Add(_nameLabel);
-            info.Add(_sizeLabel);
-            info.Add(_terrainLabel);
-            info.Add(_pathLabel);
-            detailRow.Add(_detailIcon);
-            detailRow.Add(info);
-            details.Add(detailRow);
-            root.Add(details);
-
-            // 缩略图大小滑块独立放置在详情面板下方
-            _thumbSlider = new SliderInt("缩略图大小", ThumbMin, ThumbMax);
-            _thumbSlider.value = _thumbSize;
-            _thumbSlider.style.marginTop = 6; _thumbSlider.style.marginBottom = 4;
-            _thumbSlider.RegisterValueChangedCallback(ev =>
-            {
-                _thumbSize = Mathf.Clamp(ev.newValue, ThumbMin, ThumbMax);
-                RebuildContent();
-            });
-            root.Add(_thumbSlider);
-            // 初始构建
-            // 打开窗口时主动刷新一遍数据与内容
-            RefreshLists();
-            RebuildVisibleList();
-            RebuildContent();
-            UpdateSelectionStyles();
-            UpdateDetailsPanel();
-        }
-
-        // 顶部标签样式：对齐截图所示的暗色卡片风格
-        private void ApplyTabStyles(Button btn, bool active)
-        {
-            if (btn == null) return; // 提前返回
-            btn.style.height = 22;
-            btn.style.marginTop = 6;
-            btn.style.marginRight = 6;
-            btn.style.paddingLeft = 10; btn.style.paddingRight = 10;
-            btn.style.borderTopLeftRadius = 6; btn.style.borderTopRightRadius = 6; btn.style.borderBottomLeftRadius = 6; btn.style.borderBottomRightRadius = 6;
-            btn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            btn.style.color = Color.white;
-            btn.style.borderBottomWidth = 1; btn.style.borderTopWidth = 1; btn.style.borderLeftWidth = 1; btn.style.borderRightWidth = 1;
-            var bg = active ? new Color(0.22f, 0.22f, 0.22f) : new Color(0.18f, 0.18f, 0.18f);
-            var bd = active ? new Color(0.35f, 0.35f, 0.35f) : new Color(0.25f, 0.25f, 0.25f);
-            btn.style.backgroundColor = bg;
-            btn.style.borderBottomColor = bd; btn.style.borderTopColor = bd; btn.style.borderLeftColor = bd; btn.style.borderRightColor = bd;
-        }
-
-        // 根据当前过滤模式更新标签的激活视觉
-        private void UpdateTabActive()
-        {
-            ApplyTabStyles(_tabAll, _filterMode == FilterMode.All);
-            ApplyTabStyles(_tabHeld, _filterMode == FilterMode.HeldOnly);
-        }
-
-        private bool IsListMode() => _thumbSize <= ThumbMin;
-
-        private void RebuildContent()
-        {
-            // 保留滚动位置，避免刷新导致跳回顶部
-            var prevScroll = _contentRoot.Q<ScrollView>("scroll");
-            float prevOffset = 0f;
-            if (prevScroll != null && prevScroll.verticalScroller != null)
-                prevOffset = prevScroll.verticalScroller.value;
-
-            _contentRoot.Clear();
-            var scroll = new ScrollView(ScrollViewMode.Vertical) { name = "scroll" };
-            scroll.style.flexGrow = 1;
-            // 隐藏滚动条以匹配参考图（仍可滚轮滚动）
-            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
-            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
-            _contentRoot.Add(scroll);
-
-            // NullLayer 选项始终存在
-            if (IsListMode())
-            {
-                scroll.Add(MakeListRow(null));
+                _layerBox.Add(_gridScroll);
             }
             else
             {
-                // grid 区域增加 settings-group 底板
-                var group = new VisualElement { name = "grid-group" };
-                group.AddToClassList("settings-group");
-                group.style.marginLeft = 8; group.style.marginRight = 8; group.style.marginTop = 4; group.style.marginBottom = 4;
-                group.style.paddingLeft = 12; group.style.paddingRight = 12; group.style.paddingTop = 12; group.style.paddingBottom = 12;
-                group.style.flexDirection = FlexDirection.Column;
-                // Grid 底板铺满对齐
-                group.style.height = StyleKeyword.Auto;
-                group.style.flexGrow = 1;
-                scroll.Add(group);
+                rootVisualElement.Add(_gridScroll);
+            }
 
-                // 顶部标签“Assets”，与参考样式一致的简洁标签
-                var tag = new Label("Assets");
-                tag.style.unityFontStyleAndWeight = FontStyle.Bold;
-                tag.style.marginBottom = 8;
-                tag.style.paddingLeft = 8; tag.style.paddingRight = 8; tag.style.paddingTop = 2; tag.style.paddingBottom = 2;
-                tag.style.backgroundColor = new Color(0.18f, 0.18f, 0.18f);
-                tag.style.borderTopLeftRadius = 4; tag.style.borderTopRightRadius = 4; tag.style.borderBottomLeftRadius = 4; tag.style.borderBottomRightRadius = 4;
-                group.Add(tag);
+            ApplyGridLayoutByMode();
 
-                var grid = new VisualElement { name = "grid" };
-                grid.style.flexDirection = FlexDirection.Row;
-                grid.style.flexWrap = Wrap.Wrap;
-                grid.style.alignContent = Align.FlexStart;
-                grid.style.justifyContent = Justify.FlexStart;
-                grid.AddToClassList("mrp-grid");
-                group.Add(grid);
-                grid.Add(MakeGridTile(null));
-                foreach (var tl in _visibleList)
+            // 事件绑定（优先使用 ToolbarPopupSearchField）
+            if (_searchFieldPopup != null)
+            {
+                _searchFieldPopup.RegisterValueChangedCallback(ev =>
                 {
-                    grid.Add(MakeGridTile(tl));
-                }
-                // 让底板最小高度等于视口高度，实现“铺满”效果
-                scroll.RegisterCallback<GeometryChangedEvent>(ev =>
-                {
-                    var g = scroll.Q<VisualElement>("grid-group");
-                    if (g != null) g.style.minHeight = ev.newRect.height;
+                    _search = ev.newValue ?? string.Empty;
+                    RebuildVisibleList();
+                    RebuildGrid();
                 });
-                // 恢复滚动位置
-                if (scroll.verticalScroller != null)
-                    scroll.verticalScroller.value = prevOffset;
-                return;
             }
-
-            foreach (var tl in _visibleList)
+            else if (_searchField != null)
             {
-                scroll.Add(MakeListRow(tl));
-            }
-
-            // 恢复滚动位置
-            if (scroll.verticalScroller != null)
-                scroll.verticalScroller.value = prevOffset;
-        }
-
-        // 仅更新选中样式，避免因重建导致滚动跳跃
-        private void UpdateSelectionStyles()
-        {
-            var scroll = _contentRoot.Q<ScrollView>("scroll");
-            if (scroll == null) return; // 提前返回
-            // 通用：直接更新当前 ScrollView 内所有 tile 与 row
-            var tiles = scroll.Query<VisualElement>(name: "tile").ToList();
-            foreach (var tile in tiles)
-            {
-                var tl = tile.userData as TerrainLayer;
-                SetTileSelected(tile, tl == _selected);
-            }
-
-            var rows = scroll.Query<VisualElement>(name: "row").ToList();
-            foreach (var row in rows)
-            {
-                var tl = row.userData as TerrainLayer;
-                SetTileSelected(row, tl == _selected);
-            }
-        }
-
-        private VisualElement MakeGridTile(TerrainLayer tl)
-        {
-            int tileSize = _thumbSize;
-            var tile = new VisualElement { name = "tile" };
-            tile.style.width = tileSize + 8; // 更紧凑的容器宽度
-            tile.style.height = tileSize + 28;
-            tile.style.marginLeft = 12; tile.style.marginRight = 12; tile.style.marginTop = 12; tile.style.marginBottom = 12; // 与截图一致的均匀间距
-            tile.style.flexDirection = FlexDirection.Column;
-            tile.style.alignItems = Align.Center;
-            tile.style.justifyContent = Justify.FlexStart;
-            tile.style.borderBottomWidth = 0; tile.style.borderTopWidth = 0; tile.style.borderLeftWidth = 0; tile.style.borderRightWidth = 0; // tile 背景清爽
-            tile.style.backgroundColor = new Color(0f, 0f, 0f, 0f); // 透明以露出 group 底板
-            tile.userData = tl; // 记录所属图层，便于更新选中样式
-
-            var icon = new VisualElement { name = "icon" };
-            icon.style.width = tileSize; icon.style.height = tileSize;
-            icon.style.marginTop = 4; icon.style.marginBottom = 8;
-            icon.style.borderTopLeftRadius = 6; icon.style.borderTopRightRadius = 6; icon.style.borderBottomLeftRadius = 6; icon.style.borderBottomRightRadius = 6;
-            icon.AddToClassList("tile-icon");
-
-            var name = new Label { name = "name" };
-            name.style.unityTextAlign = TextAnchor.MiddleCenter;
-            name.style.whiteSpace = WhiteSpace.Normal;
-            name.style.fontSize = 12; // 与截图一致的小号标题
-            name.style.color = Color.white;
-
-            Texture2D tex = GetLayerThumbnail(tl);
-            icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
-
-            // 名称过长使用省略号，并将 NullLayer 改为 Null
-            var rawName = tl ? tl.name : "Null";
-            var displayName = TruncateEnd(rawName, Mathf.Clamp(tileSize / 8, 6, 20));
-            name.text = displayName;
-            name.style.whiteSpace = WhiteSpace.NoWrap;
-            bool held = IsLayerHeldByCoveredTerrains(tl);
-            name.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : Color.white;
-
-            // 悬停高亮改由 USS :hover 控制，避免内联样式覆盖 selected 视觉
-
-            // 选择与应用
-            tile.RegisterCallback<MouseDownEvent>(evt =>
-            {
-                if (evt.button != 0) return; // 提前返回
-                SelectLayer(tl);
-                if (evt.clickCount == 2)
+                _searchField.RegisterValueChangedCallback(ev =>
                 {
-                    TryApplyByDoubleClick(tl);
-                }
-            });
+                    _search = ev.newValue ?? string.Empty;
+                    RebuildVisibleList();
+                    RebuildGrid();
+                });
+            }
+            if (_btnAll != null) _btnAll.clicked += () => { SetFilterMode(FilterMode.All); };
+            if (_btnHeld != null) _btnHeld.clicked += () => { SetFilterMode(FilterMode.HeldOnly); };
 
-            tile.Add(icon);
-            tile.Add(name);
-            if (_selected == tl) SetTileSelected(tile, true);
-            return tile;
-        }
-
-        private VisualElement MakeListRow(TerrainLayer tl)
-        {
-            var row = new VisualElement { name = "row" };
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.height = Mathf.Max(ThumbMin + 12, 64);
-            row.style.marginLeft = 4; row.style.marginRight = 4; row.style.marginTop = 2; row.style.marginBottom = 2;
-            row.style.borderBottomWidth = 1; row.style.borderTopWidth = 1; row.style.borderLeftWidth = 1; row.style.borderRightWidth = 1;
-            row.style.borderBottomColor = new Color(0.25f, 0.25f, 0.25f); row.style.borderTopColor = new Color(0.25f, 0.25f, 0.25f); row.style.borderLeftColor = new Color(0.25f, 0.25f, 0.25f); row.style.borderRightColor = new Color(0.25f, 0.25f, 0.25f);
-            row.style.backgroundColor = new Color(0.13f, 0.13f, 0.13f);
-            row.AddToClassList("mrp-list-row");
-            row.userData = tl; // 记录所属图层，便于更新选中样式
-
-            var icon = new VisualElement { name = "icon" };
-            icon.style.width = ThumbMin; icon.style.height = ThumbMin; // 列表模式固定采用最小缩略图尺寸
-            icon.style.marginLeft = 6; icon.style.marginRight = 8;
-            icon.style.borderTopLeftRadius = 4; icon.style.borderTopRightRadius = 4; icon.style.borderBottomLeftRadius = 4; icon.style.borderBottomRightRadius = 4;
-            icon.AddToClassList("mrp-icon");
-            icon.AddToClassList("tile-icon");
-
-            var content = new VisualElement { name = "content" };
-            content.style.flexGrow = 1;
-            content.style.flexDirection = FlexDirection.Column;
-            var text = new Label { name = "name" };
-            text.style.unityTextAlign = TextAnchor.MiddleLeft;
-            text.AddToClassList("mrp-name");
-
-            Texture2D tex = GetLayerThumbnail(tl);
-            icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
-
-            text.text = tl ? tl.name : "Null";
-            bool held = IsLayerHeldByCoveredTerrains(tl);
-            text.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : Color.white;
-
-            // 子信息行：状态与覆盖数
-            var sub = new VisualElement { name = "sub-info" };
-            sub.style.flexDirection = FlexDirection.Row;
-            var status = new Label { name = "status" };
-            status.text = held ? "已持有" : "未持有";
-            status.style.color = held ? new Color(0.2f, 0.9f, 0.2f) : new Color(1f, 0.7f, 0.2f);
-            status.style.marginRight = 10;
-            var covLabel = new Label { name = "cov" };
-            var total = _coveredTerrainTotal;
-            covLabel.text = tl ? $"覆盖：{GetCoverageCount(tl)}/{total}" : "覆盖：0/" + total;
-            covLabel.style.color = new Color(0.75f, 0.75f, 0.75f);
-            sub.Add(status);
-            sub.Add(covLabel);
-
-            // 悬停高亮改由 USS :hover 控制，避免内联样式覆盖 selected 视觉
-
-            // 选择与应用
-            row.RegisterCallback<MouseDownEvent>(evt =>
+            // 缩略图缩放：支持 SliderInt 与 Slider（UXML 中为 Slider）
+            if (_thumbSlider != null)
             {
-                if (evt.button != 0) return; // 提前返回
-                SelectLayer(tl);
-                if (evt.clickCount == 2)
+                _thumbSlider.lowValue = ThumbMin;
+                _thumbSlider.highValue = ThumbMax;
+                _thumbSlider.value = Mathf.Clamp(_thumbSize, ThumbMin, ThumbMax);
+                _thumbSlider.RegisterValueChangedCallback(ev =>
                 {
-                    TryApplyByDoubleClick(tl);
-                }
-            });
-
-            row.Add(icon);
-            content.Add(text);
-            content.Add(sub);
-            row.Add(content);
-            if (_selected == tl) SetTileSelected(row, true);
-            return row;
-        }
-
-        // 悬停样式统一交给 USS 处理，无需代码干预
-
-        private void SetTileSelected(VisualElement ve, bool selected)
-        {
-            // 使用 USS 过渡：仅切换 selected 类，动画由样式表驱动
-            var icon = ve.Q<VisualElement>("icon");
-            if (icon != null)
+                    _thumbSize = Mathf.Clamp(ev.newValue, ThumbMin, ThumbMax);
+                    ApplyGridLayoutByMode();
+                    RebuildGrid();
+                });
+            }
+            else if (_thumbSliderFloat != null)
             {
-                // 不做任何内联边框赋值，避免覆盖 USS 动画
+                _thumbSliderFloat.lowValue = ThumbMin;
+                _thumbSliderFloat.highValue = ThumbMax;
+                _thumbSliderFloat.value = Mathf.Clamp(_thumbSize, ThumbMin, ThumbMax);
+                _thumbSliderFloat.RegisterValueChangedCallback(ev =>
+                {
+                    _thumbSize = Mathf.Clamp(Mathf.RoundToInt(ev.newValue), ThumbMin, ThumbMax);
+                    ApplyGridLayoutByMode();
+                    RebuildGrid();
+                });
             }
 
-            // 名称颜色保持“已持有为绿色，否则白色”，选中不改变名称颜色
-            var nameLabel = ve.Q<Label>("name");
-            if (nameLabel != null)
-            {
-                var tl = ve.userData as TerrainLayer;
-                bool held = IsLayerHeldByCoveredTerrains(tl);
-                nameLabel.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : Color.white;
-            }
-
-            if (selected) ve.AddToClassList("selected");
-            else ve.RemoveFromClassList("selected");
-        }
-
-        // 移除 C# 动画；动画改由 USS transition 实现
-
-
-        private Texture2D GetLayerThumbnail(TerrainLayer tl)
-        {
-            if (!tl) return null; // 提前返回
-            var tex = tl.diffuseTexture as Texture2D;
-            if (tex) return tex;
-            tex = AssetPreview.GetAssetPreview(tl) as Texture2D;
-            if (tex) return tex;
-            return AssetPreview.GetMiniThumbnail(tl) as Texture2D;
-        }
-
-        private void SelectLayer(TerrainLayer tl)
-        {
-            _selected = tl;
-            // 预览联动：更新 RoadLayer 的 contentLayer 并立即刷新材料
-            if (_targetRoadLayer != null)
-            {
-                _targetRoadLayer.contentLayer = tl;
-                // 选择 Null 时不刷新材质，避免 Texture2DArray 警告
-                MarkPreviewDirty(materials: tl != null);
-            }
-            // 轻量：不重建内容，只更新选中样式与详情，避免滚动跳跃
-            UpdateSelectionStyles();
+            // 初始刷新与构建：确保打开窗口时最新列表与可见项
+            RefreshLists();
+            // 默认选中 All 标签
+            SetFilterMode(FilterMode.All);
             UpdateDetailsPanel();
         }
 
-        private void UpdateDetailsPanel()
-        {
-            var tl = _selected;
-            if (!tl)
-            {
-                _nameLabel.text = "未选择图层";
-                if (_terrainLabel != null) _terrainLabel.text = "地形覆盖：0/0";
-                if (_sizeLabel != null) _sizeLabel.text = "尺寸：N/A";
-                if (_pathLabel != null) _pathLabel.text = "路径：-";
-                _detailIcon.style.backgroundImage = null;
-                return; // 早退
-            }
-            _nameLabel.text = tl.name;
-            var cov = GetCoverageCount(tl);
-            var total = _coveredTerrainTotal;
-            if (_terrainLabel != null) _terrainLabel.text = $"地形覆盖：{cov}/{total}";
-            var texSize = tl.diffuseTexture as Texture2D;
-            if (_sizeLabel != null) _sizeLabel.text = texSize ? $"尺寸：{texSize.width}x{texSize.height}" : "尺寸：N/A";
-            if (_pathLabel != null)
-            {
-                var ap = AssetDatabase.GetAssetPath(tl);
-                int maxPath = Mathf.Clamp((int)(position.width / 10f), 24, 60);
-                var displayPath = string.IsNullOrEmpty(ap) ? "-" : TruncateMiddle(ap, maxPath);
-                _pathLabel.text = $"路径：{displayPath}";
-            }
-            var tex = GetLayerThumbnail(tl);
-            _detailIcon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
-        }
-
-        // ---------- 文本省略工具 ----------
-        private static string TruncateEnd(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s) || max <= 0) return string.Empty;
-            if (s.Length <= max) return s;
-            if (max <= 3) return new string('.', max);
-            return s.Substring(0, max - 3) + "...";
-        }
-
-        private static string TruncateMiddle(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s) || max <= 0) return string.Empty;
-            if (s.Length <= max) return s;
-            if (max <= 5) return TruncateEnd(s, max);
-            int keep = max - 3;
-            int head = Mathf.CeilToInt(keep * 0.6f);
-            int tail = keep - head;
-            return s.Substring(0, head) + "..." + s.Substring(s.Length - tail);
-        }
-
-        private void ApplySelection(TerrainLayer tl)
-        {
-            if (_targetRoadLayer == null)
-            {
-                ShowNotification(new GUIContent("目标 RoadLayer 为空，无法应用选择"));
-                return; // 提前返回
-            }
-
-            var owner = _contextPathCreator ? _contextPathCreator.profile : null;
-            if (owner) Undo.RecordObject(owner, "Select Terrain Layer");
-            _targetRoadLayer.contentLayer = tl;
-            if (owner) EditorUtility.SetDirty(owner);
-            _applied = true;
-            // 应用 Null 时不刷新材质
-            MarkPreviewDirty(materials: tl != null);
-            // 触发细粒度回调：仅更新对应行元素
-            try { OnContentLayerApplied?.Invoke(_targetRoadLayer, tl); } catch { /* 防御：忽略回调异常 */ }
-            Close();
-        }
-
-        // 双击应用前的确认逻辑（仅当不在已持有集合时弹窗）。
-        private void TryApplyByDoubleClick(TerrainLayer tl)
-        {
-            if (tl == null)
-            {
-                // 双击 Null：清空当前 RoadLayer 的地形图层插槽
-                ApplySelection(null);
-                return; // 提前返回
-            }
-            if (IsLayerHeldByCoveredTerrains(tl))
-            {
-                ApplySelection(tl);
-                return; // 提前返回
-            }
-
-            // 系统标准对话框，默认焦点在“取消”（第一个按钮）
-            bool okIsCancel = EditorUtility.DisplayDialog(
-                "添加图层到地形确认",
-                "您正在尝试将新地形Layer添加到地形，是否继续？",
-                "取消",
-                "确认添加");
-
-            if (!okIsCancel)
-            {
-                ApplySelection(tl);
-            }
-        }
-
-        private void MarkPreviewDirty(bool spine = false, bool mesh = false, bool materials = true)
-        {
-            // 直接使用全局预览渲染器刷新指定 PathCreator
-            try
-            {
-                if (_contextPathCreator)
-                {
-                    MultiPathPreviewRenderer.MarkCreatorDirty(_contextPathCreator, spine, mesh, materials);
-                    SceneView.RepaintAll();
-                }
-            }
-            catch { /* 忽略预览更新异常 */ }
-        }
-
-        private void OnLostFocus() => Close();
-
-        private void OnDisable()
-        {
-            if (!_applied && _targetRoadLayer != null)
-            {
-                _targetRoadLayer.contentLayer = _originalLayer;
-                // 回滚到 Null 时也不刷新材质
-                MarkPreviewDirty(materials: _originalLayer != null);
-            }
-        }
-
-        // -------- 过滤与数据 ---------
-        private void SetFilterMode(FilterMode mode)
-        {
-            _filterMode = mode;
-            UpdateTabActive();
-            RebuildVisibleList();
-        }
-
-        private void RefreshLists()
-        {
-            _assetLayers.Clear();
-            _assetLayers.AddRange(CollectProjectLayers());
-            _coveredLayers.Clear();
-            _coveredLayers.AddRange(CollectCoveredTerrainLayers(_contextPathCreator));
-            RebuildCoverageStats();
-        }
-
+        // 列表与网格
         private void RebuildVisibleList()
         {
             _visibleList.Clear();
@@ -664,11 +213,327 @@ namespace MrPathV2.Editor.Windows
                     break;
             }
             _visibleList.AddRange(seq);
-            RebuildContent();
-            // 重建后立即同步选中样式，确保列表/网格状态一致
-            UpdateSelectionStyles();
+            // 排序：绿色（持有）优先，黄色（等价）其次，其他最后
+            _visibleList.Sort((a, b) => GetPriority(b).CompareTo(GetPriority(a)) != 0
+                ? GetPriority(b).CompareTo(GetPriority(a))
+                : string.Compare(a ? a.name : string.Empty, b ? b.name : string.Empty, StringComparison.Ordinal));
         }
 
+        private void RebuildGrid()
+        {
+            if (_grid == null) return;
+            _grid.Clear();
+
+            // NullLayer 选项（允许清空）
+            _grid.Add(MakeTile(null));
+
+            for (int i = 0; i < _visibleList.Count; i++)
+            {
+                _grid.Add(MakeTile(_visibleList[i]));
+            }
+        }
+
+        private VisualElement MakeTile(TerrainLayer tl)
+        {
+            int tileSize = _thumbSize;
+            var tile = new VisualElement { name = "Tile" };
+            var icon = new VisualElement { name = "LayerIcon" };
+            var name = new Label { name = "LayerName" };
+            tile.Add(icon);
+            tile.Add(name);
+
+            // 布局：最小时列表模式，否则网格模式
+            if (IsListMode())
+            {
+                tile.style.flexDirection = FlexDirection.Row;
+                tile.style.alignItems = Align.Center;
+                tile.style.justifyContent = Justify.FlexStart;
+                tile.style.width = Length.Percent(100);
+                // 放大列表模式的行高与图标尺寸，增强可读性
+                tile.style.height = 40;
+                icon.style.width = 32;
+                icon.style.height = 32;
+                icon.style.marginLeft = 8; icon.style.marginRight = 8;
+                // 层项间距缩小 1/2
+                tile.style.marginLeft = 3; tile.style.marginRight = 3; tile.style.marginTop = 1; tile.style.marginBottom = 1;
+                name.style.unityTextAlign = TextAnchor.MiddleLeft;
+            }
+            else
+            {
+                tile.style.width = tileSize + 32;
+                tile.style.height = tileSize + 46;
+                // 层项间距缩小 1/2（网格模式）
+                tile.style.marginLeft = 3; tile.style.marginRight = 3; tile.style.marginTop = 3; tile.style.marginBottom = 3;
+                tile.style.flexDirection = FlexDirection.Column;
+                tile.style.alignItems = Align.Center;
+                tile.style.justifyContent = Justify.FlexStart;
+                icon.style.width = tileSize; icon.style.height = tileSize;
+                icon.style.marginTop = 6; icon.style.marginBottom = 6;
+                name.style.unityTextAlign = TextAnchor.MiddleCenter;
+            }
+
+            // 通用样式：去除图标后方深色框（卡片底色清空）
+            tile.style.borderBottomWidth = 0; tile.style.borderTopWidth = 0; tile.style.borderLeftWidth = 0; tile.style.borderRightWidth = 0;
+            tile.style.backgroundColor = Color.clear;
+            tile.style.borderTopLeftRadius = 8; tile.style.borderTopRightRadius = 8; tile.style.borderBottomLeftRadius = 8; tile.style.borderBottomRightRadius = 8;
+            icon.style.borderBottomWidth = 1; icon.style.borderTopWidth = 1; icon.style.borderLeftWidth = 1; icon.style.borderRightWidth = 1;
+            icon.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f); icon.style.borderTopColor = icon.style.borderBottomColor; icon.style.borderLeftColor = icon.style.borderBottomColor; icon.style.borderRightColor = icon.style.borderBottomColor;
+
+            // 图标圆角：列表模式减半（更直感的矩形视觉）
+            if (IsListMode())
+            {
+                icon.style.borderTopLeftRadius = 6; icon.style.borderTopRightRadius = 6; icon.style.borderBottomLeftRadius = 6; icon.style.borderBottomRightRadius = 6;
+            }
+            else
+            {
+                icon.style.borderTopLeftRadius = 12; icon.style.borderTopRightRadius = 12; icon.style.borderBottomLeftRadius = 12; icon.style.borderBottomRightRadius = 12;
+            }
+
+            // 缩略图与名称
+            Texture2D tex = GetLayerThumbnail(tl);
+            icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
+            // Null 图标 50% 透明度
+            icon.style.backgroundColor = tl ? Color.clear : new Color(0f, 0f, 0f, 0.5f);
+            var rawName = tl ? tl.name : "Null";
+            int maxChars = IsListMode() ? 22 : 12;
+            name.text = TruncateName(rawName, maxChars);
+            name.style.whiteSpace = WhiteSpace.NoWrap;
+            name.style.overflow = Overflow.Hidden;
+            name.tooltip = name.text;
+
+            // 颜色：持有绿色、等价黄色、其他白色
+            bool held = IsLayerHeldByCoveredTerrains(tl);
+            bool eq = !held && HasEquivalentInCoveredTerrains(tl);
+            name.style.color = held ? new Color(0.1f, 0.8f, 0.1f) : (eq ? new Color(0.95f, 0.85f, 0.25f) : Color.white);
+
+            tile.RegisterCallback<MouseEnterEvent>(_ => SetTileHovered(tile, true));
+            tile.RegisterCallback<MouseLeaveEvent>(_ => SetTileHovered(tile, false));
+            tile.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button == 0)
+                {
+                    SelectTile(tl, tile);
+                    if (evt.clickCount == 2)
+                    {
+                        ApplySelection(tl);
+                    }
+                }
+            });
+
+            if (_selected == tl) SetTileSelected(tile, true);
+            return tile;
+        }
+
+        private static Texture2D GetLayerThumbnail(TerrainLayer tl)
+        {
+            if (!tl) return null;
+            var tex = tl.diffuseTexture as Texture2D;
+            if (tex) return tex;
+            tex = AssetPreview.GetAssetPreview(tl) as Texture2D;
+            if (tex) return tex;
+            return AssetPreview.GetMiniThumbnail(tl) as Texture2D;
+        }
+
+        // 名称截断：过长时补充省略号，保持单行优雅
+        private static string TruncateName(string input, int maxChars)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+            if (maxChars <= 3 || input.Length <= maxChars) return input;
+            return input.Substring(0, maxChars - 3) + "...";
+        }
+
+        private void SelectTile(TerrainLayer tl, VisualElement tile)
+        {
+            _selected = tl;
+            // 预览指派：首次选中刷新预览
+            if (_targetRoadLayer != null)
+            {
+                _targetRoadLayer.contentLayer = tl;
+                MarkPreviewDirty();
+            }
+            UpdateSelectionVisual(tile);
+            UpdateDetailsPanel();
+        }
+
+        private void UpdateSelectionVisual(VisualElement selectedTile)
+        {
+            if (_grid == null) return;
+            foreach (var child in _grid.Children())
+            {
+                SetTileSelected(child, child == selectedTile);
+            }
+        }
+
+        private void SetTileSelected(VisualElement tile, bool selected)
+        {
+            var icon = tile.Q<VisualElement>(name: "LayerIcon");
+            if (icon == null) return;
+
+            // 去除卡片底色，所有选中高亮集中在图标上
+            tile.style.backgroundColor = Color.clear;
+
+            if (selected)
+            {
+                // 橙色粗描边强调选中（贴近参考图）
+                icon.style.borderBottomWidth = 3; icon.style.borderTopWidth = 3; icon.style.borderLeftWidth = 3; icon.style.borderRightWidth = 3;
+                var orange = new Color(1f, 0.68f, 0.1f);
+                icon.style.borderBottomColor = orange; icon.style.borderTopColor = orange; icon.style.borderLeftColor = orange; icon.style.borderRightColor = orange;
+            }
+            else
+            {
+                icon.style.borderBottomWidth = 1; icon.style.borderTopWidth = 1; icon.style.borderLeftWidth = 1; icon.style.borderRightWidth = 1;
+                var gray = new Color(0.3f, 0.3f, 0.3f);
+                icon.style.borderBottomColor = gray; icon.style.borderTopColor = gray; icon.style.borderLeftColor = gray; icon.style.borderRightColor = gray;
+            }
+        }
+
+        private void SetTileHovered(VisualElement tile, bool hovered)
+        {
+            var icon = tile.Q<VisualElement>(name: "LayerIcon");
+            if (icon == null) return;
+
+            bool selected = icon.style.borderBottomWidth.value > 2.4f; // 选中时宽度为 3
+            if (hovered)
+            {
+                if (!selected)
+                {
+                    // 滑动高亮：直接作用在图标边框上
+                    icon.style.borderBottomWidth = 2; icon.style.borderTopWidth = 2; icon.style.borderLeftWidth = 2; icon.style.borderRightWidth = 2;
+                    var hoverCol = new Color(0.85f, 0.85f, 0.85f);
+                    icon.style.borderBottomColor = hoverCol; icon.style.borderTopColor = hoverCol; icon.style.borderLeftColor = hoverCol; icon.style.borderRightColor = hoverCol;
+                }
+            }
+            else
+            {
+                if (!selected)
+                {
+                    // 恢复默认图标边框
+                    icon.style.borderBottomWidth = 1; icon.style.borderTopWidth = 1; icon.style.borderLeftWidth = 1; icon.style.borderRightWidth = 1;
+                    var gray = new Color(0.3f, 0.3f, 0.3f);
+                    icon.style.borderBottomColor = gray; icon.style.borderTopColor = gray; icon.style.borderLeftColor = gray; icon.style.borderRightColor = gray;
+                }
+            }
+        }
+
+        private void SetFilterMode(FilterMode mode)
+        {
+            _filterMode = mode;
+            RebuildVisibleList();
+            RebuildGrid();
+            UpdateFilterButtonsVisual();
+        }
+
+        // 更新过滤按钮视觉状态：打开窗口时默认 All 高亮
+        private void UpdateFilterButtonsVisual()
+        {
+            if (_btnAll != null)
+            {
+                bool active = _filterMode == FilterMode.All;
+                _btnAll.style.backgroundColor = active ? new Color(0.3f, 0.3f, 0.3f) : new Color(0.17f, 0.17f, 0.17f);
+                _btnAll.style.color = active ? new Color(0.85f, 0.85f, 0.85f) : new Color(0.42f, 0.42f, 0.42f);
+            }
+            if (_btnHeld != null)
+            {
+                bool active = _filterMode == FilterMode.HeldOnly;
+                _btnHeld.style.backgroundColor = active ? new Color(0.3f, 0.3f, 0.3f) : new Color(0.17f, 0.17f, 0.17f);
+                _btnHeld.style.color = active ? new Color(0.85f, 0.85f, 0.85f) : new Color(0.42f, 0.42f, 0.42f);
+            }
+        }
+
+        private void UpdateDetailsPanel()
+        {
+            var tl = _selected;
+            if (_nameLabel == null || _covLabel == null || _iconBox == null) return;
+
+            if (!tl)
+            {
+                _nameLabel.text = "未选择图层";
+                if (_sizeLabel != null) _sizeLabel.text = string.Empty;
+                _covLabel.text = "覆盖数：0/0";
+                if (_pathLabel != null) _pathLabel.text = string.Empty;
+                _iconBox.style.backgroundImage = null;
+                // Null 图标在详情面板也保持 50% 透明
+                _iconBox.style.backgroundColor = new Color(0f, 0f, 0f, 0.5f);
+                return; // 早退
+            }
+
+            _nameLabel.text = TruncateName(tl.name, 24);
+            var tex = tl.diffuseTexture as Texture2D;
+            if (_sizeLabel != null)
+            {
+                _sizeLabel.text = tex ? $"尺寸：{tex.width}x{tex.height}" : "尺寸：-";
+            }
+            var cov = GetCoverageCount(tl);
+            _covLabel.text = $"覆盖数：{cov}/{_coveredTerrainTotal}";
+            if (_pathLabel != null)
+            {
+                var path = AssetDatabase.GetAssetPath(tl);
+                _pathLabel.text = string.IsNullOrEmpty(path) ? "路径：-" : $"路径：{path}";
+            }
+            var preview = GetLayerThumbnail(tl);
+            _iconBox.style.backgroundImage = preview != null ? new StyleBackground(preview) : null;
+            _iconBox.style.backgroundColor = Color.clear;
+            _iconBox.style.borderTopLeftRadius = 12; _iconBox.style.borderTopRightRadius = 12; _iconBox.style.borderBottomLeftRadius = 12; _iconBox.style.borderBottomRightRadius = 12;
+            _iconBox.style.borderBottomWidth = 1; _iconBox.style.borderTopWidth = 1; _iconBox.style.borderLeftWidth = 1; _iconBox.style.borderRightWidth = 1;
+            _iconBox.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f); _iconBox.style.borderTopColor = _iconBox.style.borderBottomColor; _iconBox.style.borderLeftColor = _iconBox.style.borderBottomColor; _iconBox.style.borderRightColor = _iconBox.style.borderBottomColor;
+            // 详情预览不参与缩放，固定尺寸，文字溢出省略
+            _iconBox.style.width = 81; // 固定示例尺寸，可按需调整
+            _iconBox.style.height = 74;
+            if (_nameLabel != null) { _nameLabel.style.whiteSpace = WhiteSpace.NoWrap; _nameLabel.style.overflow = Overflow.Hidden; _nameLabel.tooltip = tl.name; }
+            if (_sizeLabel != null) { _sizeLabel.style.whiteSpace = WhiteSpace.NoWrap; _sizeLabel.style.overflow = Overflow.Hidden; _sizeLabel.tooltip = _sizeLabel.text; }
+            if (_covLabel != null) { _covLabel.style.whiteSpace = WhiteSpace.NoWrap; _covLabel.style.overflow = Overflow.Hidden; _covLabel.tooltip = _covLabel.text; }
+            if (_pathLabel != null) { _pathLabel.style.whiteSpace = WhiteSpace.NoWrap; _pathLabel.style.overflow = Overflow.Hidden; _pathLabel.tooltip = _pathLabel.text; }
+        }
+
+        private void ApplySelection(TerrainLayer tl)
+        {
+            if (_targetRoadLayer == null)
+            {
+                ShowNotification(new GUIContent("目标 RoadLayer 为空，无法应用选择"));
+                return; // 提前返回
+            }
+
+            var owner = _contextPathCreator ? _contextPathCreator.profile : null;
+            if (owner) Undo.RecordObject(owner, "Select Terrain Layer");
+            _targetRoadLayer.contentLayer = tl;
+            if (owner) EditorUtility.SetDirty(owner);
+            _applied = true;
+            // 通知外部（Inspector）进行对应行的轻量刷新
+            try { OnContentLayerApplied?.Invoke(_targetRoadLayer, tl); } catch { }
+            MarkPreviewDirty();
+            Close();
+        }
+
+        private void MarkPreviewDirty()
+        {
+            try
+            {
+                var type = System.Type.GetType("MrPathV2.Editor.Preview.MultiPathPreviewRenderer, Assembly-CSharp-Editor");
+                if (type != null)
+                {
+                    var m = type.GetMethod("MarkCreatorDirty", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (m != null)
+                    {
+                        m.Invoke(null, new object[] { _contextPathCreator, false, false, true });
+                        return;
+                    }
+                }
+            }
+            catch { /* 忽略预览更新异常 */ }
+        }
+
+        private void OnLostFocus() => Close();
+
+        private void OnDisable()
+        {
+            if (!_applied && _targetRoadLayer != null)
+            {
+                _targetRoadLayer.contentLayer = _originalLayer;
+                MarkPreviewDirty();
+            }
+        }
+
+        // -------- 数据收集与筛选 --------
         private static List<TerrainLayer> CollectProjectLayers()
         {
             var guids = AssetDatabase.FindAssets("t:TerrainLayer");
@@ -689,7 +554,7 @@ namespace MrPathV2.Editor.Windows
             return distinct.OrderBy(l => l.name).ToList();
         }
 
-        private List<TerrainLayer> CollectCoveredTerrainLayers(PathCreator ctx)
+        private List<TerrainLayer> CollectCoveredTerrainLayers()
         {
             var res = new List<TerrainLayer>();
             var terrains = GameObject.FindObjectsOfType<UnityEngine.Terrain>();
@@ -755,6 +620,70 @@ namespace MrPathV2.Editor.Windows
                 if (l && l.GetInstanceID() == id) return true;
             }
             return false;
+        }
+
+        // 刷新数据源：项目与场景覆盖层，并重新构建视图
+        private void RefreshLists()
+        {
+            _assetLayers.Clear();
+            _assetLayers.AddRange(CollectProjectLayers());
+            _coveredLayers.Clear();
+            _coveredLayers.AddRange(CollectCoveredTerrainLayers());
+            RebuildCoverageStats();
+            RebuildVisibleList();
+            RebuildGrid();
+        }
+
+        // 等价层：贴图匹配（参考 LayerResolver 逻辑），用于黄色标记与排序次级
+        private bool HasEquivalentInCoveredTerrains(TerrainLayer tl)
+        {
+            if (!tl) return false;
+            var terrains = GameObject.FindObjectsOfType<UnityEngine.Terrain>();
+            if (terrains == null || terrains.Length == 0) return false;
+            var targetDiffuse = tl.diffuseTexture;
+            var targetNormal = tl.normalMapTexture;
+            for (int ti = 0; ti < terrains.Length; ti++)
+            {
+                var data = terrains[ti].terrainData;
+                if (!data) continue;
+                var layers = data.terrainLayers;
+                if (layers == null || layers.Length == 0) continue;
+                for (int i = 0; i < layers.Length; i++)
+                {
+                    var l = layers[i];
+                    if (!l) continue;
+                    if (ReferenceEquals(l, tl)) return true;
+                    if (l.diffuseTexture == targetDiffuse && l.normalMapTexture == targetNormal) return true;
+                    if (l.diffuseTexture == targetDiffuse) return true;
+                    if (!targetDiffuse && !l.diffuseTexture && l.name == tl.name) return true;
+                }
+            }
+            return false;
+        }
+
+        private int GetPriority(TerrainLayer tl)
+        {
+            if (!tl) return 0;
+            if (IsLayerHeldByCoveredTerrains(tl)) return 2;
+            if (HasEquivalentInCoveredTerrains(tl)) return 1;
+            return 0;
+        }
+
+        private bool IsListMode() => _thumbSize <= ThumbMin;
+
+        private void ApplyGridLayoutByMode()
+        {
+            if (_grid == null) return;
+            if (IsListMode())
+            {
+                _grid.style.flexDirection = FlexDirection.Column;
+                _grid.style.flexWrap = Wrap.NoWrap;
+            }
+            else
+            {
+                _grid.style.flexDirection = FlexDirection.Row;
+                _grid.style.flexWrap = Wrap.Wrap;
+            }
         }
     }
 }

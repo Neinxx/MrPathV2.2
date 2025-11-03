@@ -32,10 +32,15 @@ namespace __temp.MrPathV2.Editor.UI
             {
                 return;
             }
-            // 仅句柄拖动限制
-            if (m_HandleOnly && m_DragHandle != null && !ReferenceEquals(evt.target, m_DragHandle))
+            // 仅句柄拖动限制：允许句柄及其子元素触发
+            if (m_HandleOnly && m_DragHandle != null)
             {
-                return;
+                var targetVe = evt.target as VisualElement;
+                bool onHandleOrDescendant = targetVe != null && (targetVe == m_DragHandle || m_DragHandle.Contains(targetVe));
+                if (!onHandleOrDescendant)
+                {
+                    return;
+                }
             }
             
             DragAndDrop.PrepareStartDrag();

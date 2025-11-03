@@ -1,4 +1,3 @@
-using Sirenix.OdinInspector;
 using UnityEngine;
 using System.Runtime.InteropServices;
 
@@ -24,24 +23,20 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
         }
         #region Inspector Fields
 
-        [BoxGroup("遮罩设置")]
         [Range(0f, 1f)]
         [Tooltip("遮罩边缘的平滑度。0 = 硬边缘，1 = 最大平滑")]
         public float smooth = 0.1f;
 
         // ---- 通用 UV 参数 ----
-        [BoxGroup("UV Settings")]
-        [LabelText("Tiling (X=横向重复, Y=纵向重复)")]
+
         [Tooltip("以重复次数为语义：横向/纵向的重复次数；允许负值实现镜像/翻转。")]
         public Vector2 tiling = new Vector2(2f, 2f);
 
-        [BoxGroup("UV Settings")]
-        [LabelText("Offset")]
+
         [Tooltip("UV 偏移，允许整体平移遮罩")]
         public Vector2 offset = Vector2.zero;
 
-        [BoxGroup("UV Settings")]
-        [LabelText("Overall Scale")]
+
         [Tooltip("整体缩放因子，最终遮罩值将乘以该系数")]
         [Range(0f, 2f)]
         public float overallScale = 1f;

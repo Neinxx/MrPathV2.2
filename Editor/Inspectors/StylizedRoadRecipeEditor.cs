@@ -54,8 +54,15 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         public override VisualElement CreateInspectorGUI()
         {
-            _recipeUxml = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/MrPathV2/Editor/UI/StylizedRoadRecipe.uxml");
-            _layerUxml = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/MrPathV2/Editor/UI/RoadLayer.uxml");
+            // 使用资源加载器的缓存以避免频繁重建和磁盘IO，提升选中性能
+            _recipeUxml = UIResourceLoader.LoadUxml(typeof(StylizedRoadRecipeEditor));
+            _layerUxml = UIResourceLoader.LoadUxml(typeof(RoadLayer));
+
+            if (!_recipeUxml || !_layerUxml)
+            {
+                Debug.LogError($"StylizedRoadRecipeEditor.uxml or RoadLayer.uxml is not find");
+                return null;
+            }
             _root = _recipeUxml ? _recipeUxml.Instantiate() : new VisualElement();
 
             // Master Opacity 绑定
@@ -269,16 +276,27 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         private void UpdateContentSlot(RoadLayer layer, UnityEngine.UIElements.VisualElement icon, UnityEngine.UIElements.Label name)
         {
-            if (name != null) name.text = layer.contentLayer ? layer.contentLayer.name : "未选择";
+            // 提前返回：无名称或无图标时不做任何处理
+            if (name == null && icon == null) return;
+
+            // 仅更新名称文本，避免不必要的操作
+            if (name != null)
+            {
+                name.text = layer.contentLayer ? layer.contentLayer.name : "未选择";
+            }
+
+            // 关键优化：使用 GetMiniThumbnail，避免首次选中时生成昂贵的 AssetPreview
+            // 说明：AssetPreview.GetAssetPreview 会触发主线程的预览生成，层数较多/贴图较大时会造成卡顿。
             if (icon != null)
             {
                 Texture2D tex = null;
                 if (layer.contentLayer)
                 {
                     var dtex = layer.contentLayer.diffuseTexture;
-                    tex = dtex ? (Texture2D)(AssetPreview.GetAssetPreview(dtex) ?? AssetPreview.GetMiniThumbnail(dtex))
-                               : (Texture2D)(AssetPreview.GetAssetPreview(layer.contentLayer) ?? AssetPreview.GetMiniThumbnail(layer.contentLayer));
+                    tex = dtex ? AssetPreview.GetMiniThumbnail(dtex) as Texture2D
+                               : AssetPreview.GetMiniThumbnail(layer.contentLayer) as Texture2D;
                 }
+
                 icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
             }
         }
@@ -326,11 +344,8 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private static void SetClearButtonState(UnityEngine.UIElements.Button btn, bool enabled)
         {
             if (btn == null) return;
-            // 统一通过类名让 USS 控制透明度（变量化）
-            btn.RemoveFromClassList(enabled ? "clear-btn-hidden" : "clear-btn-visible");
-            btn.AddToClassList(enabled ? "clear-btn-visible" : "clear-btn-hidden");
-
-            // 交互仍由 C# 控制（USS 不支持 pickingMode）
+            // 保持 RoadLayer.uxml 的原始视觉样式，不再通过类名覆盖透明度
+            // 仅控制交互性，遵循提前返回与单一职责（视觉交给 UXML/USS）
             btn.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
             btn.focusable = enabled;
         }

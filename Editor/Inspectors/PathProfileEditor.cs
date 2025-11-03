@@ -285,7 +285,11 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             if (!recipe) return;
 
-            _recipeEditor = CreateEditor(recipe);
+            UnityEditor.Editor.CreateCachedEditor(
+                recipe,
+                typeof(StylizedRoadRecipeEditor),
+                ref _recipeEditor
+            );
             if (!_recipeEditor)
             {
                 ErrorHandler.LogError($"[PathProfileEditor] Failed to create editor for Recipe: {recipe.name}");
@@ -293,7 +297,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             }
 
             // 使用 UITK 的 CreateInspectorGUI()，嵌入我们自定义的 StylizedRoadRecipe Inspector
-            var recipeUI = _recipeEditor.CreateInspectorGUI();
+            var recipeUI = _recipeEditor?.CreateInspectorGUI();
             if (recipeUI == null)
             {
                 // 兜底：当外部编辑器未实现 CreateInspectorGUI 时，给出提示

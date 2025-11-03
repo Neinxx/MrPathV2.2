@@ -1,4 +1,3 @@
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace __temp.MrPathV2.Runtime.Core.BlendMasks
@@ -19,36 +18,28 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             Custom
         }
 
-        [BoxGroup("路面设置")]
         [Tooltip("路面覆盖宽度占道路总宽度的比例 (0-1)")]
         [Range(0f, 1f)]
         public float surfaceWidthRatio = 0.8f;
 
-        [BoxGroup("路面设置")]
         [Tooltip("路面强度：控制路面区域的遮罩强度")]
         [Range(0f, 1f)]
         public float surfaceStrength = 1f;
 
-        [BoxGroup("路面设置")]
         [Tooltip("边缘过渡：控制路面边缘的柔和过渡距离")]
         [Range(0f, 0.5f)]
         public float edgeTransition = 0.1f;
 
-        [BoxGroup("路面设置")]
         [Tooltip("中心偏移：调整路面中心位置 (-1到1)")]
         [Range(-1f, 1f)]
         public float centerOffset;
 
-        [BoxGroup("高级设置")]
         [Tooltip("路面形状曲线：控制路面区域内的强度分布")]
         public AnimationCurve surfaceProfile = AnimationCurve.EaseInOut(0f, 1f, 1f, 1f);
 
-        [BoxGroup("高级设置")]
         [Tooltip("边缘衰减类型")]
         public EdgeFalloffType falloffType = EdgeFalloffType.SmoothStep;
 
-        [BoxGroup("高级设置")]
-        [ShowIf("falloffType", EdgeFalloffType.Custom)]
         [Tooltip("自定义边缘衰减曲线")]
         public AnimationCurve customFalloffCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
 

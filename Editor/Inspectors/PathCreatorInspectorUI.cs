@@ -22,6 +22,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private VisualElement _profileEmbeddedContainer;
         private VisualElement _recipeEmbeddedContainer;
         private VisualElement _profileInspectorUI;
+        private VisualElement _recipeInspectorUI;
         private IMGUIContainer _recipeInspectorIMGUI;
 
         // 内嵌编辑器
@@ -75,6 +76,19 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     }
                 };
             }
+
+            // 在 UI 构建完成后再触发一次防抖脏标记，避免在选中瞬间与UI加载竞争造成卡顿
+            EditorApplication.delayCall += () =>
+            {
+                try
+                {
+                    _editor?.MarkPathAsDirtyDebounced();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[PathCreatorEditor] Delayed MarkDirty failed: {ex.Message}");
+                }
+            };
 
             return _rootElement;
         }
@@ -138,8 +152,12 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             // 仅在需要时更新编辑器（使用直接比较替代逻辑判断）
             if (_profileEmbeddedEditor?.target == currentProfile) return;
-            _editor.SafeDestroyEditor(ref _profileEmbeddedEditor);
-            _profileEmbeddedEditor = UnityEditor.Editor.CreateEditor(currentProfile);
+            // 使用 CreateCachedEditor 以复用已存在的编辑器实例，减少重复构建与 OnEnable 开销
+            UnityEditor.Editor.CreateCachedEditor(
+                currentProfile,
+                typeof(PathProfileEditor),
+                ref _profileEmbeddedEditor
+            );
             RebuildProfileUI();
         }
 
@@ -254,6 +272,11 @@ namespace __temp.MrPathV2.Editor.Inspectors
         /// </summary>
         private void CleanupRecipeEditor()
         {
+            if (_recipeInspectorUI != null)
+            {
+                _recipeInspectorUI.RemoveFromHierarchy();
+                _recipeInspectorUI = null;
+            }
             if (_recipeInspectorIMGUI != null)
             {
                 _recipeInspectorIMGUI.RemoveFromHierarchy();
@@ -268,15 +291,43 @@ namespace __temp.MrPathV2.Editor.Inspectors
         /// <param name="recipe">要编辑的配方</param>
         private void SetupRecipeEditor(StylizedRoadRecipe recipe)
         {
-            _editor.SafeDestroyEditor(ref _recipeEmbeddedEditor);
-            _recipeEmbeddedEditor = UnityEditor.Editor.CreateEditor(recipe);
+            // 使用缓存的编辑器创建以减少实例化与 UI 构建的抖动
+            UnityEditor.Editor.CreateCachedEditor(
+                recipe,
+                typeof(StylizedRoadRecipeEditor),
+                ref _recipeEmbeddedEditor
+            );
 
+            // 先尝试使用 UITK Inspector（更高效，更少重绘）
+            if (_recipeInspectorUI != null)
+            {
+                _recipeInspectorUI.RemoveFromHierarchy();
+                _recipeInspectorUI = null;
+            }
             if (_recipeInspectorIMGUI != null)
             {
                 _recipeInspectorIMGUI.RemoveFromHierarchy();
                 _recipeInspectorIMGUI = null;
             }
 
+            VisualElement recipeUI = null;
+            try
+            {
+                recipeUI = _recipeEmbeddedEditor?.CreateInspectorGUI();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Recipe UITK 嵌入失败，回退 IMGUI: {e.Message}");
+            }
+
+            if (recipeUI != null)
+            {
+                _recipeInspectorUI = recipeUI;
+                _recipeEmbeddedContainer.Add(recipeUI);
+                return;
+            }
+
+            // 回退到 IMGUI 容器
             var recipeImgui = new IMGUIContainer(() =>
             {
                 if (_recipeEmbeddedEditor == null) return;

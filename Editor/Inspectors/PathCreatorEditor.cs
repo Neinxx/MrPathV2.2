@@ -61,8 +61,21 @@ namespace __temp.MrPathV2.Editor.Inspectors
             // 订阅初始 Profile 的修改事件
             SubscribeToProfile(_targetCreator.profile);
 
-            // 标记为脏以进行初始刷新（防抖延迟，避免加载瞬间卡顿）
-            MarkPathAsDirtyDebounced();
+            // 初始刷新延后至 Inspector 构建完成后由 UI 触发，避免与 UI 初始化竞争
+
+            // 预热 GPU 资源与计算着色器，避免首次拖动卡顿
+            // 使用 delayCall 避免阻塞 Inspector 初始化
+            EditorApplication.delayCall += () =>
+            {
+                try
+                {
+                    var _ = __temp.MrPathV2.Editor.GPU.GpuTerrainPainterV2.Instance;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[PathCreatorEditor] GPU 预热失败: {e.Message}");
+                }
+            };
         }
 
         private void OnDisable()

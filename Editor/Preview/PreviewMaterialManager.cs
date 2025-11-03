@@ -686,52 +686,139 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
 
         private static int CalculateHash(PathProfile profile, Material template, float alpha)
         {
-#if UNITY_EDITOR
-            // 在编辑器中，包含 StylizedRoadRecipe 的序列化数据哈希，
-            // 以便在调整 BlendLayers 或 Mask 参数时能正确刷新材质。
-#endif
             unchecked
             {
                 var hash = 17;
-                hash = hash * 31 + (profile?.GetHashCode() ?? 0);
+                // 基本引用与显示选项
                 hash = hash * 31 + (template?.GetHashCode() ?? 0);
                 hash = hash * 31 + alpha.GetHashCode();
                 if (profile != null)
                 {
                     hash = hash * 31 + profile.enableDepthTest.GetHashCode();
-                    // 新增：当切换不透明预览时强制刷新材质
                     hash = hash * 31 + profile.opaquePreview.GetHashCode();
+                    hash = hash * 31 + profile.roadWidth.GetHashCode();
                 }
 
-                // Profile 中的路面配方可能在 Inspector 中发生了修改，
-                // 仅依赖引用哈希不足以检测到内部字段变化，这里通过序列化为 JSON 的方式
-                // 将其所有序列化字段纳入哈希计算，保证任何属性调整都会触发刷新。
-#if UNITY_EDITOR
-                if (profile?.roadRecipe != null)
-                {
-                    // Include recipe itself
-                    var json = EditorJsonUtility.ToJson(profile.roadRecipe);
-                    hash = hash * 31 + json.GetHashCode();
+                // 轻量哈希：收集 RoadRecipe / Layers / TerrainLayer / Mask 关键字段
+                var recipe = profile?.roadRecipe;
+                if (recipe == null) return hash;
 
-                    // Additionally include embedded mask assets so tweaking their parameters triggers refresh
-                    var layers = profile.roadRecipe.GetLayers();
-                    if (layers != null)
+                hash = hash * 31 + recipe.masterOpacity.GetHashCode();
+                var layers = recipe.GetLayers();
+                var count = layers != null ? layers.Count : 0;
+                hash = hash * 31 + count.GetHashCode();
+                if (layers == null || count == 0) return hash;
+
+                for (int i = 0; i < count; i++)
+                {
+                    var rl = layers[i];
+                    if (rl == null)
                     {
-                        foreach (var roadLayer in layers)
+                        hash = hash * 31 + 0;
+                        continue;
+                    }
+
+                    // RoadLayer 基本字段
+                    hash = hash * 31 + rl.enabled.GetHashCode();
+                    hash = hash * 31 + rl.opacity.GetHashCode();
+                    hash = hash * 31 + rl.blendMode.GetHashCode();
+
+                    // TerrainLayer 关键字段（影响贴图与平铺、色调）
+                    var tl = rl.contentLayer;
+                    if (tl)
+                    {
+                        try
                         {
-                            var mask = roadLayer?.layerMask;
-                            if (mask)
+                            hash = hash * 31 + tl.GetInstanceID();
+                            var tex = tl.diffuseTexture;
+                            hash = hash * 31 + (tex ? tex.GetInstanceID() : 0);
+                            var sz = tl.tileSize;
+                            var off = tl.tileOffset;
+                            hash = hash * 31 + sz.x.GetHashCode();
+                            hash = hash * 31 + sz.y.GetHashCode();
+                            hash = hash * 31 + off.x.GetHashCode();
+                            hash = hash * 31 + off.y.GetHashCode();
+#if UNITY_2019_1_OR_NEWER
+                            var max = tl.diffuseRemapMax;
+                            hash = hash * 31 + max.x.GetHashCode();
+                            hash = hash * 31 + max.y.GetHashCode();
+                            hash = hash * 31 + max.z.GetHashCode();
+#endif
+                        }
+                        catch { /* 避免异常导致刷新失败 */ }
+                    }
+                    else
+                    {
+                        hash = hash * 31 + 0;
+                    }
+
+                    // Mask 关键字段（不同类型覆盖不同参数）
+                    var mask = rl.layerMask;
+                    if (mask)
+                    {
+                        try
+                        {
+                            // 通用参数
+                            hash = hash * 31 + mask.GetType().FullName.GetHashCode();
+                            hash = hash * 31 + mask.smooth.GetHashCode();
+                            hash = hash * 31 + mask.tiling.x.GetHashCode();
+                            hash = hash * 31 + mask.tiling.y.GetHashCode();
+                            hash = hash * 31 + mask.offset.x.GetHashCode();
+                            hash = hash * 31 + mask.offset.y.GetHashCode();
+                            hash = hash * 31 + mask.overallScale.GetHashCode();
+
+                            // Procedural 基类（Strength/Seed）
+                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.ProceduralMaskBase proc)
                             {
-                                var maskJson = EditorJsonUtility.ToJson(mask);
-                                hash = hash * 31 + maskJson.GetHashCode();
+                                hash = hash * 31 + proc.strength.GetHashCode();
+                                hash = hash * 31 + proc.seed.GetHashCode();
+                            }
+
+                            // 噪声类
+                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.NoiseMask noise)
+                            {
+                                hash = hash * 31 + noise.noiseScale.x.GetHashCode();
+                                hash = hash * 31 + noise.noiseScale.y.GetHashCode();
+                                hash = hash * 31 + noise.uniformScale.GetHashCode();
+                                hash = hash * 31 + noise.rotationDeg.GetHashCode();
+                                hash = hash * 31 + noise.octaves.GetHashCode();
+                                hash = hash * 31 + noise.lacunarity.GetHashCode();
+                                hash = hash * 31 + noise.gain.GetHashCode();
+                                hash = hash * 31 + noise.useAsymmetricEdges.GetHashCode();
+                                hash = hash * 31 + noise.edgeLow.GetHashCode();
+                                hash = hash * 31 + noise.edgeHigh.GetHashCode();
+                            }
+                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.PerlinNoiseMask pnoise)
+                            {
+                                hash = hash * 31 + pnoise.noiseScale.x.GetHashCode();
+                                hash = hash * 31 + pnoise.noiseScale.y.GetHashCode();
+                                hash = hash * 31 + pnoise.uniformScale.GetHashCode();
+                                hash = hash * 31 + pnoise.rotationDeg.GetHashCode();
+                                hash = hash * 31 + pnoise.octaves.GetHashCode();
+                                hash = hash * 31 + pnoise.lacunarity.GetHashCode();
+                                hash = hash * 31 + pnoise.gain.GetHashCode();
+                                hash = hash * 31 + pnoise.useAsymmetricEdges.GetHashCode();
+                                hash = hash * 31 + pnoise.edgeLow.GetHashCode();
+                                hash = hash * 31 + pnoise.edgeHigh.GetHashCode();
+                            }
+                            // 路肩遮罩
+                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.ShoulderMask shoulder)
+                            {
+                                hash = hash * 31 + shoulder.shoulderWidthRatio.GetHashCode();
+                                hash = hash * 31 + shoulder.shoulderStrength.GetHashCode();
+                                hash = hash * 31 + shoulder.edgeFalloff.GetHashCode();
+                                hash = hash * 31 + shoulder.enableLeftShoulder.GetHashCode();
+                                hash = hash * 31 + shoulder.enableRightShoulder.GetHashCode();
                             }
                         }
+                        catch { /* 忽略异常以保证哈希过程健壮 */ }
+                    }
+                    else
+                    {
+                        hash = hash * 31 + 0;
                     }
                 }
-#else
-                // 在运行时只使用引用哈希，避免额外的字符串分配成本
-                hash = hash * 31 + (profile?.roadRecipe?.GetHashCode() ?? 0);
-#endif
+
                 return hash;
             }
         }

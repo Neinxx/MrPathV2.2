@@ -4,11 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Core.BlendMasks;
-using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
+using __temp.MrPathV2.Editor;
 
 namespace MrPathV2.Editor.Windows
 {
@@ -29,8 +29,7 @@ namespace MrPathV2.Editor.Windows
 
         private readonly List<BlendMaskBase> _masks = new();
         private readonly Dictionary<int, Texture2D> _iconCache = new();
-        private Vector2 _listScroll;
-        private Vector2 _paramScroll;
+        // 移除 IMGUI 滚动状态字段，UITK 不需要这些
         private string _search = string.Empty;
 
         // 新建遮罩相关
@@ -39,10 +38,7 @@ namespace MrPathV2.Editor.Windows
         private string _newMaskName = "NewMask";
         private const string DefaultMaskFolder = "Assets/MrPathV2/Masks";
 
-        // 可拖拽分割条（IMGUI遗留，不再使用）
-        private float _listTopHeight = 240f;
-        private bool _resizing;
-        private const float SplitterHeight = 6f;
+        // 已移除拖拽分割条相关字段（保留UITK固定高度实现）
 
         // --- UITK 重构新增字段 ---
         private VisualElement _rootElement;
@@ -50,8 +46,7 @@ namespace MrPathV2.Editor.Windows
         private ListView _listView;
         private VisualElement _details; // 绑定到 UXML 中的 MaskOSBox
         private ToolbarSearchField _searchField; // 绑定到 UXML 中的 ToolbarSearchField
-        private Slider _thumbSlider; // 绑定到 UXML 中的 scaleImage
-        private float _thumbSize = 42f; // 默认缩略图尺寸，受滑块驱动
+        private float _thumbSize = 42f; // 默认缩略图尺寸（固定，已移除缩放控件）
         private Button _newBtn; // 来自 UXML（文本：新建噪声），可选
         private DropdownField _maskEnumDropdown; // 动态生成的“MaskEnum”，用于类型选择
         private TextField _nameField; // UXML中的名称输入（可选）
@@ -92,17 +87,13 @@ namespace MrPathV2.Editor.Windows
             }
         }
 
-        // 点击非窗口区域（失去焦点）自动关闭，符合 Unity 选择器交互
+        // 取消失焦自动关闭，确保新建遮罩与编辑参数时窗口保持打开
         private void OnLostFocus()
         {
-            Close();
+            // 保持窗口，不执行 Close()
         }
 
-        private void OnGUI()
-        {
-            // 完全重构为 UITK，IMGUI 渲染置空
-            return;
-        }
+        
 
         // --- UITK: 构建界面 ---
         public void CreateGUI()
@@ -111,7 +102,7 @@ namespace MrPathV2.Editor.Windows
             _rootElement = rootVisualElement;
             _rootElement.Clear();
 
-            var vta = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/MrPathV2/Editor/Windows/LayerMaskSelectWindow.uxml");
+            var vta = UIResourceLoader.LoadUxml(typeof(LayerMaskSelectWindow));
             if (vta != null)
             {
                 vta.CloneTree(_rootElement);
@@ -122,13 +113,10 @@ namespace MrPathV2.Editor.Windows
                 _rootElement.style.flexDirection = FlexDirection.Column;
             }
 
-            // 加载与地形选择窗口一致的样式（包含 :hover 和 .selected）
-            var selSs = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/MrPathV2/Editor/Styles/SelectTerrainLayerWindow.uss");
-            if (selSs) _rootElement.styleSheets.Add(selSs);
+            // 不加载外部样式以避免橙色选中效果
 
             // 绑定 UXML 元素
             _searchField = _rootElement.Q<ToolbarSearchField>("ToolbarSearchField");
-            _thumbSlider = _rootElement.Q<Slider>("scaleImage");
             var listContainer = _rootElement.Q<VisualElement>("MaskList");
             _details = _rootElement.Q<VisualElement>("MaskOSBox") ?? new VisualElement { name = "MaskOSBox" };
             if (_details.parent == null) _rootElement.Add(_details);
@@ -138,8 +126,8 @@ namespace MrPathV2.Editor.Windows
             {
                 name = "MaskListView",
                 selectionType = SelectionType.Single,
-                showBorder = true,
-                fixedItemHeight = Mathf.Max(64, _thumbSize + 20)
+                showBorder = false,
+                fixedItemHeight = 52
             };
             _listView.style.flexGrow = 1;
             _listView.makeItem = MakeListItem;
@@ -147,14 +135,15 @@ namespace MrPathV2.Editor.Windows
             _listView.onSelectionChange += items =>
             {
                 var m = items.FirstOrDefault() as BlendMaskBase;
-                SelectMask(m);
+                ApplySelection(m);
                 UpdateDetailsPanel();
-                UpdateSelectionStyles();
             };
             _listView.onItemsChosen += items =>
             {
                 var m = items.FirstOrDefault() as BlendMaskBase;
                 ApplySelection(m);
+                // 双击确认后关闭窗口
+                Close();
             };
             if (listContainer != null) listContainer.Add(_listView); else _rootElement.Add(_listView);
 
@@ -177,8 +166,9 @@ namespace MrPathV2.Editor.Windows
             var enumPlaceholder = _rootElement.Query<EnumField>().First();
             _maskEnumDropdown = new DropdownField { name = "MaskEnum", choices = typeNames };
             _maskEnumDropdown.value = typeNames[Mathf.Clamp(_createTypeIndex, 0, typeNames.Count - 1)];
-            _maskEnumDropdown.style.flexGrow = 1;
-            _maskEnumDropdown.style.width = new StyleLength(new Length(69, LengthUnit.Percent));
+            _maskEnumDropdown.style.flexGrow = 0;
+            _maskEnumDropdown.style.flexShrink = 0;
+            _maskEnumDropdown.style.width = new StyleLength(new Length(36, LengthUnit.Percent));
             _maskEnumDropdown.RegisterValueChangedCallback(ev =>
             {
                 var idx = typeNames.IndexOf(ev.newValue);
@@ -198,21 +188,26 @@ namespace MrPathV2.Editor.Windows
 
             // 绑定名称输入（若 UXML 提供）
             _nameField = _rootElement.Query<TextField>().ToList().FirstOrDefault(tf => !string.IsNullOrEmpty(tf.text) || !string.IsNullOrEmpty(tf.value));
-
-            // 缩略图缩放绑定
-            if (_thumbSlider != null)
+            if (_nameField != null)
             {
-                _thumbSize = Mathf.Clamp(_thumbSlider.value, 16f, 128f);
-                _thumbSlider.RegisterValueChangedCallback(ev =>
-                {
-                    _thumbSize = Mathf.Clamp(ev.newValue, 16f, 128f);
-                    if (_listView != null) _listView.fixedItemHeight = Mathf.Max(64, _thumbSize + 20);
-                    _listView?.RefreshItems(); // 让绑定更新图标尺寸
-                });
+                _nameField.style.flexGrow = 0;
+                _nameField.style.flexShrink = 0;
+                _nameField.style.width = new StyleLength(new Length(44, LengthUnit.Percent));
+                _nameField.style.minHeight = 22;
             }
+
+            // 使用固定缩略图尺寸 40x40
+            _thumbSize = 40f;
 
             // 可选：绑定“新建噪声”按钮（若存在）
             _newBtn = _rootElement.Query<Button>().ToList().FirstOrDefault(b => string.Equals(b.text, "新建噪声"));
+            if (_newBtn != null)
+            {
+                _newBtn.style.flexGrow = 0;
+                _newBtn.style.flexShrink = 0;
+                _newBtn.style.width = new StyleLength(new Length(20, LengthUnit.Percent));
+                _newBtn.style.minHeight = 22;
+            }
             if (_newBtn != null)
             {
                 _newBtn.clicked += () =>
@@ -231,8 +226,16 @@ namespace MrPathV2.Editor.Windows
             RebuildList();
             RebuildVisibleList();
             _listView.itemsSource = _visibleList;
+            // 默认选中 Layer 当前遮罩
+            var defaultIndex = (_selected != null) ? _visibleList.IndexOf(_selected) : -1;
+            if (defaultIndex < 0) defaultIndex = 0;
+            _listView.SetSelection(defaultIndex);
             UpdateDetailsPanel();
-            UpdateSelectionStyles();
+
+            // 固定参数区初始高度（移除分割条与拖拽）
+            var detailsGroup = _details.parent;
+            if (detailsGroup != null) detailsGroup.style.flexGrow = 0;
+            _details.style.height = 420f;
         }
 
         private void RebuildVisibleList()
@@ -245,6 +248,8 @@ namespace MrPathV2.Editor.Windows
                 source = source.Where(m => m.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
             }
             _visibleList.AddRange(source.OrderBy(m => m.name));
+            // 顶部添加 Null 项用于清空遮罩槽位
+            _visibleList.Insert(0, null);
         }
 
         private VisualElement MakeListItem()
@@ -253,22 +258,22 @@ namespace MrPathV2.Editor.Windows
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
             row.style.paddingLeft = 6; row.style.paddingRight = 6;
-            row.AddToClassList("mrp-list-row"); // 复用现有列表行样式
+            row.style.paddingTop = 6; row.style.paddingBottom = 6;
+            row.style.marginBottom = 0;
+            row.style.height = 52; // 固定行高，避免 ListView 选中偏移
+            row.style.overflow = Overflow.Hidden;
+            row.style.flexShrink = 0;
 
             var icon = new Image { name = "icon" };
             icon.style.width = _thumbSize; icon.style.height = _thumbSize; icon.scaleMode = ScaleMode.ScaleToFit;
             icon.style.marginRight = 8;
-            icon.AddToClassList("tile-icon"); // 启用 :hover 和 .selected 的边框动画
-            icon.style.borderTopLeftRadius = 4;
-            icon.style.borderTopRightRadius = 4;
-            icon.style.borderBottomLeftRadius = 4;
-            icon.style.borderBottomRightRadius = 4;
             var name = new Label { name = "name" };
-            name.style.unityFontStyleAndWeight = FontStyle.Bold;
-            name.style.fontSize = 14;
+            name.style.unityFontStyleAndWeight = FontStyle.Normal;
+            name.style.fontSize = 13;
             var sub = new Label { name = "sub" };
             sub.style.color = new Color(0.8f, 0.8f, 0.8f);
             sub.style.opacity = 0.65f;
+            sub.style.marginTop = 0;
 
             var content = new VisualElement { name = "content" };
             content.style.flexDirection = FlexDirection.Column;
@@ -293,10 +298,9 @@ namespace MrPathV2.Editor.Windows
             var sub = element.Q<Label>("sub");
             icon.image = GetMaskThumbnail(m);
             icon.style.width = _thumbSize; icon.style.height = _thumbSize; // 应用当前缩略图尺寸
-            name.text = m ? m.name : "<null>";
-            sub.text = m ? m.GetType().Name : string.Empty;
-            // 在绑定阶段更新选中样式，避免首次渲染遗漏
-            if (_selected == m) row.AddToClassList("selected"); else row.RemoveFromClassList("selected");
+            name.text = m ? m.name : "空 (清空遮罩)";
+            sub.text = m ? m.GetType().Name : "None";
+            // 移除选中样式，避免橙色高亮
         }
 
         private Texture2D GetMaskThumbnail(BlendMaskBase m)
@@ -358,159 +362,43 @@ namespace MrPathV2.Editor.Windows
             };
         }
 
-        private void UpdateSelectionStyles()
-        {
-            if (_listView == null) return;
-            var cc = _listView.contentContainer;
-            if (cc == null) return;
-            foreach (var row in cc.Children())
-            {
-                var data = row.userData as BlendMaskBase ?? row.Q<VisualElement>("row")?.userData as BlendMaskBase;
-                if (data == null) { row.RemoveFromClassList("selected"); continue; }
-                if (data == _selected) row.AddToClassList("selected"); else row.RemoveFromClassList("selected");
-            }
-        }
+        // 已移除选中样式的高亮更新
 
         private void DrawToolbar()
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            // 移除"遮罩列表"，只保留筛选；输入框水平铺满
-            GUILayout.Label("筛选:", GUILayout.Width(40)); // 固定标签宽度
-            var newSearch = GUILayout.TextField(_search, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true)); // 仅文本框扩展
-            if (!string.Equals(newSearch, _search))
-            {
-                _search = newSearch?.Trim() ?? string.Empty;
-                Repaint();
-            }
-            // GUILayout.FlexibleSpace();
-            if (GUILayout.Button("刷新", EditorStyles.toolbarButton, GUILayout.Width(60)))
-            {
-                RebuildList();
-                Repaint();
-            }
-            EditorGUILayout.EndHorizontal();
+            // IMGUI 绘制已移除，保留空实现以避免误用
         }
 
         private void DrawMaskList(float height)
         {
-            if (_masks == null || _masks.Count == 0)
-            {
-                EditorGUILayout.HelpBox("项目中未找到任何 BlendMask 资产。", MessageType.Info);
-                return; // 提前返回
-            }
-
-            var query = string.IsNullOrWhiteSpace(_search) ? null : _search.Trim();
-            var filtered = (query == null ? _masks.Where(m => m) : _masks.Where(m => m && m.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
-                            .OrderBy(m => m.name)
-                            .ToList();
-            if (filtered.Count == 0)
-            {
-                EditorGUILayout.HelpBox("筛选条件下无匹配遮罩。", MessageType.Info);
-                return; // 提前返回
-            }
-
-            EditorGUILayout.BeginVertical(GUILayout.Height(height));
-            _listScroll = EditorGUILayout.BeginScrollView(_listScroll, GUILayout.ExpandHeight(true));
-            foreach (var m in filtered) DrawMaskRow(m);
-            EditorGUILayout.EndScrollView();
-
-            // 底部“新建遮罩”区域（底对齐）
-            EditorGUILayout.BeginHorizontal();
-            var typeNames = _availableMaskTypes.Select(t => t.Name).ToArray();
-            _createTypeIndex = EditorGUILayout.Popup(_createTypeIndex, typeNames, GUILayout.Width(140));
-            _newMaskName = EditorGUILayout.TextField(_newMaskName, GUILayout.ExpandWidth(true));
-            if (GUILayout.Button("新建遮罩", GUILayout.Width(88)))
-            {
-                CreateNewMaskAsset(_availableMaskTypes[Mathf.Clamp(_createTypeIndex, 0, _availableMaskTypes.Length - 1)], _newMaskName);
-            }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
+            // IMGUI 绘制已移除
         }
 
         private void DrawMaskRow(BlendMaskBase m)
         {
-            var rowRect = EditorGUILayout.BeginHorizontal();
-            Texture2D icon = null;
-            var id = m.GetInstanceID();
-            if (!_iconCache.TryGetValue(id, out icon) || !icon)
-            {
-                icon = AssetPreview.GetMiniThumbnail(m);
-                _iconCache[id] = icon;
-            }
-            var isSelected = _selected == m;
-            var isHover = rowRect.Contains(Event.current.mousePosition);
-            var bg = isSelected ? new Color(0.2f, 0.6f, 0.2f, 0.15f) : (isHover ? new Color(1f, 1f, 1f, 0.08f) : new Color(1f, 1f, 1f, 0.03f));
-            EditorGUI.DrawRect(new Rect(rowRect.x, rowRect.y, rowRect.width, rowRect.height), bg);
-
-            GUILayout.Space(4);
-            GUILayout.Label(icon, GUILayout.Width(20), GUILayout.Height(20));
-            GUILayout.Label(m.name, EditorStyles.label);
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-
-            // 选中即应用
-            var e = Event.current;
-            if (e.type == EventType.MouseDown && rowRect.Contains(e.mousePosition))
-            {
-                // 单击：预览选择，但不最终应用（窗口关闭时可回滚）
-                SelectMask(m);
-                if (e.clickCount == 2)
-                {
-                    // 双击：最终应用并关闭窗口
-                    ApplySelection(m);
-                }
-                e.Use();
-            }
+            // IMGUI 绘制已移除
         }
 
         private void DrawParamsPanel()
         {
-            GUILayout.Space(6);
-            EditorGUILayout.BeginVertical("box");
-            GUILayout.Label("遮罩参数", EditorStyles.boldLabel);
-            if (!_selected)
-            {
-                GUILayout.Label("未选择遮罩", EditorStyles.miniLabel);
-                EditorGUILayout.EndVertical();
-                return; // 提前返回
-            }
-            _paramScroll = EditorGUILayout.BeginScrollView(_paramScroll, GUILayout.ExpandHeight(true));
-            if (_selectedEditor)
-            {
-                try { _selectedEditor.OnInspectorGUI(); }
-                catch (Exception ex) { EditorGUILayout.HelpBox($"渲染遮罩 Inspector 失败: {ex.Message}", MessageType.Error); }
-            }
-            else
-            {
-                EditorGUILayout.HelpBox("Inspector 构建失败", MessageType.Warning);
-            }
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
+            // IMGUI 绘制已移除
         }
 
         private void DrawFooter()
         {
-            GUILayout.Space(4);
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            // if (GUILayout.Button("关闭", GUILayout.Width(80), GUILayout.Height(24))) Close();
-            EditorGUILayout.EndHorizontal();
+            // IMGUI 绘制已移除
         }
 
         private void ApplySelection(BlendMaskBase m)
         {
-            if (_targetLayer == null)
-            {
-                EditorUtility.DisplayDialog("提示", "目标 RoadLayer 为空，无法应用。", "确定");
-                return; // 提前返回
-            }
+            if (_targetLayer == null) return; // 移除提示框，保持静默提前返回
             _selected = m;
             _targetLayer.layerMask = m;
             _applied = true;
             RecreateEditor();
             // 最终应用后通知，并关闭窗口（一致的交互）
             try { OnMaskApplied?.Invoke(_targetLayer, m); } catch { /* 防御：忽略回调异常 */ }
-            Close();
+            // 单击应用不关闭窗口，双击由 onItemsChosen 关闭
         }
 
         // 单击选择：仅预览并刷新参数区，不触发最终应用事件
@@ -603,31 +491,7 @@ namespace MrPathV2.Editor.Windows
             }
         }
 
-        private void DrawHeightSplitter()
-        {
-            var y = Mathf.Clamp(_listTopHeight, 140f, position.height - 180f);
-            var splitterRect = new Rect(0, y, position.width, SplitterHeight);
-            EditorGUI.DrawRect(splitterRect, new Color(0.2f, 0.2f, 0.2f, 0.35f));
-            EditorGUIUtility.AddCursorRect(splitterRect, MouseCursor.ResizeVertical);
-
-            var e = Event.current;
-            switch (e.type)
-            {
-                case EventType.MouseDown:
-                    if (splitterRect.Contains(e.mousePosition)) { _resizing = true; e.Use(); }
-                    break;
-                case EventType.MouseDrag:
-                    if (_resizing)
-                    {
-                        _listTopHeight = Mathf.Clamp(e.mousePosition.y, 140f, position.height - 180f);
-                        Repaint();
-                    }
-                    break;
-                case EventType.MouseUp:
-                    if (_resizing) { _resizing = false; e.Use(); }
-                    break;
-            }
-        }
+        // 已移除 IMGUI 高度分割函数
     }
 }
 #endif

@@ -41,14 +41,10 @@ namespace __temp.MrPathV2.Runtime.Providers
             var cache = FindCacheForPosition(worldPos);
             if (cache == null) return worldPos.y;
 
-            var normX = Mathf.Clamp01((worldPos.x - cache.Value.Position.x) / cache.Value.Size.x);
-            var normZ = Mathf.Clamp01((worldPos.z - cache.Value.Position.z) / cache.Value.Size.z);
-
-            var hX = Mathf.FloorToInt(normX * (cache.Value.Resolution - 1));
-            var hY = Mathf.FloorToInt(normZ * (cache.Value.Resolution - 1));
-
-            var h = cache.Value.Heights[hY * cache.Value.Resolution + hX];
-            return h * cache.Value.Size.y + cache.Value.Position.y;
+            // 使用按需采样，避免在选择 PathCreator 时读取整张高度图导致卡顿
+            // Unity 文档推荐在世界坐标下使用 Terrain.SampleHeight，再加上地形的世界 Y 偏移
+            var sampled = cache.Value.Terrain.SampleHeight(worldPos);
+            return sampled + cache.Value.Position.y;
         }
 
         public Vector3 GetNormal(Vector3 worldPos)
@@ -59,8 +55,9 @@ namespace __temp.MrPathV2.Runtime.Providers
             var cache = FindCacheForPosition(worldPos);
             if (cache == null) return Vector3.up;
 
-            var normX = (worldPos.x - cache.Value.Position.x) / cache.Value.Size.x;
-            var normZ = (worldPos.z - cache.Value.Position.z) / cache.Value.Size.z;
+            // 规范化并夹取到 [0,1]，确保法线插值稳定
+            var normX = Mathf.Clamp01((worldPos.x - cache.Value.Position.x) / cache.Value.Size.x);
+            var normZ = Mathf.Clamp01((worldPos.z - cache.Value.Position.z) / cache.Value.Size.z);
 
             return cache.Value.Data.GetInterpolatedNormal(normX, normZ);
         }
@@ -204,25 +201,14 @@ namespace __temp.MrPathV2.Runtime.Providers
             
             var position = terrain.GetPosition();
             var size = data.size;
-        
-            var heights2D = data.GetHeights(0, 0, data.heightmapResolution, data.heightmapResolution);
-            var owner = UnifiedMemory.Instance.RentNativeArray<float>(heights2D.Length, Allocator.Persistent);
-            var heightsNative = owner.Collection;
-        
-            for (var y = 0; y < data.heightmapResolution; y++)
-            {
-                for (var x = 0; x < data.heightmapResolution; x++)
-                {
-                    heightsNative[y * data.heightmapResolution + x] = heights2D[y, x];
-                }
-            }
-        
+            
+            // 轻量化缓存：仅保存必要的元数据，按需采样高度与法线
             _mTerrainCaches.Add(new TerrainCache
             {
                 Terrain = terrain,
                 Data = data,
                 Bounds = new Rect(position.x, position.z, size.x, size.z),
-                HeightsOwner = owner,
+                HeightsOwner = null,
                 Resolution = data.heightmapResolution,
                 Position = position,
                 Size = size

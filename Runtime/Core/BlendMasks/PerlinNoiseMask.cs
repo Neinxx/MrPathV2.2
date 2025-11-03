@@ -1,4 +1,3 @@
-using Sirenix.OdinInspector;
 using UnityEngine;
 // for GpuMaskParamsData
 
@@ -9,12 +8,10 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
     {
         [Header("Noise Settings / Scale & Rotation")]
         [Tooltip("二维噪声的无量纲缩放。小值=图案更大；大值=细节更密。")]
-        [OnValueChanged(nameof(OnNoiseScaleChanged))]
         public Vector2 noiseScale = new Vector2(1f, 1f);
 
         [Header("Uniform Scale")]
         [Tooltip("锁定XY统一缩放，调整X时同步Y。")]
-        [OnValueChanged(nameof(OnUniformScaleToggled))]
         public bool uniformScale = true;
 
         [Tooltip("噪声UV的旋转角度（度）")]

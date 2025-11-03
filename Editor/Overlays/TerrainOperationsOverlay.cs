@@ -404,7 +404,12 @@ namespace __temp.MrPathV2.Editor.Overlays
         {
             foreach (var btn in _operationButtons)
             {
-                btn.SetEnabled(enabled);
+                // 改为仅控制交互，不影响视觉：使用 pickingMode + focusable
+                // 提前返回优化：空按钮直接跳过
+                if (btn == null) continue;
+
+                btn.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+                btn.focusable = enabled;
 
 
                 if (enabled && btn.userData is string originalText)

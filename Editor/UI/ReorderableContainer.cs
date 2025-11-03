@@ -93,53 +93,18 @@ namespace __temp.MrPathV2.Editor.UI
 
         private void OnDragEnter(DragEnterEvent evt)
         {
-            // 提前返回：如果正在拖动或不是有效的重排项
-            if (m_IsDragging) return;
-
-            VisualElement draggedItem = DragAndDrop.GetGenericData("ReorderableItem") as VisualElement;
-
-            // 提前返回：如果不是本容器内的重排项
-            if (draggedItem == null || draggedItem.parent != this)
-            {
-                DragAndDrop.visualMode = DragAndDropVisualMode.None;
-                return;
-            }
-
-            // 1. 初始化状态
-            m_DraggedItem = draggedItem;
-            m_IsDragging = true;
-            DragAndDrop.visualMode = DragAndDropVisualMode.Move;
-
-            // 2. 记录初始偏移量和布局数据
-            m_DragStartOffset = WorldToLocal(evt.mousePosition) - m_DraggedItem.layout.position;
-            CacheChildMidYPositions(); // 缓存所有子项中线Y坐标
-            // 2.1 关联 ScrollView 并抑制滚轮事件传播 (拖拽中避免滚动导致抖动)
-            m_ScrollView = this.GetFirstAncestorOfType<ScrollView>();
-            RegisterCallback<WheelEvent>(OnWheelWhileDragging, TrickleDown.TrickleDown);
-            // 2.2 记录进入拖拽时的滚动位置，便于结束后恢复
-            if (m_ScrollView != null) m_ScrollPrevOffsetY = m_ScrollView.scrollOffset.y;
-            else m_ScrollPrevOffsetY = 0f;
-
-            // 2.3 拖拽期间禁用过渡动画（通过类名，交由 USS 控制）
-            AddToClassList("dragging-active");
-
-            // 3. 配置幽灵元素 (脱离布局流)
-            ConfigureDraggedItemAsGhost();
-
-            // 4. 初始化并插入占位符
-            m_PlaceholderIndex = IndexOf(m_DraggedItem);
-            SetPlaceholderSpacing(m_DraggedItem.layout.height);
-            Insert(m_PlaceholderIndex, m_PlaceholderContainer);
-            m_PlaceholderContainer.style.display = DisplayStyle.Flex;
-
-            // 5. 初始移动幽灵到鼠标位置
-            UpdateGhostPosition(evt.mousePosition);
-
+            TryBeginDrag(evt.mousePosition);
             evt.StopPropagation();
         }
 
         private void OnDragUpdated(DragUpdatedEvent evt)
         {
+            // 若拖拽尚未初始化（例如从容器内部开始拖拽），尝试初始化
+            if (!m_IsDragging || m_DraggedItem == null)
+            {
+                TryBeginDrag(evt.mousePosition);
+            }
+
             // 提前返回：非拖动状态
             if (!m_IsDragging || m_DraggedItem == null) return;
 
@@ -161,6 +126,50 @@ namespace __temp.MrPathV2.Editor.UI
             }
 
             evt.StopPropagation();
+        }
+
+        // 封装：尝试初始化拖拽状态（可在 DragEnter/DragUpdated 调用）
+        private void TryBeginDrag(Vector2 mousePosition)
+        {
+            if (m_IsDragging) return;
+
+            VisualElement draggedItem = DragAndDrop.GetGenericData("ReorderableItem") as VisualElement;
+
+            // 如果不是本容器内的重排项，退出
+            if (draggedItem == null || draggedItem.parent != this)
+            {
+                DragAndDrop.visualMode = DragAndDropVisualMode.None;
+                return;
+            }
+
+            // 1. 初始化状态
+            m_DraggedItem = draggedItem;
+            m_IsDragging = true;
+            DragAndDrop.visualMode = DragAndDropVisualMode.Move;
+
+            // 2. 记录初始偏移量和布局数据
+            m_DragStartOffset = WorldToLocal(mousePosition) - m_DraggedItem.layout.position;
+            CacheChildMidYPositions();
+            // 2.1 关联 ScrollView 并抑制滚轮事件传播
+            m_ScrollView = this.GetFirstAncestorOfType<ScrollView>();
+            RegisterCallback<WheelEvent>(OnWheelWhileDragging, TrickleDown.TrickleDown);
+            // 2.2 记录进入拖拽时的滚动位置
+            m_ScrollPrevOffsetY = m_ScrollView != null ? m_ScrollView.scrollOffset.y : 0f;
+
+            // 2.3 拖拽期间禁用过渡动画
+            AddToClassList("dragging-active");
+
+            // 3. 配置幽灵元素
+            ConfigureDraggedItemAsGhost();
+
+            // 4. 初始化并插入占位符
+            m_PlaceholderIndex = IndexOf(m_DraggedItem);
+            SetPlaceholderSpacing(m_DraggedItem.layout.height);
+            Insert(m_PlaceholderIndex, m_PlaceholderContainer);
+            m_PlaceholderContainer.style.display = DisplayStyle.Flex;
+
+            // 5. 初始移动幽灵到鼠标位置
+            UpdateGhostPosition(mousePosition);
         }
 
         private void OnDragPerform(DragPerformEvent evt)

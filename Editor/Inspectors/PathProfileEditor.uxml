@@ -1,5 +1,5 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
-    <Style src="project://database/Assets/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor" />
+    <Style src="project://database/Assets/__temp/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor" />
     <ui:VisualElement class="root-container" style="height: auto; flex-grow: 1; justify-content: flex-start; align-items: stretch; min-height: auto; padding-top: 3px;">
         <ui:VisualElement class="control-panel" style="flex-grow: 1; height: auto; margin-top: 0;">
             <ui:VisualElement class="settings-group" style="height: 46px; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; margin-right: 3px; margin-left: 3px; min-height: 46px; max-height: 60px; align-items: flex-start; justify-content: center; background-color: rgba(12, 12, 12, 0.23);">
@@ -43,7 +43,7 @@
         </ui:VisualElement>
         <ui:GroupBox name="PreviewSection" class="preview-group" style="flex-grow: 1; flex-shrink: 1; align-items: stretch; background-color: rgba(35, 35, 35, 0.16); flex-direction: column; justify-content: flex-start;">
             <uie:ObjectField label="StylizedRoadRecipe" binding-path="roadRecipe" name="RecipeField" class="object-field" style="margin-top: 1px; margin-bottom: 4px; min-height: 20px;" />
-            <ui:VisualElement name="preview-content" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.08); min-height: auto;" />
+            <ui:VisualElement name="preview-content" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0); min-height: auto;" />
         </ui:GroupBox>
     </ui:VisualElement>
 </ui:UXML>
