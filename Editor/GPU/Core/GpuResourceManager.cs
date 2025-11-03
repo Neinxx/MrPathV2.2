@@ -114,28 +114,47 @@ namespace __temp.MrPathV2.Editor.GPU.Core
 
         public RenderTexture GetOrCreateRenderTexture(string key, int width, int height, int volumeDepth = 1, RenderTextureFormat format = RenderTextureFormat.RFloat)
         {
+            // 兼容旧接口：不返回创建标记
+            return GetOrCreateRenderTextureEx(key, width, height, volumeDepth, format, out _);
+        }
+
+        public RenderTexture GetOrCreateRenderTextureEx(string key, int width, int height, int volumeDepth, RenderTextureFormat format, out bool createdNew)
+        {
             if (string.IsNullOrEmpty(key)) key = $"RT_{Guid.NewGuid()}";
             var safeDepth = Mathf.Max(volumeDepth, 1);
+            createdNew = false;
+
             if (_renderTextureMap.TryGetValue(key, out var rt))
             {
-                if (rt.width == width && rt.height == height && rt.volumeDepth == safeDepth)
+                // 防御：引用已被销毁（Unity 假 null），移除并重建
+                if (!rt)
+                {
+                    _renderTextureMap.Remove(key);
+                    rt = null;
+                }
+                else if (rt.width == width && rt.height == height && rt.volumeDepth == safeDepth)
                 {
                     return rt;
                 }
-                rt.Release();
+
+                if (rt != null)
+                {
+                    rt.Release();
+                }
             }
-        
+
             var descriptor = new RenderTextureDescriptor(width, height, format)
             {
                 volumeDepth = safeDepth,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
                 enableRandomWrite = true
             };
-            rt = new RenderTexture(descriptor) { name = key };
-            rt.Create();
-            _renderTextureMap[key] = rt;
-            RegisterRenderTexture(rt);
-            return rt;
+            var newRt = new RenderTexture(descriptor) { name = key };
+            newRt.Create();
+            _renderTextureMap[key] = newRt;
+            RegisterRenderTexture(newRt);
+            createdNew = true;
+            return newRt;
         }
     }
 }

@@ -87,7 +87,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             var addBtn = _root.Q<UnityEngine.UIElements.Button>("addLayerButton");
             if (addBtn != null)
             {
-                addBtn.text = "+ 新增图层";
+                addBtn.text = "Create Layer";
                 addBtn.clicked += () =>
                 {
                     if (_recipe == null) return;

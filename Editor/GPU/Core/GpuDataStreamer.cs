@@ -147,7 +147,7 @@ namespace __temp.MrPathV2.Editor.GPU
         }
 
         /// <summary>
-        /// 应用渲染结果到地形
+        /// 应用渲染结果到地形（使用 ROI 与异步读回）
         /// </summary>
         public void ApplyToTerrain(GpuRenderResult result)
         {
@@ -163,8 +163,7 @@ namespace __temp.MrPathV2.Editor.GPU
                     return;
                 }
 
-                // 异步读取GPU数据并应用到地形
-                ApplyRenderTextureToTerrain(result.RenderTexture, result.Terrain);
+                ApplyRenderTextureToTerrainROI(result);
             }
             catch (Exception ex)
             {
@@ -187,7 +186,7 @@ namespace __temp.MrPathV2.Editor.GPU
             for (int i = 0; i < pathData.SpinePoints.Length; i++)
             {
                 var point = pathData.SpinePoints[i];
-                
+
                 // 计算前向向量
                 Vector3 forward = Vector3.forward;
                 if (i < pathData.SpinePoints.Length - 1)
@@ -268,16 +267,19 @@ namespace __temp.MrPathV2.Editor.GPU
             var terrainData = terrain.terrainData;
             var alphamapResolution = terrainData.alphamapResolution;
             var layerCount = terrainData.alphamapLayers;
-        
+
             // 创建或获取AlphaMap纹理数组
             var key = $"AlphaMap_{terrain.GetInstanceID()}";
             var sliceCount = Mathf.Max(layerCount, 1); // 避免 volumeDepth=0
-            var alphaMapTexture = _resourceManager.GetOrCreateRenderTexture(
-                key, alphamapResolution, alphamapResolution, sliceCount, RenderTextureFormat.ARGBFloat);
-        
-            // 同步当前的alphamap数据到RenderTexture
-            SyncAlphaMapToTexture(terrain, alphaMapTexture);
-        
+            var alphaMapTexture = _resourceManager.GetOrCreateRenderTextureEx(
+                key, alphamapResolution, alphamapResolution, sliceCount, RenderTextureFormat.ARGBFloat, out var createdNew);
+
+            // 仅在首次创建或尺寸/层数变化时同步一次，避免每次绘制的大规模 CPU 拷贝
+            if (createdNew)
+            {
+                SyncAlphaMapToTexture(terrain, alphaMapTexture);
+            }
+
             return alphaMapTexture;
         }
 
@@ -285,13 +287,13 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             var terrainData = terrain.terrainData;
             var alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight);
-            
+
             // 使用Graphics.CopyTexture进行高效拷贝
             for (int layer = 0; layer < terrainData.alphamapLayers; layer++)
             {
                 var layerTexture = new Texture2D(terrainData.alphamapWidth, terrainData.alphamapHeight, TextureFormat.RGBAFloat, false);
                 var colors = new Color[terrainData.alphamapWidth * terrainData.alphamapHeight];
-                
+
                 for (int y = 0; y < terrainData.alphamapHeight; y++)
                 {
                     for (int x = 0; x < terrainData.alphamapWidth; x++)
@@ -301,12 +303,12 @@ namespace __temp.MrPathV2.Editor.GPU
                         colors[index] = new Color(alpha, alpha, alpha, alpha);
                     }
                 }
-                
+
                 layerTexture.SetPixels(colors);
                 layerTexture.Apply();
-                
+
                 Graphics.CopyTexture(layerTexture, 0, 0, alphaMapTexture, layer, 0);
-                
+
                 // 清理临时纹理
                 if (Application.isPlaying)
                     UnityEngine.Object.Destroy(layerTexture);
@@ -334,7 +336,7 @@ namespace __temp.MrPathV2.Editor.GPU
                 FalloffDistance = recipe.FalloffDistance,
                 LayerCount = recipe.Layers.Length,
                 CoverageArea = coverageArea,
-                ContourBounds = new Vector4(pathData.PathBounds.min.x, pathData.PathBounds.min.z, 
+                ContourBounds = new Vector4(pathData.PathBounds.min.x, pathData.PathBounds.min.z,
                                           pathData.PathBounds.max.x, pathData.PathBounds.max.z),
                 AlphamapLayerCount = terrainData.alphamapLayers,
                 SpinePointCount = pathData.SpinePoints != null ? pathData.SpinePoints.Length : 0,
@@ -362,53 +364,81 @@ namespace __temp.MrPathV2.Editor.GPU
         #endregion
 
         #region Terrain Application
-        private void ApplyRenderTextureToTerrain(RenderTexture renderTexture, UnityEngine.Terrain terrain)
+        private void ApplyRenderTextureToTerrainROI(GpuRenderResult result)
         {
+            var terrain = result.Terrain;
             var terrainData = terrain.terrainData;
-            
-            // 创建临时纹理来读取GPU数据
-            var tempTexture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBA32, false);
-            
-            // 读取每一层的数据
-            var alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight);
-            
-            for (int layer = 0; layer < renderTexture.volumeDepth && layer < terrainData.alphamapLayers; layer++)
+            var rt = result.RenderTexture;
+
+            // 计算 ROI（像素坐标）
+            var cov = result.CoverageArea;
+            int minX = Mathf.Clamp(Mathf.RoundToInt(cov.x), 0, terrainData.alphamapWidth);
+            int minY = Mathf.Clamp(Mathf.RoundToInt(cov.y), 0, terrainData.alphamapHeight);
+            int maxX = Mathf.Clamp(Mathf.RoundToInt(cov.z), 0, terrainData.alphamapWidth);
+            int maxY = Mathf.Clamp(Mathf.RoundToInt(cov.w), 0, terrainData.alphamapHeight);
+            // 注意：coverageMax 通常为“包含型”边界，和 CPU 路径保持一致需 +1
+            int roiWidth = Mathf.Max(1, maxX - minX + 1);
+            int roiHeight = Mathf.Max(1, maxY - minY + 1);
+
+            // 准备 ROI alphamaps
+            var roiMaps = terrainData.GetAlphamaps(minX, minY, roiWidth, roiHeight);
+
+            int sliceCount = Mathf.Max(rt.volumeDepth, 1);
+            int targetLayerCount = Mathf.Min(sliceCount, terrainData.alphamapLayers);
+
+            // 逐 slice ROI 读回，并在全部完成后一次性归一化与写回
+            int completed = 0;
+            for (int layer = 0; layer < targetLayerCount; layer++)
             {
-                // 从RenderTexture数组中读取特定层
-                var currentRT = RenderTexture.active;
-                RenderTexture.active = renderTexture;
-                
-                // 这里需要使用Graphics.CopyTexture或自定义着色器来从纹理数组中提取特定层
-                // 简化实现：直接读取第一层作为示例
-                tempTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
-                tempTexture.Apply();
-                
-                RenderTexture.active = currentRT;
-                
-                var pixels = tempTexture.GetPixels();
-                
-                // 将像素数据写入alphamap
-                for (int y = 0; y < terrainData.alphamapHeight; y++)
+                int slice = layer;
+                // 读取 ROI 子矩形，仅该 slice
+                UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0,
+                    minX, roiWidth,
+                    minY, roiHeight,
+                    slice, 1,
+                    request =>
                 {
-                    for (int x = 0; x < terrainData.alphamapWidth; x++)
+                    if (request.hasError)
                     {
-                        int pixelIndex = y * terrainData.alphamapWidth + x;
-                        if (pixelIndex < pixels.Length)
+                        Debug.LogError($"[GpuDataStreamer] GPU读回失败（slice {slice}）");
+                        return;
+                    }
+
+                    var data = request.GetData<Color>(); // 返回的就是该 slice 的 ROI 数据
+                    // 将 ROI 数据写入对应层
+                    for (int y = 0; y < roiHeight; y++)
+                    {
+                        for (int x = 0; x < roiWidth; x++)
                         {
-                            alphamaps[x, y, layer] = pixels[pixelIndex].r;
+                            int idx = y * roiWidth + x;
+                            if (idx < data.Length)
+                            {
+                                roiMaps[y, x, slice] = Mathf.Clamp01(data[idx].r);
+                            }
                         }
                     }
-                }
+
+                    completed++;
+                    if (completed >= targetLayerCount)
+                    {
+                        // 可选：归一化，保证每个像素各层权重之和为1（更符合地形渲染期望）
+                        for (int y = 0; y < roiHeight; y++)
+                        {
+                            for (int x = 0; x < roiWidth; x++)
+                            {
+                                float sum = 0f;
+                                for (int l = 0; l < targetLayerCount; l++) sum += roiMaps[y, x, l];
+                                if (sum > 1e-6f)
+                                {
+                                    for (int l = 0; l < targetLayerCount; l++) roiMaps[y, x, l] /= sum;
+                                }
+                            }
+                        }
+
+                        terrainData.SetAlphamaps(minX, minY, roiMaps);
+                    }
+                });
             }
-            
-            // 应用修改后的alphamap
-            terrainData.SetAlphamaps(0, 0, alphamaps);
-            
-            // 清理临时纹理
-            if (Application.isPlaying)
-                UnityEngine.Object.Destroy(tempTexture);
-            else
-                UnityEngine.Object.DestroyImmediate(tempTexture);
         }
         #endregion
 
@@ -420,48 +450,60 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             var terrainData = terrain.terrainData;
             var alphaMapResolution = terrainData.alphamapResolution;
-            
+
             // 创建遮罩纹理
             var maskTexture = new Texture2D(alphaMapResolution, alphaMapResolution, TextureFormat.R8, false);
             var pixels = new byte[alphaMapResolution * alphaMapResolution];
-            
+
             // 获取地形世界坐标和尺寸
             var terrainPos = terrain.transform.position;
             var terrainSize = terrainData.size;
-            
+
+            // 仅在 ROI 内生成遮罩，避免整图扫描造成卡顿
+            var coverage = CalculateCoverageArea(pathData.PathBounds, terrainPos, terrainSize, alphaMapResolution);
+            int minX = Mathf.Clamp(Mathf.RoundToInt(coverage.x), 0, alphaMapResolution);
+            int minY = Mathf.Clamp(Mathf.RoundToInt(coverage.y), 0, alphaMapResolution);
+            int maxX = Mathf.Clamp(Mathf.RoundToInt(coverage.z), 0, alphaMapResolution);
+            int maxY = Mathf.Clamp(Mathf.RoundToInt(coverage.w), 0, alphaMapResolution);
+            int roiWidth = Mathf.Max(1, maxX - minX + 1);
+            int roiHeight = Mathf.Max(1, maxY - minY + 1);
+
             // 从 PathData 创建简化的 PathSpine
             var pathSpine = CreateSimplifiedPathSpine(pathData);
-            
+
             // 创建临时的 PathProfile 来使用 RoadContourGenerator
             var tempProfile = CreateTempPathProfile(recipe);
-            
+
             // 生成道路轮廓
             NativeArray<float2> roadContour;
             float4 bounds;
             RoadContourGenerator.GenerateContour(pathSpine, tempProfile, out roadContour, out bounds, Allocator.Temp);
-            
+
             try
             {
-                for (int y = 0; y < alphaMapResolution; y++)
+                // 仅处理 ROI 子区域，其他区域保持默认 0
+                for (int y = 0; y < roiHeight; y++)
                 {
-                    for (int x = 0; x < alphaMapResolution; x++)
+                    int texY = minY + y;
+                    for (int x = 0; x < roiWidth; x++)
                     {
+                        int texX = minX + x;
                         // 将纹理坐标转换为世界坐标
-                        float worldX = terrainPos.x + (x / (float)alphaMapResolution) * terrainSize.x;
-                        float worldZ = terrainPos.z + (y / (float)alphaMapResolution) * terrainSize.z;
-                        
+                        float worldX = terrainPos.x + (texX / (float)alphaMapResolution) * terrainSize.x;
+                        float worldZ = terrainPos.z + (texY / (float)alphaMapResolution) * terrainSize.z;
+
                         // 检查点是否在道路轮廓内
                         bool isInsideRoad = IsPointInsideRoadContour(worldX, worldZ, roadContour);
-                        
+
                         // 设置像素值：道路内为255（白色），道路外为0（黑色）
-                        pixels[y * alphaMapResolution + x] = isInsideRoad ? (byte)255 : (byte)0;
+                        pixels[texY * alphaMapResolution + texX] = isInsideRoad ? (byte)255 : (byte)0;
                     }
                 }
-                
+
                 // 应用像素数据
                 maskTexture.LoadRawTextureData(pixels);
                 maskTexture.Apply();
-                
+
                 return maskTexture;
             }
             finally
@@ -471,7 +513,7 @@ namespace __temp.MrPathV2.Editor.GPU
                     roadContour.Dispose();
             }
         }
-        
+
         /// <summary>
         /// 从 PathData 创建简化的 PathSpine
         /// </summary>
@@ -481,12 +523,12 @@ namespace __temp.MrPathV2.Editor.GPU
             {
                 return new PathSpine(new Vector3[0], new Vector3[0], new Vector3[0], new float[0]);
             }
-            
+
             var points = pathData.SpinePoints;
             var tangents = new Vector3[points.Length];
             var normals = new Vector3[points.Length];
             var timestamps = new float[points.Length];
-            
+
             // 计算切线
             for (int i = 0; i < points.Length; i++)
             {
@@ -502,44 +544,44 @@ namespace __temp.MrPathV2.Editor.GPU
                 {
                     tangents[i] = (points[i + 1] - points[i - 1]).normalized;
                 }
-                
+
                 normals[i] = Vector3.up; // 简化的法线
                 timestamps[i] = i / (float)(points.Length - 1); // 归一化时间戳
             }
-            
+
             return new PathSpine(points, tangents, normals, timestamps);
         }
-        
+
         /// <summary>
         /// 创建临时的 PathProfile 用于轮廓生成
         /// </summary>
         private PathProfile CreateTempPathProfile(PathRecipe recipe)
         {
             var tempProfile = ScriptableObject.CreateInstance<PathProfile>();
-            
+
             // 从 recipe 中提取道路宽度信息
             // 使用 FalloffDistance * 2 作为道路宽度的估算
             tempProfile.roadWidth = recipe.FalloffDistance * 2f;
             tempProfile.falloffWidth = recipe.FalloffDistance * 0.5f;
-            
+
             return tempProfile;
         }
-        
+
         /// <summary>
         /// 检查点是否在道路轮廓内（使用射线投射算法）
         /// </summary>
         private bool IsPointInsideRoadContour(float x, float z, NativeArray<float2> roadContour)
         {
             if (roadContour.Length < 3) return false;
-            
+
             bool inside = false;
             int j = roadContour.Length - 1;
-            
+
             for (int i = 0; i < roadContour.Length; i++)
             {
                 var pi = roadContour[i];
                 var pj = roadContour[j];
-                
+
                 if (((pi.y > z) != (pj.y > z)) &&
                     (x < (pj.x - pi.x) * (z - pi.y) / (pj.y - pi.y) + pi.x))
                 {
@@ -547,7 +589,7 @@ namespace __temp.MrPathV2.Editor.GPU
                 }
                 j = i;
             }
-            
+
             return inside;
         }
         #endregion
@@ -557,7 +599,7 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             if (_isDisposed)
                 throw new ObjectDisposedException(nameof(GpuDataStreamer));
-            
+
             if (!_isInitialized)
                 throw new InvalidOperationException("GpuDataStreamer 未初始化");
         }
@@ -566,10 +608,10 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             if (terrain == null)
                 throw new ArgumentNullException(nameof(terrain));
-            
+
             if (pathData == null)
                 throw new ArgumentNullException(nameof(pathData));
-            
+
             if (recipe == null)
                 throw new ArgumentNullException(nameof(recipe));
 

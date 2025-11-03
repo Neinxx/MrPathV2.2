@@ -90,13 +90,16 @@ namespace __temp.MrPathV2.Editor.GPU
                 // 3. 执行GPU计算
                 var renderTexture = _computeDispatcher.ExecuteCompute(gpuData, isPreview);
                 
-                // 4. 创建结果
+                // 4. 创建结果（包含 ROI 与层数以便高效写回）
                 var result = new GpuRenderResult
                 {
                     RenderTexture = renderTexture,
                     Terrain = terrain,
                     IsPreview = isPreview,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = DateTime.UtcNow,
+                    CoverageArea = gpuData.ComputeParams.CoverageArea,
+                    AlphamapLayerCount = gpuData.ComputeParams.AlphamapLayerCount,
+                    Resolution = gpuData.ComputeParams.Resolution
                 };
 
                 // 5. 缓存结果
@@ -236,6 +239,9 @@ namespace __temp.MrPathV2.Editor.GPU
         public bool IsPreview { get; set; }
         public DateTime Timestamp { get; set; }
         public bool IsDisposed { get; private set; }
+        public Vector4 CoverageArea { get; set; }
+        public int AlphamapLayerCount { get; set; }
+        public Vector2Int Resolution { get; set; }
         
         /// <summary>
         /// 渲染是否成功
@@ -251,13 +257,10 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             if (IsDisposed) return;
 
-            if (RenderTexture)
-            {
-                if (Application.isPlaying)
-                    UnityEngine.Object.Destroy(RenderTexture);
-                else
-                    UnityEngine.Object.DestroyImmediate(RenderTexture);
-            }
+            // RenderTexture 由 GpuResourceManager 统一管理与复用，
+            // 此处不再销毁以避免外部仍在使用时出现“对象已被销毁”的错误。
+            // 仅标记为已处置并断开引用，交由资源管理器在适当时机释放。
+            RenderTexture = null;
 
             IsDisposed = true;
         }

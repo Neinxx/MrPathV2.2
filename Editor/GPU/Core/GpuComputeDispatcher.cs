@@ -140,8 +140,9 @@ namespace __temp.MrPathV2.Editor.GPU
                 // 1. 绑定所有参数
                 BindComputeParameters(dataPacket);
 
-                // 2. 计算线程组数量
-                var threadGroups = CalculateThreadGroups(dataPacket.ComputeParams.Resolution, _paintTerrainShader.ThreadGroupSize);
+                // 2. 计算线程组数量：使用 ROI 局部调度，减少无关像素计算
+                var cp = dataPacket.ComputeParams;
+                var threadGroups = CalculateThreadGroupsROI(cp, _paintTerrainShader.ThreadGroupSize);
 
                 // 3. 调度计算着色器
                 var shader = _paintTerrainShader.Shader;
@@ -184,8 +185,11 @@ namespace __temp.MrPathV2.Editor.GPU
             shader.SetInt(ShaderProperties.ContourPointCount, cp.ContourPointCount);
             shader.SetFloat(ShaderProperties.EdgeWidthWorld, cp.EdgeWidthWorld);
             shader.SetInt(ShaderProperties.DebugMode, 0);
+            // ROI 偏移：仅写入受影响的区域，提高效率
+            var roiMinX = Mathf.Max(0, (int)cp.CoverageArea.x);
+            var roiMinY = Mathf.Max(0, (int)cp.CoverageArea.y);
             shader.SetInts(ShaderProperties.TerrainOffset, 0, 0);
-            shader.SetInts(ShaderProperties.AlphamapOffset, 0, 0);
+            shader.SetInts(ShaderProperties.AlphamapOffset, roiMinX, roiMinY);
             shader.SetVector(ShaderProperties.ContourBounds, cp.ContourBounds);
 
             // coverage_min / coverage_max 来自 CoverageArea
@@ -237,6 +241,27 @@ namespace __temp.MrPathV2.Editor.GPU
 
             return new Vector3Int(groupsX, groupsY, groupsZ);
         }
+
+        /// <summary>
+        /// 基于 ROI（CoverageArea）计算最小线程组数量，仅调度受影响区域
+        /// </summary>
+        private Vector3Int CalculateThreadGroupsROI(GpuDataStreamer.GpuComputeParams cp, Vector3Int threadGroupSize)
+        {
+            var roiWidth = Mathf.Max(1, (int)(cp.CoverageArea.z - cp.CoverageArea.x));
+            var roiHeight = Mathf.Max(1, (int)(cp.CoverageArea.w - cp.CoverageArea.y));
+
+            // 防御：如果覆盖区域异常，回退到全分辨率
+            if (roiWidth <= 0 || roiHeight <= 0)
+            {
+                return CalculateThreadGroups(cp.Resolution, threadGroupSize);
+            }
+
+            int groupsX = Mathf.CeilToInt((float)roiWidth / threadGroupSize.x);
+            int groupsY = Mathf.CeilToInt((float)roiHeight / threadGroupSize.y);
+            int groupsZ = 1;
+
+            return new Vector3Int(groupsX, groupsY, groupsZ);
+        }
         #endregion
 
         #region Advanced Compute Features
@@ -273,8 +298,9 @@ namespace __temp.MrPathV2.Editor.GPU
                     shader.SetTexture(kernel, ShaderProperties.RoadSDF, roadSDF);
                 }
 
-                // 计算并调度
-                var threadGroups = CalculateThreadGroups(dataPacket.ComputeParams.Resolution, _paintTerrainShader.ThreadGroupSize);
+                // 计算并调度（使用 ROI 局部调度）
+                var cp = dataPacket.ComputeParams;
+                var threadGroups = CalculateThreadGroupsROI(cp, _paintTerrainShader.ThreadGroupSize);
 
                 using (var cmd = new CommandBuffer { name = "TerrainPaintWithMask" })
                 {

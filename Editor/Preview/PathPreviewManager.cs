@@ -6,6 +6,10 @@ using __temp.MrPathV2.Runtime.Preview;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
+// 命名空间别名，减少全限定名噪音
+using EditorLayerResolver = __temp.MrPathV2.Editor.Terrain.LayerResolver;
+using LayerConfigGPU = __temp.MrPathV2.Editor.GPU.LayerConfig;
+using GpuBlendMode = __temp.MrPathV2.Editor.GPU.BlendMode;
 
 namespace MrPathV2.Editor.Preview
 {
@@ -493,17 +497,17 @@ namespace MrPathV2.Editor.Preview
 
 #if UNITY_EDITOR
         // 将 RoadRecipe 映射为 GPU 渲染所需的 LayerConfig 数组（包含目标 Terrain 的 layer 索引）
-        private static __temp.MrPathV2.Editor.GPU.LayerConfig[] BuildLayerConfigs(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        private static LayerConfigGPU[] BuildLayerConfigs(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
         {
-            if (!terrain || recipe == null) return Array.Empty<__temp.MrPathV2.Editor.GPU.LayerConfig>();
+            if (!terrain || recipe == null) return Array.Empty<LayerConfigGPU>();
             var layers = recipe.GetLayers();
             if (layers == null || layers.Count == 0)
             {
-                return Array.Empty<__temp.MrPathV2.Editor.GPU.LayerConfig>();
+                return Array.Empty<LayerConfigGPU>();
             }
 
-            var resolved = __temp.MrPathV2.Editor.Terrain.LayerResolver.ResolveEnsurePresent(terrain, recipe);
-            var list = new List<__temp.MrPathV2.Editor.GPU.LayerConfig>(layers.Count);
+            var resolved = EditorLayerResolver.ResolveEnsurePresent(terrain, recipe);
+            var list = new List<LayerConfigGPU>(layers.Count);
             var master = Mathf.Clamp01(recipe.masterOpacity);
             for (int i = 0; i < layers.Count; i++)
             {
@@ -514,29 +518,29 @@ namespace MrPathV2.Editor.Preview
                 if (!resolved.TryGetValue(tl, out var layerIndex)) continue;
                 var strength = Mathf.Clamp01(rl.opacity * master);
                 var blend = MapBlendMode(rl.blendMode);
-                list.Add(new __temp.MrPathV2.Editor.GPU.LayerConfig(layerIndex, strength, blend));
+                list.Add(new LayerConfigGPU(layerIndex, strength, blend));
             }
 
-            return list.Count > 0 ? list.ToArray() : Array.Empty<__temp.MrPathV2.Editor.GPU.LayerConfig>();
+            return list.Count > 0 ? list.ToArray() : Array.Empty<LayerConfigGPU>();
         }
 
-        private static __temp.MrPathV2.Editor.GPU.BlendMode MapBlendMode(__temp.MrPathV2.Runtime.Core.BlendMode mode)
+        private static GpuBlendMode MapBlendMode(__temp.MrPathV2.Runtime.Core.BlendMode mode)
         {
             switch (mode)
             {
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Add:
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Additive:
-                    return __temp.MrPathV2.Editor.GPU.BlendMode.Add;
+                    return GpuBlendMode.Add;
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Multiply:
-                    return __temp.MrPathV2.Editor.GPU.BlendMode.Multiply;
+                    return GpuBlendMode.Multiply;
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Overlay:
-                    return __temp.MrPathV2.Editor.GPU.BlendMode.Overlay;
+                    return GpuBlendMode.Overlay;
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Screen:
-                    return __temp.MrPathV2.Editor.GPU.BlendMode.Add; // 近似替代
+                    return GpuBlendMode.Add; // 近似替代
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Lerp:
                 case __temp.MrPathV2.Runtime.Core.BlendMode.Normal:
                 default:
-                    return __temp.MrPathV2.Editor.GPU.BlendMode.Replace;
+                    return GpuBlendMode.Replace;
             }
         }
 #endif

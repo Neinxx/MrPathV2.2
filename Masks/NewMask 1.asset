@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: NewMask 1
   m_EditorClassIdentifier: 
   smooth: 0.1
-  tiling: {x: 2, y: 2}
+  tiling: {x: 2, y: 38.24}
   offset: {x: 0, y: 0}
   overallScale: 1
   strength: 1

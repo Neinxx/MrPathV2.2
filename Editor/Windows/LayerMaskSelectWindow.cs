@@ -163,7 +163,6 @@ namespace MrPathV2.Editor.Windows
             _availableMaskTypes = FindAvailableMaskTypes();
             var typeNames = (_availableMaskTypes ?? Array.Empty<Type>()).Select(t => t.Name).ToList();
             if (typeNames.Count == 0) typeNames.Add("BlendMaskBase");
-            //var enumPlaceholder = _rootElement.Query<EnumField>().First();
             var maskDropdown = _rootElement.Q<DropdownField>("MaskDropDownField");
             maskDropdown.name = "Masks";
             maskDropdown.choices = typeNames;
@@ -179,7 +178,7 @@ namespace MrPathV2.Editor.Windows
 
 
 
-            _nameField = _rootElement.Query<TextField>("MaskName");
+            _nameField = _rootElement.Q<TextField>("MaskName");
             if (_nameField == null)
             {
                 Debug.Log("TextField name is not matching!");
@@ -217,9 +216,9 @@ namespace MrPathV2.Editor.Windows
             UpdateDetailsPanel();
 
             // 固定参数区初始高度（移除分割条与拖拽）
-            var detailsGroup = _details.parent;
-            if (detailsGroup != null) detailsGroup.style.flexGrow = 0;
-            _details.style.height = 420f;
+            // var detailsGroup = _details.parent;
+            // if (detailsGroup != null) detailsGroup.style.flexGrow = 0;
+            // _details.style.height = 820f;
         }
 
         private void RebuildVisibleList()
@@ -492,7 +491,6 @@ namespace MrPathV2.Editor.Windows
             }
         }
 
-        // 已移除 IMGUI 高度分割函数
     }
 }
 #endif

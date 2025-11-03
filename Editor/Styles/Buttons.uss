@@ -1,0 +1,64 @@
+.AnimatedButton {
+    background-color: rgba(231, 76, 60, 0);
+    width: auto;
+    height: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    max-height: 30px;
+    min-height: 20px;
+    border-left-color: rgb(65, 65, 65);
+    border-right-color: rgb(65, 65, 65);
+    border-top-color: rgb(65, 65, 65);
+    border-bottom-color: rgb(65, 65, 65);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    transition-property: all;
+    transition-duration: 200s;
+    transition-timing-function: ease-in;
+}
+
+.AnimatedButton:hover {
+    background-color: rgba(231, 76, 60, 0);
+    width: auto;
+    height: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    max-height: 30px;
+    min-height: 20px;
+    border-left-color: rgb(103, 185, 71);
+    border-right-color: rgb(103, 185, 71);
+    border-top-color: rgb(103, 185, 71);
+    border-bottom-color: rgb(103, 185, 71);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    transition-property: border-left-color, border-right-color;
+    transition-duration: 300s, 300s;
+    transition-timing-function: ease-in, ease-in;
+    scale: 1.04 0.95;
+    color: rgb(132, 195, 86);
+    -unity-font-style: bold;
+    transform-origin: bottom;
+}
+
+.AnimatedButton:active {
+    background-color: rgba(231, 76, 60, 0);
+    width: auto;
+    height: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    max-height: 30px;
+    min-height: 20px;
+    border-left-color: rgb(153, 219, 107);
+    border-right-color: rgb(153, 219, 107);
+    border-top-color: rgb(153, 219, 107);
+    border-bottom-color: rgb(153, 219, 107);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    transition-property: border-left-color, border-right-color;
+    transition-duration: 300s, 300s;
+    transition-timing-function: ease-out, ease-out;
+    scale: 1 1;
+}

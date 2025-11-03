@@ -92,12 +92,65 @@ namespace __temp.MrPathV2.Editor.GPU
             Vector2Int coverageMax,
             CancellationToken token)
         {
-            // 将旧接口参数转换为新的元数据格式
+            // 参数校验与提前返回
+            if (terrain == null)
+            {
+                Debug.LogError("[GpuTerrainPainterV2] 地形对象为空，终止绘制");
+                return;
+            }
+            if (!spineData.IsCreated || spineData.Length < 2)
+            {
+                Debug.LogError("[GpuTerrainPainterV2] SpineData 无效或点数不足，终止绘制");
+                return;
+            }
+            if (!profileData.IsCreated || profileData.RoadWidth <= 0f)
+            {
+                Debug.LogError("[GpuTerrainPainterV2] ProfileData 无效或道路宽度不合法，终止绘制");
+                return;
+            }
+
+            // 1) 提取脊线点
+            var spinePoints = new Vector3[spineData.Length];
+            for (var i = 0; i < spineData.Length; i++)
+            {
+                var p = spineData.Points[i];
+                spinePoints[i] = new Vector3(p.x, p.y, p.z);
+            }
+
+            // 2) 读取道路宽度与衰减宽度
+            var width = profileData.RoadWidth;
+            var falloff = math.max(0f, profileData.FalloffWidth);
+
+            // 3) 映射配方为图层配置
+            LayerConfig[] layers;
+            if (!recipeData.IsCreated || recipeData.Length <= 0)
+            {
+                layers = new LayerConfig[] { new LayerConfig(layerIndex: 0, strength: 1.0f, blendMode: BlendMode.Replace) };
+            }
+            else
+            {
+                var list = new System.Collections.Generic.List<LayerConfig>(recipeData.Length);
+                for (var i = 0; i < recipeData.Length; i++)
+                {
+                    var idx = recipeData.TerrainLayerIndices[i];
+                    if (idx < 0) continue;
+                    var modeInt = recipeData.BlendModes[i];
+                    var gpuMode = MapToGpuBlendMode(modeInt);
+                    var strength = math.saturate(recipeData.Opacities[i]);
+                    list.Add(new LayerConfig(idx, strength, gpuMode));
+                }
+                layers = list.Count > 0 ? list.ToArray() : new LayerConfig[] { new LayerConfig(layerIndex: 0, strength: 1.0f, blendMode: BlendMode.Replace) };
+            }
+
+            // 4) 组装元数据并执行
             var metadata = new TerrainPaintMetadata
             {
                 Terrain = terrain,
-                IsPreview = false
-                // 注意：其他数据字段需要根据实际需求从参数中提取
+                IsPreview = false,
+                SpinePoints = spinePoints,
+                Width = width,
+                FalloffDistance = falloff,
+                Layers = layers
             };
 
             await ExecuteAsyncInternal(metadata);
@@ -307,10 +360,15 @@ namespace __temp.MrPathV2.Editor.GPU
 
         private static float ExtractFalloffDistance(TerrainPaintMetadata metadata)
         {
-            // 从元数据中提取衰减距离
-            // 通常衰减距离是路径宽度的一半
+            // 从元数据中提取衰减距离，优先使用显式值
+            if (metadata != null && metadata.FalloffDistance > 0f)
+            {
+                return metadata.FalloffDistance;
+            }
+
+            // 回退规则：通常衰减距离是路径宽度的一半
             var width = ExtractPathWidth(metadata);
-            return width * 0.5f;
+            return math.max(0f, width * 0.5f);
         }
 
         private static float CalculatePathLength(Vector3[] spinePoints)
@@ -340,6 +398,24 @@ namespace __temp.MrPathV2.Editor.GPU
             // 扩展边界以包含路径宽度
             bounds.Expand(width);
             return bounds;
+        }
+
+        // CPU 端混合枚举到 GPU 枚举的安全映射
+        private static BlendMode MapToGpuBlendMode(int cpuBlendModeInt)
+        {
+            // Runtime.Core.BlendMode: Normal(0), Multiply(1), Add(2), Overlay(3), Screen(4), Lerp(5), Additive(6)
+            // GPU.BlendMode: Replace, Add, Multiply, Overlay
+            switch (cpuBlendModeInt)
+            {
+                case 0: /* Normal */ return BlendMode.Replace;
+                case 5: /* Lerp */ return BlendMode.Replace;
+                case 4: /* Screen */ return BlendMode.Replace;
+                case 1: /* Multiply */ return BlendMode.Multiply;
+                case 2: /* Add */ return BlendMode.Add;
+                case 6: /* Additive */ return BlendMode.Add;
+                case 3: /* Overlay */ return BlendMode.Overlay;
+                default: return BlendMode.Replace;
+            }
         }
 
         #endregion
@@ -430,10 +506,12 @@ namespace __temp.MrPathV2.Editor.GPU
 
         public UnityEngine.Vector3[] SpinePoints { get; set; }
         public float Width { get; set; }
+        public float FalloffDistance { get; set; }
 
         public LayerConfig[] Layers { get; set; }
         // 其他必要的元数据字段...
     }
+
 
     #endregion
 
