@@ -222,7 +222,7 @@ namespace __temp.MrPathV2.Editor
         /// <summary>
         ///     [优化] 添加了缓存，并修复了类型过滤器
         /// </summary>
-        private static StyleSheet LoadUssByName(string className)
+        public static StyleSheet LoadUssByName(string className)
         {
             if (USSCache.TryGetValue(className, out var cached))
                 return cached;

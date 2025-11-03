@@ -7,6 +7,8 @@ using __temp.MrPathV2.Runtime.Core.BlendMasks;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
+using UnityEditor.UIElements;
 
 namespace MrPathV2.Editor.Windows
 {
@@ -17,8 +19,12 @@ namespace MrPathV2.Editor.Windows
     /// </summary>
     public class LayerMaskSelectWindow : EditorWindow
     {
+        // 选择成功事件：向外部（Inspector）提供遮罩选择的行级更新
+        public static event System.Action<__temp.MrPathV2.Runtime.Core.RoadLayer, __temp.MrPathV2.Runtime.Core.BlendMasks.BlendMaskBase> OnMaskApplied;
         private RoadLayer _targetLayer;
         private BlendMaskBase _selected;
+        private BlendMaskBase _original; // 原始值：用于未应用时回滚
+        private bool _applied;           // 是否已最终应用（双击）
         private UnityEditor.Editor _selectedEditor; // 参数区渲染
 
         private readonly List<BlendMaskBase> _masks = new();
@@ -33,10 +39,23 @@ namespace MrPathV2.Editor.Windows
         private string _newMaskName = "NewMask";
         private const string DefaultMaskFolder = "Assets/MrPathV2/Masks";
 
-        // 可拖拽分割条
+        // 可拖拽分割条（IMGUI遗留，不再使用）
         private float _listTopHeight = 240f;
         private bool _resizing;
         private const float SplitterHeight = 6f;
+
+        // --- UITK 重构新增字段 ---
+        private VisualElement _rootElement;
+        private VisualElement _contentRoot;
+        private ListView _listView;
+        private VisualElement _details; // 绑定到 UXML 中的 MaskOSBox
+        private ToolbarSearchField _searchField; // 绑定到 UXML 中的 ToolbarSearchField
+        private Slider _thumbSlider; // 绑定到 UXML 中的 scaleImage
+        private float _thumbSize = 42f; // 默认缩略图尺寸，受滑块驱动
+        private Button _newBtn; // 来自 UXML（文本：新建噪声），可选
+        private DropdownField _maskEnumDropdown; // 动态生成的“MaskEnum”，用于类型选择
+        private TextField _nameField; // UXML中的名称输入（可选）
+        private readonly List<BlendMaskBase> _visibleList = new();
 
         public static void Open(RoadLayer layer, BlendMaskBase current)
         {
@@ -50,6 +69,7 @@ namespace MrPathV2.Editor.Windows
         {
             _targetLayer = layer;
             _selected = current;
+            _original = current;
             _availableMaskTypes = FindAvailableMaskTypes();
             if (_availableMaskTypes == null || _availableMaskTypes.Length == 0)
                 _availableMaskTypes = new[] { typeof(BlendMaskBase) };
@@ -64,6 +84,12 @@ namespace MrPathV2.Editor.Windows
                 DestroyImmediate(_selectedEditor);
                 _selectedEditor = null;
             }
+
+            // 未最终应用则回滚到原始值，交互行为与 SelectTerrainLayerWindow 保持一致
+            if (!_applied && _targetLayer != null)
+            {
+                _targetLayer.layerMask = _original;
+            }
         }
 
         // 点击非窗口区域（失去焦点）自动关闭，符合 Unity 选择器交互
@@ -74,16 +100,275 @@ namespace MrPathV2.Editor.Windows
 
         private void OnGUI()
         {
-            DrawToolbar();
+            // 完全重构为 UITK，IMGUI 渲染置空
+            return;
+        }
 
-            var topHeight = Mathf.Clamp(_listTopHeight, 140f, position.height - 180f);
-            EditorGUILayout.BeginVertical(GUILayout.Height(topHeight));
-            DrawMaskList(topHeight);
-            EditorGUILayout.EndVertical();
+        // --- UITK: 构建界面 ---
+        public void CreateGUI()
+        {
+            // 使用 UXML 构建界面，确保布局与效果图一致
+            _rootElement = rootVisualElement;
+            _rootElement.Clear();
 
-            DrawHeightSplitter();
-            DrawParamsPanel();
-            DrawFooter();
+            var vta = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/MrPathV2/Editor/Windows/LayerMaskSelectWindow.uxml");
+            if (vta != null)
+            {
+                vta.CloneTree(_rootElement);
+            }
+            else
+            {
+                // 兜底：若 UXML 未找到，维持最小可用界面
+                _rootElement.style.flexDirection = FlexDirection.Column;
+            }
+
+            // 加载与地形选择窗口一致的样式（包含 :hover 和 .selected）
+            var selSs = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/MrPathV2/Editor/Styles/SelectTerrainLayerWindow.uss");
+            if (selSs) _rootElement.styleSheets.Add(selSs);
+
+            // 绑定 UXML 元素
+            _searchField = _rootElement.Q<ToolbarSearchField>("ToolbarSearchField");
+            _thumbSlider = _rootElement.Q<Slider>("scaleImage");
+            var listContainer = _rootElement.Q<VisualElement>("MaskList");
+            _details = _rootElement.Q<VisualElement>("MaskOSBox") ?? new VisualElement { name = "MaskOSBox" };
+            if (_details.parent == null) _rootElement.Add(_details);
+
+            // 创建 ListView 并添加到 UXML 的列表容器
+            _listView = new ListView
+            {
+                name = "MaskListView",
+                selectionType = SelectionType.Single,
+                showBorder = true,
+                fixedItemHeight = Mathf.Max(64, _thumbSize + 20)
+            };
+            _listView.style.flexGrow = 1;
+            _listView.makeItem = MakeListItem;
+            _listView.bindItem = BindListItem;
+            _listView.onSelectionChange += items =>
+            {
+                var m = items.FirstOrDefault() as BlendMaskBase;
+                SelectMask(m);
+                UpdateDetailsPanel();
+                UpdateSelectionStyles();
+            };
+            _listView.onItemsChosen += items =>
+            {
+                var m = items.FirstOrDefault() as BlendMaskBase;
+                ApplySelection(m);
+            };
+            if (listContainer != null) listContainer.Add(_listView); else _rootElement.Add(_listView);
+
+            // 搜索框绑定
+            if (_searchField != null)
+            {
+                _searchField.value = _search;
+                _searchField.RegisterValueChangedCallback(ev =>
+                {
+                    _search = ev.newValue?.Trim() ?? string.Empty;
+                    RebuildVisibleList();
+                    _listView?.RefreshItems();
+                });
+            }
+
+            // 动态生成 MaskEnum（替换 UXML 中的占位 EnumField）
+            _availableMaskTypes = FindAvailableMaskTypes();
+            var typeNames = (_availableMaskTypes ?? Array.Empty<Type>()).Select(t => t.Name).ToList();
+            if (typeNames.Count == 0) typeNames.Add("BlendMaskBase");
+            var enumPlaceholder = _rootElement.Query<EnumField>().First();
+            _maskEnumDropdown = new DropdownField { name = "MaskEnum", choices = typeNames };
+            _maskEnumDropdown.value = typeNames[Mathf.Clamp(_createTypeIndex, 0, typeNames.Count - 1)];
+            _maskEnumDropdown.style.flexGrow = 1;
+            _maskEnumDropdown.style.width = new StyleLength(new Length(69, LengthUnit.Percent));
+            _maskEnumDropdown.RegisterValueChangedCallback(ev =>
+            {
+                var idx = typeNames.IndexOf(ev.newValue);
+                _createTypeIndex = Mathf.Clamp(idx, 0, typeNames.Count - 1);
+            });
+            if (enumPlaceholder != null && enumPlaceholder.parent != null)
+            {
+                var p = enumPlaceholder.parent;
+                var i = p.IndexOf(enumPlaceholder);
+                p.Insert(Mathf.Max(0, i), _maskEnumDropdown);
+                enumPlaceholder.RemoveFromHierarchy();
+            }
+            else
+            {
+                _rootElement.Add(_maskEnumDropdown);
+            }
+
+            // 绑定名称输入（若 UXML 提供）
+            _nameField = _rootElement.Query<TextField>().ToList().FirstOrDefault(tf => !string.IsNullOrEmpty(tf.text) || !string.IsNullOrEmpty(tf.value));
+
+            // 缩略图缩放绑定
+            if (_thumbSlider != null)
+            {
+                _thumbSize = Mathf.Clamp(_thumbSlider.value, 16f, 128f);
+                _thumbSlider.RegisterValueChangedCallback(ev =>
+                {
+                    _thumbSize = Mathf.Clamp(ev.newValue, 16f, 128f);
+                    if (_listView != null) _listView.fixedItemHeight = Mathf.Max(64, _thumbSize + 20);
+                    _listView?.RefreshItems(); // 让绑定更新图标尺寸
+                });
+            }
+
+            // 可选：绑定“新建噪声”按钮（若存在）
+            _newBtn = _rootElement.Query<Button>().ToList().FirstOrDefault(b => string.Equals(b.text, "新建噪声"));
+            if (_newBtn != null)
+            {
+                _newBtn.clicked += () =>
+                {
+                    var types = _availableMaskTypes ?? Array.Empty<Type>();
+                    var idx = Mathf.Clamp(_createTypeIndex, 0, types.Length - 1);
+                    var type = types.Length > 0 ? types[idx] : typeof(BlendMaskBase);
+                    var nameHint = _nameField != null ? _nameField.value : _newMaskName;
+                    CreateNewMaskAsset(type, nameHint);
+                    RebuildVisibleList();
+                    _listView?.RefreshItems();
+                };
+            }
+
+            // 数据初始化
+            RebuildList();
+            RebuildVisibleList();
+            _listView.itemsSource = _visibleList;
+            UpdateDetailsPanel();
+            UpdateSelectionStyles();
+        }
+
+        private void RebuildVisibleList()
+        {
+            _visibleList.Clear();
+            var query = string.IsNullOrWhiteSpace(_search) ? null : _search.Trim();
+            IEnumerable<BlendMaskBase> source = _masks.Where(m => m);
+            if (query != null)
+            {
+                source = source.Where(m => m.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            _visibleList.AddRange(source.OrderBy(m => m.name));
+        }
+
+        private VisualElement MakeListItem()
+        {
+            var row = new VisualElement { name = "row" };
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.paddingLeft = 6; row.style.paddingRight = 6;
+            row.AddToClassList("mrp-list-row"); // 复用现有列表行样式
+
+            var icon = new Image { name = "icon" };
+            icon.style.width = _thumbSize; icon.style.height = _thumbSize; icon.scaleMode = ScaleMode.ScaleToFit;
+            icon.style.marginRight = 8;
+            icon.AddToClassList("tile-icon"); // 启用 :hover 和 .selected 的边框动画
+            icon.style.borderTopLeftRadius = 4;
+            icon.style.borderTopRightRadius = 4;
+            icon.style.borderBottomLeftRadius = 4;
+            icon.style.borderBottomRightRadius = 4;
+            var name = new Label { name = "name" };
+            name.style.unityFontStyleAndWeight = FontStyle.Bold;
+            name.style.fontSize = 14;
+            var sub = new Label { name = "sub" };
+            sub.style.color = new Color(0.8f, 0.8f, 0.8f);
+            sub.style.opacity = 0.65f;
+
+            var content = new VisualElement { name = "content" };
+            content.style.flexDirection = FlexDirection.Column;
+            content.style.flexGrow = 1;
+
+            row.Add(icon);
+            content.Add(name);
+            content.Add(sub);
+            row.Add(content);
+            return row;
+        }
+
+        private void BindListItem(VisualElement element, int index)
+        {
+            if (index < 0 || index >= _visibleList.Count) return;
+            var m = _visibleList[index];
+            element.userData = m; // 绑定数据到容器，便于选中样式更新
+            var row = element.Q<VisualElement>("row") ?? element;
+            row.userData = m; // 行本身也存储数据，UpdateSelectionStyles 使用
+            var icon = element.Q<Image>("icon");
+            var name = element.Q<Label>("name");
+            var sub = element.Q<Label>("sub");
+            icon.image = GetMaskThumbnail(m);
+            icon.style.width = _thumbSize; icon.style.height = _thumbSize; // 应用当前缩略图尺寸
+            name.text = m ? m.name : "<null>";
+            sub.text = m ? m.GetType().Name : string.Empty;
+            // 在绑定阶段更新选中样式，避免首次渲染遗漏
+            if (_selected == m) row.AddToClassList("selected"); else row.RemoveFromClassList("selected");
+        }
+
+        private Texture2D GetMaskThumbnail(BlendMaskBase m)
+        {
+            if (!m) return null;
+            var id = m.GetInstanceID();
+            if (_iconCache.TryGetValue(id, out var tex) && tex) return tex;
+            tex = AssetPreview.GetMiniThumbnail(m);
+            _iconCache[id] = tex;
+            return tex;
+        }
+
+        private void UpdateDetailsPanel()
+        {
+            if (_details == null) return; // 提前返回
+            _details.Clear();
+            var target = _selected;
+            if (!target)
+            {
+                _details.Add(new Label("未选择遮罩"));
+                return; // 提前返回
+            }
+
+            // 为减少首次选中卡顿：延迟构建 Inspector 到下一帧
+            _details.Add(new Label("正在加载参数…"));
+            var captured = target;
+            EditorApplication.delayCall += () =>
+            {
+                if (_details == null) return;
+                // 选中已变化则取消
+                if (_selected != captured) return;
+                try
+                {
+                    _details.Clear();
+                    var inspector = new InspectorElement(captured);
+                    _details.Add(inspector);
+                }
+                catch
+                {
+                    try
+                    {
+                        if (_selectedEditor) { DestroyImmediate(_selectedEditor); _selectedEditor = null; }
+                        _selectedEditor = UnityEditor.Editor.CreateEditor(captured);
+                        var ui = _selectedEditor.CreateInspectorGUI();
+                        if (ui != null)
+                        {
+                            _details.Add(ui);
+                        }
+                        else
+                        {
+                            _details.Add(new IMGUIContainer(() => _selectedEditor.OnInspectorGUI()));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _details.Add(new Label($"Inspector 构建失败: {ex.Message}"));
+                    }
+                }
+            };
+        }
+
+        private void UpdateSelectionStyles()
+        {
+            if (_listView == null) return;
+            var cc = _listView.contentContainer;
+            if (cc == null) return;
+            foreach (var row in cc.Children())
+            {
+                var data = row.userData as BlendMaskBase ?? row.Q<VisualElement>("row")?.userData as BlendMaskBase;
+                if (data == null) { row.RemoveFromClassList("selected"); continue; }
+                if (data == _selected) row.AddToClassList("selected"); else row.RemoveFromClassList("selected");
+            }
         }
 
         private void DrawToolbar()
@@ -167,7 +452,13 @@ namespace MrPathV2.Editor.Windows
             var e = Event.current;
             if (e.type == EventType.MouseDown && rowRect.Contains(e.mousePosition))
             {
-                ApplySelection(m);
+                // 单击：预览选择，但不最终应用（窗口关闭时可回滚）
+                SelectMask(m);
+                if (e.clickCount == 2)
+                {
+                    // 双击：最终应用并关闭窗口
+                    ApplySelection(m);
+                }
                 e.Use();
             }
         }
@@ -213,6 +504,19 @@ namespace MrPathV2.Editor.Windows
                 EditorUtility.DisplayDialog("提示", "目标 RoadLayer 为空，无法应用。", "确定");
                 return; // 提前返回
             }
+            _selected = m;
+            _targetLayer.layerMask = m;
+            _applied = true;
+            RecreateEditor();
+            // 最终应用后通知，并关闭窗口（一致的交互）
+            try { OnMaskApplied?.Invoke(_targetLayer, m); } catch { /* 防御：忽略回调异常 */ }
+            Close();
+        }
+
+        // 单击选择：仅预览并刷新参数区，不触发最终应用事件
+        private void SelectMask(BlendMaskBase m)
+        {
+            if (_targetLayer == null) return; // 提前返回
             _selected = m;
             _targetLayer.layerMask = m;
             RecreateEditor();

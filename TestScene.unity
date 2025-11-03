@@ -589,7 +589,7 @@ MonoBehaviour:
   pathData:
     positions:
     - {x: 0, y: 0, z: 0}
-    - {x: -20.83081, y: 0, z: 4.1906013}
+    - {x: -12.729931, y: 0, z: -12.450264}
     - {x: -64.03653, y: 0, z: 3.7742577}
     tangentsIn:
     - {x: 0, y: 0, z: 0}

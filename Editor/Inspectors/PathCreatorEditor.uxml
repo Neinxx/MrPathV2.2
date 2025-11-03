@@ -12,6 +12,6 @@
             <ui:Button name="createProfileButton" text="快速创建默认 Profile" style="flex-shrink: 1; flex-grow: 1;" />
         </ui:VisualElement>
         <ui:VisualElement name="profileEmbeddedContainer" style="flex-grow: 1;" />
-        <ui:VisualElement name="recipeEmbeddedContainer" />
+        <ui:VisualElement name="recipeEmbeddedContainer" style="background-color: rgba(0, 0, 0, 0.06);" />
     </ui:VisualElement>
 </ui:UXML>

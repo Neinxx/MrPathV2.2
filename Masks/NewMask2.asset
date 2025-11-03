@@ -10,20 +10,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
-  m_Name: MrPath_StylizedRoadRecipe_NoiseMask
+  m_Name: NewMask2
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 1.78, y: 2.78}
+  smooth: 0
+  tiling: {x: 2, y: 2}
   offset: {x: 0, y: 0}
-  overallScale: 0.924
-  strength: 0.819
-  seed: 11.05
-  noiseScale: {x: 40.23, y: 40.23}
+  overallScale: 1
+  strength: 1
+  seed: 0
+  noiseScale: {x: 1, y: 1}
   uniformScale: 1
-  rotationDeg: 15
+  rotationDeg: 0
   octaves: 1
-  lacunarity: 2.73
-  gain: 0.61
-  useAsymmetricEdges: 1
-  edgeLow: 0.281
-  edgeHigh: 0.668
+  lacunarity: 2
+  gain: 0.5
+  useAsymmetricEdges: 0
+  edgeLow: 0.25
+  edgeHigh: 0.75

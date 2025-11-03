@@ -12,8 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e94586aa4628dd47ad29c5db14f46ad, type: 3}
   m_Name: classRecipe
   m_EditorClassIdentifier: 
-  masterOpacity: 0.752
+  masterOpacity: 0.844
   layers:
+  - name: Layer 2
+    enabled: 1
+    blendMode: 0
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: cceae8b37ffe16949a5dc95628ae821b,
+      type: 2}
+    layerMask: {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}
   - name: Layer 2
     enabled: 1
     blendMode: 0

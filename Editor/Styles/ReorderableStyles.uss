@@ -25,3 +25,53 @@
     transition-duration: 10ms; /* 让它与列表项移动速度匹配 */
     transition-timing-function: ease-in-out; 
 }
+
+/* ================= Clear Button Visibility ================= */
+:root {
+    /* 使用 USS 变量统一管理 Clear 按钮显隐的透明度 */
+    --clear-btn-visible-opacity: 1;
+    --clear-btn-hidden-opacity: 0;
+}
+
+.clear-btn-visible {
+    opacity: var(--clear-btn-visible-opacity);
+}
+
+.clear-btn-hidden {
+    opacity: var(--clear-btn-hidden-opacity);
+}
+
+/* 可选：为显隐加入轻微过渡，让状态切换更丝滑 */
+.clear-btn-visible, .clear-btn-hidden {
+    transition-property: opacity;
+    transition-duration: 60ms;
+    transition-timing-function: ease-out;
+}
+
+/* ================= Dragging Performance & Visual Tweaks ================= */
+/* 拖拽期间禁用列表项/占位间距的过渡，避免抖动 */
+.dragging-active .reorderable-item {
+    transition-duration: 0ms;
+}
+.dragging-active .placeholder-spacing-element {
+    transition-duration: 0ms;
+}
+
+/* 占位蓝线在拖拽时轻微半透明，贴近原生体验 */
+#placeholder-container .placeholder-line {
+    opacity: 0.5;
+    transition-property: opacity;
+    transition-duration: 60ms;
+    transition-timing-function: ease-out;
+}
+.dragging-active #placeholder-container .placeholder-line {
+    opacity: 0.35;
+}
+
+/* 插入后行淡入效果（由代码设置初始 opacity=0 触发） */
+.reordered-fade-in {
+    transition-property: opacity, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out;
+    opacity: 1;
+}

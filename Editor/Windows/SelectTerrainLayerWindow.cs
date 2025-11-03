@@ -19,6 +19,8 @@ namespace MrPathV2.Editor.Windows
     /// </summary>
     public class SelectTerrainLayerWindow : EditorWindow
     {
+        // 选择成功事件：让外部（Inspector）做行级更新，避免全量刷新
+        public static event System.Action<__temp.MrPathV2.Runtime.Core.RoadLayer, UnityEngine.TerrainLayer> OnContentLayerApplied;
         // 上下文
         private RoadLayer _targetRoadLayer;
         private TerrainLayer _originalLayer;
@@ -567,6 +569,8 @@ namespace MrPathV2.Editor.Windows
             _applied = true;
             // 应用 Null 时不刷新材质
             MarkPreviewDirty(materials: tl != null);
+            // 触发细粒度回调：仅更新对应行元素
+            try { OnContentLayerApplied?.Invoke(_targetRoadLayer, tl); } catch { /* 防御：忽略回调异常 */ }
             Close();
         }
 

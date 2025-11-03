@@ -31,7 +31,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private CompositeCurveView _compositeView;
 
         // --- 内嵌 Recipe 编辑器 ---
-        private IMGUIContainer _recipeContainer;
+        private VisualElement _recipeContainer;
         private UnityEditor.Editor _recipeEditor;
         private ObjectField _recipeField;
         private VisualElement _rootElement;
@@ -292,23 +292,17 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 return;
             }
 
-            _recipeContainer = new IMGUIContainer(() =>
+            // 使用 UITK 的 CreateInspectorGUI()，嵌入我们自定义的 StylizedRoadRecipe Inspector
+            var recipeUI = _recipeEditor.CreateInspectorGUI();
+            if (recipeUI == null)
             {
-                if (!_recipeEditor || !_recipeEditor.target) return;
-                EditorGUILayout.LabelField("Stylized Road Recipe", EditorStyles.boldLabel);
-                _recipeEditor.OnInspectorGUI();
-            })
-            {
-                style =
-                {
-                    marginTop = 10,
-                    minHeight = 120,
-                    flexGrow = 1
-                }
-            };
+                // 兜底：当外部编辑器未实现 CreateInspectorGUI 时，给出提示
+                recipeUI = new Label("StylizedRoadRecipe editor UI not available.");
+            }
 
-            // 挂载到预览内容区（保持原有布局）
-            _previewContent?.Add(_recipeContainer);
+            // 直接嵌入生成的 UI，避免创建任何“虚拟背板/容器”
+            _recipeContainer = recipeUI;
+            _previewContent?.Add(recipeUI);
         }
     }
 }

@@ -11,6 +11,10 @@ namespace __temp.MrPathV2.Editor.UI
         public new class UxmlFactory : UxmlFactory<ReorderableItem, UxmlTraits> { }
         public new class UxmlTraits : VisualElement.UxmlTraits { }
 
+        // --- 拖拽句柄控制 ---
+        private VisualElement m_DragHandle;   // 指定拖拽句柄
+        private bool m_HandleOnly = false;    // 仅在句柄上允许拖动
+
         // --- 构造函数 ---
 
         public ReorderableItem()
@@ -28,12 +32,43 @@ namespace __temp.MrPathV2.Editor.UI
             {
                 return;
             }
+            // 仅句柄拖动限制
+            if (m_HandleOnly && m_DragHandle != null && !ReferenceEquals(evt.target, m_DragHandle))
+            {
+                return;
+            }
             
             DragAndDrop.PrepareStartDrag();
             DragAndDrop.SetGenericData("ReorderableItem", this);
             DragAndDrop.StartDrag("Reordering");
 
             evt.StopPropagation();
+        }
+
+        /// <summary>
+        /// 指定拖拽句柄；当 handleOnly 为 true 时，只有句柄接收的 PointerDown 触发拖动。
+        /// </summary>
+        public void SetDragHandle(VisualElement handle, bool handleOnly = true)
+        {
+            m_DragHandle = handle;
+            m_HandleOnly = handleOnly;
+
+            if (m_DragHandle != null)
+            {
+                m_DragHandle.style.cursor = new StyleCursor(Cursorer.DefaultCursor(Cursorer.CursorType.MoveArrow));
+            }
+
+            if (m_HandleOnly)
+            {
+                // 句柄接管事件，避免整个项触发拖拽
+                UnregisterCallback<PointerDownEvent>(OnPointerDown);
+                m_DragHandle?.RegisterCallback<PointerDownEvent>(OnPointerDown);
+            }
+            else
+            {
+                // 保持默认：整项也可以拖拽
+                RegisterCallback<PointerDownEvent>(OnPointerDown);
+            }
         }
         
         // --- Cursorer 辅助类 (保持不变) ---

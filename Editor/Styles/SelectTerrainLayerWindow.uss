@@ -14,6 +14,14 @@
     transition-timing-function: ease;
 }
 
+/* 悬停：仅改变边框颜色，避免覆盖 selected 的 2px 宽度 */
+.tile-icon:hover {
+    border-bottom-color: rgb(90,153,255);
+    border-top-color: rgb(90,153,255);
+    border-left-color: rgb(90,153,255);
+    border-right-color: rgb(90,153,255);
+}
+
 .selected .tile-icon {
     /* 选中：2px 橙色 (#FFA000) */
     border-bottom-width: 2px;
@@ -25,4 +33,3 @@
     border-left-color: rgb(255,160,0);
     border-right-color: rgb(255,160,0);
 }
-
