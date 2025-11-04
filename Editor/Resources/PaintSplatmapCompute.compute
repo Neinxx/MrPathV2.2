@@ -1,6 +1,9 @@
 
 
 #pragma kernel paint_terrain
+// 为避免在 OpenGLES3 上因 RWTexture2DArray<float4> 类型/格式限制导致 HLSLcc 警告，排除 gles3 编译目标。
+// GLES3 设备将使用 CPU 或其它后备路径进行地形绘制。
+#pragma exclude_renderers gles3
 
 #include "BlendingLibrary.hlsl"
 #include "BlendMaskLibrary.hlsl"

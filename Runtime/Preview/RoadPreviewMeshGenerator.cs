@@ -224,7 +224,59 @@ namespace __temp.MrPathV2.Runtime.Preview
                     AccumulatedDistances = NativeArrayExtensions.CreateTracked<float>(spineLen, allocator);
 
                     var recipeSo = profile.roadRecipe;
-                    Recipe = recipeSo ? RecipeJobsUtility.BakeRecipe(recipeSo, allocator) : RecipeJobsUtility.CreateDefaultRecipe(allocator);
+                    if (recipeSo)
+                    {
+                        // 在预览侧直接构建 RecipeData，使用实际道路宽度与路径长度，避免对旧 API 的依赖
+                        float pathLength = 0f;
+                        for (var i = 1; i < worldSpine.VertexCount; i++)
+                        {
+                            pathLength += Vector3.Distance(worldSpine.Points[i - 1], worldSpine.Points[i]);
+                        }
+
+                        var worldWidth = Mathf.Max(0.01f, profile.roadWidth);
+
+                        // 临时 Profile 仅为 RecipeData 提供 recipe 引用
+                        var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
+                        tmpProfile.roadRecipe = recipeSo;
+                        Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator);
+#if UNITY_EDITOR
+                        if (Application.isPlaying)
+                            UnityEngine.Object.Destroy(tmpProfile);
+                        else
+                            UnityEngine.Object.DestroyImmediate(tmpProfile);
+#else
+                        UnityEngine.Object.Destroy(tmpProfile);
+#endif
+                    }
+                    else
+                    {
+                        // 无 recipe 时，构建空配方，保证预览流程不断
+                        float pathLength = 0f;
+                        for (var i = 1; i < worldSpine.VertexCount; i++)
+                        {
+                            pathLength += Vector3.Distance(worldSpine.Points[i - 1], worldSpine.Points[i]);
+                        }
+                        var worldWidth = Mathf.Max(0.01f, profile.roadWidth);
+                        var tmpRecipe = ScriptableObject.CreateInstance<StylizedRoadRecipe>();
+                        var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
+                        tmpProfile.roadRecipe = tmpRecipe;
+                        Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator);
+#if UNITY_EDITOR
+                        if (Application.isPlaying)
+                        {
+                            UnityEngine.Object.Destroy(tmpProfile);
+                            UnityEngine.Object.Destroy(tmpRecipe);
+                        }
+                        else
+                        {
+                            UnityEngine.Object.DestroyImmediate(tmpProfile);
+                            UnityEngine.Object.DestroyImmediate(tmpRecipe);
+                        }
+#else
+                        UnityEngine.Object.Destroy(tmpProfile);
+                        UnityEngine.Object.Destroy(tmpRecipe);
+#endif
+                    }
 
                     // 计算 UV Tiling，使预览网格与材质保持一致
                     try

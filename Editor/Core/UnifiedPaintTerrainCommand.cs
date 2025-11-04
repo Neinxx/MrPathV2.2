@@ -15,7 +15,7 @@ namespace __temp.MrPathV2.Editor.Core
         private readonly PathCreator _pathCreator;
         private readonly bool _isPreview;
         private readonly PainterType _preferredPainterType;
-        
+
         private IUnifiedTerrainPainter _painter;
         private bool _disposed = false;
 
@@ -56,7 +56,7 @@ namespace __temp.MrPathV2.Editor.Core
 
                 // 执行绘制
                 var result = await _painter.PaintAsync(_pathCreator, _isPreview, cancellationToken);
-                
+
                 LogResult(result);
                 return result;
             }
@@ -92,7 +92,7 @@ namespace __temp.MrPathV2.Editor.Core
 
                 // 执行绘制
                 var result = _painter.Paint(_pathCreator, _isPreview);
-                
+
                 LogResult(result);
                 return result;
             }
@@ -125,7 +125,7 @@ namespace __temp.MrPathV2.Editor.Core
                 // 获取PathData和PathProfile
                 var pathData = _pathCreator.pathData;
                 var pathProfile = _pathCreator.profile;
-                
+
                 // 查找最近的地形
                 var terrain = FindNearestTerrain(_pathCreator.transform.position);
                 if (terrain == null)
@@ -133,7 +133,7 @@ namespace __temp.MrPathV2.Editor.Core
                     UnityEngine.Debug.LogError("[UnifiedPaintTerrainCommand] 无法找到附近的地形");
                     return null;
                 }
-                
+
                 return UnifiedPainterFactory.CreatePainter(
                     _preferredPainterType,
                     terrain,
@@ -163,7 +163,7 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 var terrainPos = terrain.transform.position;
                 var terrainSize = terrain.terrainData.size;
-                
+
                 // 检查位置是否在地形范围内
                 if (position.x >= terrainPos.x && position.x <= terrainPos.x + terrainSize.x &&
                     position.z >= terrainPos.z && position.z <= terrainPos.z + terrainSize.z)
@@ -180,7 +180,7 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 var terrainCenter = terrain.transform.position + terrain.terrainData.size * 0.5f;
                 var distance = Vector3.Distance(position, terrainCenter);
-                
+
                 if (distance < nearestDistance)
                 {
                     nearestDistance = distance;
@@ -220,19 +220,19 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (_pathCreator == null)
                 throw new ArgumentNullException(nameof(_pathCreator));
-                
+
             var pathData = _pathCreator.pathData;
             var pathProfile = _pathCreator.profile;
-            
+
             if (pathData == null)
                 throw new ArgumentException("PathCreator.pathData 不能为空", nameof(_pathCreator));
-                
+
             if (pathData.positions.Count == 0)
                 throw new ArgumentException("PathData.positions 不能为空", nameof(_pathCreator));
 
             if (pathProfile == null)
                 throw new ArgumentException("PathCreator.profile 不能为空", nameof(_pathCreator));
-                
+
             if (pathProfile.roadRecipe == null)
                 throw new ArgumentException("PathProfile.roadRecipe 不能为空", nameof(_pathCreator));
 
@@ -242,7 +242,7 @@ namespace __temp.MrPathV2.Editor.Core
 
         private void LogResult(TerrainPaintResult result)
         {
-            if (result.Success)
+            if (result.IsSuccess)
             {
                 UnityEngine.Debug.Log($"[UnifiedPaintTerrainCommand] 绘制成功 - 使用 {result.GetType()} 绘制器，耗时 {result.ExecutionTimeMs:F2}ms");
             }

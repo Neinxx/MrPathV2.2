@@ -154,7 +154,7 @@ namespace __temp.MrPathV2.Editor.Core
                 };
             }
 
-            // 转换层配置
+            // 转换层配置（严格来源于 Recipe：layer.blendMode、opacity、enabled）
             var layers = new NativeArray<LayerConfig>(activeLayers.Count, allocator);
             for (int i = 0; i < activeLayers.Count; i++)
             {
@@ -162,7 +162,7 @@ namespace __temp.MrPathV2.Editor.Core
                 layers[i] = new LayerConfig
                 {
                     TerrainLayerIndex = GetTerrainLayerIndex(cpuLayer.contentLayer),
-                    BlendMode = ConvertBlendMode(BlendMode.Normal),
+                    BlendMode = ConvertBlendMode(cpuLayer.blendMode),
                     Opacity = cpuLayer.opacity,
                     Enabled = cpuLayer.enabled
                 };
@@ -289,16 +289,25 @@ namespace __temp.MrPathV2.Editor.Core
             return 0;
         }
 
-        private static BlendMode ConvertBlendMode(BlendMode cpuBlendMode)
+        private static BlendMode ConvertBlendMode(__temp.MrPathV2.Runtime.Core.BlendMode cpuBlendMode)
         {
-            return cpuBlendMode switch
+            // 将 Runtime.Core.BlendMode 映射到 GPU 适配器的 BlendMode（统一来源：Recipe）
+            switch (cpuBlendMode)
             {
-                BlendMode.Normal => BlendMode.Normal,
-                BlendMode.Multiply => BlendMode.Multiply,
-                BlendMode.Additive => BlendMode.Additive,
-                BlendMode.Overlay => BlendMode.Overlay,
-                _ => BlendMode.Normal
-            };
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Normal:
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Lerp:
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Screen:
+                    return BlendMode.Normal; // 默认置换/覆盖
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Multiply:
+                    return BlendMode.Multiply;
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Add:
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Additive:
+                    return BlendMode.Additive;
+                case __temp.MrPathV2.Runtime.Core.BlendMode.Overlay:
+                    return BlendMode.Overlay;
+                default:
+                    return BlendMode.Normal;
+            }
         }
 
         private static NativeArray<Keyframe> ConvertAnimationCurve(AnimationCurve curve, Allocator allocator)

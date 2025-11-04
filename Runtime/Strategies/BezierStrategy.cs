@@ -103,7 +103,7 @@ namespace __temp.MrPathV2.Runtime.Strategies
         }
 
 
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
         public override void DrawHandles(ref PathEditorHandles.HandleDrawContext context)
         {
             DrawCurve(ref context);
@@ -307,6 +307,11 @@ namespace __temp.MrPathV2.Runtime.Strategies
                 }
             }
             return bestT;
+        }
+
+        public override PreviewLineRenderer.LineType GetLineTypeToCleanup()
+        {
+            return PreviewLineRenderer.LineType.PathCurve;
         }
 
         #endregion

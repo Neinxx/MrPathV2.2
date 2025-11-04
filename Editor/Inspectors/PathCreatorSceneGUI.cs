@@ -86,7 +86,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private void SynchronizeDragState()
         {
             MultiPathPreviewRenderer.IsDraggingActive = _ctx.IsDraggingHandle;
-            if (_targetCreator) 
+            if (_targetCreator)
                 MultiPathPreviewRenderer.ActiveEditingId = _ctx.IsDraggingHandle ? _targetCreator.GetInstanceID() : 0;
         }
 
@@ -101,15 +101,17 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private void CleanupPreviewLines()
         {
             var context = _ctx.CreateHandleContext();
-            if (context.LineRenderer == null) return;
+            // 检查LineRenderer是否存在，不存在则直接返回
+            if (context.LineRenderer == null)
+                return;
 
+            // 获取当前路径策略
             var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(_targetCreator.profile.curveType);
+            // 确定需要清除的线条类型
+            var lineTypeToClear = currentStrategy.GetLineTypeToCleanup();
 
-            // 如果当前为贝塞尔曲线策略，则清除上一帧可能遗留的 Catmull-Rom 路径曲线
-            context.LineRenderer.Clear(currentStrategy is BezierStrategy
-                ? PreviewLineRenderer.LineType.PathCurve
-                // 如果当前不是贝塞尔曲线策略，则清除上一帧可能遗留的贝塞尔控制线
-                : PreviewLineRenderer.LineType.ControlLine);
+            // 清除指定类型的预览线
+            context.LineRenderer.Clear(lineTypeToClear);
         }
 
         private void ProcessSceneHandlesAndInput(Event currentEvent)

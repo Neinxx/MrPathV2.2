@@ -1,5 +1,5 @@
 .AnimatedButton {
-    background-color: rgba(231, 76, 60, 0);
+    background-color: rgb(70, 70, 70);
     width: auto;
     height: 30px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -13,33 +13,27 @@
     border-right-width: 3px;
     border-top-width: 3px;
     border-bottom-width: 3px;
-    transition-property: all;
-    transition-duration: 200s;
-    transition-timing-function: ease-in;
+    transition-property: background-color, color;
+    transition-duration: 200ms, 200ms;
+    transition-timing-function: ease, ease-in;
+    transition-delay: 0ms, 0ms;
 }
 
 .AnimatedButton:hover {
-    background-color: rgba(231, 76, 60, 0);
     width: auto;
     height: 30px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     max-height: 30px;
     min-height: 20px;
-    border-left-color: rgb(103, 185, 71);
-    border-right-color: rgb(103, 185, 71);
-    border-top-color: rgb(103, 185, 71);
-    border-bottom-color: rgb(103, 185, 71);
-    border-left-width: 3px;
-    border-right-width: 3px;
-    border-top-width: 3px;
-    border-bottom-width: 3px;
-    transition-property: border-left-color, border-right-color;
-    transition-duration: 300s, 300s;
-    transition-timing-function: ease-in, ease-in;
-    scale: 1.04 0.95;
-    color: rgb(132, 195, 86);
-    -unity-font-style: bold;
+    scale: 1.04 1.04;
     transform-origin: bottom;
+    transition-duration: 300ms, 300ms;
+    transition-timing-function: ease, ease;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0);
+    transition-property: background-color, color;
+    transition-delay: 0ms, 0ms;
+    background-color: rgba(152, 32, 32, 0.83);
+    color: rgb(233, 37, 37);
 }
 
 .AnimatedButton:active {
@@ -57,8 +51,97 @@
     border-right-width: 3px;
     border-top-width: 3px;
     border-bottom-width: 3px;
-    transition-property: border-left-color, border-right-color;
-    transition-duration: 300s, 300s;
-    transition-timing-function: ease-out, ease-out;
     scale: 1 1;
+    transition-duration: 300s;
+    transition-timing-function: ease-out;
+}
+
+.AnimatedBordeButton {
+    background-color: rgba(70, 70, 70, 0);
+    width: auto;
+    height: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    max-height: 30px;
+    min-height: 20px;
+    border-left-color: rgb(65, 65, 65);
+    border-right-color: rgb(65, 65, 65);
+    border-top-color: rgb(65, 65, 65);
+    border-bottom-color: rgb(65, 65, 65);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-right: 14px;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 14px;
+    -unity-font-style: bold;
+    transition-duration: 0ms;
+    transition-delay: 0ms;
+}
+
+.AnimatedBordeButton:hover {
+    background-color: rgba(70, 70, 70, 0);
+    width: auto;
+    height: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    max-height: 30px;
+    min-height: 20px;
+    border-left-color: rgb(231, 136, 62);
+    border-right-color: rgb(231, 136, 62);
+    border-top-color: rgb(231, 136, 62);
+    border-bottom-color: rgb(231, 136, 62);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-right: 14px;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 14px;
+    transition-duration: 200ms;
+    transition-delay: 0ms;
+    -unity-font-style: bold;
+    color: rgb(231, 136, 62);
+    transition-timing-function: ease-in;
+}
+
+.AnimatedBordeButton:active {
+    background-color: rgba(70, 70, 70, 0);
+    width: auto;
+    height: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    max-height: 30px;
+    min-height: 20px;
+    border-left-color: rgb(65, 65, 65);
+    border-right-color: rgb(65, 65, 65);
+    border-top-color: rgb(65, 65, 65);
+    border-bottom-color: rgb(65, 65, 65);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    transition-property: color, translate;
+    transition-duration: 200ms, 1000ms;
+    transition-timing-function: ease-in, ease-out;
+    transition-delay: 0ms, 0ms;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-right: 18px;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 18px;
+    transform-origin: top;
+    scale: 1.06 1.25;
+    color: rgba(210, 210, 210, 0.29);
 }

@@ -23,7 +23,7 @@ UnifiedDataAdapter (转换层)
     ↓
 IUnifiedTerrainPainter
     ↓
-UnifiedCpuTerrainPainter | UnifiedGpuTerrainPainter
+UnifiedCpuTerrainPainter | GpuTerrainPainterV2
     ↓
 UnifiedPaintTerrainCommand (简洁的统一接口)
 ```
@@ -68,11 +68,11 @@ await gpuPainter.PaintPathAsync(terrain, spinePoints, width, layers, isPreview);
 
 **新方式:**
 ```csharp
-// 统一接口
+// 统一接口（以 PathCreator 为输入）
 IUnifiedTerrainPainter painter = UnifiedPainterFactory.CreatePainter(PainterType.Auto, terrain);
 
 // 简洁的调用方式
-var result = await painter.PaintAsync(terrain, pathData, pathProfile, isPreview, cancellationToken);
+var result = await painter.PaintAsync(pathCreator, isPreview, cancellationToken);
 ```
 
 ### 3. 命令模式简化
@@ -87,14 +87,12 @@ await command.ProcessTerrainsAsync(terrains, spine, cancellationToken);
 **新方式:**
 ```csharp
 // 简洁的命令类
-using var command = UnifiedPaintTerrainCommandV2.Create(pathCreator, heightProvider);
-var result = await command.ExecuteAsync(terrains, pathProfile, PainterType.Auto, isPreview, cancellationToken);
+using var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator, isPreview: true, preferredPainterType: PainterType.Auto);
+var result = await command.ExecuteAsync(cancellationToken);
 
-// 或者使用构建器模式
+// 或者使用构建器模式（以 PathCreator 构建）
 var result = await new UnifiedPaintCommandBuilder()
-    .ForTerrain(terrain)
-    .WithPath(pathData)
-    .WithProfile(pathProfile)
+    .ForPathCreator(pathCreator)
     .AsPreview(true)
     .PreferPainter(PainterType.GPU)
     .ExecuteAsync(cancellationToken);
@@ -183,8 +181,8 @@ finally
 
 **新代码:**
 ```csharp
-using var command = UnifiedPaintTerrainCommandV2.Create(pathCreator, heightProvider);
-var result = await command.ExecuteAsync(terrains, pathProfile, PainterType.Auto, isPreview, cancellationToken);
+using var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator, isPreview, PainterType.Auto);
+var result = await command.ExecuteAsync(cancellationToken);
 
 // 自动清理，无需手动管理资源
 if (result.IsSuccess)
@@ -231,7 +229,7 @@ var results = await Task.WhenAll(tasks);
 ```csharp
 // 使用using语句确保资源清理
 using var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
-using var command = UnifiedPaintTerrainCommandV2.Create(pathCreator);
+using var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator);
 
 // 或者手动管理
 try
@@ -302,7 +300,7 @@ public async Task PaintTerrainsOld(List<Terrain> terrains, PathCreator pathCreat
 // 新代码
 public async Task PaintTerrainsNew(List<Terrain> terrains, PathCreator pathCreator, PathProfile pathProfile)
 {
-    using var command = UnifiedPaintTerrainCommandV2.Create(pathCreator);
+using var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator);
     
     var result = await command.ExecuteAsync(
         terrains, 

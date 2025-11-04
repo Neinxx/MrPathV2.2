@@ -105,7 +105,7 @@ namespace __temp.MrPathV2.Editor.Examples
 
             try
             {
-                using var painter = new UnifiedGpuTerrainPainter();
+                using var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
 
                 var creator = CreateTempPathCreator(terrain);
                 if (creator == null)
@@ -116,11 +116,11 @@ namespace __temp.MrPathV2.Editor.Examples
 
                 // 预览模式：仅生成并绑定预览权重，不直接写入地形
                 var preview = painter.Paint(creator, true);
-                UnityEngine.Debug.Log($"预览模式绘制结果: {(preview.Success ? "成功" : "失败")}");
+                UnityEngine.Debug.Log($"预览模式绘制结果: {(preview.IsSuccess ? "成功" : "失败")}");
 
                 // 实际绘制：应用到地形的alphamap
                 var applied = painter.Paint(creator, false);
-                UnityEngine.Debug.Log($"实际绘制结果: {(applied.Success ? "成功" : "失败")}");
+                UnityEngine.Debug.Log($"实际绘制结果: {(applied.IsSuccess ? "成功" : "失败")}");
 
                 // 清理临时对象
                 Object.DestroyImmediate(creator.gameObject);
@@ -136,7 +136,7 @@ namespace __temp.MrPathV2.Editor.Examples
             UnityEngine.Debug.Log("测试性能...");
 
             var stopwatch = new Stopwatch();
-            using var painter = new UnifiedGpuTerrainPainter();
+            using var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
             var creator = CreateTempPathCreator(terrain);
             if (creator == null)
             {
@@ -167,7 +167,7 @@ namespace __temp.MrPathV2.Editor.Examples
         {
             UnityEngine.Debug.Log("测试预览管线稳定性（统一接口）...");
 
-            using var painter = new UnifiedGpuTerrainPainter();
+            using var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
             var creator = CreateTempPathCreator(terrain);
             if (creator == null)
             {
@@ -191,14 +191,14 @@ namespace __temp.MrPathV2.Editor.Examples
             var secondTime = stopwatch.ElapsedMilliseconds;
 
             UnityEngine.Debug.Log($"首次预览: {firstTime} ms, 二次预览: {secondTime} ms");
-            UnityEngine.Debug.Log($"结果一致性: {(r1.Success && r2.Success ? "正常" : "异常")}");
+            UnityEngine.Debug.Log($"结果一致性: {(r1.IsSuccess && r2.IsSuccess ? "正常" : "异常")}");
 
             Object.DestroyImmediate(creator.gameObject);
         }
 
         private static double MeasureNewSystemPerformance(UnityEngine.Terrain terrain, Vector3[] spinePoints, LayerConfig[] layers)
         {
-            using var painter = new UnifiedGpuTerrainPainter();
+            using var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
             var creator = CreateTempPathCreator(terrain, spinePoints);
             if (creator == null)
             {

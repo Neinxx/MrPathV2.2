@@ -1,5 +1,6 @@
 // PathStrategy.cs
 
+using MrPathV2.Runtime.Preview;
 using UnityEngine;
 
 namespace __temp.MrPathV2.Runtime.Core
@@ -32,6 +33,8 @@ namespace __temp.MrPathV2.Runtime.Core
         }
 
         #endregion
+
+        public abstract PreviewLineRenderer.LineType GetLineTypeToCleanup();
 
 #if UNITY_EDITOR
         #region 绘制与交互契约 (Drawing & Interaction Contract)

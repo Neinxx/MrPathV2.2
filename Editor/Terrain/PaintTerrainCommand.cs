@@ -1,522 +1,225 @@
-// 文件: Editor/Terrain/PaintTerrainCommand.cs
-
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Editor.Core;
+using __temp.MrPathV2.Editor.GPU;
 using __temp.MrPathV2.Editor.Settings;
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Jobs;
 using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
-using UnityEngine;
 using UnityEditor;
-using __temp.MrPathV2.Runtime.Interfaces;
-// <-- 修正：添加 using
+using UnityEngine;
 
-// 确保 Painter 命名空间可访问
 namespace __temp.MrPathV2.Editor.Terrain
 {
-    public class PaintTerrainCommand : TerrainCommandBase
+    /// <summary>
+    /// 绘制纹理命令：桥接旧命令入口与新统一绘制架构。
+    /// - 遵循提前返回与单一职责：输入校验、层解析、绘制执行解耦。
+    /// - 支持 CPU/GPU/Auto 后端选择（项目高级设置）。
+    /// - 针对每块地形仅处理覆盖区域，避免全贴图拷贝。
+    /// </summary>
+    public sealed class PaintTerrainCommand : TerrainCommandBase
     {
-        #region 常量与枚举
-
-        private const string OperationName = "绘制纹理 (Paint Textures)";
-
+        // 供设置与 UI 引用的后端枚举（保持名称兼容）
         public enum PaintingBackend
         {
-            CPUJobTwoPass,
-            GPUCompute
+            CPUJobTwoPass = 0,
+            GPUCompute = 1,
+            Auto = 2
         }
 
-        #endregion
-
-        #region 构造函数
-
-        public PaintTerrainCommand(PathCreator creator, IHeightProvider heightProvider)
+        public PaintTerrainCommand(PathCreator creator, __temp.MrPathV2.Runtime.Interfaces.IHeightProvider heightProvider)
             : base(creator, heightProvider) { }
 
-        public override string GetCommandName() => OperationName;
+        public override string GetCommandName() => "绘制纹理 (Paint Terrain)";
 
-        #endregion
-
-
-
-        /// <summary>
-        ///     处理地形绘制，采用提前返回风格和单一职责原则
-        /// </summary>
         protected override async Task ProcessTerrainsAsync(List<UnityEngine.Terrain> terrains, PathSpine spine, CancellationToken token)
         {
-            // 提前返回：检查地形列表有效性
-            if (terrains == null || terrains.Count == 0)
-            {
-                Debug.LogWarning("[PaintTerrainCommand] No terrains to process.");
-                return;
-            }
+            // 提前返回：无可用地形
+            if (terrains == null || terrains.Count == 0) return;
 
-            SharedData sharedData = default;
+            // 采样数据准备（一次生成，多处复用）
+            var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
+            var profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
+            RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
+
+            // 使用预览包围盒或退化包围盒优化覆盖区域计算
+            if (PreferredBoundsXZ.HasValue)
+            {
+                var pb = PreferredBoundsXZ.Value;
+                contourBounds = new float4(pb.x, pb.y, pb.z, pb.w);
+            }
+            else if (!roadContour.IsCreated || roadContour.Length < 3)
+            {
+                var fb = GetExpandedXZBounds(spine, Creator.profile);
+                contourBounds = new float4(fb.x, fb.y, fb.z, fb.w);
+            }
 
             try
             {
-                // 选择绘制后端
-                var backend = SelectPaintingBackend();
+                // 统一弹窗：是否将缺失的 TerrainLayer 添加到所有目标地形
+                var layerMaps = ResolveLayersWithConfirm(terrains, Creator.profile);
+                if (layerMaps == null) return; // 用户取消
 
-                // 准备共享数据
-                sharedData = await PrepareSharedDataAsync(spine, token);
-                if (!sharedData.IsValid)
+                // 逐地形执行绘制
+                foreach (var terrain in terrains)
                 {
-                    Debug.LogError("[PaintTerrainCommand] Failed to prepare shared data.");
-                    return;
+                    token.ThrowIfCancellationRequested();
+                    if (!terrain || !terrain.terrainData) continue;
+
+                    Undo.RegisterCompleteObjectUndo(terrain.terrainData, GetCommandName());
+
+                    // 覆盖区域（基于轮廓或退化 AABB），映射到 alphamap 像素坐标
+                    CalculateCoverageOnTerrain(terrain, contourBounds, out var covMin, out var covMax, out var pixelCount);
+                    if (pixelCount <= 0) continue; // 提前返回：无覆盖区域
+
+                    // 构建 RecipeData（与目标地形图层映射一致）
+                    var layerMap = layerMaps.TryGetValue(terrain, out var m) ? m : BuildTerrainLayerMap(terrain);
+                    using var recipeData = BuildRecipeData(Creator.profile, layerMap, spine);
+
+                    // 选择并执行后端
+                    using var painter = SelectPainter(terrain, covMin, covMax, pixelCount);
+                    await painter.ExecuteAsync(
+                        terrain,
+                        spineData,
+                        profileData,
+                        recipeData,
+                        roadContour,
+                        contourBounds,
+                        covMin,
+                        covMax,
+                        token);
+
+                    // 写脏与刷新
+                    terrain.Flush();
+                    EditorUtility.SetDirty(terrain.terrainData);
                 }
-
-                // 准备后端特定数据
-                var backendData = await PrepareBackendDataAsync(backend, terrains, token);
-
-                // 处理所有地形
-                await ProcessAllTerrainsAsync(backend, terrains, sharedData, backendData, token);
-            }
-            catch (OperationCanceledException)
-            {
-                Debug.Log("[PaintTerrainCommand] Operation cancelled.");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[PaintTerrainCommand] Error during processing: {ex.Message}\n{ex.StackTrace}");
-                throw;
             }
             finally
             {
-                // 清理共享资源
-                CleanupSharedResources(ref sharedData);
-
-                // 标记高度提供器为脏
+                // 资源清理
+                if (spineData.IsCreated) spineData.Dispose();
+                if (profileData.IsCreated) profileData.Dispose();
+                if (roadContour.IsCreated) roadContour.Dispose();
                 HeightProvider?.MarkAsDirty();
             }
         }
 
-        /// <summary>
-        ///     清理共享资源
-        /// </summary>
-        private static void CleanupSharedResources(ref SharedData sharedData)
+        // 单次确认与提前返回：汇总所有地形的缺失层，统一确认一次
+        private static Dictionary<UnityEngine.Terrain, Dictionary<TerrainLayer, int>> ResolveLayersWithConfirm(
+            List<UnityEngine.Terrain> terrains, PathProfile pathProfile)
         {
-            sharedData.RoadContour.SafeDispose();
-            if (sharedData.SpineData.IsCreated) sharedData.SpineData.Dispose();
-            if (sharedData.ProfileData.IsCreated) sharedData.ProfileData.Dispose();
-        }
-
-        /// <summary>
-        ///     选择绘制后端
-        /// </summary>
-        private static PaintingBackend SelectPaintingBackend()
-        {
-            var backend = PaintingBackend.CPUJobTwoPass; // 默认
-            var projectSettings = MrPathProjectSettings.GetOrCreateSettings();
-
-            // 检查高级设置
-            if (projectSettings?.advancedSettings != null)
+            var result = new Dictionary<UnityEngine.Terrain, Dictionary<TerrainLayer, int>>();
+            if (terrains == null || terrains.Count == 0 || !pathProfile.roadRecipe) return result;
+            var recipe = pathProfile.roadRecipe;
+            // 收集缺失层（任一地形缺失即计入）
+            var anyMissing = false;
+            foreach (var t in terrains)
             {
-                backend = projectSettings.advancedSettings.paintingBackend;
-            }
-            else
-            {
-                Debug.LogWarning("[PaintTerrainCommand] Could not find AdvancedSettings. Defaulting to CPU backend.");
-            }
-
-            // 检查GPU支持
-            if (backend == PaintingBackend.GPUCompute && !SystemInfo.supportsComputeShaders)
-            {
-                Debug.LogWarning("[PaintTerrainCommand] Compute Shaders not supported. Falling back to CPU Job backend.");
-                backend = PaintingBackend.CPUJobTwoPass;
-            }
-
-            Debug.Log($"[PaintTerrainCommand] Using backend: {backend}");
-            return backend;
-        }
-
-        /// <summary>
-        ///     准备共享数据
-        /// </summary>
-        private async Task<SharedData> PrepareSharedDataAsync(PathSpine spine, CancellationToken token)
-        {
-            await Task.Yield();
-            token.ThrowIfCancellationRequested();
-
-            // 生成道路轮廓
-            RoadContourGenerator.GenerateContour(spine, Creator.profile, out var roadContour, out var contourBounds, Allocator.Persistent);
-            var finalBounds = DetermineFinalBounds(contourBounds, roadContour, spine);
-
-            // 创建脊柱和剖面数据
-            var spineData = new PathJobsUtility.SpineData(spine, Allocator.Persistent);
-            var profileData = new PathJobsUtility.ProfileData(Creator.profile, Allocator.Persistent);
-
-            token.ThrowIfCancellationRequested();
-
-            return new SharedData
-            {
-                RoadContour = roadContour,
-                FinalBounds = finalBounds,
-                SpineData = spineData,
-                ProfileData = profileData,
-                IsValid = roadContour.IsCreated && spineData.IsCreated && profileData.IsCreated
-            };
-        }
-
-        /// <summary>
-        ///     准备后端特定数据
-        /// </summary>
-        private async Task<BackendData> PrepareBackendDataAsync(PaintingBackend backend, List<UnityEngine.Terrain> terrains, CancellationToken token)
-        {
-            await Task.Yield();
-            token.ThrowIfCancellationRequested();
-
-            var backendData = new BackendData();
-
-            if (backend == PaintingBackend.CPUJobTwoPass)
-            {
-                backendData.CpuRecipeDataMap = await PrepareCpuRecipeDataAsync(terrains, token);
-            }
-            // GPU后端不需要提前准备数据
-
-            return backendData;
-        }
-
-        /// <summary>
-        ///     准备CPU配方数据
-        /// </summary>
-        private async Task<Dictionary<UnityEngine.Terrain, RecipeData>> PrepareCpuRecipeDataAsync(List<UnityEngine.Terrain> terrains, CancellationToken token)
-        {
-            await Task.Yield();
-            token.ThrowIfCancellationRequested();
-
-            var cpuRecipeDataMap = new Dictionary<UnityEngine.Terrain, RecipeData>();
-
-            foreach (var terrain in terrains)
-            {
-                // 提前返回：检查地形有效性
-                if (!IsTerrainValidForPainting(terrain))
+                var map = LayerResolver.ResolveSmart(t, recipe);
+                var recipeLayers = recipe.GetLayers();
+                foreach (var rl in recipeLayers)
                 {
-                    continue;
+                    if (rl != null || !rl.contentLayer) continue;
+                    if (!map.ContainsKey(rl.contentLayer)) { anyMissing = true; break; }
                 }
-                // 在非预览绘制到地形前进行缺失图层确认
-                var layerMap = ResolveLayersWithConfirm(terrain, Creator.profile.roadRecipe);
-                if (layerMap == null)
-                {
-                    // 用户取消
-                    Debug.LogWarning($"[PaintTerrainCommand] 用户取消为地形 {terrain.name} 添加图层，跳过该地形。");
-                    continue;
-                }
-                var roadWorldWidth = Creator.profile.roadWidth;
-                var roadWorldLength = Creator.GetPathLength();
-
-                var recipeData = new RecipeData(Creator.profile.roadRecipe, layerMap, roadWorldWidth, roadWorldLength, Allocator.Persistent);
-
-                if (!recipeData.IsCreated)
-                {
-                    Debug.LogError($"[PaintTerrainCommand] Failed to create CPU RecipeData for terrain {terrain.name}");
-                    continue;
-                }
-
-                cpuRecipeDataMap.Add(terrain, recipeData);
+                if (anyMissing) break;
             }
 
-            return cpuRecipeDataMap;
-        }
-
-        /// <summary>
-        ///     处理所有地形
-        /// </summary>
-        private async Task ProcessAllTerrainsAsync(
-            PaintingBackend backend,
-            List<UnityEngine.Terrain> terrains,
-            SharedData sharedData,
-            BackendData backendData,
-            CancellationToken token)
-        {
-            var tasks = new List<Task>();
-
-            foreach (var terrain in terrains)
+            // 无缺失：直接智能映射（非交互）
+            if (!anyMissing)
             {
-                token.ThrowIfCancellationRequested();
-
-                // 提前返回：检查地形有效性
-                if (!IsTerrainValidForPainting(terrain))
-                {
-                    continue;
-                }
-
-                // 计算覆盖区域
-                var (_, coverageMin, coverageMax) = CalculateCoverageArea(terrain, sharedData.FinalBounds);
-
-                // 提前返回：检查覆盖区域有效性
-                if (!IsCoverageAreaValid(coverageMin, coverageMax))
-                {
-                    continue;
-                }
-
-                // 自适应后端选择：根据覆盖区域大小和设置选择最佳后端
-                var selectedBackend = SelectBackendForTerrain(backend, terrain, coverageMin, coverageMax);
-
-                // 创建绘制器任务
-                var task = CreatePainterTask(selectedBackend, terrain, sharedData, backendData, coverageMin, coverageMax, token);
-                tasks.Add(task);
+                foreach (var t in terrains)
+                    result[t] = LayerResolver.ResolveSmart(t, recipe);
+                return result;
             }
 
-            await Task.WhenAll(tasks);
-        }
+            // 统一一次确认
+            var choice = EditorUtility.DisplayDialogComplex(
+                "缺失地形图层",
+                "检测到配方引用的 TerrainLayer 在部分地形中缺失。\n\n是否将缺失图层添加到所有目标地形？",
+                "添加到所有地形",
+                "仅匹配等价图层",
+                "取消");
 
-        /// <summary>
-        ///     检查地形是否适合绘制
-        /// </summary>
-        private bool IsTerrainValidForPainting(UnityEngine.Terrain terrain)
-        {
-            return terrain != null &&
-                   terrain.terrainData != null &&
-                   terrain.terrainData.alphamapLayers > 0 &&
-                   Creator.profile?.roadRecipe != null;
-        }
+            if (choice == 2) return null; // 取消
 
-        /// <summary>
-        ///     检查覆盖区域是否有效
-        /// </summary>
-        private static bool IsCoverageAreaValid(Vector2Int coverageMin, Vector2Int coverageMax)
-        {
-            var numPixelsX = coverageMax.x - coverageMin.x + 1;
-            var numPixelsY = coverageMax.y - coverageMin.y + 1;
-            return numPixelsX > 0 && numPixelsY > 0;
-        }
-
-        /// <summary>
-        ///     创建绘制器任务
-        /// </summary>
-        private Task CreatePainterTask(
-            PaintingBackend backend,
-            UnityEngine.Terrain terrain,
-            SharedData sharedData,
-            BackendData backendData,
-            Vector2Int coverageMin,
-            Vector2Int coverageMax,
-            CancellationToken token)
-        {
-            // CPU 后端仍沿用旧版 ITerrainPainter 执行路径，GPU 后端切换到统一接口 IUnifiedTerrainPainter，去除对 GpuTerrainPainterV2.Instance 的直接依赖。
-
-            if (backend == PaintingBackend.CPUJobTwoPass)
+            var addMissing = choice == 0;
+            foreach (var t in terrains)
             {
-                RecipeData cpuRecipeData = default;
-
-                // 获取CPU配方数据
-                if (backendData.CpuRecipeDataMap == null || !backendData.CpuRecipeDataMap.TryGetValue(terrain, out cpuRecipeData) || !cpuRecipeData.IsCreated)
-                {
-                    Debug.LogWarning($"[PaintTerrainCommand] Skipping terrain {terrain.name} due to missing CPU RecipeData.");
-                    return Task.CompletedTask;
-                }
-
-                var cpuPainter = new CpuTerrainPainter();
-                return ExecutePainterAsync(cpuPainter, terrain, sharedData.SpineData, sharedData.ProfileData,
-                    cpuRecipeData, sharedData.RoadContour, sharedData.FinalBounds,
-                    coverageMin, coverageMax, token);
+                result[t] = addMissing
+                    ? LayerResolver.ResolveEnsurePresentSmart(t, pathProfile)
+                    : LayerResolver.ResolveSmart(t, recipe);
             }
-            else // GPU_Compute
-            {
-                // GPU 绘制前同样进行缺失图层确认（用于添加或跳过添加）
-                var confirmMap = ResolveLayersWithConfirm(terrain, Creator.profile.roadRecipe);
-                if (confirmMap == null)
-                {
-                    Debug.LogWarning($"[PaintTerrainCommand] 用户取消为地形 {terrain.name} 添加图层，跳过该地形。");
-                    return Task.CompletedTask;
-                }
-
-                // 统一到新接口：使用 UnifiedGpuTerrainPainter 执行绘制，避免直接引用旧版管线单例。
-                var unifiedGpuPainter = new UnifiedGpuTerrainPainter();
-                return unifiedGpuPainter.PaintAsync(Creator, false, token);
-            }
+            return result;
         }
 
-        /// <summary>
-        ///     当绘制到地形时，检测缺失图层并弹出确认框：
-        ///     - 选择“添加并继续”：调用 EnsurePresentSmart 添加缺失图层
-        ///     - 选择“仅使用已有图层”：不添加，按现有映射绘制
-        ///     - 选择“取消”：返回 null，调用方跳过当前地形
-        /// </summary>
-        private static Dictionary<TerrainLayer, int> ResolveLayersWithConfirm(UnityEngine.Terrain terrain, __temp.MrPathV2.Runtime.Core.StylizedRoadRecipe recipe)
-        {
-            // 计算缺失图层
-            var missing = LayerResolver.GetMissingLayersSmart(terrain, recipe);
-
-            // 没有缺失则直接智能映射
-            if (missing.Count == 0)
-            {
-                return LayerResolver.ResolveSmart(terrain, recipe);
-            }
-
-            // 组装提示信息
-            var names = new List<string>();
-            foreach (var tl in missing)
-            {
-                if (tl == null) continue;
-                names.Add(tl.name);
-            }
-
-            var message = "检测到以下配方图层在当前地形中缺失：\n\n" + string.Join("\n", names) +
-                          "\n\n是否将缺失图层添加到地形？";
-            var title = "添加缺失的地形图层";
-
-            // 0: 添加并继续, 1: 仅使用已有图层, 2: 取消
-            var choice = EditorUtility.DisplayDialogComplex(title, message, "添加并继续", "仅使用已有图层", "取消");
-
-            switch (choice)
-            {
-                case 0:
-                    return LayerResolver.ResolveEnsurePresentSmart(terrain, recipe);
-                case 1:
-                    return LayerResolver.ResolveSmart(terrain, recipe);
-                default:
-                    return null; // 取消
-            }
-        }
-
-        /// <summary>
-        ///     共享数据结构
-        /// </summary>
-        private struct SharedData
-        {
-            public NativeArray<float2> RoadContour;
-            public float4 FinalBounds;
-            public PathJobsUtility.SpineData SpineData;
-            public PathJobsUtility.ProfileData ProfileData;
-            public bool IsValid;
-        }
-
-        /// <summary>
-        ///     后端特定数据结构
-        /// </summary>
-        private struct BackendData
-        {
-            public Dictionary<UnityEngine.Terrain, RecipeData> CpuRecipeDataMap;
-        }
-
-        private static async Task ExecutePainterAsync(
-            ITerrainPainter painter, UnityEngine.Terrain terrain,
-            PathJobsUtility.SpineData spineData, PathJobsUtility.ProfileData profileData,
-            RecipeData cpuRecipeData, NativeArray<float2> roadContour, float4 finalBounds,
-            Vector2Int coverageMin, Vector2Int coverageMax, CancellationToken token)
-        {
-            try
-            {
-                if (painter is CpuTerrainPainter cpuPainter)
-                {
-                    // 使用CPU画笔的完整参数版本
-                    await cpuPainter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, roadContour, finalBounds, coverageMin, coverageMax, token);
-                }
-                else
-                {
-                    Debug.LogError($"[PaintTerrainCommand] 不支持的画笔类型: {painter.GetType().Name}");
-                }
-            }
-            finally
-            {
-                // CPU RecipeData 是为这个特定任务创建的，在这里释放
-                if (cpuRecipeData.IsCreated && painter is CpuTerrainPainter)
-                {
-                    cpuRecipeData.Dispose();
-                }
-            }
-        }
-
-        private static (bool useCoverageLimit, Vector2Int coverageMin, Vector2Int coverageMax) CalculateCoverageArea(UnityEngine.Terrain terrain, float4 finalBounds)
+        // 覆盖区域：将世界空间 XZ AABB 映射到 alphamap 像素范围
+        private static void CalculateCoverageOnTerrain(UnityEngine.Terrain terrain, float4 boundsXZ,
+            out Vector2Int coverageMin, out Vector2Int coverageMax, out int pixelCount)
         {
             var td = terrain.terrainData;
-            if (td == null) return (true, new Vector2Int(0, 0), new Vector2Int(-1, -1));
+            var res = td.alphamapResolution;
+            var pos = terrain.GetPosition();
+            var size = td.size;
 
-            var bounds = finalBounds;
+            // 映射到 [0, res-1]
+            float ToPixelX(float x) => (x - pos.x) / size.x * (res - 1);
+            float ToPixelY(float z) => (z - pos.z) / size.z * (res - 1);
 
-            var terrainPos = terrain.GetPosition();
-            var terrainSize = td.size;
-            var resolution = td.alphamapResolution;
+            var minX = Mathf.FloorToInt(Mathf.Min(ToPixelX(boundsXZ.x), ToPixelX(boundsXZ.z)));
+            var maxX = Mathf.CeilToInt(Mathf.Max(ToPixelX(boundsXZ.x), ToPixelX(boundsXZ.z)));
+            var minY = Mathf.FloorToInt(Mathf.Min(ToPixelY(boundsXZ.y), ToPixelY(boundsXZ.w)));
+            var maxY = Mathf.CeilToInt(Mathf.Max(ToPixelY(boundsXZ.y), ToPixelY(boundsXZ.w)));
 
-            float terrainMinX = terrainPos.x, terrainMinZ = terrainPos.z;
-            float terrainMaxX = terrainPos.x + terrainSize.x, terrainMaxZ = terrainPos.z + terrainSize.z;
-            float intersectMinX = Mathf.Max(bounds.x, terrainMinX), intersectMinZ = Mathf.Max(bounds.y, terrainMinZ);
-            float intersectMaxX = Mathf.Min(bounds.z, terrainMaxX), intersectMaxZ = Mathf.Min(bounds.w, terrainMaxZ);
+            // 裁剪至有效范围
+            minX = Mathf.Clamp(minX, 0, res - 1);
+            maxX = Mathf.Clamp(maxX, 0, res - 1);
+            minY = Mathf.Clamp(minY, 0, res - 1);
+            maxY = Mathf.Clamp(maxY, 0, res - 1);
 
-            if (intersectMinX >= intersectMaxX || intersectMinZ >= intersectMaxZ)
-            {
-                return (true, new Vector2Int(0, 0), new Vector2Int(-1, -1));
-            }
-
-            float invSizeX = 1f / terrainSize.x, invSizeZ = 1f / terrainSize.z;
-            var pixelMinX = Mathf.FloorToInt((intersectMinX - terrainMinX) * invSizeX * (resolution - 1));
-            var pixelMinZ = Mathf.FloorToInt((intersectMinZ - terrainMinZ) * invSizeZ * (resolution - 1));
-            var pixelMaxX = Mathf.CeilToInt((intersectMaxX - terrainMinX) * invSizeX * (resolution - 1));
-            var pixelMaxZ = Mathf.CeilToInt((intersectMaxZ - terrainMinZ) * invSizeZ * (resolution - 1));
-
-            pixelMinX = Mathf.Clamp(pixelMinX, 0, resolution - 1);
-            pixelMinZ = Mathf.Clamp(pixelMinZ, 0, resolution - 1);
-            pixelMaxX = Mathf.Clamp(pixelMaxX, 0, resolution - 1);
-            pixelMaxZ = Mathf.Clamp(pixelMaxZ, 0, resolution - 1);
-
-            return (true, new(pixelMinX, pixelMinZ), new(pixelMaxX, pixelMaxZ));
+            coverageMin = new Vector2Int(minX, minY);
+            coverageMax = new Vector2Int(maxX, maxY);
+            pixelCount = Mathf.Max(0, (maxX - minX + 1) * (maxY - minY + 1));
         }
 
-
-        private float4 DetermineFinalBounds(float4 contourBounds, NativeArray<float2> roadContour, PathSpine spine)
+        // 选择 CPU 或 GPU 实现（遵循项目高级设置；Auto 模式按像素阈值与硬件能力切换）
+        private static ITerrainPainter SelectPainter(UnityEngine.Terrain terrain, Vector2Int covMin, Vector2Int covMax, int pixelCount)
         {
-            if (!roadContour.IsCreated || roadContour.Length < 3)
+            var settings = MrPathProjectSettings.GetOrCreateSettings();
+            var adv = settings != null ? settings.advancedSettings : null;
+            var backend = adv != null ? adv.paintingBackend : PaintingBackend.CPUJobTwoPass;
+            var threshold = adv != null ? Mathf.Max(1, adv.gpuAutoSwitchThreshold) : 50000; // 默认阈值
+
+            bool UseGpu()
             {
-                var fallback = GetExpandedXZBounds(spine, Creator.profile);
-                return new float4(fallback.x, fallback.y, fallback.z, fallback.w);
+                if (!SystemInfo.supportsComputeShaders) return false;
+                if (backend == PaintingBackend.GPUCompute) return true;
+                if (backend == PaintingBackend.CPUJobTwoPass) return false;
+                // Auto：按覆盖像素与硬件能力
+                return pixelCount >= threshold;
             }
 
-            if (PreferredBoundsXZ.HasValue)
-            {
-                var pb = PreferredBoundsXZ.Value;
-                var minX = Mathf.Min(contourBounds.x, pb.x);
-                var minZ = Mathf.Min(contourBounds.y, pb.y);
-                var maxX = Mathf.Max(contourBounds.z, pb.z);
-                var maxZ = Mathf.Max(contourBounds.w, pb.w);
-                return new float4(minX, minZ, maxX, maxZ);
-            }
-
-            return contourBounds;
+            return UseGpu() ? (ITerrainPainter)GpuTerrainPainterV2.Instance : new CPUJobTwoPass();
         }
 
-        private static PaintingBackend SelectBackendForTerrain(PaintingBackend userSelectedBackend, UnityEngine.Terrain terrain, Vector2Int coverageMin, Vector2Int coverageMax)
+        // 配方数据：根据地形图层映射，计算道路宽与近似长度
+        private static RecipeData BuildRecipeData(PathProfile pathProfile, Dictionary<TerrainLayer, int> map, PathSpine spine)
         {
-            var adv = MrPathProjectSettings.GetOrCreateSettings()?.advancedSettings;
-            // 如果用户强制选择 GPU，则直接使用 GPU（若支持）。
-            if (userSelectedBackend == PaintingBackend.GPUCompute)
-            {
-                return SystemInfo.supportsComputeShaders ? PaintingBackend.GPUCompute : PaintingBackend.CPUJobTwoPass;
-            }
+            var width = Mathf.Max(0.01f, pathProfile ? pathProfile.roadWidth > 0 ? pathProfile.roadWidth : 0f : 0f);
+            // 道路总长度（沿骨架）
+            var length = 0f;
+            for (var i = 1; i < spine.VertexCount; i++)
+                length += Vector3.Distance(spine.Points[i - 1], spine.Points[i]);
 
-            // 如果禁用自动切换或阈值为 0，则保持用户选择（默认 CPU）。
-            var threshold = adv?.gpuAutoSwitchThreshold ?? 0;
-            if (threshold <= 0)
-            {
-                return userSelectedBackend;
-            }
+            // 若未从 recipe 提供宽度覆盖，则用 Profile 宽度
+            if (width <= 0.0001f)
+                width = Mathf.Max(0.01f, map != null ? 1f : 1f); // 宽度参与遮罩采样，非 0 即可
 
-            // 计算覆盖区域像素数
-            int width = Mathf.Max(0, coverageMax.x - coverageMin.x + 1);
-            int height = Mathf.Max(0, coverageMax.y - coverageMin.y + 1);
-            int areaPixels = width * height;
-
-            // 动态阈值：不超过整张纹理分辨率的 10%，但至少为设置的阈值
-            var td = terrain.terrainData;
-            int terrainPixels = td.alphamapWidth * td.alphamapHeight;
-            int dynamicMax = Mathf.Max(threshold, Mathf.FloorToInt(terrainPixels * 0.10f));
-
-            if (SystemInfo.supportsComputeShaders && areaPixels >= dynamicMax)
-            {
-                return PaintingBackend.GPUCompute;
-            }
-
-            return PaintingBackend.CPUJobTwoPass;
+            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent);
         }
-
     }
-
-
 }

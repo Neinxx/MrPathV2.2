@@ -173,7 +173,7 @@ namespace __temp.MrPathV2.Editor.Core
                 pathCreator.pathData = pathData;
                 pathCreator.profile = pathProfile;
 
-                var command = UnifiedPaintTerrainCommandV2.Create(pathCreator);
+                var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator, false, PainterType.GPU);
 
                 if (command != null)
                     result.AddSuccess("命令构建成功");
@@ -181,11 +181,7 @@ namespace __temp.MrPathV2.Editor.Core
                     result.AddError("命令构建失败");
 
                 // 测试命令执行
-                var terrains = new List<UnityEngine.Terrain>
-                {
-                    terrain
-                };
-                var commandResult = command.ExecuteAsync(terrains, pathProfile, PainterType.GPU, false).Result;
+                var commandResult = command.ExecuteAsync().Result;
 
 
                 if (commandResult.IsSuccess)
@@ -226,7 +222,7 @@ namespace __temp.MrPathV2.Editor.Core
 
                 // 测试同步绘制
                 var syncResult = painter.Paint(pathCreator, true);
-                if (syncResult.Success)
+                if (syncResult.IsSuccess)
                     result.AddSuccess($"同步绘制成功 (耗时: {syncResult.ExecutionTimeMs:F2}ms)");
                 else
                     result.AddError($"同步绘制失败: {syncResult.ErrorMessage}");
@@ -235,7 +231,7 @@ namespace __temp.MrPathV2.Editor.Core
                 var asyncTask = painter.PaintAsync(pathCreator, true);
                 asyncTask.Wait(5000); // 5秒超时
 
-                if (asyncTask.IsCompleted && asyncTask.Result.Success)
+                if (asyncTask.IsCompleted && asyncTask.Result.IsSuccess)
                     result.AddSuccess($"异步绘制成功 (耗时: {asyncTask.Result.ExecutionTimeMs:F2}ms)");
                 else
                     result.AddError("异步绘制失败或超时");
@@ -266,7 +262,7 @@ namespace __temp.MrPathV2.Editor.Core
                 var pathCreatorObject = new GameObject("ValidatorPathCreator");
                 var pathCreator = pathCreatorObject.AddComponent<PathCreator>();
 
-                var painter = new UnifiedGpuTerrainPainter();
+                var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
 
                 if (!painter.IsSupported)
                 {
@@ -276,7 +272,7 @@ namespace __temp.MrPathV2.Editor.Core
 
                 // 测试同步绘制
                 var syncResult = painter.Paint(pathCreator, true);
-                if (syncResult.Success)
+                if (syncResult.IsSuccess)
                     result.AddSuccess($"同步绘制成功 (耗时: {syncResult.ExecutionTimeMs:F2}ms)");
                 else
                     result.AddError($"同步绘制失败: {syncResult.ErrorMessage}");
@@ -310,7 +306,7 @@ namespace __temp.MrPathV2.Editor.Core
                 for (int i = 0; i < iterations; i++)
                 {
                     var cpuResult = cpuPainter.Paint(pathCreator, true);
-                    if (cpuResult.Success)
+                    if (cpuResult.IsSuccess)
                         cpuTimes.Add(cpuResult.ExecutionTimeMs);
                 }
 
@@ -323,13 +319,13 @@ namespace __temp.MrPathV2.Editor.Core
                 // GPU性能测试（如果支持）
                 if (SystemInfo.supportsComputeShaders)
                 {
-                    var gpuPainter = new UnifiedGpuTerrainPainter();
+                    var gpuPainter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
                     var gpuTimes = new List<float>();
 
                     for (int i = 0; i < iterations; i++)
                     {
                         var gpuResult = gpuPainter.Paint(pathCreator, true);
-                        if (gpuResult.Success)
+                        if (gpuResult.IsSuccess)
                             gpuTimes.Add(gpuResult.ExecutionTimeMs);
                     }
 

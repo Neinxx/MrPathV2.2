@@ -7,14 +7,17 @@ using __temp.MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using System.Threading;
+using __temp.MrPathV2.Editor.Core; // IUnifiedTerrainPainter
+using __temp.MrPathV2.Runtime.Core; // PathCreator / PathData / PathProfile / StylizedRoadRecipe
+using System.Linq;
 
 namespace __temp.MrPathV2.Editor.GPU
 {
     /// <summary>
-    /// 新版GPU地形绘制器 - 简洁优雅的统一接口
-    /// 替代旧的复杂GPU绘制系统，提供简单易用的API
+    /// 新版 GPU 地形绘制器 - 简洁统一接口
+    /// 替代旧版复杂的 GPU 绘制系统，提供简单易用的 API。
     /// </summary>
-    public sealed class GpuTerrainPainterV2 : ITerrainPainter, IDisposable
+    public sealed class GpuTerrainPainterV2 : ITerrainPainter, IUnifiedTerrainPainter, IDisposable
     {
         #region Singleton Pattern
 
@@ -65,7 +68,7 @@ namespace __temp.MrPathV2.Editor.GPU
                 _renderer = new GpuTerrainRenderer();
                 _isInitialized = true;
 
-                Debug.Log("[GpuTerrainPainterV2] 新版GPU绘制器初始化成功");
+
             }
             catch (Exception ex)
             {
@@ -95,7 +98,7 @@ namespace __temp.MrPathV2.Editor.GPU
             // 参数校验与提前返回
             if (terrain == null)
             {
-                Debug.LogError("[GpuTerrainPainterV2] 地形对象为空，终止绘制");
+                Debug.LogError($"[GpuTerrainPainterV2] 地形对象为空，终止操作");
                 return;
             }
             if (!spineData.IsCreated || spineData.Length < 2)
@@ -117,11 +120,11 @@ namespace __temp.MrPathV2.Editor.GPU
                 spinePoints[i] = new Vector3(p.x, p.y, p.z);
             }
 
-            // 2) 读取道路宽度与衰减宽度
+            // 2) 读取道路宽度与过渡宽度
             var width = profileData.RoadWidth;
             var falloff = math.max(0f, profileData.FalloffWidth);
 
-            // 3) 映射配方为图层配置
+            // 3) 构建图层配置用于渲染
             LayerConfig[] layers;
             if (!recipeData.IsCreated || recipeData.Length <= 0)
             {
@@ -171,14 +174,14 @@ namespace __temp.MrPathV2.Editor.GPU
 
             try
             {
-                // 转换元数据为新的数据结构
+                // 转换元数据为新结构
                 var pathData = ConvertToPathData(metadata);
                 var recipe = ConvertToPathRecipe(metadata);
 
-                // 执行GPU渲染
+                // 执行 GPU 渲染
                 var result = _renderer.RenderPath(metadata.Terrain, pathData, recipe, metadata.IsPreview);
 
-                // 如果不是预览模式，应用到地形
+                // 非预览模式则应用到地形
                 if (!metadata.IsPreview)
                 {
                     _renderer.ApplyToTerrain(result);
@@ -194,11 +197,152 @@ namespace __temp.MrPathV2.Editor.GPU
         }
 
         /// <summary>
-        /// 同步执行地形绘制（兼容旧接口）
+        /// 同步执行地形绘制（兼容接口）
         /// </summary>
         public bool Execute(TerrainPaintMetadata metadata)
         {
             return ExecuteAsyncInternal(metadata).GetAwaiter().GetResult();
+        }
+
+        #endregion
+
+        #region IUnifiedTerrainPainter Implementation
+
+        public bool IsSupported => SystemInfo.supportsComputeShaders;
+        public PainterType Type => PainterType.GPU;
+
+        public async Task<TerrainPaintResult> PaintAsync(PathCreator pathCreator, bool isPreview = false, CancellationToken cancellationToken = default)
+        {
+            var r = Paint(pathCreator, isPreview);
+            await Task.Yield();
+            return r;
+        }
+
+        public TerrainPaintResult Paint(PathCreator pathCreator, bool isPreview = false)
+        {
+            ValidateState();
+
+            if (pathCreator == null)
+            {
+                return TerrainPaintResult.CreateFailure("PathCreator为空", PainterType.GPU);
+            }
+
+            var profile = pathCreator.profile;
+            var runtimePathData = pathCreator.pathData;
+            if (profile == null)
+            {
+                return TerrainPaintResult.CreateFailure("PathProfile为空", PainterType.GPU);
+            }
+            if (runtimePathData == null)
+            {
+                return TerrainPaintResult.CreateFailure("PathData为空", PainterType.GPU);
+            }
+
+            // 查找最近地形
+            var terrain = FindNearestTerrain(pathCreator.transform.position);
+            if (terrain == null)
+            {
+                return TerrainPaintResult.CreateFailure("无法找到相关地形", PainterType.GPU);
+            }
+
+            var sw = new System.Diagnostics.Stopwatch();
+            sw.Start();
+
+            try
+            {
+                // 构建 GPU 渲染所需的数据结构
+                var pathData = ConvertRuntimePathData(runtimePathData, profile.roadWidth);
+                var recipe = ConvertProfileToRecipe(profile, terrain);
+
+                var renderResult = _renderer.RenderPath(terrain, pathData, recipe, isPreview);
+
+                if (isPreview)
+                {
+                    // 预览模式下注册 RT 到全局缓存，供材质/UI使用
+                    global::MrPathV2.Editor.Terrain.GpuPreviewCache.Register(terrain, renderResult.RenderTexture);
+                }
+                else
+                {
+                    _renderer.ApplyToTerrain(renderResult);
+                }
+
+                sw.Stop();
+                return TerrainPaintResult.CreateSuccess(PainterType.GPU, (float)sw.Elapsed.TotalMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[GpuTerrainPainterV2] 统一接口绘制失败: {ex.Message}");
+                sw.Stop();
+                return TerrainPaintResult.CreateFailure(ex.Message, PainterType.GPU);
+            }
+        }
+
+        private PathData ConvertRuntimePathData(Runtime.Core.PathData src, float width)
+        {
+            var knotCount = src?.KnotCount ?? 0;
+            if (knotCount < 2)
+            {
+                return new PathData(Array.Empty<Vector3>(), width, 0f, new Bounds());
+            }
+
+            var points = new Vector3[knotCount];
+            for (int i = 0; i < knotCount; i++)
+            {
+                points[i] = src.GetKnot(i).Position;
+            }
+
+            var length = CalculatePathLength(points);
+            var bounds = CalculatePathBounds(points, width);
+            return new PathData(points, width, length, bounds);
+        }
+
+        private PathRecipe ConvertProfileToRecipe(PathProfile profile, UnityEngine.Terrain terrain)
+        {
+            var roadRecipe = profile.roadRecipe;
+            var layerConfigs = new System.Collections.Generic.List<LayerConfig>();
+
+            if (roadRecipe != null)
+            {
+                var mapping = LayerResolver.Resolve(terrain, roadRecipe, interactive: false);
+                foreach (var rl in roadRecipe.GetLayers())
+                {
+                    if (rl == null || !rl.enabled) continue;
+                    if (!mapping.TryGetValue(rl.contentLayer, out var layerIndex)) continue;
+
+                    var strength = math.saturate(rl.opacity);
+                    var blend = MapToGpuBlendMode((int)rl.blendMode);
+                    layerConfigs.Add(new LayerConfig(layerIndex, strength, blend));
+                }
+            }
+
+            if (layerConfigs.Count == 0)
+            {
+                layerConfigs.Add(new LayerConfig(0, 1.0f, BlendMode.Replace));
+            }
+
+            return new PathRecipe(layerConfigs.ToArray(), math.max(0f, profile.falloffWidth), AnimationCurve.EaseInOut(0, 1, 1, 0));
+        }
+
+        private UnityEngine.Terrain FindNearestTerrain(Vector3 position)
+        {
+            var terrains = UnityEngine.Terrain.activeTerrains;
+            if (terrains == null || terrains.Length == 0) return null;
+            if (terrains.Length == 1) return terrains[0];
+
+            UnityEngine.Terrain nearest = null;
+            var minDist = float.MaxValue;
+            foreach (var t in terrains)
+            {
+                if (!t || t.terrainData == null) continue;
+                var bounds = new Bounds(t.transform.position + t.terrainData.size * 0.5f, t.terrainData.size);
+                var dist = Vector3.SqrMagnitude(bounds.center - position);
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    nearest = t;
+                }
+            }
+            return nearest;
         }
 
         #endregion
@@ -257,7 +401,7 @@ namespace __temp.MrPathV2.Editor.GPU
                     _renderer.ApplyToTerrain(result);
                 }
 
-                // 保持异步语义但不切换到后台线程
+                // 保持异步语义但不切到后台线程
                 await Task.Yield();
                 return result;
             }
@@ -273,7 +417,7 @@ namespace __temp.MrPathV2.Editor.GPU
         }
 
         /// <summary>
-        /// 清除缓存
+        /// 娓呴櫎缂撳瓨
         /// </summary>
         public void ClearCache(UnityEngine.Terrain terrain = null)
         {
@@ -288,8 +432,8 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             ValidateState();
 
-            // 这里可以收集各个组件的性能统计
-            return "GPU绘制器性能统计 - 新架构运行正常";
+            // 这里可以收集各组件的性能统计
+            return "GPU 绘制器性能统计 - 正常运行";
         }
 
         #endregion
@@ -298,7 +442,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
         private static PathData ConvertToPathData(TerrainPaintMetadata metadata)
         {
-            // 从旧的元数据结构转换为新的PathData
+            // 浠庢棫鐨勫厓鏁版嵁缁撴瀯杞?崲涓烘柊鐨凱athData
             var spinePoints = ExtractSpinePoints(metadata);
             var width = ExtractPathWidth(metadata);
 
@@ -307,7 +451,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
         private PathRecipe ConvertToPathRecipe(TerrainPaintMetadata metadata)
         {
-            // 从旧的元数据结构转换为新的PathRecipe
+            // 浠庢棫鐨勫厓鏁版嵁缁撴瀯杞?崲涓烘柊鐨凱athRecipe
             var layers = ExtractLayerConfigs(metadata);
             var falloffDistance = ExtractFalloffDistance(metadata);
 
@@ -316,14 +460,14 @@ namespace __temp.MrPathV2.Editor.GPU
 
         private static Vector3[] ExtractSpinePoints(TerrainPaintMetadata metadata)
         {
-            // 从元数据中提取脊柱点
+            // 浠庡厓鏁版嵁涓?彁鍙栬剨鏌辩偣
             if (metadata?.SpinePoints != null && metadata.SpinePoints.Length > 0)
             {
                 return metadata.SpinePoints;
             }
 
-            // 如果没有脊柱点，返回默认的直线路径
-            Debug.LogWarning("[GpuTerrainPainterV2] 元数据中没有脊柱点，使用默认路径");
+            // 濡傛灉娌℃湁鑴婃煴鐐癸紝杩斿洖榛樿?鐨勭洿绾胯矾寰?
+            Debug.LogWarning("[GpuTerrainPainterV2] 鍏冩暟鎹?腑娌℃湁鑴婃煴鐐癸紝浣跨敤榛樿?璺?緞");
             return new[]
             {
                 Vector3.zero, Vector3.forward * 10, Vector3.forward * 20
@@ -332,26 +476,26 @@ namespace __temp.MrPathV2.Editor.GPU
 
         private static float ExtractPathWidth(TerrainPaintMetadata metadata)
         {
-            // 从元数据中提取路径宽度
+            // 浠庡厓鏁版嵁涓?彁鍙栬矾寰勫?搴?
             if (metadata != null && metadata.Width > 0)
             {
                 return metadata.Width;
             }
 
-            Debug.LogWarning("[GpuTerrainPainterV2] 元数据中没有有效的路径宽度，使用默认值5.0f");
-            return 5.0f; // 默认值
+            Debug.LogWarning("[GpuTerrainPainterV2] 鍏冩暟鎹?腑娌℃湁鏈夋晥鐨勮矾寰勫?搴︼紝浣跨敤榛樿?鍊?.0f");
+            return 5.0f; // 榛樿?鍊?
         }
 
         private static LayerConfig[] ExtractLayerConfigs(TerrainPaintMetadata metadata)
         {
-            // 从元数据中提取图层配置
+            // 浠庡厓鏁版嵁涓?彁鍙栧浘灞傞厤缃?
             if (metadata?.Layers != null && metadata.Layers.Length > 0)
             {
                 return metadata.Layers;
             }
 
-            // 如果没有图层配置，返回默认配置
-            Debug.LogWarning("[GpuTerrainPainterV2] 元数据中没有图层配置，使用默认配置");
+            // 濡傛灉娌℃湁鍥惧眰閰嶇疆锛岃繑鍥為粯璁ら厤缃?
+            Debug.LogWarning("[GpuTerrainPainterV2] 鍏冩暟鎹?腑娌℃湁鍥惧眰閰嶇疆锛屼娇鐢ㄩ粯璁ら厤缃?");
             return new LayerConfig[]
             {
                 new LayerConfig(layerIndex: 0, strength: 1.0f, blendMode: BlendMode.Replace)
@@ -360,13 +504,13 @@ namespace __temp.MrPathV2.Editor.GPU
 
         private static float ExtractFalloffDistance(TerrainPaintMetadata metadata)
         {
-            // 从元数据中提取衰减距离，优先使用显式值
+            // 浠庡厓鏁版嵁涓?彁鍙栬“鍑忚窛绂伙紝浼樺厛浣跨敤鏄惧紡鍊?
             if (metadata != null && metadata.FalloffDistance > 0f)
             {
                 return metadata.FalloffDistance;
             }
 
-            // 回退规则：通常衰减距离是路径宽度的一半
+            // 鍥為瑙勫垯锛氶氬父琛板噺璺濈?鏄?矾寰勫?搴︾殑涓鍗?
             var width = ExtractPathWidth(metadata);
             return math.max(0f, width * 0.5f);
         }
@@ -395,12 +539,12 @@ namespace __temp.MrPathV2.Editor.GPU
                 bounds.Encapsulate(point);
             }
 
-            // 扩展边界以包含路径宽度
+            // 鎵╁睍杈圭晫浠ュ寘鍚?矾寰勫?搴?
             bounds.Expand(width);
             return bounds;
         }
 
-        // CPU 端混合枚举到 GPU 枚举的安全映射
+        // CPU 绔?贩鍚堟灇涓惧埌 GPU 鏋氫妇鐨勫畨鍏ㄦ槧灏?
         private static BlendMode MapToGpuBlendMode(int cpuBlendModeInt)
         {
             // Runtime.Core.BlendMode: Normal(0), Multiply(1), Add(2), Overlay(3), Screen(4), Lerp(5), Additive(6)
@@ -428,7 +572,7 @@ namespace __temp.MrPathV2.Editor.GPU
                 throw new ObjectDisposedException(nameof(GpuTerrainPainterV2));
 
             if (!_isInitialized)
-                throw new InvalidOperationException("GpuTerrainPainterV2 未初始化");
+                throw new InvalidOperationException("GpuTerrainPainterV2 尚未初始化");
         }
 
         #endregion
@@ -497,7 +641,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
     // (Removed duplicate ITerrainPainter definition to avoid naming collision)
     /// <summary>
-    /// 地形绘制元数据（兼容旧系统）
+    /// 地形绘制元数据（公共数据结构）
     /// </summary>
     public class TerrainPaintMetadata
     {
@@ -509,10 +653,11 @@ namespace __temp.MrPathV2.Editor.GPU
         public float FalloffDistance { get; set; }
 
         public LayerConfig[] Layers { get; set; }
-        // 其他必要的元数据字段...
+        // 其它常用的元数据字段...
     }
 
 
     #endregion
 
 }
+

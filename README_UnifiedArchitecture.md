@@ -38,13 +38,13 @@
   - Burst编译优化
   - 多线程安全
   
-- **UnifiedGpuTerrainPainter.cs**: GPU绘制器
+- **GpuTerrainPainterV2.cs**: GPU绘制器（统一接口实现）
   - 计算着色器支持
   - 内存带宽优化
   - 异步GPU操作
 
 #### 5. 统一命令系统
-- **UnifiedPaintTerrainCommandV2.cs**: 新的统一绘制命令
+- **UnifiedPaintTerrainCommand.cs**: 统一绘制命令
   - 替换旧的分离式命令
   - 支持批量地形处理
   - 流畅的构建器模式API
@@ -92,28 +92,29 @@ var pathData = CreatePathData();
 var pathProfile = CreatePathProfile();
 
 // 使用统一命令绘制
-var command = UnifiedPaintTerrainCommandV2.Builder()
-    .WithPathData(pathData)
-    .WithPathProfile(pathProfile)
-    .WithPreferredPainter(PainterType.Auto)
-    .Build();
-
-var result = await command.ExecuteAsync(terrains);
+// 以 PathCreator 为输入，创建并执行命令
+using var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(
+    pathCreator: pathCreator,
+    isPreview: false,
+    preferredPainterType: PainterType.Auto
+);
+var result = await command.ExecuteAsync();
 ```
 
 ### 直接使用绘制器
 ```csharp
-// 自动选择最优绘制器
+// 自动选择最优绘制器（根据系统能力与路径范围）
 using var painter = UnifiedPainterFactory.CreatePainter(
-    PainterType.Auto, terrainData, pathData, pathProfile);
-
-var result = await painter.PaintAsync(terrain, pathData, pathProfile);
+    preferredType: PainterType.Auto,
+    terrain: terrain
+);
+var result = await painter.PaintAsync(pathCreator, isPreview: false);
 ```
 
 ## 迁移指南
 
 ### 从旧架构迁移
-1. **替换命令**: 使用 `UnifiedPaintTerrainCommandV2` 替换 `PaintTerrainCommand`
+1. **替换命令**: 使用 `UnifiedPaintTerrainCommand` 替换 `PaintTerrainCommand`
 2. **统一数据源**: 所有绘制操作现在使用CPU数据源
 3. **更新API调用**: 使用新的统一接口和工厂方法
 
@@ -152,8 +153,8 @@ Assets/__temp/MrPathV2/
 │   ├── UnifiedDataAdapter.cs           # 数据适配器
 │   ├── IUnifiedTerrainPainter.cs       # 统一绘制接口
 │   ├── UnifiedCpuTerrainPainter.cs     # CPU绘制器
-│   ├── UnifiedGpuTerrainPainter.cs     # GPU绘制器
-│   ├── UnifiedPaintTerrainCommandV2.cs # 统一命令
+│   ├── GpuTerrainPainterV2.cs          # GPU绘制器
+│   ├── UnifiedPaintTerrainCommand.cs   # 统一命令
 │   ├── UnifiedArchitectureValidator.cs # 验证工具
 │   ├── UnifiedArchitectureTest.cs      # 测试套件
 │   ├── MigrationGuide.md               # 迁移指南

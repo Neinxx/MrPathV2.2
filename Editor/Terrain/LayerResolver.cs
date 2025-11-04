@@ -131,9 +131,9 @@ namespace __temp.MrPathV2.Editor.Terrain
         ///     确保配方图层存在
         /// </summary>
         private static void EnsureRecipeLayersPresent(
-            StylizedRoadRecipe recipe, 
-            List<TerrainLayer> layers, 
-            Dictionary<TerrainLayer, int> result, 
+            StylizedRoadRecipe recipe,
+            List<TerrainLayer> layers,
+            Dictionary<TerrainLayer, int> result,
             TerrainData td)
         {
             foreach (var roadLayer in recipe.GetLayers())
@@ -169,9 +169,9 @@ namespace __temp.MrPathV2.Editor.Terrain
         ///     添加缺失图层
         /// </summary>
         private static void AddMissingLayer(
-            TerrainLayer terrainLayer, 
-            List<TerrainLayer> layers, 
-            Dictionary<TerrainLayer, int> result, 
+            TerrainLayer terrainLayer,
+            List<TerrainLayer> layers,
+            Dictionary<TerrainLayer, int> result,
             TerrainData td)
         {
             Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
@@ -213,9 +213,9 @@ namespace __temp.MrPathV2.Editor.Terrain
         }
 
         // 智能解析：优先匹配地形中等价的图层，若无则添加
-        public static Dictionary<TerrainLayer, int> ResolveEnsurePresentSmart(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
+        public static Dictionary<TerrainLayer, int> ResolveEnsurePresentSmart(UnityEngine.Terrain terrain, PathProfile pathProfile)
         {
-            if (!IsInputValid(terrain, recipe))
+            if (!IsInputValid(terrain, pathProfile.roadRecipe))
             {
                 return new Dictionary<TerrainLayer, int>();
             }
@@ -225,7 +225,7 @@ namespace __temp.MrPathV2.Editor.Terrain
 
             var result = GetExistingLayerMapping(layers);
 
-            foreach (var roadLayer in recipe.GetLayers())
+            foreach (var roadLayer in pathProfile.roadRecipe.GetLayers())
             {
                 if (!IsRoadLayerValid(roadLayer)) continue;
 
@@ -357,7 +357,7 @@ namespace __temp.MrPathV2.Editor.Terrain
         /// </summary>
         public static Dictionary<UnityEngine.Terrain, Dictionary<TerrainLayer, int>> ResolveAcrossTerrainsSmart(
             List<UnityEngine.Terrain> terrains,
-            StylizedRoadRecipe recipe,
+            PathProfile pathProfile,
             out List<TerrainLayer> unionLayers)
         {
             var perTerrain = new Dictionary<UnityEngine.Terrain, Dictionary<TerrainLayer, int>>();
@@ -368,10 +368,10 @@ namespace __temp.MrPathV2.Editor.Terrain
             {
                 foreach (var t in terrains)
                 {
-                    if (!IsInputValid(t, recipe)) continue;
+                    if (!IsInputValid(t, pathProfile?.roadRecipe)) continue;
 
                     // 先对每个地形进行智能解析（优先使用已有等价图层，缺失则添加）
-                    var map = ResolveEnsurePresentSmart(t, recipe);
+                    var map = ResolveEnsurePresentSmart(t, pathProfile);
                     perTerrain[t] = map;
 
                     // 累积 union 列表

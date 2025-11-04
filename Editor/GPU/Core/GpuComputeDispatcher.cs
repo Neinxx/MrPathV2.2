@@ -46,6 +46,7 @@ namespace __temp.MrPathV2.Editor.GPU
             public static readonly int RoadMask = Shader.PropertyToID("road_mask");
             public static readonly int RoadSDF = Shader.PropertyToID("road_sdf");
             public static readonly int MaskThreshold = Shader.PropertyToID("mask_threshold");
+            public static readonly int UseRoadMask = Shader.PropertyToID("use_road_mask");
         }
         #endregion
 
@@ -202,6 +203,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
             // 遮罩阈值
             shader.SetFloat(ShaderProperties.MaskThreshold, 0.5f);
+            shader.SetInt(ShaderProperties.UseRoadMask, dataPacket.RoadMask != null ? 1 : 0);
 
             // 绑定缓冲区
             if (dataPacket.SpineBuffer != null)

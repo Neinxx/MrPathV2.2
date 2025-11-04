@@ -31,10 +31,10 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (pathCreator == null)
                 throw new ArgumentNullException(nameof(pathCreator));
-                
+
             var pathData = pathCreator.pathData;
             var pathProfile = pathCreator.profile;
-            
+
             // 查找最近的地形
             var terrain = FindNearestTerrain(pathCreator.transform.position);
             if (terrain == null)
@@ -43,15 +43,15 @@ namespace __temp.MrPathV2.Editor.Core
             ValidateInputs(terrain, pathData, pathProfile);
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 // 在后台线程执行CPU绘制
                 var result = await Task.Run(() => ExecutePaint(terrain, pathData, pathProfile, isPreview, cancellationToken), cancellationToken);
-                
+
                 stopwatch.Stop();
                 result.ExecutionTimeMs = (float)stopwatch.Elapsed.TotalMilliseconds;
-                
+
                 return result;
             }
             catch (OperationCanceledException)
@@ -75,10 +75,10 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (pathCreator == null)
                 throw new ArgumentNullException(nameof(pathCreator));
-                
+
             var pathData = pathCreator.pathData;
             var pathProfile = pathCreator.profile;
-            
+
             // 查找最近的地形
             var terrain = FindNearestTerrain(pathCreator.transform.position);
             if (terrain == null)
@@ -87,13 +87,13 @@ namespace __temp.MrPathV2.Editor.Core
             ValidateInputs(terrain, pathData, pathProfile);
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 var result = ExecutePaint(terrain, pathData, pathProfile, isPreview, CancellationToken.None);
                 stopwatch.Stop();
                 result.ExecutionTimeMs = (float)stopwatch.Elapsed.TotalMilliseconds;
-                
+
                 return result;
             }
             catch (Exception ex)
@@ -136,7 +136,7 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 var terrainPos = terrain.transform.position;
                 var terrainSize = terrain.terrainData.size;
-                
+
                 // 检查位置是否在地形范围内
                 if (position.x >= terrainPos.x && position.x <= terrainPos.x + terrainSize.x &&
                     position.z >= terrainPos.z && position.z <= terrainPos.z + terrainSize.z)
@@ -153,7 +153,7 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 var terrainCenter = terrain.transform.position + terrain.terrainData.size * 0.5f;
                 var distance = Vector3.Distance(position, terrainCenter);
-                
+
                 if (distance < nearestDistance)
                 {
                     nearestDistance = distance;
@@ -213,13 +213,13 @@ namespace __temp.MrPathV2.Editor.Core
 
             // 创建脊线数据
             var spineData = CreateSpineData(pathData);
-            
+
             // 创建配置数据
             var profileData = CreateProfileData(pathProfile);
-            
+
             // 创建配方数据
-            var recipeData = CreateRecipeData(pathProfile.roadRecipe, terrain);
-            
+            var recipeData = CreateRecipeData(pathProfile, terrain);
+
             // 生成道路轮廓
             var (roadContour, contourBounds) = GenerateRoadContour(pathData, pathProfile);
 
@@ -245,18 +245,18 @@ namespace __temp.MrPathV2.Editor.Core
             return new PathJobsUtility.ProfileData(pathProfile, Allocator.TempJob);
         }
 
-        private RecipeData CreateRecipeData(StylizedRoadRecipe recipe, UnityEngine.Terrain terrain)
+        private RecipeData CreateRecipeData(PathProfile pathProfile, UnityEngine.Terrain terrain)
         {
-            if (recipe == null)
+            if (pathProfile == null)
             {
-                throw new ArgumentNullException(nameof(recipe));
+                throw new ArgumentNullException(nameof(pathProfile));
             }
 
             // 解析地形层映射
-            var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, recipe);
-            
+            var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, pathProfile);
+
             // 创建CPU配方数据
-            return new RecipeData(recipe, layerMap, 0f, 0f, Allocator.TempJob);
+            return new RecipeData(pathProfile, layerMap, 0f, 0f, Allocator.TempJob);
         }
 
         private (NativeArray<float2> contour, float4 bounds) GenerateRoadContour(PathData pathData, PathProfile pathProfile)
@@ -266,7 +266,7 @@ namespace __temp.MrPathV2.Editor.Core
             NativeArray<float2> contour;
             float4 bounds;
             RoadContourGenerator.GenerateContour(pathSpine, pathProfile, out contour, out bounds, Allocator.TempJob);
-            
+
             return (contour, bounds);
         }
 
@@ -348,7 +348,7 @@ namespace __temp.MrPathV2.Editor.Core
             // 扩展边界以包含路径宽度
             var halfWidth = pathWidth * 0.5f;
             var expansion = new Vector3(halfWidth, 0, halfWidth);
-            
+
             return new Bounds(
                 (min + max) * 0.5f,
                 (max - min) + expansion * 2f
@@ -366,7 +366,7 @@ namespace __temp.MrPathV2.Editor.Core
             {
                 // 使用现有的CPU绘制器逻辑
                 var cpuPainter = new CpuTerrainPainter();
-                
+
                 // 执行绘制
                 var task = cpuPainter.ExecuteAsync(
                     terrain,

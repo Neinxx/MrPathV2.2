@@ -56,32 +56,71 @@ namespace __temp.MrPathV2.Editor.GPU
         /// <summary>
         /// 脊柱点数据结构
         /// </summary>
-        public struct SpinePointData
-        {
-            public Vector3 Position;
-            public Vector3 Forward;
-            public Vector3 Right;
-            public float Distance;
-        }
+        // 旧版携带多余向量，compute 仅需位置。已改为直接上传 Vector3 队列以降低带宽。
 
         /// <summary>
         /// 轮廓点数据结构
         /// </summary>
-        public struct ContourPointData
-        {
-            public Vector3 Position;
-            public Vector3 Normal;
-        }
+        // 旧版定义包含法线且按 XYZ 打包，compute 仅需 XZ 平面坐标，现改为上传 Vector2(x,z)。
 
         /// <summary>
-        /// 图层参数数据结构
+        /// 与 HLSL layer_params 精确对齐的结构体（顺序与字段大小必须一致）。
+        /// 对应 PaintSplatmapCompute.compute 中的：
+        /// struct layer_params { int blend_mode; float opacity; int texture_index; int terrain_layer_splat_index; float4 tiling_offset; float4 tint_color; GpuMaskParams mask_params; };
         /// </summary>
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         public struct LayerParamData
         {
-            public int LayerIndex;
+            public int BlendMode;                 // layer.blend_mode
+            public float Opacity;                 // layer.opacity
+            public int TextureIndex;              // layer.texture_index（当前未使用，填0）
+            public int TerrainLayerSplatIndex;   // layer.terrain_layer_splat_index（映射到 Terrain 的 splat 索引）
+            public Vector4 TilingOffset;         // layer.tiling_offset（当前未使用，填0）
+            public Vector4 TintColor;            // layer.tint_color（当前未使用，填1）
+            public GpuMaskParams MaskParams;     // layer.mask_params（按需填充，默认“无遮罩”）
+        }
+
+        // 以下 GPU 遮罩参数结构体需与 Editor/Resources/BlendMaskLibrary.hlsl 保持字节对齐
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct GpuNoiseMaskParams
+        {
             public float Strength;
-            public int BlendMode;
-            public Vector4 MaskParams; // 用于存储遮罩相关参数
+            public float Seed;
+            public Vector2 Tiling;      // x,y
+            public Vector2 Offset;      // x,y
+            public float OverallScale;
+            public float Smooth;
+            public Vector2 NoiseScale;  // x,y
+            public float RotationRad;
+            public int Octaves;
+            public float Lacunarity;
+            public float Gain;
+            public int AlgorithmId;
+            public int UseAsymmetricEdges;
+            public float EdgeLow;
+            public float EdgeHigh;
+            public float Pad1;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct GpuShoulderMaskParams
+        {
+            public float Width;
+            public float Softness;
+            public float Strength;
+            public float OverallScale;
+            public float Smooth;
+            public float Pad;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct GpuMaskParams
+        {
+            public int Type;
+            public float Strength;
+            public Vector2 Padding;
+            public GpuNoiseMaskParams Noise;
+            public GpuShoulderMaskParams Shoulder;
         }
         #endregion
 
@@ -179,44 +218,10 @@ namespace __temp.MrPathV2.Editor.GPU
             if (pathData.SpinePoints == null || pathData.SpinePoints.Length == 0)
                 throw new ArgumentException("脊柱点数据无效");
 
-            // 构建增强的脊柱数据
-            var spineData = new SpinePointData[pathData.SpinePoints.Length];
-            float accumulatedDistance = 0f;
-
-            for (int i = 0; i < pathData.SpinePoints.Length; i++)
-            {
-                var point = pathData.SpinePoints[i];
-
-                // 计算前向向量
-                Vector3 forward = Vector3.forward;
-                if (i < pathData.SpinePoints.Length - 1)
-                {
-                    forward = (pathData.SpinePoints[i + 1] - point).normalized;
-                }
-                else if (i > 0)
-                {
-                    forward = (point - pathData.SpinePoints[i - 1]).normalized;
-                }
-
-                // 计算右向向量
-                Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-
-                // 累积距离
-                if (i > 0)
-                {
-                    accumulatedDistance += Vector3.Distance(pathData.SpinePoints[i - 1], point);
-                }
-
-                spineData[i] = new SpinePointData
-                {
-                    Position = point,
-                    Forward = forward,
-                    Right = right,
-                    Distance = accumulatedDistance
-                };
-            }
-
-            return _resourceManager.GetOrCreateComputeBuffer("SpineData", spineData);
+            // compute 侧读取 float3，并以 xz 作为 2D 计算平面，这里直接上传世界坐标 Vector3
+            var spinePositions = new Vector3[pathData.SpinePoints.Length];
+            Array.Copy(pathData.SpinePoints, spinePositions, spinePositions.Length);
+            return _resourceManager.GetOrCreateComputeBuffer("SpineData", spinePositions);
         }
 
         private ComputeBuffer PrepareContourData(PathData pathData)
@@ -224,21 +229,19 @@ namespace __temp.MrPathV2.Editor.GPU
             if (pathData.ContourPoints == null || pathData.ContourPoints.Length == 0)
             {
                 // 如果没有轮廓数据，创建空缓冲区
-                var emptyData = new ContourPointData[1];
-                return _resourceManager.GetOrCreateComputeBuffer("ContourData", emptyData);
+                var empty = new Vector2[1];
+                return _resourceManager.GetOrCreateComputeBuffer("ContourData", empty);
             }
 
-            var contourData = new ContourPointData[pathData.ContourPoints.Length];
+            // compute 读取 float2，并在世界 XZ 平面做点在多边形测试；只上传 (x,z)
+            var contourXZ = new Vector2[pathData.ContourPoints.Length];
             for (int i = 0; i < pathData.ContourPoints.Length; i++)
             {
-                contourData[i] = new ContourPointData
-                {
-                    Position = pathData.ContourPoints[i],
-                    Normal = Vector3.up // 默认法向量，可以根据需要计算
-                };
+                var p = pathData.ContourPoints[i];
+                contourXZ[i] = new Vector2(p.x, p.z);
             }
 
-            return _resourceManager.GetOrCreateComputeBuffer("ContourData", contourData);
+            return _resourceManager.GetOrCreateComputeBuffer("ContourData", contourXZ);
         }
 
         private ComputeBuffer PrepareLayerParams(PathRecipe recipe)
@@ -250,12 +253,26 @@ namespace __temp.MrPathV2.Editor.GPU
             for (int i = 0; i < recipe.Layers.Length; i++)
             {
                 var layer = recipe.Layers[i];
+
+                // 默认的无遮罩参数（Type=0，Strength=1，其余为0）
+                var defaultMask = new GpuMaskParams
+                {
+                    Type = 0,
+                    Strength = 1f,
+                    Padding = Vector2.zero,
+                    Noise = new GpuNoiseMaskParams(),
+                    Shoulder = new GpuShoulderMaskParams()
+                };
+
                 layerParams[i] = new LayerParamData
                 {
-                    LayerIndex = layer.LayerIndex,
-                    Strength = layer.Strength,
                     BlendMode = (int)layer.BlendMode,
-                    MaskParams = Vector4.zero // 可扩展的遮罩参数
+                    Opacity = Mathf.Clamp01(layer.Strength),
+                    TextureIndex = 0,
+                    TerrainLayerSplatIndex = layer.LayerIndex,
+                    TilingOffset = Vector4.zero,
+                    TintColor = new Vector4(1, 1, 1, 1),
+                    MaskParams = defaultMask
                 };
             }
 
@@ -270,7 +287,8 @@ namespace __temp.MrPathV2.Editor.GPU
 
             // 创建或获取AlphaMap纹理数组
             var key = $"AlphaMap_{terrain.GetInstanceID()}";
-            var sliceCount = Mathf.Max(layerCount, 1); // 避免 volumeDepth=0
+            // 注意：一个 alphamap 切片包含 4 个图层（RGBA），因此体纹理深度应为 ceil(layers/4)
+            var sliceCount = Mathf.Max(1, Mathf.CeilToInt(layerCount / 4f));
             var alphaMapTexture = _resourceManager.GetOrCreateRenderTextureEx(
                 key, alphamapResolution, alphamapResolution, sliceCount, RenderTextureFormat.ARGBFloat, out var createdNew);
 
@@ -286,34 +304,42 @@ namespace __temp.MrPathV2.Editor.GPU
         private void SyncAlphaMapToTexture(UnityEngine.Terrain terrain, RenderTexture alphaMapTexture)
         {
             var terrainData = terrain.terrainData;
-            var alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight);
+            int width = terrainData.alphamapWidth;
+            int height = terrainData.alphamapHeight;
+            int totalLayers = terrainData.alphamapLayers;
+            int sliceCount = Mathf.Max(1, Mathf.CeilToInt(totalLayers / 4f));
 
-            // 使用Graphics.CopyTexture进行高效拷贝
-            for (int layer = 0; layer < terrainData.alphamapLayers; layer++)
+            // 获取现有 alphamap 数据一次性读取
+            var alphamaps = terrainData.GetAlphamaps(0, 0, width, height);
+
+            for (int slice = 0; slice < sliceCount; slice++)
             {
-                var layerTexture = new Texture2D(terrainData.alphamapWidth, terrainData.alphamapHeight, TextureFormat.RGBAFloat, false);
-                var colors = new Color[terrainData.alphamapWidth * terrainData.alphamapHeight];
+                var sliceTex = new Texture2D(width, height, TextureFormat.RGBAFloat, false);
+                var colors = new Color[width * height];
 
-                for (int y = 0; y < terrainData.alphamapHeight; y++)
+                int baseLayer = slice * 4;
+                for (int y = 0; y < height; y++)
                 {
-                    for (int x = 0; x < terrainData.alphamapWidth; x++)
+                    for (int x = 0; x < width; x++)
                     {
-                        int index = y * terrainData.alphamapWidth + x;
-                        float alpha = layer < terrainData.alphamapLayers ? alphamaps[x, y, layer] : 0f;
-                        colors[index] = new Color(alpha, alpha, alpha, alpha);
+                        int idx = y * width + x;
+                        float r = (baseLayer + 0) < totalLayers ? alphamaps[x, y, baseLayer + 0] : 0f;
+                        float g = (baseLayer + 1) < totalLayers ? alphamaps[x, y, baseLayer + 1] : 0f;
+                        float b = (baseLayer + 2) < totalLayers ? alphamaps[x, y, baseLayer + 2] : 0f;
+                        float a = (baseLayer + 3) < totalLayers ? alphamaps[x, y, baseLayer + 3] : 0f;
+                        colors[idx] = new Color(r, g, b, a);
                     }
                 }
 
-                layerTexture.SetPixels(colors);
-                layerTexture.Apply();
+                sliceTex.SetPixels(colors);
+                sliceTex.Apply();
 
-                Graphics.CopyTexture(layerTexture, 0, 0, alphaMapTexture, layer, 0);
+                Graphics.CopyTexture(sliceTex, 0, 0, alphaMapTexture, slice, 0);
 
-                // 清理临时纹理
                 if (Application.isPlaying)
-                    UnityEngine.Object.Destroy(layerTexture);
+                    UnityEngine.Object.Destroy(sliceTex);
                 else
-                    UnityEngine.Object.DestroyImmediate(layerTexture);
+                    UnityEngine.Object.DestroyImmediate(sliceTex);
             }
         }
 
@@ -383,54 +409,63 @@ namespace __temp.MrPathV2.Editor.GPU
             // 准备 ROI alphamaps
             var roiMaps = terrainData.GetAlphamaps(minX, minY, roiWidth, roiHeight);
 
+            int totalLayers = terrainData.alphamapLayers;
             int sliceCount = Mathf.Max(rt.volumeDepth, 1);
-            int targetLayerCount = Mathf.Min(sliceCount, terrainData.alphamapLayers);
-
-            // 逐 slice ROI 读回，并在全部完成后一次性归一化与写回
-            int completed = 0;
-            for (int layer = 0; layer < targetLayerCount; layer++)
+            int expectedSliceCount = Mathf.Max(1, Mathf.CeilToInt(totalLayers / 4f));
+            if (sliceCount != expectedSliceCount)
             {
-                int slice = layer;
-                // 读取 ROI 子矩形，仅该 slice
+                Debug.LogWarning($"[GpuDataStreamer] 体纹理深度({sliceCount})与层数划分({expectedSliceCount})不一致，按 {expectedSliceCount} 处理");
+                sliceCount = expectedSliceCount;
+            }
+
+            // 逐 slice ROI 读回（每 slice 对应4个 terrain layers）
+            int completed = 0;
+            for (int slice = 0; slice < sliceCount; slice++)
+            {
+                int capturedSlice = slice;
                 UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0,
                     minX, roiWidth,
                     minY, roiHeight,
-                    slice, 1,
+                    capturedSlice, 1,
                     request =>
                 {
                     if (request.hasError)
                     {
-                        Debug.LogError($"[GpuDataStreamer] GPU读回失败（slice {slice}）");
+                        Debug.LogError($"[GpuDataStreamer] GPU读回失败（slice {capturedSlice}）");
                         return;
                     }
 
-                    var data = request.GetData<Color>(); // 返回的就是该 slice 的 ROI 数据
-                    // 将 ROI 数据写入对应层
+                    var data = request.GetData<Color>();
+                    int baseLayer = capturedSlice * 4;
+
                     for (int y = 0; y < roiHeight; y++)
                     {
                         for (int x = 0; x < roiWidth; x++)
                         {
                             int idx = y * roiWidth + x;
-                            if (idx < data.Length)
-                            {
-                                roiMaps[y, x, slice] = Mathf.Clamp01(data[idx].r);
-                            }
+                            if (idx >= data.Length) continue;
+
+                            var c = data[idx];
+                            if (baseLayer + 0 < totalLayers) roiMaps[y, x, baseLayer + 0] = Mathf.Clamp01(c.r);
+                            if (baseLayer + 1 < totalLayers) roiMaps[y, x, baseLayer + 1] = Mathf.Clamp01(c.g);
+                            if (baseLayer + 2 < totalLayers) roiMaps[y, x, baseLayer + 2] = Mathf.Clamp01(c.b);
+                            if (baseLayer + 3 < totalLayers) roiMaps[y, x, baseLayer + 3] = Mathf.Clamp01(c.a);
                         }
                     }
 
                     completed++;
-                    if (completed >= targetLayerCount)
+                    if (completed >= sliceCount)
                     {
-                        // 可选：归一化，保证每个像素各层权重之和为1（更符合地形渲染期望）
+                        // 归一化：保证每个像素所有层之和为1
                         for (int y = 0; y < roiHeight; y++)
                         {
                             for (int x = 0; x < roiWidth; x++)
                             {
                                 float sum = 0f;
-                                for (int l = 0; l < targetLayerCount; l++) sum += roiMaps[y, x, l];
+                                for (int l = 0; l < totalLayers; l++) sum += roiMaps[y, x, l];
                                 if (sum > 1e-6f)
                                 {
-                                    for (int l = 0; l < targetLayerCount; l++) roiMaps[y, x, l] /= sum;
+                                    for (int l = 0; l < totalLayers; l++) roiMaps[y, x, l] /= sum;
                                 }
                             }
                         }

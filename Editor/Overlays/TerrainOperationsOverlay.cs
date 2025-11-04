@@ -19,32 +19,32 @@ namespace __temp.MrPathV2.Editor.Overlays
     public class TerrainOperationsOverlay : Overlay
     {
 
-        // GPU预览功能已移除
+        // GPU预览是否启用
         // private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
 
 
         private const string ElCpuOrGpu = "CpuOrGpu";
         private const string ElOperationsContainer = "operationsContainer";
-        // GPU预览功能已移除
+        // GPU预览是否启用
         // private const string ElGpuPreviewToggle = "gpuPreviewToggle";
 
         private static readonly string[] BackendChoices =
         {
-            "CPU", "GPU"
+            "CPU", "GPU","Auto"
         };
 
         /// <summary>
-        ///     存储所有操作按钮，以便统一启用/禁用
+        ///    存储所有操作按钮的列表，用于批量处理状态
         /// </summary>
         private readonly List<Button> _operationButtons = new List<Button>();
         private DropdownField _backendDropdown;
         private VisualElement _content;
         private PathEditorContext _ctx;
-        // GPU预览功能已移除
+        //GPU预览是否启用
         // private Toggle _gpuPreviewToggle;
 
         /// <summary>
-        ///     跟踪当前是否有地形操作正在异步执行
+        ///    标记是否正在执行操作
         /// </summary>
         private bool _isExecutingOperation;
         private MrPathProjectSettings _projectSettings;
@@ -59,20 +59,19 @@ namespace __temp.MrPathV2.Editor.Overlays
             _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>();
             if (_root == null)
             {
-                return new Label("Overlay UI 加载失败");
+                return new Label("Overlay UI 閸旂姾娴囨径杈Е");
             }
-
-            // <--- 更改：从 UXML 查询元素，而不是手动创建
+            // <--- 从UXML中获取元素引用
             _backendDropdown = _root.Q<DropdownField>(ElCpuOrGpu);
-            // GPU预览功能已移除
+            // GPU预览是否启用
             // _gpuPreviewToggle = _root.Q<Toggle>(ElGpuPreviewToggle);
             _content = _root.Q<VisualElement>(ElOperationsContainer);
 
-            InitializeBackendDropdown(); // <--- 更改：方法现在只负责注册回调和设置初始值
-            // GPU预览功能已移除
-            // InitializeGpuPreviewToggleFromUxml(); // <--- 更改：新方法，用于绑定 UXML 中的 Toggle
+            InitializeBackendDropdown(); // <--- 初始化后端选择下拉框
+            // GPU预览是否启用
+            // InitializeGpuPreviewToggleFromUxml(); // <--- 从UXML初始化GPU预览开关
 
-            // <--- 更改：移除了手动删除 "refreshButton" 的代码
+            // <--- 移除旧的刷新按钮
             // var staleRefreshBtn = _root.Q<Button>("refreshButton");
             // staleRefreshBtn?.RemoveFromHierarchy();
 
@@ -86,14 +85,14 @@ namespace __temp.MrPathV2.Editor.Overlays
 
         private void InitializeBackendDropdown()
         {
-            // <--- 更改：移除了查询 (Q)，因为它已在 CreatePanelContent 中完成
+            // <--- 检查下拉框是否在CreatePanelContent中正确获取
             if (_backendDropdown == null) return;
 
             _backendDropdown.choices = BackendChoices.ToList();
 
             var backend = _projectSettings?.advancedSettings?.paintingBackend ??
                           PaintTerrainCommand.PaintingBackend.CPUJobTwoPass;
-            _backendDropdown.index = backend == PaintTerrainCommand.PaintingBackend.GPUCompute ? 1 : 0;
+            _backendDropdown.index = backend == PaintTerrainCommand.PaintingBackend.GPUCompute ? 1 : (backend == PaintTerrainCommand.PaintingBackend.Auto ? 2 : 0);
 
             _backendDropdown.UnregisterValueChangedCallback(OnBackendChanged);
             _backendDropdown.RegisterValueChangedCallback(OnBackendChanged);
@@ -103,7 +102,9 @@ namespace __temp.MrPathV2.Editor.Overlays
         {
             var newBackend = evt.newValue == "GPU"
                 ? PaintTerrainCommand.PaintingBackend.GPUCompute
-                : PaintTerrainCommand.PaintingBackend.CPUJobTwoPass;
+                : (evt.newValue == "Auto"
+                    ? PaintTerrainCommand.PaintingBackend.Auto
+                    : PaintTerrainCommand.PaintingBackend.CPUJobTwoPass);
 
             var advanced = _projectSettings != null ? _projectSettings.advancedSettings : null;
             if (advanced == null || advanced.paintingBackend == newBackend) return;
@@ -113,64 +114,61 @@ namespace __temp.MrPathV2.Editor.Overlays
             EditorUtility.SetDirty(advanced);
         }
 
-        // GPU预览功能已移除，以下方法不再需要：
+        // GPU预览是否启用的初始化方法
         // private void InitializeGpuPreviewToggleFromUxml() { ... }
 
-
         /// <summary>
-        /// 刷新地形操作按钮的UI内容。
-        /// 这是一个高层协调器，不处理具体的按钮创建逻辑。
+        /// 刷新UI内容
+        /// 根据当前配置重新创建所有操作按钮
         /// </summary>
         private void RefreshContent()
         {
-            // 1. 守卫条款 (Guard Clause)
+            // 1. 守卫语句
             if (_content == null) return;
 
             _content.Clear();
             _operationButtons.Clear();
 
-            // 2. 提前返回：处理配置丢失
+            // 2. 检查地形操作配置是否存在
             if (_terrainOpsConfig == null)
             {
-                _content.Add(new Label("未找到 Terrain Operations 配置"));
+                _content.Add(new Label("未找到地形操作配置"));
                 return;
             }
 
             var ops = _terrainOpsConfig.operations;
 
-            // 3. 提前返回：处理配置为空
+            // 3. 检查操作列表是否为空
             if (ops == null || ops.Length == 0)
             {
                 _content.Add(CreateConfigRedirectButton());
                 return;
             }
 
-            // 4. 核心逻辑：生成并添加操作按钮
+            // 4. 为每个操作创建按钮并添加到UI
 
-            // 使用 LINQ 将“数据”转换为“UI元素”
-            // 这比 foreach 循环更具声明性（更“优雅”）
+            // 使用LINQ查询过滤、排序并创建按钮
+            // 转换为foreach循环以提高可读性
             var newButtons = ops
-                .Where(op => op) // 过滤掉 null 的 op
-                .OrderBy(op => op.order)  // 按 order 排序
-                .Select(CreateOperationButton) // 使用工厂方法创建按钮
+                .Where(op => op != null) // 过滤掉null
+                .OrderBy(op => op.order)  // 按顺序排序
+                .Select(CreateOperationButton) // 创建按钮
                 .ToList();
 
-            // 5. 将创建好的按钮批量添加到 UI 和跟踪列表
+            // 5. 更新按钮列表并添加到UI
 
-            // 跟踪按钮
+            // 添加到按钮列表
             _operationButtons.AddRange(newButtons);
 
-            // 将按钮添加到 VisualElement 层次结构中
+            // 添加到可视化元素
             foreach (var btn in newButtons)
             {
                 _content.Add(btn);
             }
-
-
         }
 
         /// <summary>
-        /// (工厂方法) 创建一个跳转到项目设置的按钮。
+        /// 创建一个跳转到配置页面的按钮
         /// </summary>
         private static Button CreateConfigRedirectButton()
         {
@@ -183,40 +181,40 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// (工厂方法) 根据 TerrainOperation 配置创建一个新的 ToolbarButton。
+        /// 为地形操作创建一个工具栏按钮
         /// </summary>
         private Button CreateOperationButton(PathTerrainOperation op)
         {
             var buttonText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
 
-            // 1. 创建按钮实例
+            // 1. 创建按钮
             var btn = new ToolbarButton
             {
                 text = buttonText,
                 userData = buttonText
             };
 
-            // 2. 注册回调
-            //   (使用 RegisterCallback 比在构造函数中用 lambda 捕获 btn 自身更清晰)
+            // 2. 注册点击事件
+            // 使用RegisterCallback而非直接赋值clickable，以便在lambda中捕获btn
             btn.RegisterCallback<ClickEvent>(_ => ExecuteOperation(op, btn));
 
-            // 3. 设置初始状态
+            // 3. 设置按钮状态和样式
             btn.SetEnabled(!_isExecutingOperation);
             btn.AddToClassList("terrain-op-button");
 
-            // 4. 应用动态样式
+            // 4. 应用操作特定样式
             ApplyOperationStyles(btn, op);
 
             return btn;
         }
 
         /// <summary>
-        /// (辅助方法) 将 op 上的动态样式（图标、颜色）应用到按钮上。
+        /// 应用操作特定的样式到按钮
         /// </summary>
         private static void ApplyOperationStyles(Button btn, PathTerrainOperation op)
         {
             if (op.icon == null) return;
-            // 性能：直接操作 style 属性比创建 StyleBackground 更高效
+            // 通过设置style.backgroundImage应用图标
             btn.style.backgroundImage = op.icon;
 
             var color = op.buttonColor != default ? op.buttonColor : Color.white;
@@ -261,47 +259,47 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// 异步执行一个地形操作，并管理UI状态。
+        /// 执行选定的地形操作
         /// </summary>
         private async void ExecuteOperation(PathTerrainOperation op, Button clickedButton)
         {
             try
             {
-                // 1. 守卫条款 (Guard Clauses) - 快速前置检查
+                // 1. 守卫语句 - 检查是否可以执行操作
                 if (!CanExecuteOperation(op))
                 {
                     return;
                 }
 
-                // 2. 异步操作的 try/catch/finally 封装
-                //    这是 async void 事件处理程序的关键模式
+                // 2. 使用try/catch/finally确保UI状态正确恢复
+                // 注意：async void应谨慎使用，此处用于事件处理
                 try
                 {
-                    // 3. 设置UI为"执行中"状态
+                    // 3. 更新UI为执行状态
                     SetUIStateExecuting(clickedButton);
 
-                    // 4. 创建命令
+                    // 4. 创建操作命令
                     var cmd = op.CreateCommand(_ctx.Target, _ctx.HeightProvider);
-                    if (cmd == null) return; // 如果命令无效，finally 块会正确恢复UI
+                    if (cmd == null) return; // 如果命令为空，在finally中恢复UI
 
-                    // 5. (已提取) 附加预览边界
+                    // 5. 设置预览边界（如果可用）
                     if (TryGetPreviewBoundsXZ(out var previewBounds))
                     {
                         cmd.SetPreviewBoundsXZ(previewBounds);
                     }
 
-                    // 6. 执行核心异步逻辑
+                    // 6. 执行操作
                     await _ctx.TerrainHandler.ExecuteAsync(cmd, null);
                 }
                 catch (Exception e)
                 {
-                    // 捕获异步执行中的所有异常
-                    // 使用 LogException 而不是 Log 来保留完整的堆栈跟踪
+                    // 记录操作执行过程中的异常
+                    // 使用LogException而非Log以捕获完整堆栈信息
                     ErrorHandler.LogException(e);
                 }
                 finally
                 {
-                    // 7. (已提取) 无论成功还是失败，都恢复UI状态
+                    // 7. 恢复UI状态
                     RestoreUIState(clickedButton);
                 }
             }
@@ -312,47 +310,47 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// (辅助方法) 检查所有前置条件是否满足。
+        /// 检查是否可以执行操作
         /// </summary>
         private bool CanExecuteOperation(PathTerrainOperation op)
         {
-            // 快速检查
+            // 基本检查
             if (_isExecutingOperation || _ctx == null || !_ctx.Target || !op.CanExecute(_ctx.Target))
             {
                 return false;
             }
 
-            // 稍慢的配置检查
+            // 检查路径策略
             var profile = _ctx.Target.profile;
             if (profile && PathStrategyRegistry.Instance.GetStrategy(profile.curveType) != null) return true;
             ShowConfigError();
             return false;
-
         }
 
+
         /// <summary>
-        /// (辅助方法) 封装所有“开始执行”的UI状态变更。
+        /// 设置UI为执行状态
         /// </summary>
         private void SetUIStateExecuting(Button clickedButton)
         {
             _isExecutingOperation = true;
             if (clickedButton != null)
             {
-                clickedButton.text = "执行中...";
+                clickedButton.text = "Progress..";
             }
             SetOperationButtonsEnabled(false);
         }
 
         /// <summary>
-        /// (辅助方法) 封装所有“恢复UI”的状态变更。
+        /// 恢复UI状态
         /// </summary>
         private void RestoreUIState(Button clickedButton)
         {
             _isExecutingOperation = false;
             SetOperationButtonsEnabled(true);
 
-            // [BUG FIX] 从 userData 恢复原始文本
-            // (假设在 RefreshContent 中已将原始文本存入 userData)
+            // [BUG FIX] 使用userData恢复原始文本
+            // （防止RefreshContent重置时丢失原始文本）
             if (clickedButton is { userData: string originalText })
             {
                 clickedButton.text = originalText;
@@ -360,14 +358,14 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// (辅助方法) 尝试获取预览网格的2D边界。
-        /// 注意：PreviewMesh的顶点是在世界坐标系中生成的，mesh.bounds已经是世界坐标
+        /// 尝试获取预览网格的XZ边界
+        /// 用于限制地形操作仅在预览网格范围内执行
         /// </summary>
         private bool TryGetPreviewBoundsXZ(out Vector4 bounds)
         {
             bounds = Vector4.zero;
 
-            // 检查 Unity 对象时应使用 '== null'
+            // 检查预览生成器是否存在
             if (_ctx.PreviewGenerator == null) return false;
 
             var previewMesh = _ctx.PreviewGenerator.PreviewMesh;
@@ -375,11 +373,10 @@ namespace __temp.MrPathV2.Editor.Overlays
 
             var b = previewMesh.bounds;
 
-            // 使用明确的 > 0 检查，可读性比属性模式稍好
+            // 检查边界是否有效
             if (b.size.x > 0 && b.size.z > 0)
             {
-                // PreviewMesh的顶点已经在世界坐标系中，mesh.bounds直接就是世界坐标边界
-                // 无需进行坐标转换，直接使用即可
+                // 存储XZ平面的最小和最大值
                 bounds = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
                 return true;
             }
@@ -391,26 +388,25 @@ namespace __temp.MrPathV2.Editor.Overlays
         {
             EditorUtility.DisplayDialog(
                 "配置错误",
-                "路径缺少 Profile 或未找到对应的路径策略 (Strategy)。\n请检查 Path Creator 的 Profile 字段以及 Project/MrPath 设置中的高级设置。",
+                "所选路径配置文件缺少有效的策略。请确保路径创建器已分配配置文件，并在Project/MrPath设置中正确配置了策略。",
                 "确定"
             );
         }
 
         /// <summary>
-        ///     统一设置所有地形操作按钮的可用状态，并在启用时恢复其原始文本。
+        /// 设置所有操作按钮的启用状态
         /// </summary>
-        /// <param name="enabled">是否启用按钮</param>
+        /// <param name="enabled">按钮是否启用</param>
         private void SetOperationButtonsEnabled(bool enabled)
         {
             foreach (var btn in _operationButtons)
             {
-                // 改为仅控制交互，不影响视觉：使用 pickingMode + focusable
-                // 提前返回优化：空按钮直接跳过
+                // 同时设置pickingMode和focusable以完全禁用交互
+                // 跳过空引用
                 if (btn == null) continue;
 
                 btn.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
                 btn.focusable = enabled;
-
 
                 if (enabled && btn.userData is string originalText)
                 {
@@ -432,3 +428,5 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
     }
 }
+
+

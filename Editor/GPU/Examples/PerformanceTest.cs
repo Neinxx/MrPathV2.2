@@ -224,7 +224,7 @@ namespace __temp.MrPathV2.Editor.Examples
 
             // 创建取消令牌
             _cts = new CancellationTokenSource();
-            
+
             _testRunning = true;
             _testResults.Clear();
 
@@ -232,8 +232,8 @@ namespace __temp.MrPathV2.Editor.Examples
             {
                 UnityEngine.Debug.Log($"开始统一管线性能测试 - 迭代次数: {_testIterations}");
 
-                // 使用统一接口创建绘制器
-                var painter = new UnifiedGpuTerrainPainter();
+                // 使用统一工厂创建绘制器（首选GPU）
+                var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
 
                 // 设置PathCreator的路径宽度
                 if (_testPathCreator.profile != null)
@@ -267,14 +267,14 @@ namespace __temp.MrPathV2.Editor.Examples
                         UnityEngine.Debug.Log("测试已取消");
                         break;
                     }
-                    
+
                     stopwatch.Restart();
 
                     var result = await painter.PaintAsync(_testPathCreator, _usePreview, _cts.Token);
 
                     stopwatch.Stop();
 
-                    if (result.Success)
+                    if (result.IsSuccess)
                     {
                         _testResults.Add(stopwatch.Elapsed.TotalMilliseconds);
                     }
@@ -451,7 +451,7 @@ namespace __temp.MrPathV2.Editor.Examples
             {
                 // 根据类型创建绘制器
                 IUnifiedTerrainPainter painter = painterType == PainterType.GPU
-                    ? new UnifiedGpuTerrainPainter()
+                    ? UnifiedPainterFactory.CreatePainter(PainterType.GPU)
                     : new UnifiedCpuTerrainPainter();
 
                 // 执行绘制
@@ -459,7 +459,7 @@ namespace __temp.MrPathV2.Editor.Examples
                 var painterName = painterType == PainterType.GPU ? "GPU" : "CPU";
                 var dialogTitle = $"{painterName}绘制测试";
 
-                string message = result.Success
+                string message = result.IsSuccess
                     ? $"{painterName}绘制测试成功！\n已生成预览纹理。\n执行时间: {result.ExecutionTimeMs:F2}ms"
                     : $"{painterName}绘制测试失败：{result.ErrorMessage}";
 
@@ -494,8 +494,8 @@ namespace __temp.MrPathV2.Editor.Examples
 
             try
             {
-                // 创建统一绘制命令
-                var command = UnifiedPaintTerrainCommandV2.Create(_testPathCreator);
+                // 创建统一绘制命令（预览）
+                var command = __temp.MrPathV2.Editor.Core.UnifiedPaintTerrainCommand.CreatePreviewCommand(_testPathCreator, painterType);
                 if (command == null)
                 {
                     EditorUtility.DisplayDialog("路径绘制命令测试", "绘制命令创建失败", "确定");
@@ -504,7 +504,7 @@ namespace __temp.MrPathV2.Editor.Examples
 
                 // 执行命令
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var result = command.ExecuteAsync(_testTerrains, _testPathCreator.profile, painterType, true).Result;
+                var result = command.ExecuteAsync().Result;
                 sw.Stop();
 
                 var painterName = painterType == PainterType.GPU ? "GPU" : "CPU";

@@ -6,13 +6,12 @@ using UnityEngine;
 namespace __temp.MrPathV2.Runtime.Core
 {
     /// <summary>
-    ///     【最终步：终极执行者】
-    ///     这是我们新架构的核心驱动者。它的职责被简化到了极致，从而变得异常强大和稳固。
+
     ///     - 它持有"数据容器"(PathData)。
     ///     - 它引用"配置文件"(PathProfile)来了解用户的意图。
     ///     - 它通过"注册中心"(PathStrategyRegistry)来获取正确的"法则"(PathStrategy)。
     ///     - 它将数据和法则结合，完成所有路径操作。
-    ///     注意，这个类中不再有任何复杂的切换逻辑。大道至简。
+
     /// </summary>
     [DisallowMultipleComponent]
     public class PathCreator : MonoBehaviour
@@ -26,7 +25,7 @@ namespace __temp.MrPathV2.Runtime.Core
         [SerializeField]
         public PathData pathData = new PathData();
 
-        // --- 新增：用于跟踪已订阅的 Profile，并在其修改时回调 ---
+        // --- 用于跟踪已订阅的 Profile，并在其修改时回调 ---
         [NonSerialized]
         private PathProfile _subscribedProfile;
 
@@ -66,7 +65,7 @@ namespace __temp.MrPathV2.Runtime.Core
 
         private void Awake()
         {
-            // 确保pathData在运行时不为null
+
             if (pathData != null) return;
             pathData = new PathData();
             this.LogWarning("PathData was null, created new instance.", "PathCreator");
@@ -74,23 +73,19 @@ namespace __temp.MrPathV2.Runtime.Core
 
         /// <summary>
         ///     当Inspector中的值发生变化时调用。
-        ///     我们在这里简单地触发一个事件，让关心变化的系统（如编辑器UI）知道需要刷新。
+        ///     让关心变化的系统（如编辑器UI）知道需要刷新。
         /// </summary>
         private void OnValidate()
         {
-            // 确保pathData不为null
+
             pathData ??= new PathData();
-
-            // 保证中心点位于第一个节点
             EnsurePivotAtFirstPoint();
-
             // 仅触发外观变化事件，避免重采样
             AppearanceChanged?.Invoke();
         }
         public event Action<PathChangeCommand> PathModified;
         public event Action CurveDefinitionChanged;
         public event Action AppearanceChanged;
-
 
         /// <summary>
         ///     验证组件状态是否有效
@@ -121,19 +116,17 @@ namespace __temp.MrPathV2.Runtime.Core
         #region Public API (供编辑器或其他脚本调用)
 
         /// <summary>
-        ///     【已修正】获取曲线上某一点的世界坐标。
+        ///     获取曲线上某一点的世界坐标。
         ///     这是坐标转换的唯一出口。
         /// </summary>
         public Vector3 GetPointAt(float t)
         {
-            // 参数验证
             if (float.IsNaN(t) || float.IsInfinity(t))
             {
                 this.LogWarning($"Invalid parameter t={t} in GetPointAt. Using t=0.", "PathCreator");
                 t = 0f;
             }
 
-            // 将t限制在有效范围内
             t = Mathf.Clamp(t, 0f, NumSegments);
 
             if (!IsValidState())
@@ -155,14 +148,14 @@ namespace __temp.MrPathV2.Runtime.Core
                     this.LogWarning($"Strategy returned invalid point {localPoint} for t={t}. Using fallback.", "PathCreator");
                     return transform.position;
 
-                    // 2. 在这里，由 PathCreator 亲自完成到世界空间的转换
+                    // 2. 由 PathCreator 亲自完成到世界空间的转换
                 }, transform.position, "PathCreator.GetPointAt", this);
             }
             return transform.position;
         }
 
         /// <summary>
-        ///     【已修正】获取曲线上某一点的本地坐标。
+        ///     获取曲线上某一点的本地坐标。
         ///     这个方法现在变得极其高效，因为它直接返回策略层的计算结果。
         /// </summary>
         public Vector3 GetPointAtLocal(float t)

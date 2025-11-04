@@ -169,6 +169,11 @@ namespace __temp.MrPathV2.Runtime.Strategies
             }
         }
 
+        public override PreviewLineRenderer.LineType GetLineTypeToCleanup()
+        {
+            return PreviewLineRenderer.LineType.ControlLine;
+        }
+
         #endregion
 #endif
     }

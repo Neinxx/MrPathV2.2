@@ -38,23 +38,23 @@ namespace __temp.MrPathV2.Runtime.Jobs
         public int PathSamples;
         public int Length { get; set; }
 
-        public RecipeData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap,
+        public RecipeData(PathProfile pathProfile, Dictionary<TerrainLayer, int> terrainLayerMap,
                   float roadWorldWidth, float roadWorldLength, Allocator allocator) : this()
       {
     // 初始化基础数据结构
-    InitializeBaseData(recipe, allocator);
+    InitializeBaseData(pathProfile, allocator);
 
     // 初始化图层相关数据
-    InitializeLayerData(recipe, terrainLayerMap, roadWorldWidth, roadWorldLength);
+    InitializeLayerData(pathProfile, terrainLayerMap, roadWorldWidth, roadWorldLength);
 
     // 初始化渐变关键帧数据
-    InitializeGradientData(recipe);
+    InitializeGradientData(pathProfile);
 
     // 初始化遮罩条纹数据
-    InitializeStripData(recipe, roadWorldWidth, roadWorldLength);
+    InitializeStripData(pathProfile, roadWorldWidth, roadWorldLength);
 
     // 初始化遮罩图集数据
-    InitializeMaskAtlasData(recipe, roadWorldWidth, roadWorldLength);
+    InitializeMaskAtlasData(pathProfile, roadWorldWidth, roadWorldLength);
 
     _disposed = false;
 }
@@ -62,9 +62,9 @@ namespace __temp.MrPathV2.Runtime.Jobs
 /// <summary>
 /// 初始化基础数据结构
 /// </summary>
-private void InitializeBaseData(StylizedRoadRecipe recipe, Allocator allocator)
+private void InitializeBaseData(PathProfile pathProfile, Allocator allocator)
 {
-    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = pathProfile?.roadRecipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
     Length = roadLayers.Length;
     TerrainLayerIndices = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
     BlendModes = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
@@ -89,10 +89,10 @@ private void InitializeBaseData(StylizedRoadRecipe recipe, Allocator allocator)
 /// <summary>
 /// 初始化图层相关数据
 /// </summary>
-private void InitializeLayerData(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap,
+private void InitializeLayerData(PathProfile pathProfile, Dictionary<TerrainLayer, int> terrainLayerMap,
                                 float roadWorldWidth, float roadWorldLength)
 {
-    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = pathProfile?.roadRecipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
 
     for (var i = 0; i < Length; i++)
     {
@@ -109,17 +109,17 @@ private void InitializeLayerData(StylizedRoadRecipe recipe, Dictionary<TerrainLa
         BlendModes[i] = layer != null ? (int)layer.blendMode : 0; // 默认 Normal=0
 
         // 设置不透明度
-        if (recipe)
-            Opacities[i] = Mathf.Clamp01(layer != null ? layer.opacity * recipe.masterOpacity : recipe.masterOpacity);
+        if (pathProfile.roadRecipe)
+            Opacities[i] = Mathf.Clamp01(layer != null ? layer.opacity * pathProfile.roadRecipe.masterOpacity : pathProfile.roadRecipe.masterOpacity);
     }
 }
 
 /// <summary>
 /// 初始化渐变关键帧数据
 /// </summary>
-private void InitializeGradientData(StylizedRoadRecipe recipe)
+private void InitializeGradientData(PathProfile pathProfile)
 {
-    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = pathProfile?.roadRecipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
 
     // 计算总关键帧数
     var totalKeyframes = 0;
@@ -149,9 +149,9 @@ private void InitializeGradientData(StylizedRoadRecipe recipe)
 /// <summary>
 /// 初始化遮罩条纹数据
 /// </summary>
-private void InitializeStripData(StylizedRoadRecipe recipe, float roadWorldWidth, float roadWorldLength)
+private void InitializeStripData(PathProfile pathProfile, float roadWorldWidth, float roadWorldLength)
 {
-    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = pathProfile?.roadRecipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
     var stripOffset = 0;
 
     for (var i = 0; i < Length; i++)
@@ -184,9 +184,9 @@ private void InitializeStripData(StylizedRoadRecipe recipe, float roadWorldWidth
 /// <summary>
 /// 初始化遮罩图集数据
 /// </summary>
-private void InitializeMaskAtlasData(StylizedRoadRecipe recipe, float roadWorldWidth, float roadWorldLength)
+private void InitializeMaskAtlasData(PathProfile pathProfile, float roadWorldWidth, float roadWorldLength)
 {
-    var roadLayers = recipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
+    var roadLayers = pathProfile?.roadRecipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
 
     // 生成 2D MaskAtlas：
     // Y 方向先是 layer，再是 pathProgress 采样，共 Length * PathSamples 行。
@@ -252,16 +252,82 @@ private void InitializeMaskAtlasData(StylizedRoadRecipe recipe, float roadWorldW
         /// <summary>
         ///     烘焙 StylizedRoadRecipe 为 Job 友好的数据结构
         /// </summary>
-        public static RecipeData BakeRecipe(StylizedRoadRecipe recipe, Allocator allocator, float roadWorldWidth = -1, float roadWorldLength = -1)
+        private static RecipeData BuildRecipeData(PathProfile pathProfile, Dictionary<TerrainLayer, int> map, PathSpine spine)
         {
-            if (roadWorldWidth < 0) roadWorldWidth = 10f; // 默认宽度
-            if (roadWorldLength < 0) roadWorldLength = 100f; // 默认长度
-            return new RecipeData(recipe, null, roadWorldWidth, roadWorldLength, allocator);
+            var width = Mathf.Max(0.01f, pathProfile?.roadRecipe ? pathProfile?.roadWidth > 0 ? pathProfile.roadWidth : 0f : 0f);
+            // 道路总长度（沿骨架）
+            var length = 0f;
+            for (var i = 1; i < spine.VertexCount; i++)
+                length += Vector3.Distance(spine.Points[i - 1], spine.Points[i]);
+
+            // 若未从 recipe 提供宽度覆盖，则用 Profile 宽度
+            if (width <= 0.0001f)
+                width = Mathf.Max(0.01f, map != null ? 1f : 1f); // 宽度参与遮罩采样，非 0 即可
+
+            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent);
         }
 
         /// <summary>
-        ///     创建默认的 RecipeData
+        /// 兼容旧版调用：仅根据 Recipe 烘焙 Job 配方数据。
+        /// 由于缺少路径上下文，这里使用安全的默认道路宽度与路径长度（轻量预览足够）。
         /// </summary>
-        public static RecipeData CreateDefaultRecipe(Allocator allocator) => new RecipeData(null, null, 10f, 100f, allocator);
+        public static RecipeData BakeRecipe(StylizedRoadRecipe recipe, Allocator allocator)
+        {
+            if (!recipe)
+            {
+                return CreateDefaultRecipe(allocator);
+            }
+
+            var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
+            tmpProfile.roadRecipe = recipe;
+
+            const float defaultWorldWidth = 5f;   // 与 PathProfile 默认一致
+            const float defaultPathLength = 100f; // 与预览遮罩采样默认一致
+
+            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator);
+
+#if UNITY_EDITOR
+            if (Application.isPlaying)
+                UnityEngine.Object.Destroy(tmpProfile);
+            else
+                UnityEngine.Object.DestroyImmediate(tmpProfile);
+#else
+            UnityEngine.Object.Destroy(tmpProfile);
+#endif
+            return data;
+        }
+
+        /// <summary>
+        /// 创建一个安全的默认（空）配方数据，用于没有 Recipe 时的预览兜底。
+        /// </summary>
+        public static RecipeData CreateDefaultRecipe(Allocator allocator)
+        {
+            var tmpRecipe = ScriptableObject.CreateInstance<StylizedRoadRecipe>();
+            var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
+            tmpProfile.roadRecipe = tmpRecipe;
+
+            const float defaultWorldWidth = 5f;
+            const float defaultPathLength = 100f;
+
+            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator);
+
+#if UNITY_EDITOR
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(tmpProfile);
+                UnityEngine.Object.Destroy(tmpRecipe);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(tmpProfile);
+                UnityEngine.Object.DestroyImmediate(tmpRecipe);
+            }
+#else
+            UnityEngine.Object.Destroy(tmpProfile);
+            UnityEngine.Object.Destroy(tmpRecipe);
+#endif
+            return data;
+        }
+        
     }
 }

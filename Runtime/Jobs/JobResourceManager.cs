@@ -95,12 +95,12 @@ namespace __temp.MrPathV2.Runtime.Jobs
         /// <summary>
         ///     创建RecipeData并自动注册管理
         /// </summary>
-        public RecipeData CreateRecipeData(StylizedRoadRecipe recipe,
+        public RecipeData CreateRecipeData(PathProfile pathProfile,
             Dictionary<TerrainLayer, int> terrainLayerMap,
             float roadWorldWidth, float roadWorldLength,
             Allocator allocator = Allocator.Persistent)
         {
-            return CreateResource(() => new RecipeData(recipe, terrainLayerMap, roadWorldWidth, roadWorldLength, allocator));
+            return CreateResource(() => new RecipeData(pathProfile, terrainLayerMap, roadWorldWidth, roadWorldLength, allocator));
         }
 
         /// <summary>
@@ -156,54 +156,54 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 throw new ObjectDisposedException(nameof(JobResourceManager));
         }
 
-/*
-        /// <summary>
-        /// NativeArray包装器，用于统一的IDisposable管理
-        /// </summary>
-        private class NativeArrayWrapper<T> : IDisposable where T : struct
-        {
-            private NativeArray<T> _array;
-            private bool _disposed;
-
-            public NativeArrayWrapper(NativeArray<T> array)
-            {
-                _array = array;
-            }
-
-            public void Dispose()
-            {
-                if (!_disposed && _array.IsCreated)
+        /*
+                /// <summary>
+                /// NativeArray包装器，用于统一的IDisposable管理
+                /// </summary>
+                private class NativeArrayWrapper<T> : IDisposable where T : struct
                 {
-                    _array.Dispose();
-                    _disposed = true;
+                    private NativeArray<T> _array;
+                    private bool _disposed;
+
+                    public NativeArrayWrapper(NativeArray<T> array)
+                    {
+                        _array = array;
+                    }
+
+                    public void Dispose()
+                    {
+                        if (!_disposed && _array.IsCreated)
+                        {
+                            _array.Dispose();
+                            _disposed = true;
+                        }
+                    }
                 }
-            }
-        }
-*/
+        */
 
-/*
-        /// <summary>
-        /// NativeList包装器，用于统一的IDisposable管理
-        /// </summary>
-        private class NativeListWrapper<T> : IDisposable where T : unmanaged
-        {
-            private NativeList<T> _list;
-            private bool _disposed;
-
-            public NativeListWrapper(NativeList<T> list)
-            {
-                _list = list;
-            }
-
-            public void Dispose()
-            {
-                if (!_disposed && _list.IsCreated)
+        /*
+                /// <summary>
+                /// NativeList包装器，用于统一的IDisposable管理
+                /// </summary>
+                private class NativeListWrapper<T> : IDisposable where T : unmanaged
                 {
-                    _list.Dispose();
-                    _disposed = true;
+                    private NativeList<T> _list;
+                    private bool _disposed;
+
+                    public NativeListWrapper(NativeList<T> list)
+                    {
+                        _list = list;
+                    }
+
+                    public void Dispose()
+                    {
+                        if (!_disposed && _list.IsCreated)
+                        {
+                            _list.Dispose();
+                            _disposed = true;
+                        }
+                    }
                 }
-            }
-        }
-*/
+        */
     }
 }

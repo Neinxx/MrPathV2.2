@@ -143,8 +143,12 @@ namespace __temp.MrPathV2.Editor.GPU.Core
                 }
             }
 
-            var descriptor = new RenderTextureDescriptor(width, height, format)
+            // 选择在当前平台上支持 RW(UAV) 的图形格式
+            var graphicsFormat = ChooseUavGraphicsFormat(format);
+            var descriptor = new RenderTextureDescriptor(width, height)
             {
+                graphicsFormat = graphicsFormat,
+                depthBufferBits = 0,
                 volumeDepth = safeDepth,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
                 enableRandomWrite = true
@@ -155,6 +159,49 @@ namespace __temp.MrPathV2.Editor.GPU.Core
             RegisterRenderTexture(newRt);
             createdNew = true;
             return newRt;
+        }
+
+        /// <summary>
+        /// 根据输入 RenderTextureFormat，选择在目标平台上支持 UAV 的 GraphicsFormat。
+        /// 在 OpenGLES3 上优先使用 32-bit float 以避免 HLSLcc 对半精度/数组 RW 的限制。
+        /// </summary>
+        private static UnityEngine.Experimental.Rendering.GraphicsFormat ChooseUavGraphicsFormat(RenderTextureFormat rtFormat)
+        {
+            var isGles3 = SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3;
+
+            // 在 GLES3 上，RW 对半精度/部分数组格式支持不一致，选用 32-bit float 以保证 imageStore 支持
+            if (isGles3)
+            {
+                switch (rtFormat)
+                {
+                    case RenderTextureFormat.ARGBFloat:
+                    case RenderTextureFormat.ARGBHalf:
+                    case RenderTextureFormat.DefaultHDR:
+                        return UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat;
+                    case RenderTextureFormat.RFloat:
+                    case RenderTextureFormat.RHalf:
+                        return UnityEngine.Experimental.Rendering.GraphicsFormat.R32_SFloat;
+                    default:
+                        // 兜底为 RGBA32F，确保 RW 存储
+                        return UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat;
+                }
+            }
+
+            // 非 GLES3：尽量使用与输入匹配的高效格式
+            switch (rtFormat)
+            {
+                case RenderTextureFormat.ARGBFloat:
+                    return UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat;
+                case RenderTextureFormat.ARGBHalf:
+                    return UnityEngine.Experimental.Rendering.GraphicsFormat.R16G16B16A16_SFloat;
+                case RenderTextureFormat.RFloat:
+                    return UnityEngine.Experimental.Rendering.GraphicsFormat.R32_SFloat;
+                case RenderTextureFormat.RHalf:
+                    return UnityEngine.Experimental.Rendering.GraphicsFormat.R16_SFloat;
+                default:
+                    // 兜底：选用具有广泛 RW 支持的 RGBA32F
+                    return UnityEngine.Experimental.Rendering.GraphicsFormat.R32G32B32A32_SFloat;
+            }
         }
     }
 }

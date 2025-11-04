@@ -20,11 +20,24 @@ MonoBehaviour:
   profiles:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
   - {fileID: 11400000, guid: 913914e227fb88241a33396e0d5a2e94, type: 2}
-  - {fileID: 11400000, guid: a78d4df5d6a6d5f4cbab0848a3b1e700, type: 2}
   roadRecipes:
   - {fileID: 11400000, guid: 747a0f774da3d8049b612213b4e96e88, type: 2}
   - {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
   masks:
+  - {fileID: 11400000, guid: 88f1308840f11974ebb55ae97f298e42, type: 2}
+  - {fileID: 11400000, guid: e280ef632ab03b549b47fa041272c0ca, type: 2}
+  - {fileID: 11400000, guid: 4dd3ece41f2220c43b82e66ce58c0b4d, type: 2}
+  - {fileID: 11400000, guid: 32a5184d184445641ba35f9ee4487efc, type: 2}
+  - {fileID: 11400000, guid: c6872f01933dfaa458e22554247fb2af, type: 2}
   - {fileID: 11400000, guid: 9d0650fa383412f4bafcadd32da430f7, type: 2}
   - {fileID: 11400000, guid: b7dfecc4d4a2b624dbf8affac382bb88, type: 2}
   - {fileID: 11400000, guid: eccb412fbd1979441b4c8cb51500a4b0, type: 2}
+  - {fileID: 11400000, guid: ea28d1daf95a37d47a8f5d98fd7bd6b3, type: 2}
+  - {fileID: 11400000, guid: 7260be80ac79d464fb8b67cbbd32bd17, type: 2}
+  - {fileID: 11400000, guid: 336059957bea7464fbd07f328ca993bf, type: 2}
+  - {fileID: 11400000, guid: b4bc5b5c64dcaab4a8b2ee89b7d3bedb, type: 2}
+  - {fileID: 11400000, guid: b061a9fab61b85649957b37224046546, type: 2}
+  - {fileID: 11400000, guid: ee8ee8716d84eb246a1bd17072c903ce, type: 2}
+  - {fileID: 11400000, guid: e00a1c18fbaf1894b87a7047d289a95c, type: 2}
+  - {fileID: 11400000, guid: e3388e8e36a349142a5df189fb015266, type: 2}
+  - {fileID: 11400000, guid: 5236b19222dc06e45a5025b4339dffe4, type: 2}

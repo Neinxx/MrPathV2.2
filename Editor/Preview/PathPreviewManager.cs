@@ -6,6 +6,7 @@ using __temp.MrPathV2.Runtime.Preview;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
+using __temp.MrPathV2.Editor.Core; // 统一地形绘制接口
 // 命名空间别名，减少全限定名噪音
 using EditorLayerResolver = __temp.MrPathV2.Editor.Terrain.LayerResolver;
 using LayerConfigGPU = __temp.MrPathV2.Editor.GPU.LayerConfig;
@@ -286,22 +287,12 @@ namespace MrPathV2.Editor.Preview
                             goto SkipGpuRun;
                         }
 
-                        // 构造层配置（根据 RoadRecipe + Terrain 实际层索引）
-                        var layerConfigs = BuildLayerConfigs(targetTerrain, creator.profile.roadRecipe);
-                        if (layerConfigs == null || layerConfigs.Length == 0)
-                        {
-                            // 没有有效图层，提前返回
-                            goto SkipGpuRun;
-                        }
+                        // 使用统一绘制接口，保持预览缓存注册在绘制器内部进行
+                        var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU, targetTerrain);
+                        var result = painter.Paint(creator, true);
 
-                        var width = Mathf.Max(0.1f, creator.profile.roadWidth);
-                        var result = __temp.MrPathV2.Editor.GPU.GpuTerrainPainterV2.Instance
-                            .PaintPathAsync(targetTerrain, pts, width, layerConfigs, true)
-                            .GetAwaiter().GetResult();
-
-                        if (result != null && result.Success && result.RenderTexture)
+                        if (result.IsSuccess)
                         {
-                            MrPathV2.Editor.Terrain.GpuPreviewCache.Register(targetTerrain, result.RenderTexture);
                             m_LastGpuTerrainId = terrainIdNow;
                             m_LastSpineHash = spineHashNow;
                             m_LastProfileHash = profileHashNow;

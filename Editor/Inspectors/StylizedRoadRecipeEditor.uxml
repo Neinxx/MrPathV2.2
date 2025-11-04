@@ -11,7 +11,7 @@
             <ui:Foldout text="Layers" name="Layers" style="flex-grow: 1; -unity-font-style: bold; font-size: 14px; justify-content: flex-start; background-color: rgba(0, 0, 0, 0);">
                 <ui:VisualElement focusable="true" name="drapableRoot" style="flex-grow: 1; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; margin-left: 0; margin-right: 0; margin-top: 3px; margin-bottom: 3px; height: auto; left: -8px; width: initial; justify-content: flex-start;" />
             </ui:Foldout>
-            <ui:Button text="Button" display-tooltip-when-elided="true" name="addLayerButton" class="AnimatedButton" style="background-color: rgba(149, 94, 50, 0); color: rgb(210, 210, 210); -unity-font-style: bold; -unity-text-align: middle-center; margin-left: 13px; margin-right: 14px; border-left-color: rgb(65, 65, 65); border-right-color: rgb(65, 65, 65); border-top-color: rgb(65, 65, 65); border-bottom-color: rgb(65, 65, 65); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; height: 29px; transition-property: border-right-color, border-right-color; transition-duration: 500ms, 500s; transition-timing-function: ease-in, ease-in;" />
+            <ui:Button text="Button" display-tooltip-when-elided="true" name="addLayerButton" class="AnimatedBordeButton" />
         </ui:GroupBox>
     </ui:GroupBox>
 </ui:UXML>

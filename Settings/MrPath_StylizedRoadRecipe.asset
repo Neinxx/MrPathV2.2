@@ -14,10 +14,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   masterOpacity: 1
   layers:
+  - name: Layer 2
+    enabled: 1
+    blendMode: 0
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: d69026617a177274fbedc2d457858b3e,
+      type: 2}
+    layerMask: {fileID: 11400000, guid: b7dfecc4d4a2b624dbf8affac382bb88, type: 2}
+  - name: Layer 4
+    enabled: 1
+    blendMode: 0
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: 60bc044e385d5a346ad003e38d1fa3ee,
+      type: 2}
+    layerMask: {fileID: 11400000, guid: b7dfecc4d4a2b624dbf8affac382bb88, type: 2}
   - name: Layer 3
     enabled: 1
     blendMode: 0
     opacity: 1
-    contentLayer: {fileID: 8574412962073106934, guid: b1d5bfb32127564498bef6f86cecccea,
+    contentLayer: {fileID: 8574412962073106934, guid: 096629a7a845a2a47a0ee4f132297e46,
       type: 2}
     layerMask: {fileID: 11400000, guid: ea28d1daf95a37d47a8f5d98fd7bd6b3, type: 2}
+  - name: Layer 5
+    enabled: 1
+    blendMode: 0
+    opacity: 1
+    contentLayer: {fileID: 8574412962073106934, guid: 18c7b58197507ef4e9775ed38cfdd237,
+      type: 2}
+    layerMask: {fileID: 11400000, guid: e280ef632ab03b549b47fa041272c0ca, type: 2}

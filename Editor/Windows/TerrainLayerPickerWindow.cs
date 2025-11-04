@@ -249,7 +249,7 @@ namespace __temp.MrPathV2.Editor.Windows
                 foreach (var terrain in coveredTerrains)
                 {
                     if (!s_ContextPathCreator) continue;
-                    var result = LayerResolver.ResolveEnsurePresentSmart(terrain, s_ContextPathCreator.profile.roadRecipe);
+                    var result = LayerResolver.ResolveEnsurePresentSmart(terrain, s_ContextPathCreator.profile);
                     if (result.Count > 0) assignedCount++;
                 }
 

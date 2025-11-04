@@ -12,15 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
   m_Name: NewMask 1
   m_EditorClassIdentifier: 
-  smooth: 0.1
-  tiling: {x: 2, y: 38.24}
+  smooth: 0.495
+  tiling: {x: 2, y: 8.37}
   offset: {x: 0, y: 0}
   overallScale: 1
-  strength: 1
+  strength: 0.968
   seed: 0
   noiseScale: {x: 1, y: 1}
   uniformScale: 1
-  rotationDeg: 0
+  rotationDeg: -63
   octaves: 1
   lacunarity: 2
   gain: 0.5

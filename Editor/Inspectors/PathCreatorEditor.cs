@@ -7,7 +7,7 @@ using UnityEngine.UIElements;
 
 namespace __temp.MrPathV2.Editor.Inspectors
 {
-    [CustomEditor(typeof(Runtime.Core.PathCreator))]
+    [CustomEditor(typeof(PathCreator))]
     public class PathCreatorEditor : UnityEditor.Editor
     {
         #region 字段
@@ -19,7 +19,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         // --- 核心上下文 ---
         private PathEditorContext _ctx;
-        
+
         // --- UI 处理器 ---
         private PathCreatorInspectorUI _inspectorUI;
         private PathCreatorSceneGUI _sceneGUI;
@@ -48,7 +48,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             // 初始化上下文
             _ctx = new PathEditorContext(_targetCreator);
             _ctx.Initialize(_targetCreator);
-            
+
             // 初始化UI处理器
             _inspectorUI = new PathCreatorInspectorUI(this, _targetCreator);
             _sceneGUI = new PathCreatorSceneGUI(_targetCreator, _ctx);
@@ -82,7 +82,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         {
             // 1. 清理UI资源
             _inspectorUI?.OnDestroy();
-            
+
             // 2. 清理上下文引用
             if (_ctx != null)
             {
@@ -172,7 +172,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             _ctx?.RequestMaterialsRefresh(true);
             _ctx?.RequestSceneViewRefresh(true);
         }
-        
+
         private void OnUndoRedo() => MarkPathAsDirty();
 
         /// <summary>
@@ -221,7 +221,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 _lastSubscribedProfile = null;
             }
         }
-        
+
         /// <summary>
         /// 当在Inspector中创建新的Profile时调用
         /// </summary>
