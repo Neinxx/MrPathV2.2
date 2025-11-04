@@ -15,18 +15,15 @@ using UnityEngine.UIElements;
 
 namespace __temp.MrPathV2.Editor.Overlays
 {
-    [Overlay(typeof(SceneView), "MrPath.TerrainOperationsOverlay", "Modify Terrain Operations")]
+    /// <summary>
+    /// Provides an overlay for terrain operations in the Scene view.
+    /// This overlay allows users to execute predefined terrain operations on selected PathCreator objects.
+    /// </summary>
+    [Overlay(typeof(SceneView), "MrPathV2.TerrainOperations", "MrPathV2Operations")]
     public class TerrainOperationsOverlay : Overlay
     {
-
-        // GPU预览是否启用
-        // private const string GpuPreviewPrefKey = "MrPath_EnableGpuPreview";
-
-
         private const string ElCpuOrGpu = "CpuOrGpu";
         private const string ElOperationsContainer = "operationsContainer";
-        // GPU预览是否启用
-        // private const string ElGpuPreviewToggle = "gpuPreviewToggle";
 
         private static readonly string[] BackendChoices =
         {
@@ -34,79 +31,119 @@ namespace __temp.MrPathV2.Editor.Overlays
         };
 
         /// <summary>
-        ///    存储所有操作按钮的列表，用于批量处理状态
+        /// Stores all operation buttons for batch state management
         /// </summary>
         private readonly List<Button> _operationButtons = new List<Button>();
+        
         private DropdownField _backendDropdown;
         private VisualElement _content;
         private PathEditorContext _ctx;
-        //GPU预览是否启用
-        // private Toggle _gpuPreviewToggle;
-
+        
         /// <summary>
-        ///    标记是否正在执行操作
+        /// Indicates whether an operation is currently executing
         /// </summary>
         private bool _isExecutingOperation;
         private MrPathProjectSettings _projectSettings;
         private VisualElement _root;
         private MrPathTerrainOperations _terrainOpsConfig;
 
+        /// <summary>
+        /// Creates the panel content for the overlay
+        /// </summary>
+        /// <returns>The root visual element of the overlay</returns>
         public override VisualElement CreatePanelContent()
         {
-            _projectSettings = MrPathProjectSettings.GetOrCreateSettings();
-            _terrainOpsConfig = _projectSettings.terrainOperations;
-            //_root = UIResourceLoader.LoadAndCloneByName(nameof(TerrainOperationsOverlay));
-            _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>();
-            if (_root == null)
-            {
-                return new Label("Overlay UI 閸旂姾娴囨径杈Е");
-            }
-            // <--- 从UXML中获取元素引用
-            _backendDropdown = _root.Q<DropdownField>(ElCpuOrGpu);
-            // GPU预览是否启用
-            // _gpuPreviewToggle = _root.Q<Toggle>(ElGpuPreviewToggle);
-            _content = _root.Q<VisualElement>(ElOperationsContainer);
-
-            InitializeBackendDropdown(); // <--- 初始化后端选择下拉框
-            // GPU预览是否启用
-            // InitializeGpuPreviewToggleFromUxml(); // <--- 从UXML初始化GPU预览开关
-
-            // <--- 移除旧的刷新按钮
-            // var staleRefreshBtn = _root.Q<Button>("refreshButton");
-            // staleRefreshBtn?.RemoveFromHierarchy();
-
-            Selection.selectionChanged -= OnSelectionChanged;
-            Selection.selectionChanged += OnSelectionChanged;
+            InitializeSettings();
+            LoadUxmlContent();
+            InitializeUiElements();
+            SetupEventHandlers();
             RefreshContent();
             UpdateVisibility();
 
             return _root;
         }
 
+        /// <summary>
+        /// Initializes project settings and terrain operations configuration
+        /// </summary>
+        private void InitializeSettings()
+        {
+            _projectSettings = MrPathProjectSettings.GetOrCreateSettings();
+            _terrainOpsConfig = _projectSettings.terrainOperations;
+        }
+
+        /// <summary>
+        /// Loads the UXML content for the overlay
+        /// </summary>
+        private void LoadUxmlContent()
+        {
+            _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>();
+            if (_root == null)
+            {
+                // Fallback if UXML is not found
+                _root = new VisualElement();
+                _root.Add(new Label("TerrainOperationsOverlay.uxml is not found"));
+            }
+        }
+
+        /// <summary>
+        /// Initializes UI elements from the UXML
+        /// </summary>
+        private void InitializeUiElements()
+        {
+            _backendDropdown = _root.Q<DropdownField>(ElCpuOrGpu);
+            _content = _root.Q<VisualElement>(ElOperationsContainer);
+
+            if (_backendDropdown != null)
+            {
+                InitializeBackendDropdown();
+            }
+        }
+
+        /// <summary>
+        /// Sets up event handlers for the overlay
+        /// </summary>
+        private void SetupEventHandlers()
+        {
+            Selection.selectionChanged -= OnSelectionChanged;
+            Selection.selectionChanged += OnSelectionChanged;
+        }
+
+        /// <summary>
+        /// Initializes the backend dropdown with choices and current value
+        /// </summary>
         private void InitializeBackendDropdown()
         {
-            // <--- 检查下拉框是否在CreatePanelContent中正确获取
-            if (_backendDropdown == null) return;
-
             _backendDropdown.choices = BackendChoices.ToList();
 
             var backend = _projectSettings?.advancedSettings?.paintingBackend ??
-                          PaintTerrainCommand.PaintingBackend.CPUJobTwoPass;
-            _backendDropdown.index = backend == PaintTerrainCommand.PaintingBackend.GPUCompute ? 1 : (backend == PaintTerrainCommand.PaintingBackend.Auto ? 2 : 0);
+                          PaintTerrainCommand.PaintingBackend.CPUCompute;
+            
+            _backendDropdown.index = backend switch
+            {
+                PaintTerrainCommand.PaintingBackend.GPUCompute => 1,
+                PaintTerrainCommand.PaintingBackend.Auto => 2,
+                _ => 0
+            };
 
             _backendDropdown.UnregisterValueChangedCallback(OnBackendChanged);
             _backendDropdown.RegisterValueChangedCallback(OnBackendChanged);
         }
 
+        /// <summary>
+        /// Handles backend dropdown value changes
+        /// </summary>
+        /// <param name="evt">Change event with new value</param>
         private void OnBackendChanged(ChangeEvent<string> evt)
         {
-            var newBackend = evt.newValue == "GPU"
-                ? PaintTerrainCommand.PaintingBackend.GPUCompute
-                : (evt.newValue == "Auto"
-                    ? PaintTerrainCommand.PaintingBackend.Auto
-                    : PaintTerrainCommand.PaintingBackend.CPUJobTwoPass);
+            var newBackend = evt.newValue switch
+            {
+                "GPU" => PaintTerrainCommand.PaintingBackend.GPUCompute,
+                "CPU" => PaintTerrainCommand.PaintingBackend.CPUCompute,
+                _ => PaintTerrainCommand.PaintingBackend.Auto
+            };
 
-            var advanced = _projectSettings != null ? _projectSettings.advancedSettings : null;
+            var advanced = _projectSettings?.advancedSettings;
             if (advanced == null || advanced.paintingBackend == newBackend) return;
 
             Undo.RecordObject(advanced, "Change Painting Backend");
@@ -114,143 +151,172 @@ namespace __temp.MrPathV2.Editor.Overlays
             EditorUtility.SetDirty(advanced);
         }
 
-        // GPU预览是否启用的初始化方法
-        // private void InitializeGpuPreviewToggleFromUxml() { ... }
-
         /// <summary>
-        /// 刷新UI内容
-        /// 根据当前配置重新创建所有操作按钮
+        /// Refreshes the UI content based on current configuration
         /// </summary>
         private void RefreshContent()
         {
-            // 1. 守卫语句
+            // Early return if content container is not available
             if (_content == null) return;
 
+            ClearContent();
+            DisplayContent();
+        }
+
+        /// <summary>
+        /// Clears the content container and operation buttons list
+        /// </summary>
+        private void ClearContent()
+        {
             _content.Clear();
             _operationButtons.Clear();
+        }
 
-            // 2. 检查地形操作配置是否存在
+        /// <summary>
+        /// Displays content based on terrain operations configuration
+        /// </summary>
+        private void DisplayContent()
+        {
+            // Show error message if configuration is missing
             if (_terrainOpsConfig == null)
             {
-                _content.Add(new Label("未找到地形操作配置"));
+                _content.Add(new Label("Terrain operations configuration not found"));
                 return;
             }
 
             var ops = _terrainOpsConfig.operations;
 
-            // 3. 检查操作列表是否为空
+            // Show configuration redirect button if no operations are defined
             if (ops == null || ops.Length == 0)
             {
                 _content.Add(CreateConfigRedirectButton());
                 return;
             }
 
-            // 4. 为每个操作创建按钮并添加到UI
+            CreateAndAddOperationButtons(ops);
+        }
 
-            // 使用LINQ查询过滤、排序并创建按钮
-            // 转换为foreach循环以提高可读性
-            var newButtons = ops
-                .Where(op => op != null) // 过滤掉null
-                .OrderBy(op => op.order)  // 按顺序排序
-                .Select(CreateOperationButton) // 创建按钮
+        /// <summary>
+        /// Creates and adds operation buttons for each terrain operation
+        /// </summary>
+        /// <param name="operations">Array of terrain operations</param>
+        private void CreateAndAddOperationButtons(PathTerrainOperation[] operations)
+        {
+            var buttons = operations
+                .Where(op => op != null)
+                .OrderBy(op => op.order)
+                .Select(CreateOperationButton)
                 .ToList();
 
-            // 5. 更新按钮列表并添加到UI
+            _operationButtons.AddRange(buttons);
 
-            // 添加到按钮列表
-            _operationButtons.AddRange(newButtons);
-
-            // 添加到可视化元素
-            foreach (var btn in newButtons)
+            foreach (var button in buttons)
             {
-                _content.Add(btn);
+                _content.Add(button);
             }
         }
 
         /// <summary>
-        /// 创建一个跳转到配置页面的按钮
+        /// Creates a button that redirects to the project settings
         /// </summary>
+        /// <returns>Configuration redirect button</returns>
         private static Button CreateConfigRedirectButton()
         {
             var btn = new Button(() => SettingsService.OpenProjectSettings("Project/MrPath"))
             {
-                text = "配置地形操作"
+                text = "Configure Terrain Operations"
             };
             btn.AddToClassList("unity-toolbar-button");
             return btn;
         }
 
         /// <summary>
-        /// 为地形操作创建一个工具栏按钮
+        /// Creates a toolbar button for a terrain operation
         /// </summary>
-        private Button CreateOperationButton(PathTerrainOperation op)
+        /// <param name="operation">Terrain operation to create button for</param>
+        /// <returns>Toolbar button for the operation</returns>
+        private Button CreateOperationButton(PathTerrainOperation operation)
         {
-            var buttonText = !string.IsNullOrEmpty(op.displayName) ? op.displayName : op.name;
+            var buttonText = !string.IsNullOrEmpty(operation.displayName) ? operation.displayName : operation.name;
 
-            // 1. 创建按钮
             var btn = new ToolbarButton
             {
                 text = buttonText,
                 userData = buttonText
             };
 
-            // 2. 注册点击事件
-            // 使用RegisterCallback而非直接赋值clickable，以便在lambda中捕获btn
-            btn.RegisterCallback<ClickEvent>(_ => ExecuteOperation(op, btn));
-
-            // 3. 设置按钮状态和样式
+            btn.RegisterCallback<ClickEvent>(_ => ExecuteOperation(operation, btn));
             btn.SetEnabled(!_isExecutingOperation);
             btn.AddToClassList("terrain-op-button");
 
-            // 4. 应用操作特定样式
-            ApplyOperationStyles(btn, op);
+            ApplyOperationStyles(btn, operation);
 
             return btn;
         }
 
         /// <summary>
-        /// 应用操作特定的样式到按钮
+        /// Applies operation-specific styles to a button
         /// </summary>
-        private static void ApplyOperationStyles(Button btn, PathTerrainOperation op)
+        /// <param name="button">Button to apply styles to</param>
+        /// <param name="operation">Terrain operation with style information</param>
+        private static void ApplyOperationStyles(Button button, PathTerrainOperation operation)
         {
-            if (op.icon == null) return;
-            // 通过设置style.backgroundImage应用图标
-            btn.style.backgroundImage = op.icon;
+            if (operation.icon == null) return;
+            
+            button.style.backgroundImage = operation.icon;
 
-            var color = op.buttonColor != default ? op.buttonColor : Color.white;
-            btn.style.unityBackgroundImageTintColor = color;
+            var color = operation.buttonColor != default ? operation.buttonColor : Color.white;
+            button.style.unityBackgroundImageTintColor = color;
         }
 
+        /// <summary>
+        /// Handles selection changes in the editor
+        /// </summary>
         private void OnSelectionChanged()
         {
             UpdateVisibility();
         }
 
+        /// <summary>
+        /// Updates the overlay visibility based on the current selection
+        /// </summary>
         private void UpdateVisibility()
         {
-            var go = Selection.activeGameObject;
-            if (go == null)
+            var selectedGameObject = Selection.activeGameObject;
+            if (selectedGameObject == null)
             {
                 HideOverlay();
                 return;
             }
 
-            var creator = go.GetComponent<PathCreator>();
-            if (creator == null)
+            var pathCreator = selectedGameObject.GetComponent<PathCreator>();
+            if (pathCreator == null)
             {
                 HideOverlay();
                 return;
             }
 
+            ShowOverlay(pathCreator);
+        }
+
+        /// <summary>
+        /// Shows the overlay for a specific PathCreator
+        /// </summary>
+        /// <param name="pathCreator">PathCreator to show overlay for</param>
+        private void ShowOverlay(PathCreator pathCreator)
+        {
             displayed = true;
 
-            if (_ctx?.Target == creator) return;
+            if (_ctx?.Target == pathCreator) return;
 
             _ctx?.Dispose();
-            _ctx = new PathEditorContext(creator);
+            _ctx = new PathEditorContext(pathCreator);
             RefreshContent();
         }
 
+        /// <summary>
+        /// Hides the overlay and disposes of the context
+        /// </summary>
         private void HideOverlay()
         {
             displayed = false;
@@ -259,98 +325,84 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// 执行选定的地形操作
+        /// Executes a terrain operation
         /// </summary>
-        private async void ExecuteOperation(PathTerrainOperation op, Button clickedButton)
+        /// <param name="operation">Operation to execute</param>
+        /// <param name="clickedButton">Button that triggered the operation</param>
+        private async void ExecuteOperation(PathTerrainOperation operation, Button clickedButton)
         {
+            if (!CanExecuteOperation(operation))
+            {
+                return;
+            }
+
             try
             {
-                // 1. 守卫语句 - 检查是否可以执行操作
-                if (!CanExecuteOperation(op))
+                SetUIStateExecuting(clickedButton);
+
+                var command = operation.CreateCommand(_ctx.Target, _ctx.HeightProvider);
+                if (command == null) return;
+
+                if (TryGetPreviewBoundsXZ(out var previewBounds))
                 {
-                    return;
+                    command.SetPreviewBoundsXZ(previewBounds);
                 }
 
-                // 2. 使用try/catch/finally确保UI状态正确恢复
-                // 注意：async void应谨慎使用，此处用于事件处理
-                try
-                {
-                    // 3. 更新UI为执行状态
-                    SetUIStateExecuting(clickedButton);
-
-                    // 4. 创建操作命令
-                    var cmd = op.CreateCommand(_ctx.Target, _ctx.HeightProvider);
-                    if (cmd == null) return; // 如果命令为空，在finally中恢复UI
-
-                    // 5. 设置预览边界（如果可用）
-                    if (TryGetPreviewBoundsXZ(out var previewBounds))
-                    {
-                        cmd.SetPreviewBoundsXZ(previewBounds);
-                    }
-
-                    // 6. 执行操作
-                    await _ctx.TerrainHandler.ExecuteAsync(cmd, null);
-                }
-                catch (Exception e)
-                {
-                    // 记录操作执行过程中的异常
-                    // 使用LogException而非Log以捕获完整堆栈信息
-                    ErrorHandler.LogException(e);
-                }
-                finally
-                {
-                    // 7. 恢复UI状态
-                    RestoreUIState(clickedButton);
-                }
+                await _ctx.TerrainHandler.ExecuteAsync(command, null);
             }
             catch (Exception e)
             {
                 ErrorHandler.LogException(e);
             }
+            finally
+            {
+                RestoreUIState(clickedButton);
+            }
         }
 
         /// <summary>
-        /// 检查是否可以执行操作
+        /// Checks if an operation can be executed
         /// </summary>
-        private bool CanExecuteOperation(PathTerrainOperation op)
+        /// <param name="operation">Operation to check</param>
+        /// <returns>True if the operation can be executed</returns>
+        private bool CanExecuteOperation(PathTerrainOperation operation)
         {
-            // 基本检查
-            if (_isExecutingOperation || _ctx == null || !_ctx.Target || !op.CanExecute(_ctx.Target))
+            // Basic validation checks
+            if (_isExecutingOperation || _ctx == null || !_ctx.Target || !operation.CanExecute(_ctx.Target))
             {
                 return false;
             }
 
-            // 检查路径策略
+            // Validate path strategy
             var profile = _ctx.Target.profile;
-            if (profile && PathStrategyRegistry.Instance.GetStrategy(profile.curveType) != null) return true;
+            if (profile && PathStrategyRegistry.Instance.GetStrategy(profile.curveType) != null) 
+                return true;
+                
             ShowConfigError();
             return false;
         }
 
-
         /// <summary>
-        /// 设置UI为执行状态
+        /// Sets the UI to executing state
         /// </summary>
+        /// <param name="clickedButton">Button that triggered the execution</param>
         private void SetUIStateExecuting(Button clickedButton)
         {
             _isExecutingOperation = true;
-            if (clickedButton != null)
-            {
-                clickedButton.text = "Progress..";
-            }
+            clickedButton.text = "Progress..";
             SetOperationButtonsEnabled(false);
         }
 
         /// <summary>
-        /// 恢复UI状态
+        /// Restores the UI state after execution
         /// </summary>
+        /// <param name="clickedButton">Button that triggered the execution</param>
         private void RestoreUIState(Button clickedButton)
         {
             _isExecutingOperation = false;
             SetOperationButtonsEnabled(true);
 
-            // [BUG FIX] 使用userData恢复原始文本
-            // （防止RefreshContent重置时丢失原始文本）
+            // Restore original button text
             if (clickedButton is { userData: string originalText })
             {
                 clickedButton.text = originalText;
@@ -358,75 +410,73 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// 尝试获取预览网格的XZ边界
-        /// 用于限制地形操作仅在预览网格范围内执行
+        /// Tries to get the XZ bounds of the preview mesh
         /// </summary>
+        /// <param name="bounds">Output bounds vector (min.x, min.z, max.x, max.z)</param>
+        /// <returns>True if bounds were successfully retrieved</returns>
         private bool TryGetPreviewBoundsXZ(out Vector4 bounds)
         {
             bounds = Vector4.zero;
 
-            // 检查预览生成器是否存在
-            if (_ctx.PreviewGenerator == null) return false;
+            if (_ctx.PreviewGenerator == null) 
+                return false;
 
             var previewMesh = _ctx.PreviewGenerator.PreviewMesh;
-            if (previewMesh == null) return false;
+            if (previewMesh == null) 
+                return false;
 
-            var b = previewMesh.bounds;
+            var meshBounds = previewMesh.bounds;
 
-            // 检查边界是否有效
-            if (b.size.x > 0 && b.size.z > 0)
-            {
-                // 存储XZ平面的最小和最大值
-                bounds = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
-                return true;
-            }
-
-            return false;
+            // Validate bounds
+            if (!(meshBounds.size.x > 0) || !(meshBounds.size.z > 0)) 
+                return false;
+                
+            // Store XZ plane min and max values
+            bounds = new Vector4(meshBounds.min.x, meshBounds.min.z, meshBounds.max.x, meshBounds.max.z);
+            return true;
         }
 
+        /// <summary>
+        /// Shows a configuration error dialog
+        /// </summary>
         private static void ShowConfigError()
         {
             EditorUtility.DisplayDialog(
-                "配置错误",
-                "所选路径配置文件缺少有效的策略。请确保路径创建器已分配配置文件，并在Project/MrPath设置中正确配置了策略。",
-                "确定"
+                "Configuration Error",
+                "The selected path profile is missing a valid strategy. Ensure the PathCreator has a profile assigned and that strategies are properly configured in Project/MrPath settings.",
+                "OK"
             );
         }
 
         /// <summary>
-        /// 设置所有操作按钮的启用状态
+        /// Sets the enabled state of all operation buttons
         /// </summary>
-        /// <param name="enabled">按钮是否启用</param>
+        /// <param name="enabled">Whether buttons should be enabled</param>
         private void SetOperationButtonsEnabled(bool enabled)
         {
-            foreach (var btn in _operationButtons)
+            foreach (var button in _operationButtons.Where(btn => btn != null))
             {
-                // 同时设置pickingMode和focusable以完全禁用交互
-                // 跳过空引用
-                if (btn == null) continue;
+                button.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
+                button.focusable = enabled;
 
-                btn.pickingMode = enabled ? PickingMode.Position : PickingMode.Ignore;
-                btn.focusable = enabled;
-
-                if (enabled && btn.userData is string originalText)
+                if (enabled && button.userData is string originalText)
                 {
-                    btn.text = originalText;
+                    button.text = originalText;
                 }
             }
         }
 
-
+        /// <summary>
+        /// Called when the overlay is disabled
+        /// </summary>
         public void OnDisable()
         {
             Selection.selectionChanged -= OnSelectionChanged;
             _ctx?.Dispose();
             _ctx = null;
 
-
             SetOperationButtonsEnabled(true);
             _isExecutingOperation = false;
         }
     }
 }
-
-

@@ -26,7 +26,7 @@ namespace __temp.MrPathV2.Editor.Terrain
         // 供设置与 UI 引用的后端枚举（保持名称兼容）
         public enum PaintingBackend
         {
-            CPUJobTwoPass = 0,
+            CPUCompute = 0,
             GPUCompute = 1,
             Auto = 2
         }
@@ -123,7 +123,8 @@ namespace __temp.MrPathV2.Editor.Terrain
                 var recipeLayers = recipe.GetLayers();
                 foreach (var rl in recipeLayers)
                 {
-                    if (rl != null || !rl.contentLayer) continue;
+                    // 提前返回：无效条目不参与检测
+                    if (rl == null || !rl.contentLayer) continue;
                     if (!map.ContainsKey(rl.contentLayer)) { anyMissing = true; break; }
                 }
                 if (anyMissing) break;
@@ -191,14 +192,14 @@ namespace __temp.MrPathV2.Editor.Terrain
         {
             var settings = MrPathProjectSettings.GetOrCreateSettings();
             var adv = settings != null ? settings.advancedSettings : null;
-            var backend = adv != null ? adv.paintingBackend : PaintingBackend.CPUJobTwoPass;
+            var backend = adv != null ? adv.paintingBackend : PaintingBackend.CPUCompute;
             var threshold = adv != null ? Mathf.Max(1, adv.gpuAutoSwitchThreshold) : 50000; // 默认阈值
 
             bool UseGpu()
             {
                 if (!SystemInfo.supportsComputeShaders) return false;
                 if (backend == PaintingBackend.GPUCompute) return true;
-                if (backend == PaintingBackend.CPUJobTwoPass) return false;
+                if (backend == PaintingBackend.CPUCompute) return false;
                 // Auto：按覆盖像素与硬件能力
                 return pixelCount >= threshold;
             }

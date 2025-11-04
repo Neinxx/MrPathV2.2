@@ -43,9 +43,9 @@ struct GpuNoiseMaskParams {
 };
 
 struct GpuMaskParams {
-	int                   maskType; // C#: MaskType
-	float                 strength; // C#: Strength
-	float2                padding; // C#: Pad2, Pad3
+	int                   maskType; // C# : MaskType
+	float                 strength; // C# : Strength
+	float2                padding; // C# : Pad2, Pad3
 	GpuNoiseMaskParams    noiseParams;
 	GpuShoulderMaskParams shoulderParams;
 };
@@ -107,7 +107,7 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
 	float denomY = (abs(tileY) < 1e-4) ? (1e-4 * ((tileY == 0.0) ? 1.0 : sign(tileY))) : tileY;
 
 	// Map worldPos to normalized across (-1..1) and along (0..1)
-	float posAcross = worldPos.x / max(1e-5, roadWidth); // -1..1
+	float posAcross = worldPos.x / max(1e-5, roadWidth); // - 1..1
 	float pathProgress = (pathLength > 1e-5) ? (worldPos.y / pathLength) : 0.0; // 0..1
 
 	float uNorm = 0.5 * (posAcross + 1.0);
@@ -162,7 +162,12 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
 	{
 		float e0 = p.EdgeLow;
 		float e1 = p.EdgeHigh;
-		if(e0 > e1){ float t = e0; e0 = e1; e1 = t; }
+		if(e0 > e1)
+		{
+			float t = e0;
+			e0 = e1;
+			e1 = t;
+		}
 		return saturate(smoothstep(e0, e1, valuePre));
 	}
 	if(p.Smooth <= 1e-5)
@@ -237,7 +242,7 @@ void BuildAtlas(uint3 id : SV_DispatchThreadID)
 	int  pathRow = (int)uPathRow;
 
 	float across = (float)idxX / max(1, _AtlasWidth - 1); // 0..1
-	float posAcross = across * 2.0 - 1.0; // -1..1, center=0
+	float posAcross = across * 2.0 - 1.0; // - 1..1, center = 0
 	float pathProgress = (float)pathRow / max(1, _PathSamples - 1);
 
 	GpuMaskParams p = _MaskParams[layerIndex];

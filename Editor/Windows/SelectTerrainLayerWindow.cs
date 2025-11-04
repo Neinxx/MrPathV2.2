@@ -496,6 +496,54 @@ namespace MrPathV2.Editor.Windows
                 return; // 提前返回
             }
 
+            // 若选择了有效 Layer，且存在路径上下文，则在应用前检测覆盖地形是否缺失该 Layer
+            if (tl && _contextPathCreator)
+            {
+                try
+                {
+                    var coveredTerrains = GetCoveredTerrains(_contextPathCreator);
+                    if (coveredTerrains.Count > 0)
+                    {
+                        bool anyMissing = false;
+                        foreach (var t in coveredTerrains)
+                        {
+                            if (!TerrainHoldsOrEquivalent(t, tl)) { anyMissing = true; break; }
+                        }
+
+                        if (anyMissing)
+                        {
+                            // 三选项：添加到覆盖地形 / 仅选择(不添加) / 取消
+                            int choice = EditorUtility.DisplayDialogComplex(
+                                "覆盖地形缺失图层",
+                                $"选中的 TerrainLayer 在部分道路覆盖的地形中缺失：\n\n{tl.name}\n\n是否将其添加到所有覆盖地形？",
+                                "添加到覆盖地形",
+                                "仅选择(不添加)",
+                                "取消");
+
+                            if (choice == 2)
+                            {
+                                // 取消：不更改选择，不关闭窗口
+                                return;
+                            }
+
+                            if (choice == 0)
+                            {
+                                // 添加到所有覆盖地形
+                                foreach (var t in coveredTerrains)
+                                {
+                                    try { EnsureLayerPresentOnTerrain(t, tl); } catch { }
+                                }
+                            }
+                            // choice == 1 仅选择：直接继续下面的应用流程
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[SelectTerrainLayerWindow] 缺失Layer检测失败: {ex.Message}");
+                }
+            }
+
             var owner = _contextPathCreator ? _contextPathCreator.profile : null;
             if (owner) Undo.RecordObject(owner, "Select Terrain Layer");
             _targetRoadLayer.contentLayer = tl;
@@ -687,6 +735,111 @@ namespace MrPathV2.Editor.Windows
                 _grid.style.flexDirection = FlexDirection.Row;
                 _grid.style.flexWrap = Wrap.Wrap;
             }
+        }
+
+        // -------- 覆盖地形检测与辅助 --------
+        private static List<UnityEngine.Terrain> GetCoveredTerrains(PathCreator creator)
+        {
+            var result = new List<UnityEngine.Terrain>();
+            if (!creator || !creator.profile || creator.pathData == null || creator.pathData.KnotCount < 2)
+                return result;
+
+            try
+            {
+                // 采样路径脊线
+                var heightProvider = new __temp.MrPathV2.Runtime.Providers.TerrainHeightProvider();
+                var spine = PathSampler.SamplePath(creator, heightProvider);
+
+                // 计算扩展边界
+                var bounds = GetExpandedXZBounds(spine, creator.profile);
+
+                // 查找相交地形
+                var terrains = UnityEngine.Terrain.activeTerrains;
+                foreach (var terrain in terrains)
+                {
+                    if (!terrain || !terrain.terrainData) continue;
+                    var tb = GetTerrainBounds(terrain);
+                    if (BoundsOverlap(bounds, tb)) result.Add(terrain);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[GetCoveredTerrains] {ex.Message}");
+            }
+
+            return result;
+        }
+
+        private static Vector4 GetExpandedXZBounds(PathSpine spine, PathProfile profile)
+        {
+            if (spine.Points ==null || spine.VertexCount == 0)
+                return new Vector4(0, 0, 0, 0);
+
+            var halfWidth = (profile.roadWidth * 0.5f) + profile.falloffWidth;
+            float minX = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxZ = float.MinValue;
+
+            for (int i = 0; i < spine.VertexCount; i++)
+            {
+                var p = spine.Points[i];
+                minX = Mathf.Min(minX, p.x - halfWidth);
+                minZ = Mathf.Min(minZ, p.z - halfWidth);
+                maxX = Mathf.Max(maxX, p.x + halfWidth);
+                maxZ = Mathf.Max(maxZ, p.z + halfWidth);
+            }
+
+            return new Vector4(minX, minZ, maxX, maxZ);
+        }
+
+        private static Vector4 GetTerrainBounds(UnityEngine.Terrain terrain)
+        {
+            var pos = terrain.transform.position;
+            var size = terrain.terrainData.size;
+            return new Vector4(pos.x, pos.z, pos.x + size.x, pos.z + size.z);
+        }
+
+        private static bool BoundsOverlap(Vector4 a, Vector4 b)
+        {
+            return !(a.z <= b.x || a.x >= b.z || a.w <= b.y || a.y >= b.w);
+        }
+
+        private static bool TerrainHoldsOrEquivalent(UnityEngine.Terrain terrain, TerrainLayer layer)
+        {
+            if (!terrain || !terrain.terrainData || !layer) return false;
+            var layers = terrain.terrainData.terrainLayers ?? Array.Empty<TerrainLayer>();
+            var targetDiffuse = layer.diffuseTexture;
+            var targetNormal = layer.normalMapTexture;
+            for (int i = 0; i < layers.Length; i++)
+            {
+                var l = layers[i];
+                if (!l) continue;
+                if (ReferenceEquals(l, layer)) return true;
+                if (l.diffuseTexture == targetDiffuse && l.normalMapTexture == targetNormal) return true;
+                if (l.diffuseTexture == targetDiffuse) return true;
+                if (!targetDiffuse && !l.diffuseTexture && l.name == layer.name) return true;
+            }
+            return false;
+        }
+
+        private static void EnsureLayerPresentOnTerrain(UnityEngine.Terrain terrain, TerrainLayer layer)
+        {
+            if (!terrain || !terrain.terrainData || !layer) return;
+            if (TerrainHoldsOrEquivalent(terrain, layer)) return; // 已存在或等价，提前返回
+
+            var td = terrain.terrainData;
+            var list = new List<TerrainLayer>(td.terrainLayers ?? Array.Empty<TerrainLayer>());
+            Undo.RegisterCompleteObjectUndo(td, "添加地形图层");
+
+            // 寻找空槽位
+            int insertIndex = -1;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (!list[i]) { insertIndex = i; break; }
+            }
+
+            if (insertIndex >= 0) list[insertIndex] = layer; else list.Add(layer);
+            td.terrainLayers = list.ToArray();
+            EditorUtility.SetDirty(td);
         }
     }
 }

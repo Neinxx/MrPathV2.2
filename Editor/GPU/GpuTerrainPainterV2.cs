@@ -68,7 +68,7 @@ namespace __temp.MrPathV2.Editor.GPU
                 _renderer = new GpuTerrainRenderer();
                 _isInitialized = true;
 
-
+                // Debug.Log("[GpuTerrainPainterV2] 新版 GPU 绘制器初始化成功");
             }
             catch (Exception ex)
             {
@@ -311,8 +311,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
                     var strength = math.saturate(rl.opacity);
                     var blend = MapToGpuBlendMode((int)rl.blendMode);
-                    // 传递 Layer 关联的遮罩（可能为空）
-                    layerConfigs.Add(new LayerConfig(layerIndex, strength, blend, rl.layerMask));
+                    layerConfigs.Add(new LayerConfig(layerIndex, strength, blend));
                 }
             }
 

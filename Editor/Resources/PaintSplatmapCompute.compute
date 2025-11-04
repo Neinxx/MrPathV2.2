@@ -171,46 +171,37 @@ float4 clamp_to_linear(float4 value)
     return saturate(value);  // 替代unorm的自动范围处理
 }
 
-void apply_blending(int2 pixel_coord, layer_params layer, float distance_abs, float progress, float signed_distance, float mask_gate)
+// 工具：读取/写入指定 splat 通道
+float read_splat_weight(int2 pixel_coord, int splat_index)
 {
-    // distance_abs 现传入的是 edgeFactor（0..1）：中心=1，边界外=0
-    float falloff = saturate(distance_abs);
+    int slice = splat_index / 4;
+    int ch = splat_index % 4;
+    float4 v = clamp_to_linear(splat_weights[int3(pixel_coord, slice)]);
+    return (ch == 0) ? v.r : (ch == 1) ? v.g : (ch == 2) ? v.b : v.a;
+}
 
-    float2 world_pos = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
-    float  mask_value = EvaluateMask(layer.mask_params, world_pos, progress, signed_distance, road_width);
+void write_splat_weight(int2 pixel_coord, int splat_index, float value)
+{
+    int slice = splat_index / 4;
+    int ch = splat_index % 4;
+    float4 v = clamp_to_linear(splat_weights[int3(pixel_coord, slice)]);
+    value = saturate(value);
+    if(ch == 0) v.r = value;
+    else if(ch == 1) v.g = value;
+    else if(ch == 2) v.b = value;
+    else v.a = value;
+    splat_weights[int3(pixel_coord, slice)] = clamp_to_linear(v);
+}
 
-    float final_strength = layer.opacity * falloff * mask_value * mask_gate;
-    if(final_strength <= 0.0f) return;
-
-    int splat_idx_signed = layer.terrain_layer_splat_index;
-    if(splat_idx_signed < 0 || splat_idx_signed >= alphamap_layer_count)
+bool is_recipe_splat(int splat_index)
+{
+    [loop]
+    for(int i = 0; i < layer_count; i++)
     {
-        splat_idx_signed = 0;
+        if(layer_params_buffer[i].terrain_layer_splat_index == splat_index)
+            return true;
     }
-
-    uint splat_index = (uint)splat_idx_signed;
-    uint alphamap_index = splat_index / 4u;
-    uint channel_index = splat_index % 4u;
-
-    // 读取当前值并确保在有效范围内
-    float4 current_alpha = splat_weights[int3(pixel_coord, alphamap_index)];
-    current_alpha = clamp_to_linear(current_alpha);
-
-    float base_weight = (channel_index == 0) ? current_alpha.r
-                      : (channel_index == 1) ? current_alpha.g
-                      : (channel_index == 2) ? current_alpha.b
-                      : current_alpha.a;
-                      
-    float blended_weight = BlendWeight(base_weight, final_strength, layer.blend_mode);
-    blended_weight = saturate(blended_weight);
-
-    if(channel_index == 0) current_alpha.r = blended_weight;
-    else if(channel_index == 1) current_alpha.g = blended_weight;
-    else if(channel_index == 2) current_alpha.b = blended_weight;
-    else current_alpha.a = blended_weight;
-
-    // 写入前再次确保值在[0,1]范围
-    splat_weights[int3(pixel_coord, alphamap_index)] = clamp_to_linear(current_alpha);
+    return false;
 }
 
 [numthreads(8, 8, 1)]
@@ -263,10 +254,71 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    // 正常模式：对所有图层执行混合
-    for(int layerIdx = 0; layerIdx < layer_count; layerIdx++)
+    // 正常模式：有序覆盖（Ordered Over）
+    // 步骤1：统计非配方层的原始总和（用于后续按剩余量缩放）
+    float others_sum = 0.0;
+    [loop]
+    for(int s = 0; s < alphamap_layer_count; s++)
+    {
+        if(!is_recipe_splat(s))
+        {
+            others_sum += read_splat_weight(pixel_coord, s);
+        }
+    }
+
+    // 步骤2：计算配方层的总贡献（自透明+按剩余量分配，不写回）
+    float remaining = 1.0;
+    float sum_recipe = 0.0;
+    [loop]
+    for(int layerIdx = layer_count - 1; layerIdx >= 0; layerIdx--)
     {
         layer_params layer = layer_params_buffer[layerIdx];
-        apply_blending(pixel_coord, layer, edgeFactor, progress, signed_distance, maskGate);
+        int splat_idx = layer.terrain_layer_splat_index;
+        if(splat_idx < 0 || splat_idx >= alphamap_layer_count) continue;
+
+        float2 world_pos2 = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
+        float mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
+        float self_alpha = saturate(layer.opacity * edgeFactor * mask_value) * maskGate;
+        float contribute = min(self_alpha, remaining);
+        if(contribute > 1e-6)
+        {
+            sum_recipe += contribute;
+            remaining = max(0.0, remaining - contribute);
+        }
+        if(remaining <= 1e-6) break;
+    }
+
+    // 步骤3：按剩余量缩放非配方层（保持其相对比例），使 sum(others)=1-sum_recipe
+    float target_others = saturate(1.0 - sum_recipe);
+    float scale = (others_sum > 1e-6) ? target_others / others_sum : 0.0;
+    if(scale < 1.0 - 1e-6)
+    {
+        [loop]
+        for(int s = 0; s < alphamap_layer_count; s++)
+        {
+            if(!is_recipe_splat(s))
+            {
+                float w = read_splat_weight(pixel_coord, s);
+                write_splat_weight(pixel_coord, s, w * scale);
+            }
+        }
+    }
+
+    // 步骤4：写入配方层的贡献（再次遍历以避免存临时数组）
+    remaining = 1.0;
+    [loop]
+    for(int layerIdx = layer_count - 1; layerIdx >= 0; layerIdx--)
+    {
+        layer_params layer = layer_params_buffer[layerIdx];
+        int splat_idx = layer.terrain_layer_splat_index;
+        if(splat_idx < 0 || splat_idx >= alphamap_layer_count) continue;
+
+        float2 world_pos2 = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
+        float mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
+        float self_alpha = saturate(layer.opacity * edgeFactor * mask_value) * maskGate;
+        float contribute = min(self_alpha, remaining);
+        write_splat_weight(pixel_coord, splat_idx, contribute);
+        remaining = max(0.0, remaining - contribute);
+        if(remaining <= 1e-6) break;
     }
 }

@@ -2,7 +2,6 @@ using __temp.MrPathV2.Editor.Tools;
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Settings;
 using __temp.MrPathV2.Runtime.Strategies;
-using MrPathV2.Editor.Preview;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEditor.EditorTools;
@@ -63,10 +62,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         /// 处理无效上下文的情况
         /// </summary>
         private void HandleInvalidContext()
-        {
-            MultiPathPreviewRenderer.ActiveEditingId = 0;
-            MultiPathPreviewRenderer.IsDraggingActive = false;
-        }
+        { }
 
         /// <summary>
         /// 根据需要激活预览管理器
@@ -75,19 +71,14 @@ namespace __temp.MrPathV2.Editor.Inspectors
         /// 重置预览状态
         /// </summary>
         private static void ResetPreviewState()
-        {
-            MultiPathPreviewRenderer.ActiveEditingId = 0;
-            MultiPathPreviewRenderer.IsDraggingActive = false;
-        }
+        { }
 
         /// <summary>
         /// 同步拖拽状态到全局多路径预览
         /// </summary>
         private void SynchronizeDragState()
         {
-            MultiPathPreviewRenderer.IsDraggingActive = _ctx.IsDraggingHandle;
-            if (_targetCreator)
-                MultiPathPreviewRenderer.ActiveEditingId = _ctx.IsDraggingHandle ? _targetCreator.GetInstanceID() : 0;
+            if (_targetCreator) { }
         }
 
         // --- OnSceneGUI 辅助方法 ---

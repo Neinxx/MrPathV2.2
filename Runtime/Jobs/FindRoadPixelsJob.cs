@@ -75,10 +75,16 @@ namespace __temp.MrPathV2.Runtime.Jobs
             var minDistanceSq = float.MaxValue;
             var closestSegmentIndex = -1;
             var tClosest = 0f;
+            // 记录弧长：与 GPU 端 compute 一致，按真实路径长度归一化
+            var totalLen = 0f;
+            var accumLenBeforeClosest = 0f;
+            var closestSegLen = 0f;
 
             var spineSegmentCount = Spine.Points.Length - 1;
             if (spineSegmentCount < 0) return false;
 
+            // 单次遍历：在统计最短距离的同时累积总弧长，并在更新最近段时记录该段前的累计长度与该段长度
+            var accumLen = 0f;
             for (var i = 0; i < spineSegmentCount; i++)
             {
                 var segmentStart = Spine.Points[i].xz;
@@ -86,6 +92,8 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 var segmentVector = segmentEnd - segmentStart;
                 var pointVector = worldPos2D - segmentStart;
                 var segmentLengthSq = math.dot(segmentVector, segmentVector);
+                var segmentLen = math.sqrt(math.max(segmentLengthSq, 0f));
+                totalLen += segmentLen;
 
                 var t = 0f;
                 float distanceSq;
@@ -107,7 +115,12 @@ namespace __temp.MrPathV2.Runtime.Jobs
                     minDistanceSq = distanceSq;
                     closestSegmentIndex = i;
                     tClosest = t;
+                    accumLenBeforeClosest = accumLen;
+                    closestSegLen = segmentLen;
                 }
+
+                // 将当前段长度累加入起点到该段末尾
+                accumLen += segmentLen;
             }
 
             if (closestSegmentIndex == -1) return false;
@@ -128,7 +141,10 @@ namespace __temp.MrPathV2.Runtime.Jobs
             var signedDistance = math.dot(offsetVector, rightVector.xz);
 
             normalizedDist = math.saturate(0.5f * (signedDistance / halfRoadWidth + 1f));
-            pathProgress = math.saturate((closestSegmentIndex + tClosest) / spineSegmentCount);
+            // 以弧长归一化进度，匹配 GPU 端 calculate_distance_progress_signed 实现
+            var alongLen = accumLenBeforeClosest + tClosest * closestSegLen;
+            var denom = math.max(totalLen, Epsilon);
+            pathProgress = math.saturate(alongLen / denom);
 
             return true;
         }

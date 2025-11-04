@@ -12,18 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
   m_Name: NewMask 1
   m_EditorClassIdentifier: 
-  smooth: 0.441
-  tiling: {x: 2, y: 5.96}
+  smooth: 1
+  tiling: {x: 2, y: 21.4}
   offset: {x: 0, y: 0}
-  overallScale: 1
-  strength: 0.968
+  overallScale: 1.1
+  strength: 1
   seed: 0
-  noiseScale: {x: 1, y: 1}
+  noiseScale: {x: 1.5, y: 1.5}
   uniformScale: 1
-  rotationDeg: -63
+  rotationDeg: -91
   octaves: 1
-  lacunarity: 2
-  gain: 0.5
+  lacunarity: 2.44
+  gain: 0.398
   useAsymmetricEdges: 0
   edgeLow: 0.25
   edgeHigh: 0.75

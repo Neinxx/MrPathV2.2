@@ -20,22 +20,18 @@ namespace MrPathV2.Editor.Preview
     public static class MultiPathPreviewRenderer
     {
         // 控制全局多路径预览是否启用，避免与单对象编辑器预览重复绘制
-        public static bool IsEnabled { get; set; } = true;
+        private static bool IsEnabled => true;
 
-        // 新增：偏好全局渲染（包括拖拽时），禁用本地预览
-        public static bool PreferGlobalOnly { get; set; } = false;
 
         // 当前正在编辑（拖拽句柄）的对象 ID；拖拽中由编辑器设置
-        public static int ActiveEditingId { get; set; }
-        public static bool IsDraggingActive { get; set; }
 
         private static readonly Dictionary<int, PathPreviewManager> Managers = new Dictionary<int, PathPreviewManager>();
         private static readonly Dictionary<int, TransformSnapshot> LastTransforms = new Dictionary<int, TransformSnapshot>();
-        private static IHeightProvider m_HeightProvider;
-        private static Material m_Template;
-        private static bool m_Initialized;
-        private static List<PathCreator> m_CachedCreators = new List<PathCreator>();
-        private static bool m_CreatorsDirty = true;
+        private static IHeightProvider s_MHeightProvider;
+        private static Material s_MTemplate;
+        private static bool s_MInitialized;
+        private static List<PathCreator> s_MCachedCreators = new List<PathCreator>();
+        private static bool s_MCreatorsDirty = true;
 
         private struct TransformSnapshot
         {
@@ -51,35 +47,35 @@ namespace MrPathV2.Editor.Preview
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
             EditorApplication.hierarchyChanged += () =>
             {
-                m_CreatorsDirty = true;
+                s_MCreatorsDirty = true;
             };
         }
 
         private static void EnsureInitialized()
         {
-            if (m_Initialized) return;
+            if (s_MInitialized) return;
             try
             {
-                m_HeightProvider ??= new TerrainHeightProvider();
+                s_MHeightProvider ??= new TerrainHeightProvider();
 
                 var settings = MrPathProjectSettings.GetOrCreateSettings();
                 var appearance = settings?.appearanceDefaults;
-                m_Template = appearance?.previewMaterialTemplate;
+                s_MTemplate = appearance?.previewMaterialTemplate;
 
                 // Ensure multi-layer shader template exists
                 var multiShader = Shader.Find("MrPath/PathPreviewSplatMulti");
                 if (multiShader)
                 {
-                    if (!m_Template || !m_Template.shader || !m_Template.shader.name.Contains("PathPreviewSplatMulti"))
+                    if (!s_MTemplate || !s_MTemplate.shader || !s_MTemplate.shader.name.Contains("PathPreviewSplatMulti"))
                     {
-                        m_Template = new Material(multiShader)
+                        s_MTemplate = new Material(multiShader)
                         {
                             name = "DefaultPreviewMaterialTemplate"
                         };
                     }
                 }
 
-                m_Initialized = true;
+                s_MInitialized = true;
             }
             catch (Exception ex)
             {
@@ -93,7 +89,7 @@ namespace MrPathV2.Editor.Preview
             if (Managers.TryGetValue(id, out var mgr) && mgr != null) return mgr;
             var generator = new DefaultPreviewGenerator();
             var matMgr = new PreviewMaterialManager();
-            mgr = new PathPreviewManager(generator, matMgr, m_Template, alpha: 1f);
+            mgr = new PathPreviewManager(generator, matMgr, s_MTemplate, alpha: 1f);
             Managers[id] = mgr;
             return mgr;
         }
@@ -102,7 +98,7 @@ namespace MrPathV2.Editor.Preview
         public static void MarkCreatorDirty(PathCreator creator, bool spine = true, bool mesh = true, bool materials = true)
         {
             if (!creator) return;
-            if (!m_Initialized) EnsureInitialized();
+            if (!s_MInitialized) EnsureInitialized();
             var id = creator.GetInstanceID();
             var mgr = EnsureManager(id);
             if (spine) mgr.MarkSpineDirty();
@@ -127,59 +123,57 @@ namespace MrPathV2.Editor.Preview
 
         private static IEnumerable<PathCreator> GetCreators()
         {
-            if (!m_CreatorsDirty && m_CachedCreators != null) return m_CachedCreators ?? Array.Empty<PathCreator>().ToList();
+            if (!s_MCreatorsDirty && s_MCachedCreators != null) return s_MCachedCreators ?? Array.Empty<PathCreator>().ToList();
             try
             {
-                m_CachedCreators = new List<PathCreator>(UnityEngine.Object.FindObjectsOfType<PathCreator>());
+                s_MCachedCreators = new List<PathCreator>(UnityEngine.Object.FindObjectsOfType<PathCreator>());
             }
             catch
             { /* ignore */
             }
-            m_CreatorsDirty = false;
-            return m_CachedCreators ?? Array.Empty<PathCreator>().ToList();
+            s_MCreatorsDirty = false;
+            return s_MCachedCreators ?? Array.Empty<PathCreator>().ToList();
         }
 
         private static void OnSceneGUI(SceneView sv)
         {
             if (!IsEnabled) return;
-            if (!m_Initialized) EnsureInitialized();
+            if (!s_MInitialized) EnsureInitialized();
 
-            var fallbackActiveId = DetectFallbackActiveId();
+            DetectFallbackActiveId();
             var creators = GetCreators();
             var alive = new HashSet<int>();
 
-            ProcessAllCreators(creators, alive, fallbackActiveId);
+            ProcessAllCreators(creators, alive);
             CleanupRemovedCreators(alive);
         }
 
-        private static int DetectFallbackActiveId()
+        private static void DetectFallbackActiveId()
         {
-            var fallbackActiveId = 0;
             try
             {
                 var selectedGo = Selection.activeGameObject;
                 var selectedCreator = selectedGo ? selectedGo.GetComponent<PathCreator>() : null;
                 if (selectedCreator && GUIUtility.hotControl != 0)
                 {
-                    fallbackActiveId = selectedCreator.GetInstanceID();
+                    selectedCreator.GetInstanceID();
                 }
             }
             catch
             {
                 /* ignore */
             }
-            return fallbackActiveId;
         }
 
-        private static void ProcessAllCreators(IEnumerable<PathCreator> creators, HashSet<int> alive, int fallbackActiveId)
+        private static void ProcessAllCreators(IEnumerable<PathCreator> creators, HashSet<int> alive)
         {
             foreach (var creator in creators)
             {
-                ProcessSingleCreator(creator, alive, fallbackActiveId);
+                ProcessSingleCreator(creator, alive);
             }
         }
 
-        private static void ProcessSingleCreator(PathCreator creator, HashSet<int> alive, int fallbackActiveId)
+        private static void ProcessSingleCreator(PathCreator creator, HashSet<int> alive)
         {
             if (!ShouldProcessCreator(creator)) return;
 
@@ -188,7 +182,7 @@ namespace MrPathV2.Editor.Preview
 
             var mgr = EnsureManager(id);
 
-            if (ShouldSkipCreatorRendering(id, fallbackActiveId))
+            if (ShouldSkipCreatorRendering())
             {
                 DisableManagerForEditing(mgr);
                 return;
@@ -205,7 +199,7 @@ namespace MrPathV2.Editor.Preview
             return true;
         }
 
-        private static bool ShouldSkipCreatorRendering(int creatorId, int fallbackActiveId)
+        private static bool ShouldSkipCreatorRendering()
         {
             // 不再在编辑或变换期间跳过渲染，始终保持可见
             return false;
@@ -255,7 +249,7 @@ namespace MrPathV2.Editor.Preview
             try
             {
                 mgr.SetActive(true);
-                mgr.Update(creator, m_HeightProvider);
+                mgr.Update(creator, s_MHeightProvider);
             }
             catch (Exception ex)
             {
@@ -302,8 +296,8 @@ namespace MrPathV2.Editor.Preview
             }
             Managers.Clear();
             LastTransforms.Clear();
-            m_CachedCreators?.Clear();
-            m_CreatorsDirty = true;
+            s_MCachedCreators?.Clear();
+            s_MCreatorsDirty = true;
         }
     }
 }

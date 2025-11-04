@@ -13,13 +13,13 @@ namespace MrPathV2.Editor.Preview
     /// </summary>
     public class PreviewMaterialParameterSetter
     {
-        private readonly Material m_Material;
-        private readonly PathProfile m_Profile;
+        private readonly Material _mMaterial;
+        private readonly PathProfile _mProfile;
         
         public PreviewMaterialParameterSetter(Material material, PathProfile profile)
         {
-            m_Material = material ?? throw new ArgumentNullException(nameof(material));
-            m_Profile = profile ?? throw new ArgumentNullException(nameof(profile));
+            _mMaterial = material ?? throw new ArgumentNullException(nameof(material));
+            _mProfile = profile ?? throw new ArgumentNullException(nameof(profile));
         }
         
         /// <summary>
@@ -29,35 +29,35 @@ namespace MrPathV2.Editor.Preview
         /// <param name="alpha">Preview alpha value</param>
         public void SetCommonPreviewParameters(int layerCount, float alpha)
         {
-            if (m_Material == null) return;
+            if (_mMaterial == null) return;
             
-            var recipe = m_Profile.roadRecipe;
+            var recipe = _mProfile.roadRecipe;
             var master = recipe?.masterOpacity ?? 1f;
 
             // Layer count and opacity logic
-            m_Material.SetInt(PreviewShaderContracts.Properties.LayerCount, Mathf.Max(1, layerCount));
-            var isOpaque = m_Profile.opaquePreview;
-            m_Material.SetFloat(PreviewShaderContracts.Properties.PreviewAlpha, isOpaque ? 1f : Mathf.Clamp01(alpha));
-            m_Material.SetFloat(PreviewShaderContracts.Properties.OpaquePreview, isOpaque ? 1f : 0f);
+            _mMaterial.SetInt(PreviewShaderContracts.Properties.LayerCount, Mathf.Max(1, layerCount));
+            var isOpaque = _mProfile.opaquePreview;
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.PreviewAlpha, isOpaque ? 1f : Mathf.Clamp01(alpha));
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.OpaquePreview, isOpaque ? 1f : 0f);
 
             // Mask strength and threshold (linked with opaque preview)
-            m_Material.SetFloat(PreviewShaderContracts.Properties.MaskStrength, master);
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskStrength, master);
             var maskThreshold = isOpaque ? 0.2f : 0.0f;
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.MaskThreshold)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThreshold);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MaskThreshold)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThreshold);
 
             // Depth test, path sample count and other common properties
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.ZTest)) 
-                m_Material.SetInt(PreviewShaderContracts.Properties.ZTest, m_Profile.enableDepthTest ? 4 : 8);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.ZTest)) 
+                _mMaterial.SetInt(PreviewShaderContracts.Properties.ZTest, _mProfile.enableDepthTest ? 4 : 8);
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
 
             // Uniform AcrossScale and MeshRepeat default mapping
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.AcrossScale)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.AcrossScale, 1f);
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, 1f);
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, 1f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.AcrossScale)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.AcrossScale, 1f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, 1f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, 1f);
         }
         
         /// <summary>
@@ -68,51 +68,99 @@ namespace MrPathV2.Editor.Preview
         /// <returns>Number of layers processed</returns>
         public int SetLayerParametersAsArrays(int maxLayers, IReadOnlyList<RoadLayer> layers)
         {
-            if (m_Material == null) return 0;
+            if (_mMaterial == null) return 0;
             
-            var layerCount = layers?.Count ?? 0;
-            if (layerCount == 0) layerCount = 1; // At least one layer
-
+            var layerCount = GetEffectiveLayerCount(layers);
             var tilingsArr = new Vector4[maxLayers];
             var opacitiesArr = new float[maxLayers];
             var blendModesArr = new float[maxLayers];
 
+            // Process each layer
             for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
             {
-                TerrainLayer tl = null;
-                var layerOpacity = 0f;
-                var blendMode = BlendMode.Normal;
-
-                if (layers != null && i < layers.Count)
-                {
-                    var rl = layers[i];
-                    if (rl != null && rl.enabled)
-                    {
-                        tl = rl.contentLayer;
-                        layerOpacity = rl.opacity;
-                        blendMode = rl.blendMode;
-                    }
-                }
-
-                // Tiling
-                var t = (tl && tl.diffuseTexture) ? PreviewPipelineUtility.CalcLayerTiling(m_Profile.roadWidth, tl) : Vector2.one;
-                tilingsArr[i] = new Vector4(t.x, t.y, 0, 0);
-
-                // Opacity/Blend
-                var master = m_Profile.roadRecipe?.masterOpacity ?? 1f;
-                opacitiesArr[i] = layers == null || layers.Count == 0 ? 1f : Mathf.Clamp01(layerOpacity * master);
-                blendModesArr[i] = (float)blendMode;
-
-                // Push per-layer color (TerrainLayer.specular as tint)
-                m_Material.SetColor($"_Layer{i}_Color", GetTerrainLayerTint(tl));
+                ProcessLayerAtIndex(i, layers, tilingsArr, opacitiesArr, blendModesArr);
             }
 
-            // Push array properties (for shader sampling)
-            m_Material.SetVectorArray(PreviewShaderContracts.Properties.LayerTilingsArr, tilingsArr);
-            m_Material.SetFloatArray(PreviewShaderContracts.Properties.LayerOpacitiesArr, opacitiesArr);
-            m_Material.SetFloatArray(PreviewShaderContracts.Properties.LayerBlendModesArr, blendModesArr);
+            // Apply the arrays to the material
+            ApplyLayerArraysToMaterial(tilingsArr, opacitiesArr, blendModesArr);
             
             return layerCount;
+        }
+        
+        /// <summary>
+        /// Gets the effective layer count, ensuring at least 1 layer
+        /// </summary>
+        /// <param name="layers">List of road layers</param>
+        /// <returns>Effective layer count</returns>
+        private static int GetEffectiveLayerCount(IReadOnlyList<RoadLayer> layers)
+        {
+            var layerCount = layers?.Count ?? 0;
+            return layerCount == 0 ? 1 : layerCount; // At least one layer
+        }
+        
+        /// <summary>
+        /// Processes a single layer at the specified index
+        /// </summary>
+        /// <param name="index">Layer index</param>
+        /// <param name="layers">List of road layers</param>
+        /// <param name="tilingsArr">Tilings array to populate</param>
+        /// <param name="opacitiesArr">Opacities array to populate</param>
+        /// <param name="blendModesArr">Blend modes array to populate</param>
+        private void ProcessLayerAtIndex(int index, IReadOnlyList<RoadLayer> layers, Vector4[] tilingsArr, float[] opacitiesArr, float[] blendModesArr)
+        {
+            var (tl, layerOpacity, blendMode) = GetLayerDataAtIndex(index, layers);
+            
+            // Tiling
+            var tiling = (tl && tl.diffuseTexture) ? PreviewPipelineUtility.CalcLayerTiling(_mProfile.roadWidth, tl) : Vector2.one;
+            tilingsArr[index] = new Vector4(tiling.x, tiling.y, 0, 0);
+
+            // Opacity/Blend
+            var master = _mProfile.roadRecipe?.masterOpacity ?? 1f;
+            opacitiesArr[index] = layers == null || layers.Count == 0 ? 1f : Mathf.Clamp01(layerOpacity * master);
+            blendModesArr[index] = (float)blendMode;
+
+            // Push per-layer color (TerrainLayer.specular as tint)
+            _mMaterial.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(tl));
+        }
+        
+        /// <summary>
+        /// Gets layer data at the specified index
+        /// </summary>
+        /// <param name="index">Layer index</param>
+        /// <param name="layers">List of road layers</param>
+        /// <returns>Tuple containing the terrain layer, layer opacity, and blend mode</returns>
+        private (TerrainLayer tl, float layerOpacity, BlendMode blendMode) GetLayerDataAtIndex(int index, IReadOnlyList<RoadLayer> layers)
+        {
+            TerrainLayer tl = null;
+            var layerOpacity = 0f;
+            var blendMode = BlendMode.Normal;
+
+            if (layers != null && index < layers.Count)
+            {
+                var rl = layers[index];
+                if (rl != null && rl.enabled)
+                {
+                    tl = rl.contentLayer;
+                    layerOpacity = rl.opacity;
+                    blendMode = rl.blendMode;
+                }
+            }
+            
+            return (tl, layerOpacity, blendMode);
+        }
+        
+        /// <summary>
+        /// Applies the layer arrays to the material
+        /// </summary>
+        /// <param name="tilingsArr">Tilings array</param>
+        /// <param name="opacitiesArr">Opacities array</param>
+        /// <param name="blendModesArr">Blend modes array</param>
+        private void ApplyLayerArraysToMaterial(Vector4[] tilingsArr, float[] opacitiesArr, float[] blendModesArr)
+        {
+            // Push array properties (for shader sampling)
+            _mMaterial.SetVectorArray(PreviewShaderContracts.Properties.LayerTilingsArr, tilingsArr);
+            _mMaterial.SetFloatArray(PreviewShaderContracts.Properties.LayerOpacitiesArr, opacitiesArr);
+            _mMaterial.SetFloatArray(PreviewShaderContracts.Properties.LayerBlendModesArr, blendModesArr);
         }
         
         /// <summary>
@@ -122,7 +170,7 @@ namespace MrPathV2.Editor.Preview
         /// <param name="layer">Terrain layer</param>
         public void SetLayerParameters(int index, TerrainLayer layer)
         {
-            if (m_Material == null) return;
+            if (_mMaterial == null) return;
 
             try
             {
@@ -139,21 +187,21 @@ namespace MrPathV2.Editor.Preview
 
                 if (tex != null)
                 {
-                    m_Material.SetTexture($"_Layer{index}_Texture", tex);
-                    m_Material.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
+                    _mMaterial.SetTexture($"_Layer{index}_Texture", tex);
+                    _mMaterial.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
                 }
                 else
                 {
-                    m_Material.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                    m_Material.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
+                    _mMaterial.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
+                    _mMaterial.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[PreviewMaterialParameterSetter] Failed to read TerrainLayer at index {index}: {ex.Message}\nStackTrace: {ex.StackTrace}");
                 // Fallback to safe defaults so preview continues rendering
-                m_Material.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                m_Material.SetColor($"_Layer{index}_Color", Color.white);
+                _mMaterial.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
+                _mMaterial.SetColor($"_Layer{index}_Color", Color.white);
             }
         }
         
@@ -163,63 +211,122 @@ namespace MrPathV2.Editor.Preview
         /// <param name="layer">Terrain layer</param>
         public void SetStylizedParameters(TerrainLayer layer)
         {
-            if (m_Material == null) return;
+            if (_mMaterial == null) return;
 
-            Texture2D tex = null;
+            // Set texture and tiling parameters
+            SetTextureAndTilingParameters(layer);
+
+            // Set opacity and blend parameters
+            SetOpacityAndBlendParameters();
+
+            // Set common parameters
+            SetCommonStylizedParameters();
+
+            // Set preview-specific parameters
+            SetPreviewSpecificParameters();
+        }
+        
+        /// <summary>
+        /// Sets texture and tiling parameters for stylized preview
+        /// </summary>
+        /// <param name="layer">Terrain layer</param>
+        private void SetTextureAndTilingParameters(TerrainLayer layer)
+        {
+            var tex = TryGetTextureFromLayer(layer);
+            
+            if (tex != null)
+            {
+                _mMaterial.SetTexture(PreviewShaderContracts.Properties.LayerTex, tex);
+                var tiling = CalculateLayerTiling(layer);
+                _mMaterial.SetVector(PreviewShaderContracts.Properties.LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
+                _mMaterial.SetColor(PreviewShaderContracts.Properties.LayerTint, GetTerrainLayerTint(layer));
+            }
+            else
+            {
+                _mMaterial.SetTexture(PreviewShaderContracts.Properties.LayerTex, Texture2D.whiteTexture);
+                _mMaterial.SetVector(PreviewShaderContracts.Properties.LayerTiling, Vector4.one);
+                _mMaterial.SetColor(PreviewShaderContracts.Properties.LayerTint, GetTerrainLayerTint(layer));
+            }
+        }
+        
+        /// <summary>
+        /// Safely tries to get a texture from a terrain layer
+        /// </summary>
+        /// <param name="layer">Terrain layer</param>
+        /// <returns>Texture if available, null otherwise</returns>
+        private static Texture2D TryGetTextureFromLayer(TerrainLayer layer)
+        {
             try
             {
                 if (layer && layer.diffuseTexture != null)
                 {
-                    tex = layer.diffuseTexture;
+                    return layer.diffuseTexture;
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[PreviewMaterialParameterSetter] Failed to access TerrainLayer.diffuseTexture for stylized preview: {ex.Message}\nStackTrace: {ex.StackTrace}");
             }
-
-            if (tex != null)
-            {
-                m_Material.SetTexture(PreviewShaderContracts.Properties.LayerTex, tex);
-                var sz = layer.tileSize;
-                if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
-                if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
-                var tiling = LayerTilingUtility.CalcLayerTiling(m_Profile.roadWidth, layer);
-                m_Material.SetVector(PreviewShaderContracts.Properties.LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
-                m_Material.SetColor(PreviewShaderContracts.Properties.LayerTint, GetTerrainLayerTint(layer));
-            }
-            else
-            {
-                m_Material.SetTexture(PreviewShaderContracts.Properties.LayerTex, Texture2D.whiteTexture);
-                m_Material.SetVector(PreviewShaderContracts.Properties.LayerTiling, Vector4.one);
-                m_Material.SetColor(PreviewShaderContracts.Properties.LayerTint, GetTerrainLayerTint(layer));
-            }
-
-            var master = m_Profile.roadRecipe?.masterOpacity ?? 1f;
-            m_Material.SetFloat(PreviewShaderContracts.Properties.LayerOpacity, master);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.MaskStrength, master);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.BlendMode, 0f);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.LayerIndex, 0f);
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.ZTest)) 
-                m_Material.SetInt(PreviewShaderContracts.Properties.ZTest, m_Profile.enableDepthTest ? 4 : 8);
+            return null;
+        }
+        
+        /// <summary>
+        /// Calculates layer tiling values
+        /// </summary>
+        /// <param name="layer">Terrain layer</param>
+        /// <returns>Tiling vector</returns>
+        private Vector2 CalculateLayerTiling(TerrainLayer layer)
+        {
+            var sz = layer.tileSize;
+            if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
+            if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
+            return LayerTilingUtility.CalcLayerTiling(_mProfile.roadWidth, layer);
+        }
+        
+        /// <summary>
+        /// Sets opacity and blend parameters for stylized preview
+        /// </summary>
+        private void SetOpacityAndBlendParameters()
+        {
+            var master = _mProfile.roadRecipe?.masterOpacity ?? 1f;
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.LayerOpacity, master);
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskStrength, master);
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.BlendMode, 0f);
+        }
+        
+        /// <summary>
+        /// Sets common parameters for stylized preview
+        /// </summary>
+        private void SetCommonStylizedParameters()
+        {
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
+            _mMaterial.SetFloat(PreviewShaderContracts.Properties.LayerIndex, 0f);
             
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.ZTest)) 
+                _mMaterial.SetInt(PreviewShaderContracts.Properties.ZTest, _mProfile.enableDepthTest ? 4 : 8);
+        }
+        
+        /// <summary>
+        /// Sets preview-specific parameters for stylized preview
+        /// </summary>
+        private void SetPreviewSpecificParameters()
+        {
             // Stylized preview also supports opaque preview
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.OpaquePreview)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.OpaquePreview, m_Profile.opaquePreview ? 1f : 0f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.OpaquePreview)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.OpaquePreview, _mProfile.opaquePreview ? 1f : 0f);
             
             // Set mask threshold for single-layer stylized preview to ensure clear edges
-            var maskThresholdStylized = m_Profile.opaquePreview ? 0.2f : 0.0f;
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.MaskThreshold)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThresholdStylized);
+            var maskThresholdStylized = _mProfile.opaquePreview ? 0.2f : 0.0f;
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MaskThreshold)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThresholdStylized);
 
             // Uniform AcrossScale and MeshRepeat default mapping
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.AcrossScale)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.AcrossScale, 1f);
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, 1f);
-            if (m_Material.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
-                m_Material.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, 1f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.AcrossScale)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.AcrossScale, 1f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, 1f);
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, 1f);
         }
         
         /// <summary>
@@ -227,7 +334,7 @@ namespace MrPathV2.Editor.Preview
         /// </summary>
         /// <param name="layer">Terrain layer</param>
         /// <returns>Tint color</returns>
-        private Color GetTerrainLayerTint(TerrainLayer layer)
+        private static Color GetTerrainLayerTint(TerrainLayer layer)
         {
             try
             {

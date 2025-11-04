@@ -28,7 +28,7 @@ namespace __temp.MrPathV2.Editor.Settings // Or Editor.Settings
         [Tooltip("选择地形纹理绘制的后端：\n" +
                  "CPU_Job_TwoPass: 兼容性好，性能优于旧版 Job，但仍受 CPU 限制。\n" +
                  "GPU_Compute: 速度最快，利用 GPU 加速，但需要 Compute Shader 支持且可能对显卡有要求。")]
-        public PaintTerrainCommand.PaintingBackend paintingBackend = PaintTerrainCommand.PaintingBackend.CPUJobTwoPass; // 默认使用 CPU
+        public PaintTerrainCommand.PaintingBackend paintingBackend = PaintTerrainCommand.PaintingBackend.CPUCompute; // 默认使用 CPU
 
         [Tooltip("自动切换到 GPU 绘制的像素阈值。当绘制区域超过此像素数时，将自动选用 GPU 后端（如果支持）。设置为 0 可禁用自动切换。")]
         [Min(0)]

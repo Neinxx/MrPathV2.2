@@ -77,8 +77,12 @@ namespace __temp.MrPathV2.Runtime.Jobs
             if (!ValidateAlphaIndexRange(baseAlphaIndex))
                 return;
 
-            // 根据开关：不透明时使用 alpha clip；否则保持透明混合
-            var (anyLayerPainted, firstValidSplatIndex) = ApplyLayerBlending(baseAlphaIndex, normalizedDist, pathProgress);
+            // 先判断该像素是否需要涂绘，并取一个有效 splat 供归一化使用
+            if (!ShouldPaintPixel(normalizedDist, pathProgress, out var firstValidSplatIndex))
+                return;
+
+            // 根据开关：不透明时使用 alpha clip；否则按有序覆盖进行透明混合
+            var anyLayerPainted = ApplyLayerBlending(baseAlphaIndex, normalizedDist, pathProgress, firstValidSplatIndex);
 
             // 不透明绘制：当确实涂绘到图层时，将非配方层权重清零以避免与底层混合
             if (OpaquePainting && anyLayerPainted)
@@ -128,47 +132,108 @@ namespace __temp.MrPathV2.Runtime.Jobs
         /// 应用图层混合
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private (bool anyLayerPainted, int firstValidSplatIndex) ApplyLayerBlending(int baseAlphaIndex, float normalizedDist, float pathProgress)
+        private bool ApplyLayerBlending(int baseAlphaIndex, float normalizedDist, float pathProgress, int firstValidSplatIndex)
         {
             var anyLayerPainted = false;
-            var firstValidSplatIndex = -1;
 
-            // 顺序不限：每个通道独立按当前alpha与遮罩alpha进行混合
-            for (var layerIndex = 0; layerIndex < Recipe.Length; layerIndex++)
+            if (!OpaquePainting)
             {
-                var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
-                if (!ValidateSplatIndex(splatIndex))
-                    continue;
+                // 有序覆盖（Ordered Over）：
+                // 1) 自身透明度 = 遮罩透明度（已含 layer opacity/预乘）
+                // 2) 从“下到上”（更靠下的层优先，占据剩余空间）
+                // 3) 其余层按剩余量缩放（保持原有相对比例），最后归一化
 
-                if (firstValidSplatIndex == -1)
-                    firstValidSplatIndex = splatIndex;
-
-                var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
-                if (!OpaquePainting)
+                // 预先累计“其他层”的原始总和（非配方层与配方层的旧值）
+                float originalOthersSum = 0f;
+                for (var i = 0; i < AlphamapLayerCount; i++)
                 {
-                    // 透明混合：小权重直接忽略，使用统一 Blend 函数
-                    if (maskAlpha <= SmallWeightCutoff)
-                        continue;
-                    anyLayerPainted = true;
-                    var alphaMapIndex = baseAlphaIndex + splatIndex;
-                    var baseAlpha = Alphamaps[alphaMapIndex];
-                    var blended = TerrainJobsUtility.Blend(baseAlpha, maskAlpha, Recipe.BlendModes[layerIndex]);
-                    // 截断极小权重，避免黑边
-                    if (blended < SmallWeightCutoff) blended = 0f;
-                    Alphamaps[alphaMapIndex] = blended;
+                    if (!IsRecipeSplatIndex(i))
+                        originalOthersSum += Alphamaps[baseAlphaIndex + i];
                 }
-                else
+
+                // 1) 从下到上分配“剩余”
+                var remaining = 1f;
+                float sumRecipe = 0f;
+
+                for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
                 {
-                    // 不透明绘制：应用 alpha clip，超过阈值直接写满（1），否则忽略
-                    if (maskAlpha < AlphaClipThreshold)
+                    var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
+                    if (!ValidateSplatIndex(splatIndex))
                         continue;
-                    anyLayerPainted = true;
-                    var alphaMapIndex = baseAlphaIndex + splatIndex;
-                    Alphamaps[alphaMapIndex] = 1f;
+
+                    var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
+                    if (maskAlpha <= SmallWeightCutoff)
+                    {
+                        // 完全被覆盖或自身很小，直接写 0 以避免残留
+                        Alphamaps[baseAlphaIndex + splatIndex] = 0f;
+                        continue;
+                    }
+
+                    var selfAlpha = maskAlpha; // 自透明度（已考虑 mask/opacity）
+                    var contribute = math.min(selfAlpha, remaining);
+                    if (contribute > SmallWeightCutoff)
+                    {
+                        anyLayerPainted = true;
+                        Alphamaps[baseAlphaIndex + splatIndex] = contribute;
+                        sumRecipe += contribute;
+                        remaining = math.max(0f, remaining - contribute);
+                    }
+                    else
+                    {
+                        Alphamaps[baseAlphaIndex + splatIndex] = 0f;
+                    }
+                }
+
+                // 2) 缩放非配方层，使其总和按剩余量衰减（保持相对比例），避免突兀断层
+                if (originalOthersSum > SmallWeightCutoff)
+                {
+                    var scale = math.saturate(1f - sumRecipe);
+                    if (scale < 1f - Epsilon)
+                    {
+                        for (var i = 0; i < AlphamapLayerCount; i++)
+                        {
+                            if (!IsRecipeSplatIndex(i))
+                            {
+                                var idx = baseAlphaIndex + i;
+                                Alphamaps[idx] *= scale;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 不透明绘制：有序 clip，最靠下的层优先吃满
+                var remaining = 1f;
+                for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
+                {
+                    var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
+                    if (!ValidateSplatIndex(splatIndex)) continue;
+
+                    var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
+                    if (maskAlpha < AlphaClipThreshold)
+                    {
+                        Alphamaps[baseAlphaIndex + splatIndex] = 0f;
+                        continue;
+                    }
+
+                    var contribute = remaining; // clip 模式，达阈值即吃掉所有剩余
+                    if (contribute > SmallWeightCutoff)
+                    {
+                        anyLayerPainted = true;
+                        Alphamaps[baseAlphaIndex + splatIndex] = contribute;
+                        remaining = 0f;
+                    }
+                    else
+                    {
+                        Alphamaps[baseAlphaIndex + splatIndex] = 0f;
+                    }
+
+                    if (remaining <= Epsilon) break;
                 }
             }
 
-            return (anyLayerPainted, firstValidSplatIndex);
+            return anyLayerPainted;
         }
 
         /// <summary>
