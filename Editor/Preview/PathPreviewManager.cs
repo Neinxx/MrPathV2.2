@@ -52,10 +52,7 @@ namespace MrPathV2.Editor.Preview
             m_Alpha = alpha;
 
             // Ensure materials list is always initialized
-            if (m_Materials == null)
-            {
-                m_Materials = new List<Material>();
-            }
+            m_Materials ??= new List<Material>();
         }
 
         public PathSpine? LatestSpine { get; private set; }
@@ -189,12 +186,12 @@ namespace MrPathV2.Editor.Preview
                 // 基于脊线包围盒选择目标 Terrain（优先相交，其次最近），并仅在变化时运行 GPU 预览
                 UnityEngine.Terrain targetTerrain = m_TargetTerrain;
                 var activeTerrains = UnityEngine.Terrain.activeTerrains;
-                if (activeTerrains != null && activeTerrains.Length > 0)
+                if (activeTerrains is { Length: > 0 })
                 {
                     if (LatestSpine.HasValue)
                     {
                         var pts = LatestSpine.Value.Points;
-                        if (pts != null && pts.Length > 0)
+                        if (pts is { Length: > 0 })
                         {
                             var minX = pts[0].x; var maxX = pts[0].x;
                             var minZ = pts[0].z; var maxZ = pts[0].z;
@@ -268,7 +265,7 @@ namespace MrPathV2.Editor.Preview
                 var profileHashNow = CalcProfileHash(creator.profile);
                 var terrainIdNow = targetTerrain ? targetTerrain.GetInstanceID() : 0;
                 var spineHashNow = LatestSpine.HasValue ? CalcSpineHash(LatestSpine.Value) : 0;
-                var cacheHasRt = targetTerrain && MrPathV2.Editor.Terrain.GpuPreviewCache.TryGet(targetTerrain, out var cachedRt) && cachedRt;
+                var cacheHasRt = targetTerrain && Terrain.GpuPreviewCache.TryGet(targetTerrain, out var cachedRt) && cachedRt;
                 var shouldRunGpu = PreviewMaterialManager.EnableGpuPreview && targetTerrain && LatestSpine.HasValue && (
                     !cacheHasRt || terrainIdNow != m_LastGpuTerrainId || spineHashNow != m_LastSpineHash || profileHashNow != m_LastProfileHash);
 
@@ -303,7 +300,7 @@ namespace MrPathV2.Editor.Preview
                         Debug.LogError($"[PathPreviewManager] GPU 预览执行失败: {ex.Message}");
                     }
                 }
-            SkipGpuRun:;
+                SkipGpuRun:;
 #endif
 
                 try
@@ -390,8 +387,7 @@ namespace MrPathV2.Editor.Preview
             else
             {
                 // 使用 MaterialPropertyBlock 而非全局 Shader 属性，避免因其他编辑器 UI 绘制修改全局状态导致闪烁。
-                if (m_SingleMpb == null)
-                    m_SingleMpb = new MaterialPropertyBlock();
+                m_SingleMpb ??= new MaterialPropertyBlock();
                 m_SingleMpb.SetFloat(PreviewAlpha, m_Alpha);
                 Graphics.DrawMesh(m_Mesh, matrix, m_Materials[0], 0, cam, 0, m_SingleMpb);
             }
@@ -414,10 +410,7 @@ namespace MrPathV2.Editor.Preview
             {
                 Debug.LogError($"[PathPreviewManager] Error in RefreshMaterialCache: {ex.Message}\nStackTrace: {ex.StackTrace}");
                 // Ensure materials list is in a valid state even if refresh fails
-                if (m_Materials == null)
-                {
-                    m_Materials = new List<Material>();
-                }
+                m_Materials ??= new List<Material>();
             }
         }
 
@@ -500,10 +493,9 @@ namespace MrPathV2.Editor.Preview
             var resolved = EditorLayerResolver.ResolveEnsurePresent(terrain, recipe);
             var list = new List<LayerConfigGPU>(layers.Count);
             var master = Mathf.Clamp01(recipe.masterOpacity);
-            for (int i = 0; i < layers.Count; i++)
+            foreach (var rl in layers)
             {
-                var rl = layers[i];
-                if (rl == null || !rl.enabled) continue;
+                if (rl is not { enabled: true }) continue;
                 var tl = rl.contentLayer;
                 if (!tl) continue;
                 if (!resolved.TryGetValue(tl, out var layerIndex)) continue;
@@ -515,21 +507,21 @@ namespace MrPathV2.Editor.Preview
             return list.Count > 0 ? list.ToArray() : Array.Empty<LayerConfigGPU>();
         }
 
-        private static GpuBlendMode MapBlendMode(__temp.MrPathV2.Runtime.Core.BlendMode mode)
+        private static GpuBlendMode MapBlendMode(BlendMode mode)
         {
             switch (mode)
             {
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Add:
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Additive:
+                case BlendMode.Add:
+                case BlendMode.Additive:
                     return GpuBlendMode.Add;
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Multiply:
+                case BlendMode.Multiply:
                     return GpuBlendMode.Multiply;
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Overlay:
+                case BlendMode.Overlay:
                     return GpuBlendMode.Overlay;
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Screen:
+                case BlendMode.Screen:
                     return GpuBlendMode.Add; // 近似替代
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Lerp:
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Normal:
+                case BlendMode.Lerp:
+                case BlendMode.Normal:
                 default:
                     return GpuBlendMode.Replace;
             }

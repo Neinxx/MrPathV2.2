@@ -311,7 +311,8 @@ namespace __temp.MrPathV2.Editor.GPU
 
                     var strength = math.saturate(rl.opacity);
                     var blend = MapToGpuBlendMode((int)rl.blendMode);
-                    layerConfigs.Add(new LayerConfig(layerIndex, strength, blend));
+                    // 传递 Layer 关联的遮罩（可能为空）
+                    layerConfigs.Add(new LayerConfig(layerIndex, strength, blend, rl.layerMask));
                 }
             }
 

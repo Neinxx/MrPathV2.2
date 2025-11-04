@@ -14,7 +14,6 @@ using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
 
 namespace MrPathV2.Editor.Preview
 {
-
     /// <summary>
     ///     Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current
     ///     profile/template.
@@ -22,31 +21,6 @@ namespace MrPathV2.Editor.Preview
     /// </summary>
     public sealed class PreviewMaterialManager : IDisposable
     {
-        private static readonly int LayerCount = PreviewShaderContracts.Properties.LayerCount;
-        private static readonly int PreviewAlpha = PreviewShaderContracts.Properties.PreviewAlpha;
-        private static readonly int OpaquePreview = PreviewShaderContracts.Properties.OpaquePreview;
-        private static readonly int MaskAtlas = PreviewShaderContracts.Properties.MaskAtlas;
-        private static readonly int AtlasInvHeight = PreviewShaderContracts.Properties.AtlasInvHeight;
-        private static readonly int LayerTex = PreviewShaderContracts.Properties.LayerTex;
-        private static readonly int LayerTiling = PreviewShaderContracts.Properties.LayerTiling;
-        private static readonly int LayerTint = PreviewShaderContracts.Properties.LayerTint;
-        private static readonly int LayerOpacity = PreviewShaderContracts.Properties.LayerOpacity;
-        private static readonly int Mode = PreviewShaderContracts.Properties.BlendMode;
-        private static readonly int LayerTilingsArr = PreviewShaderContracts.Properties.LayerTilingsArr;
-        private static readonly int LayerOpacitiesArr = PreviewShaderContracts.Properties.LayerOpacitiesArr;
-        private static readonly int LayerBlendModesArr = PreviewShaderContracts.Properties.LayerBlendModesArr;
-        private static readonly int PathSamplesId = PreviewShaderContracts.Properties.PathSamples;
-        private static readonly int LayerIndexId = PreviewShaderContracts.Properties.LayerIndex;
-        private static readonly int MaskStrengthId = PreviewShaderContracts.Properties.MaskStrength;
-        private static readonly int ZTestId = PreviewShaderContracts.Properties.ZTest;
-        private static readonly int MaskThresholdId = PreviewShaderContracts.Properties.MaskThreshold;
-        private static readonly int MeshRepeatAcrossId = PreviewShaderContracts.Properties.MeshRepeatAcross;
-        private static readonly int MeshRepeatAlongId = PreviewShaderContracts.Properties.MeshRepeatAlong;
-        private static readonly int AcrossScaleId = PreviewShaderContracts.Properties.AcrossScale;
-        private static readonly int LayerTexturesId = PreviewShaderContracts.Properties.LayerTextures;
-        private static readonly int UseLayerTexArrayId = PreviewShaderContracts.Properties.UseLayerTexArray;
-        private static readonly int PrevResultTexId = PreviewShaderContracts.Properties.PrevResultTex;
-
         private readonly List<Material> m_CachedList = new List<Material>(1);
         private bool m_Dirty = true;
         private ShaderFlavor m_Flavor = ShaderFlavor.Unknown;
@@ -57,37 +31,24 @@ namespace MrPathV2.Editor.Preview
         // private Texture2D _maskLUT;
         private static Texture2D m_TransparentPrevTex; // 1x1 RGBA(0,0,0,0)
 
-        private static Texture2D EnsureTransparentPrevTex()
-        {
-            if (m_TransparentPrevTex) return m_TransparentPrevTex;
-            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
-            tex.name = "__PreviewTransparentPrevTex";
-            tex.hideFlags = HideFlags.HideAndDontSave;
-            tex.SetPixel(0, 0, new Color(0f, 0f, 0f, 0f));
-            tex.Apply(false, false);
-            m_TransparentPrevTex = tex;
-            return m_TransparentPrevTex;
-        }
         // Future: cached 2D mask atlas
         private Texture2D m_MaskAtlas;
-        // 新增：图层贴图数组的缓存与生命周期管理
-        private Texture2DArray m_LayerTexArray;
         private RenderTexture m_LayerRtArray;
 
-        // 新增：纹理数组缓存机制
+        // Texture array cache mechanism
         private struct TextureArrayCacheKey
         {
             public readonly int LayerCount;
             public readonly int Width;
             public readonly int Height;
-            public readonly string TextureHashes; // 所有纹理的哈希值组合
+            public readonly string TextureHashes; // Hash combination of all textures
 
             public TextureArrayCacheKey(int layerCount, int width, int height, string textureHashes)
             {
-                this.LayerCount = layerCount;
-                this.Width = width;
-                this.Height = height;
-                this.TextureHashes = textureHashes;
+                LayerCount = layerCount;
+                Width = width;
+                Height = height;
+                TextureHashes = textureHashes;
             }
 
             public override bool Equals(object obj)
@@ -115,124 +76,41 @@ namespace MrPathV2.Editor.Preview
         }
 
         private TextureArrayCacheKey? m_CurrentCacheKey;
-        private CommandBuffer m_ReusableCommandBuffer; // 复用CommandBuffer
+        private CommandBuffer m_ReusableCommandBuffer; // Reusable CommandBuffer
 
-        // 新增：记录路径长度供构建 MaskAtlas 使用
+        // Record path length for building MaskAtlas
         private float m_PathLength = -1f;
         private bool m_Disposed;
 
         public Material Current { get; private set; }
 
-        // 公共参数推送：统一控制预览的通用属性
+        // Public parameter push: uniformly control common preview properties
         private void PushCommonPreviewParams(PathProfile profile, int layerCount, float alpha)
         {
-            var recipe = profile.roadRecipe;
-            var master = recipe?.masterOpacity ?? 1f;
-        
-            // 层数与不透明逻辑
-            Current.SetInt(LayerCount, Mathf.Max(1, layerCount));
-            var isOpaque = profile.opaquePreview; // 移除单层自动不透明，避免矩形遮盖
-            Current.SetFloat(PreviewAlpha, isOpaque ? 1f : Mathf.Clamp01(alpha));
-            Current.SetFloat(OpaquePreview, isOpaque ? 1f : 0f);
-        
-            // 遮罩强度与阈值（与不透明预览联动）
-            Current.SetFloat(MaskStrengthId, master);
-            var maskThreshold = isOpaque ? 0.2f : 0.0f;
-            if (Current.HasProperty(MaskThresholdId)) Current.SetFloat(MaskThresholdId, maskThreshold);
-        
-            // 深度测试、路径采样数等通用属性
-            if (Current.HasProperty(ZTestId)) Current.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
-            Current.SetFloat(PathSamplesId, 64f);
-        
-            // 统一 AcrossScale 与 MeshRepeat 默认映射，减少材质侧分散控制
-            if (Current.HasProperty(AcrossScaleId)) Current.SetFloat(AcrossScaleId, 1f);
-            if (Current.HasProperty(MeshRepeatAcrossId)) Current.SetFloat(MeshRepeatAcrossId, 1f);
-            if (Current.HasProperty(MeshRepeatAlongId)) Current.SetFloat(MeshRepeatAlongId, 1f);
+            if (Current == null) return;
+
+            var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
+            parameterSetter.SetCommonPreviewParameters(layerCount, alpha);
         }
 
-        // 层参数推送：数组形式（tiling/opacity/blend），并优先绑定 Texture2DArray
+        // Layer parameter push: array form (tiling/opacity/blend), and prefer to bind Texture2DArray
         private int PushLayerParams(PathProfile profile)
         {
+            if (Current == null) return 0;
+
             var recipe = profile.roadRecipe;
             var layers = recipe?.GetLayers();
             var layerCount = layers?.Count ?? 0;
-            if (layerCount == 0) layerCount = 1; // 至少一个图层
+            if (layerCount == 0) layerCount = 1; // At least one layer
 
             var isMultiLayerShader = Current.shader.name.Contains("PathPreviewSplatMulti");
             var maxLayers = isMultiLayerShader ? 16 : 4;
 
-            var tilingsArr = new Vector4[maxLayers];
-            var opacitiesArr = new float[maxLayers];
-            var blendModesArr = new float[maxLayers];
-
-            // 收集纹理用于尝试构建 Texture2DArray
-            var texList = new List<Texture2D>();
-            int sliceCount = 0;
-            int width = -1, height = -1;
-            var textureHashBuilder = new System.Text.StringBuilder();
-#if UNITY_2019_1_OR_NEWER
-            var formatSet = false;
-            var graphicsFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm;
-#endif
-
-            for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
-            {
-                TerrainLayer tl = null;
-                var layerOpacity = 0f;
-                var blendMode = BlendMode.Normal;
-
-                if (layers != null && i < layers.Count)
-                {
-                    var rl = layers[i];
-                    if (rl != null && rl.enabled)
-                    {
-                        tl = rl.contentLayer;
-                        layerOpacity = rl.opacity;
-                        blendMode = rl.blendMode;
-                    }
-                }
-
-                // Tiling
-                var t = (tl && tl.diffuseTexture) ? PreviewPipelineUtility.CalcLayerTiling(profile.roadWidth, tl) : Vector2.one;
-                tilingsArr[i] = new Vector4(t.x, t.y, 0, 0);
-
-                // Opacity/Blend
-                var master = recipe?.masterOpacity ?? 1f;
-                opacitiesArr[i] = layers == null || layers.Count == 0 ? 1f : Mathf.Clamp01(layerOpacity * master);
-                blendModesArr[i] = (float)blendMode;
-
-                // 推送每层颜色（TerrainLayer.specular 作为 tint）
-
-                Current.SetColor($"_Layer{i}_Color", GetTerrainLayerTint(tl));
-
-                // 尝试收集数组纹理
-                var tex = tl && tl.diffuseTexture ? tl.diffuseTexture : null;
-                if (tex)
-                {
-                    texList.Add(tex);
-                    sliceCount++;
-                    if (width < 0) { width = tex.width; height = tex.height; }
-                    // 添加纹理哈希到缓存键
-                    textureHashBuilder.Append(tex.GetInstanceID()).Append(",");
-#if UNITY_2019_1_OR_NEWER
-                    if (!formatSet) { graphicsFormat = tex.graphicsFormat; formatSet = true; }
-#endif
-                }
-                else
-                {
-                    // 若任一层缺失纹理，则放弃数组方案（改用旧的逐层推送）
-                    sliceCount = -1;
-                    textureHashBuilder.Append("null,");
-                }
-            }
-
-            // 推送数组属性（供着色器采样）
-            Current.SetVectorArray(LayerTilingsArr, tilingsArr);
-            Current.SetFloatArray(LayerOpacitiesArr, opacitiesArr);
-            Current.SetFloatArray(LayerBlendModesArr, blendModesArr);
+            var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
+            var processedLayerCount = parameterSetter.SetLayerParametersAsArrays(maxLayers, layers);
 
 #if UNITY_EDITOR
-            // 推送 GPU 预览所需的 splat 索引数组
+            // Push splat index array required for GPU preview
             var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, layerCount) : Mathf.Min(4, layerCount);
             var splatIndicesArr = new float[maxLayers];
             for (var i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
@@ -249,123 +127,98 @@ namespace MrPathV2.Editor.Preview
                     }
                 }
             }
-            if (Current.HasProperty(LayerSplatIndicesArr)) Current.SetFloatArray(LayerSplatIndicesArr, splatIndicesArr);
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerSplatIndicesArr)) 
+                Current.SetFloatArray(PreviewShaderContracts.Properties.LayerSplatIndicesArr, splatIndicesArr);
 #endif
 
-            // 优先使用数组路径：只要所有层都有纹理即可（尺寸允许不一致，GPU Blit 自动缩放到首个纹理尺寸）
+            // Collect textures for trying to build Texture2DArray
+            var texList = new List<Texture2D>();
+            int sliceCount = 0;
+            int width = -1, height = -1;
+            var textureHashBuilder = new System.Text.StringBuilder();
+
+            for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
+            {
+                TerrainLayer tl = null;
+                if (layers != null && i < layers.Count)
+                {
+                    var rl = layers[i];
+                    if (rl != null && rl.enabled)
+                    {
+                        tl = rl.contentLayer;
+                    }
+                }
+
+                // Try to collect array textures
+                var tex = tl && tl.diffuseTexture ? tl.diffuseTexture : null;
+                if (tex)
+                {
+                    texList.Add(tex);
+                    sliceCount++;
+                    if (width < 0)
+                    {
+                        width = tex.width;
+                        height = tex.height;
+                    }
+                    // Add texture hash to cache key
+                    textureHashBuilder.Append(tex.GetInstanceID()).Append(",");
+                }
+                else
+                {
+                    // If any layer is missing a texture, abandon the array approach (use the old per-layer push)
+                    sliceCount = -1;
+                    textureHashBuilder.Append("null,");
+                }
+            }
+
+            // Prefer array path: as long as all layers have textures (sizes can be inconsistent, GPU Blit automatically scales to the first texture size)
             var canUseArray = sliceCount > 0;
 
-            // 检查缓存是否可用
+            // Check if cache is available
             var textureHashes = textureHashBuilder.ToString();
             var newCacheKey = new TextureArrayCacheKey(sliceCount, width, height, textureHashes);
             var canReuseCache = m_CurrentCacheKey.HasValue && m_CurrentCacheKey.Value.Equals(newCacheKey) && m_LayerRtArray != null && m_LayerRtArray.IsCreated();
 
             if (canUseArray)
             {
-                try
+                var textureArrayManager = new PreviewTextureArrayManager();
+                var success = textureArrayManager.TryCreateAndBindTextureArray(Current, texList, width, height, textureHashes);
+                
+                if (!success)
                 {
-                    // 如果缓存可用，直接使用
-                    if (canReuseCache)
-                    {
-                        if (Current.HasProperty(LayerTexturesId)) Current.SetTexture(LayerTexturesId, m_LayerRtArray);
-                        if (Current.HasProperty(UseLayerTexArrayId)) Current.SetFloat(UseLayerTexArrayId, 1f);
-                    }
-                    else
-                    {
-                        // 释放旧数组（包含 Texture2DArray 与 RenderTexture 数组）
-                        ReleaseLayerTexArray();
-
-                        // 使用 RenderTexture Tex2DArray 作为统一目标，GPU Blit 解码/缩放
-                        var desc = new RenderTextureDescriptor(width, height)
-                        {
-                            graphicsFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm,
-                            dimension = TextureDimension.Tex2DArray,
-                            volumeDepth = texList.Count,
-                            enableRandomWrite = false,
-                            useMipMap = false,
-                            msaaSamples = 1
-                        };
-                        m_LayerRtArray = new RenderTexture(desc)
-                        {
-                            filterMode = FilterMode.Bilinear,
-                            wrapMode = TextureWrapMode.Repeat,
-                            name = "Preview_Layers_RTArray"
-                        };
-                        if (!m_LayerRtArray.Create())
-                        {
-                            throw new Exception("Failed to create RenderTexture Tex2DArray.");
-                        }
-
-                        // 复用CommandBuffer避免频繁创建
-                        if (m_ReusableCommandBuffer == null)
-                        {
-                            m_ReusableCommandBuffer = new CommandBuffer { name = "BuildLayerRTArray" };
-                        }
-                        else
-                        {
-                            m_ReusableCommandBuffer.Clear();
-                        }
-
-                        for (var slice = 0; slice < texList.Count; slice++)
-                        {
-                            m_ReusableCommandBuffer.SetRenderTarget(m_LayerRtArray, 0, CubemapFace.Unknown, slice);
-                            m_ReusableCommandBuffer.ClearRenderTarget(false, true, Color.white);
-                            m_ReusableCommandBuffer.Blit(texList[slice], BuiltinRenderTextureType.CurrentActive);
-                        }
-                        Graphics.ExecuteCommandBuffer(m_ReusableCommandBuffer);
-                        // 不释放CommandBuffer，保留复用
-
-                        // 更新缓存键
-                        m_CurrentCacheKey = newCacheKey;
-
-                        if (Current.HasProperty(LayerTexturesId)) Current.SetTexture(LayerTexturesId, m_LayerRtArray);
-                        if (Current.HasProperty(UseLayerTexArrayId)) Current.SetFloat(UseLayerTexArrayId, 1f);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[PreviewMaterialManager] 构建 Texture2DArray 失败，已回退逐层绑定。原因: {e.Message}");
-                    if (Current.HasProperty(UseLayerTexArrayId)) Current.SetFloat(UseLayerTexArrayId, 0f);
-                    if (Current.HasProperty(LayerTexturesId)) Current.SetTexture(LayerTexturesId, null);
-                    // 回退：逐层绑定已有纹理，缺失则使用白纹理
-                    var maxLayersToBind = Mathf.Min(maxLayers, layerCount);
-                    for (var i = 0; i < maxLayersToBind; i++)
-                    {
-                        TerrainLayer tl = null;
-                        if (layers != null && i < layers.Count)
-                        {
-                            var rl = layers[i];
-                            if (rl != null && rl.enabled)
-                            {
-                                tl = rl.contentLayer;
-                            }
-                        }
-                        SetLayer(i, tl, profile.roadWidth);
-                    }
+                    HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
                 }
             }
             else
             {
-                Debug.LogWarning("[PreviewMaterialManager] Texture2DArray 不可用或存在缺失纹理，已回退逐层绑定。");
-                if (Current.HasProperty(UseLayerTexArrayId)) Current.SetFloat(UseLayerTexArrayId, 0f);
-                if (Current.HasProperty(LayerTexturesId)) Current.SetTexture(LayerTexturesId, null);
-                var maxLayersToBind = Mathf.Min(maxLayers, layerCount);
-                for (var i = 0; i < maxLayersToBind; i++)
-                {
-                    TerrainLayer tl = null;
-                    if (layers != null && i < layers.Count)
-                    {
-                        var rl = layers[i];
-                        if (rl != null && rl.enabled)
-                        {
-                            tl = rl.contentLayer;
-                        }
-                    }
-                    SetLayer(i, tl, profile.roadWidth);
-                }
+                HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
             }
 
-            return layerCount;
+            return processedLayerCount;
+        }
+
+        private void HandleFallbackTextureBinding(int maxLayers, int layerCount, IReadOnlyList<RoadLayer> layers, PathProfile profile, PreviewMaterialParameterSetter parameterSetter)
+        {
+            Debug.LogWarning("[PreviewMaterialManager] Texture2DArray not available or missing textures, fallback to per-layer binding.");
+            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray)) 
+                Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures)) 
+                Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+                
+            var maxLayersToBind = Mathf.Min(maxLayers, layerCount);
+            for (var i = 0; i < maxLayersToBind; i++)
+            {
+                TerrainLayer tl = null;
+                if (layers != null && i < layers.Count)
+                {
+                    var rl = layers[i];
+                    if (rl != null && rl.enabled)
+                    {
+                        tl = rl.contentLayer;
+                    }
+                }
+                parameterSetter.SetLayerParameters(i, tl);
+            }
         }
 
         public List<Material> GetRenderMaterials()
@@ -381,16 +234,16 @@ namespace MrPathV2.Editor.Preview
 
 #if UNITY_EDITOR
         /// <summary>
-        ///     设置当前预览所关联的 Terrain（用于从 <see cref="Gpu Preview Cache" /> 获取缓存的 alphamap RenderTextureArray）
+        ///     Sets the Terrain associated with the current preview (used to get cached alphamap RenderTextureArray from <see cref="Gpu Preview Cache" />)
         /// </summary>
-        /// <param name="terrain">目标 Terrain</param>
+        /// <param name="terrain">Target Terrain</param>
         public void SetTargetTerrain(UnityEngine.Terrain terrain)
         {
             m_TargetTerrain = terrain;
         }
 #endif
 
-        // 新增：供外部推送路径长度与Mesh重复参数
+        // New: for external push of path length and Mesh repeat parameters
         public void SetPathLength(float length)
         {
             m_PathLength = length;
@@ -399,15 +252,18 @@ namespace MrPathV2.Editor.Preview
         public void SetMeshRepeats(float across, float along)
         {
             if (!Current) return;
-            if (Current.HasProperty(MeshRepeatAcrossId)) Current.SetFloat(MeshRepeatAcrossId, Mathf.Max(1e-4f, across));
-            if (Current.HasProperty(MeshRepeatAlongId)) Current.SetFloat(MeshRepeatAlongId, Mathf.Max(1e-4f, along));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
+                Current.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, Mathf.Max(1e-4f, across));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
+                Current.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, Mathf.Max(1e-4f, along));
         }
 
-        // 恢复 Update 方法（被前一次编辑移除），保持材质刷新与GPU绑定逻辑
+        // Restore Update method (removed by previous edit), keep material refresh and GPU binding logic
         public void Update(PathProfile profile, Material template, float previewAlpha)
         {
             if (m_Disposed) return;
-            if (!profile || !template)
+            
+            if (profile == null || template == null)
             {
                 Clear();
                 return;
@@ -424,23 +280,24 @@ namespace MrPathV2.Editor.Preview
             }
 
 #if UNITY_EDITOR
-            // 绑定（或解除）GPU 实时预览纹理
+            // Bind (or unbind) GPU real-time preview texture
             TryBindGpuPreview(profile);
 #endif
 
             m_Dirty = true;
         }
 
-
         private void ApplySplat(PathProfile profile, float alpha)
         {
-            // 推送层参数（含数组/fallback）
+            if (Current == null) return;
+
+            // Push layer parameters (including array/fallback)
             var layerCount = PushLayerParams(profile);
-            // 推送通用预览参数（不透明、阈值、深度等）
+            // Push common preview parameters (opacity, threshold, depth, etc.)
             PushCommonPreviewParams(profile, layerCount, alpha);
-            // 准备遮罩纹理（MaskAtlas 或 GPU 权重）
+            // Prepare mask texture (MaskAtlas or GPU weights)
 #if UNITY_EDITOR
-            // 若GPU权重可用，则跳过MaskAtlas构建（提前返回）
+            // If GPU weights are available, skip MaskAtlas construction (early return)
             var gpuPreviewAvailable = EnableGpuPreview && m_TargetTerrain && EditorGpuPreviewCache.TryGet(m_TargetTerrain, out var rt) && rt;
             if (!gpuPreviewAvailable)
             {
@@ -448,9 +305,11 @@ namespace MrPathV2.Editor.Preview
             }
             else
             {
-                // 绑定最简占位，避免着色器依赖MaskAtlas时退化为不透明矩形
-                if (Current.HasProperty(MaskAtlas)) Current.SetTexture(MaskAtlas, Texture2D.blackTexture);
-                if (Current.HasProperty(AtlasInvHeight)) Current.SetFloat(AtlasInvHeight, 1f);
+                // Bind minimal placeholder to avoid shader degradation to opaque rectangle when depending on MaskAtlas
+                if (Current.HasProperty(PreviewShaderContracts.Properties.MaskAtlas)) 
+                    Current.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.blackTexture);
+                if (Current.HasProperty(PreviewShaderContracts.Properties.AtlasInvHeight)) 
+                    Current.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, 1f);
             }
 #else
             SetupMaskTextures(profile);
@@ -463,169 +322,30 @@ namespace MrPathV2.Editor.Preview
         /// </summary>
         private void SetupMaskTextures(PathProfile profile)
         {
-            var recipe = profile.roadRecipe;
-            var layers = recipe?.GetLayers();
-            if (layers == null || layers.Count == 0)
-            {
-                // 无有效图层则绑定黑纹理，确保着色器透明（不产生矩形遮盖）
-                if (Current.HasProperty(MaskAtlas))
-                {
-                    Current.SetTexture(MaskAtlas, Texture2D.blackTexture);
-                    Current.SetFloat(AtlasInvHeight, 1f);
-                }
-                return;
-            }
-        
-            // 收集层信息（不限制层数）
-            List<PreviewPipelineUtility.PreviewLayerInfo> layerInfos = new List<PreviewPipelineUtility.PreviewLayerInfo>(layers.Count);
-            var worldWidth = Mathf.Max(0.1f, profile.roadWidth);
-        
-            foreach (var roadLayer in layers)
-            {
-                if (roadLayer is not { enabled: true }) continue;
-                var tLayer = roadLayer.contentLayer;
-        
-                Texture2D tex = null;
-                try
-                {
-                    if (tLayer && tLayer.diffuseTexture != null)
-                    {
-                        tex = tLayer.diffuseTexture;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[PreviewMaterialManager] Failed to access TerrainLayer.diffuseTexture while building mask atlas: {ex.Message}\nStackTrace: {ex.StackTrace}");
-                }
-                if (tex == null) continue;
-        
-                var tiling = PreviewPipelineUtility.CalcLayerTiling(worldWidth, tLayer);
-                var info = new PreviewPipelineUtility.PreviewLayerInfo(
-                    tex,
-                    tiling,
-                    Vector2.zero,
-                    GetTerrainLayerTint(tLayer),
-                    Mathf.Clamp01(roadLayer.opacity * recipe.masterOpacity),
-                    roadLayer.blendMode,
-                    roadLayer.layerMask);
-                layerInfos.Add(info);
-            }
-        
-            if (layerInfos.Count == 0)
-            {
-                // Fallback to black texture when nothing to draw so preview stays transparent
-                Current.SetTexture(MaskAtlas, Texture2D.blackTexture);
-                Current.SetFloat(AtlasInvHeight, 1f);
-                return;
-            }
-        
-            // 使用外部推送的真实路径长度；若未知则采用保守默认
-            var effectivePathLength = m_PathLength > 0f ? m_PathLength : 100f;
-            m_MaskAtlas = PreviewPipelineUtility.BuildMaskAtlas(m_MaskAtlas, layerInfos, worldWidth, effectivePathLength);
-            if (!Current.HasProperty(MaskAtlas)) return;
-            Current.SetTexture(MaskAtlas, m_MaskAtlas ?? Texture2D.blackTexture);
-            Current.SetFloat(AtlasInvHeight, m_MaskAtlas && m_MaskAtlas.height > 0 ? 1f / m_MaskAtlas.height : 1f);
-            Current.SetFloat(PathSamplesId, 64f);
-            // Stylized shader expects layer index uniform (always 0 for single-layer preview)
-            Current.SetFloat(LayerIndexId, 0f);
+            if (Current == null) return;
+            
+            var maskAtlasGenerator = new PreviewMaskAtlasGenerator(Current, profile, m_PathLength);
+            m_MaskAtlas = maskAtlasGenerator.GenerateMaskAtlas(m_MaskAtlas);
         }
 
         private void ApplyStylized(PathProfile profile)
         {
+            if (Current == null) return;
+
             var layersList = profile.roadRecipe?.GetLayers();
             var layer = layersList != null && layersList.Count > 0 ? layersList[0]?.contentLayer : null;
+            
+            var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
+            parameterSetter.SetStylizedParameters(layer);
 
-            Texture2D tex = null;
-            try
+            // Key: Provide transparent previous frame result for stylized preview to avoid default blackTexture Alpha=1 causing entire rectangle
+            if (Current.HasProperty(PreviewShaderContracts.Properties.PrevResultTex))
             {
-                if (layer && layer.diffuseTexture != null)
-                {
-                    tex = layer.diffuseTexture;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[PreviewMaterialManager] Failed to access TerrainLayer.diffuseTexture for stylized preview: {ex.Message}\nStackTrace: {ex.StackTrace}");
+                Current.SetTexture(PreviewShaderContracts.Properties.PrevResultTex, EnsureTransparentPrevTex());
             }
 
-            if (tex != null)
-            {
-                Current.SetTexture(LayerTex, tex);
-                var sz = layer.tileSize;
-                if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
-                if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
-                var tiling = LayerTilingUtility.CalcLayerTiling(profile.roadWidth, layer);
-                Current.SetVector(LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
-                Current.SetColor(LayerTint, GetTerrainLayerTint(layer));
-            }
-            else
-            {
-                Current.SetTexture(LayerTex, Texture2D.whiteTexture);
-                Current.SetVector(LayerTiling, Vector4.one);
-                Current.SetColor(LayerTint, GetTerrainLayerTint(layer));
-            }
-
-            // 关键：为风格化预览提供透明的上一帧结果，避免默认 blackTexture 的 Alpha=1 导致整片矩形
-            if (Current.HasProperty(PrevResultTexId))
-            {
-                Current.SetTexture(PrevResultTexId, EnsureTransparentPrevTex());
-            }
-
-            var master = profile.roadRecipe?.masterOpacity ?? 1f;
-            Current.SetFloat(LayerOpacity, master);
-            Current.SetFloat(MaskStrengthId, master);
-            Current.SetFloat(Mode, 0f);
-            Current.SetFloat(PathSamplesId, 64f);
-            Current.SetFloat(LayerIndexId, 0f);
-            if (Current.HasProperty(ZTestId)) Current.SetInt(ZTestId, profile.enableDepthTest ? 4 : 8);
-            // 新增：Stylized 预览也支持不透明预览
-            if (Current.HasProperty(OpaquePreview)) Current.SetFloat(OpaquePreview, profile.opaquePreview ? 1f : 0f);
-            // 新增：为单层风格化预览设置遮罩阈值，保证边缘清晰
-            var maskThresholdStylized = profile.opaquePreview ? 0.2f : 0.0f;
-            if (Current.HasProperty(MaskThresholdId)) Current.SetFloat(MaskThresholdId, maskThresholdStylized);
-
-            // 统一 AcrossScale 与 MeshRepeat 默认映射
-            if (Current.HasProperty(AcrossScaleId)) Current.SetFloat(AcrossScaleId, 1f);
-            if (Current.HasProperty(MeshRepeatAcrossId)) Current.SetFloat(MeshRepeatAcrossId, 1f);
-            if (Current.HasProperty(MeshRepeatAlongId)) Current.SetFloat(MeshRepeatAlongId, 1f);
-
-            // 确保单层预览也能获取遮罩贴图（0号层）以应用透明度渐变
+            // Ensure single-layer preview can also get mask texture (layer 0) to apply transparency gradient
             SetupMaskTextures(profile);
-        }
-
-        private void SetLayer(int index, TerrainLayer layer, float worldWidth)
-        {
-            try
-            {
-                Texture2D tex = null;
-                // Safely access TerrainLayer.diffuseTexture; Unity may throw if the asset is invalid/destroyed
-                if (layer != null)
-                {
-                    // Guard against Unity's fake-null: use implicit bool check first
-                    if (layer && layer.diffuseTexture != null)
-                    {
-                        tex = layer.diffuseTexture;
-                    }
-                }
-
-                if (tex != null)
-                {
-                    Current.SetTexture($"_Layer{index}_Texture", tex);
-                    Current.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
-                }
-                else
-                {
-                    Current.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                    Current.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[PreviewMaterialManager] Failed to read TerrainLayer at index {index}: {ex.Message}\nStackTrace: {ex.StackTrace}");
-                // Fallback to safe defaults so preview continues rendering
-                Current.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
-                Current.SetColor($"_Layer{index}_Color", Color.white);
-            }
         }
 
         private enum ShaderFlavor
@@ -634,63 +354,17 @@ namespace MrPathV2.Editor.Preview
             Stylized,
             Unknown
         }
-        // 新增：GPU 预览相关属性
-#if UNITY_EDITOR
-        private static readonly int SplatWeightsID = Shader.PropertyToID("_SplatWeights");
-        private static readonly int UseSplatWeightsID = Shader.PropertyToID("_UseSplatWeights");
-        private static readonly int TerrainPositionID = Shader.PropertyToID("_TerrainPosition");
-        private static readonly int TerrainSizeID = Shader.PropertyToID("_TerrainSize");
-        private static readonly int AlphamapResolutionID = Shader.PropertyToID("_AlphamapResolution");
-        private static readonly int LayerSplatIndicesArr = Shader.PropertyToID("_LayerSplatIndices");
-        // 绑定缓存：避免重复设置同一 RT 与 Terrain
-        private int m_LastBoundSplatRtId = 0;
-        private int m_LastBoundTerrainId = 0;
-#endif
-
-        // GPU 预览目标 Terrain（仅在 Editor 环境下使用）
+        
+        // New: GPU preview related properties
 #if UNITY_EDITOR
         private UnityEngine.Terrain m_TargetTerrain;
-
-// 从 Terrain 中已加载的 Layer 解析 Tint 颜色（URP 的 DiffuseRemapMax）
-private Color GetTerrainLayerTint(TerrainLayer layer)
-{
-    try
-    {
-        if (!layer) return Color.white;
-        TerrainLayer source = layer;
-#if UNITY_EDITOR
-        if (m_TargetTerrain && m_TargetTerrain.terrainData && m_TargetTerrain.terrainData.terrainLayers != null)
-        {
-            var loaded = m_TargetTerrain.terrainData.terrainLayers;
-            for (int i = 0; i < loaded.Length; i++)
-            {
-                if (loaded[i] == layer)
-                {
-                    source = loaded[i];
-                    break;
-                }
-            }
-        }
-#endif
-#if UNITY_2019_1_OR_NEWER
-        var max = source.diffuseRemapMax; // Vector4
-        return new Color(max.x, max.y, max.z, 1f);
-#else
-        return Color.white;
-#endif
-    }
-    catch
-    {
-        return Color.white;
-    }
-}
+        
         /// <summary>
-        ///     全局开关：是否启用 GPU 实时预览。
-        ///     后续可替换为 ProjectSettings / ScriptableObject 配置。
+        ///     Global switch: whether to enable GPU real-time preview.
+        ///     Can be replaced with ProjectSettings / ScriptableObject configuration later.
         /// </summary>
         public static bool EnableGpuPreview = false;
 #endif
-
 
         #region Utilities
 
@@ -707,7 +381,7 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
             unchecked
             {
                 var hash = 17;
-                // 基本引用与显示选项
+                // Basic references and display options
                 hash = hash * 31 + (template?.GetHashCode() ?? 0);
                 hash = hash * 31 + alpha.GetHashCode();
                 if (profile != null)
@@ -717,7 +391,7 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                     hash = hash * 31 + profile.roadWidth.GetHashCode();
                 }
 
-                // 轻量哈希：收集 RoadRecipe / Layers / TerrainLayer / Mask 关键字段
+                // Lightweight hash: collect RoadRecipe / Layers / TerrainLayer / Mask key fields
                 var recipe = profile?.roadRecipe;
                 if (recipe == null) return hash;
 
@@ -736,12 +410,12 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                         continue;
                     }
 
-                    // RoadLayer 基本字段
+                    // RoadLayer basic fields
                     hash = hash * 31 + rl.enabled.GetHashCode();
                     hash = hash * 31 + rl.opacity.GetHashCode();
                     hash = hash * 31 + rl.blendMode.GetHashCode();
 
-                    // TerrainLayer 关键字段（影响贴图与平铺、色调）
+                    // TerrainLayer key fields (affecting texture and tiling, tint)
                     var tl = rl.contentLayer;
                     if (tl)
                     {
@@ -763,20 +437,22 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                             hash = hash * 31 + max.z.GetHashCode();
 #endif
                         }
-                        catch { /* 避免异常导致刷新失败 */ }
+                        catch
+                        { /* Avoid exceptions causing refresh failure */
+                        }
                     }
                     else
                     {
                         hash = hash * 31 + 0;
                     }
 
-                    // Mask 关键字段（不同类型覆盖不同参数）
+                    // Mask key fields (different parameters for different types)
                     var mask = rl.layerMask;
                     if (mask)
                     {
                         try
                         {
-                            // 通用参数
+                            // General parameters
                             hash = hash * 31 + mask.GetType().FullName.GetHashCode();
                             hash = hash * 31 + mask.smooth.GetHashCode();
                             hash = hash * 31 + mask.tiling.x.GetHashCode();
@@ -785,14 +461,14 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                             hash = hash * 31 + mask.offset.y.GetHashCode();
                             hash = hash * 31 + mask.overallScale.GetHashCode();
 
-                            // Procedural 基类（Strength/Seed）
+                            // Procedural base class (Strength/Seed)
                             if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.ProceduralMaskBase proc)
                             {
                                 hash = hash * 31 + proc.strength.GetHashCode();
                                 hash = hash * 31 + proc.seed.GetHashCode();
                             }
 
-                            // 噪声类
+                            // Noise classes
                             if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.NoiseMask noise)
                             {
                                 hash = hash * 31 + noise.noiseScale.x.GetHashCode();
@@ -819,7 +495,7 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                                 hash = hash * 31 + pnoise.edgeLow.GetHashCode();
                                 hash = hash * 31 + pnoise.edgeHigh.GetHashCode();
                             }
-                            // 路肩遮罩
+                            // Shoulder mask
                             if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.ShoulderMask shoulder)
                             {
                                 hash = hash * 31 + shoulder.shoulderWidthRatio.GetHashCode();
@@ -829,7 +505,9 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                                 hash = hash * 31 + shoulder.enableRightShoulder.GetHashCode();
                             }
                         }
-                        catch { /* 忽略异常以保证哈希过程健壮 */ }
+                        catch
+                        { /* Ignore exceptions to ensure hash process robustness */
+                        }
                     }
                     else
                     {
@@ -840,12 +518,14 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
                 return hash;
             }
         }
+        
         public void Dispose()
         {
             if (m_Disposed) return;
             Clear();
             m_Disposed = true;
         }
+        
         private void Clear()
         {
             ReleaseMaterial();
@@ -872,26 +552,21 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
             }
         }
 
-        // 新增：释放图层贴图数组，避免资源泄漏
+        // New: release layer texture array to avoid resource leaks
         private void ReleaseLayerTexArray()
         {
-            if (m_LayerTexArray != null)
-            {
-                Object.DestroyImmediate(m_LayerTexArray);
-                m_LayerTexArray = null;
-            }
             if (m_LayerRtArray != null)
             {
                 m_LayerRtArray.Release();
                 Object.DestroyImmediate(m_LayerRtArray);
                 m_LayerRtArray = null;
             }
-            // 清除缓存键
+            // Clear cache key
             m_CurrentCacheKey = null;
         }
 
         /// <summary>
-        /// 清理所有资源，包括CommandBuffer
+        /// Clean up all resources, including CommandBuffer
         /// </summary>
         public void Cleanup()
         {
@@ -939,56 +614,24 @@ private Color GetTerrainLayerTint(TerrainLayer layer)
         private void TryBindGpuPreview(PathProfile profile)
         {
             if (!Current) return;
-
-            // 默认走 MaskAtlas 回退路径
-            var useGpu = EnableGpuPreview && m_TargetTerrain && profile && profile.roadRecipe;
-            if (!useGpu)
-            {
-                if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 0);
-                if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, null);
-                m_LastBoundSplatRtId = 0;
-                m_LastBoundTerrainId = 0;
-                return;
-            }
-
-            // 从缓存获取 RenderTextureArray
-            if (EditorGpuPreviewCache.TryGet(m_TargetTerrain, out var rt) && rt)
-            {
-                var rtId = rt.GetInstanceID();
-                var terrainId = m_TargetTerrain.GetInstanceID();
-                // 若已绑定同一资源，提前返回避免重复设置
-                if (rtId == m_LastBoundSplatRtId && terrainId == m_LastBoundTerrainId)
-                {
-                    return;
-                }
-                // 绑定 GPU 生成的权重纹理
-                if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, rt);
-                if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 1);
-
-                // 推送地形参数供着色器采样世界坐标
-                var td = m_TargetTerrain.terrainData;
-                var pos = m_TargetTerrain.GetPosition();
-                var size = td.size;
-                if (Current.HasProperty(TerrainPositionID)) Current.SetVector(TerrainPositionID, new Vector4(pos.x, pos.z, 0f, 0f));
-                if (Current.HasProperty(TerrainSizeID)) Current.SetVector(TerrainSizeID, new Vector4(size.x, size.z, 0f, 0f));
-                if (Current.HasProperty(AlphamapResolutionID))
-                {
-                    var res = td.alphamapResolution;
-                    Current.SetVector(AlphamapResolutionID, new Vector4(res, res, 0f, 0f));
-                }
-                m_LastBoundSplatRtId = rtId;
-                m_LastBoundTerrainId = terrainId;
-            }
-            else
-            {
-                // 无缓存：解除绑定，回退到 MaskAtlas
-                if (Current.HasProperty(UseSplatWeightsID)) Current.SetInt(UseSplatWeightsID, 0);
-                if (Current.HasProperty(SplatWeightsID)) Current.SetTexture(SplatWeightsID, null);
-                m_LastBoundSplatRtId = 0;
-                m_LastBoundTerrainId = 0;
-            }
+            
+            var gpuBinder = new PreviewGpuBinder();
+            gpuBinder.SetTargetTerrain(m_TargetTerrain);
+            gpuBinder.TryBindGpuPreview(Current, EnableGpuPreview, profile.roadRecipe);
         }
 #endif
+
+        private static Texture2D EnsureTransparentPrevTex()
+        {
+            if (m_TransparentPrevTex) return m_TransparentPrevTex;
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
+            tex.name = "__PreviewTransparentPrevTex";
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            tex.SetPixel(0, 0, new Color(0f, 0f, 0f, 0f));
+            tex.Apply(false, false);
+            m_TransparentPrevTex = tex;
+            return m_TransparentPrevTex;
+        }
 
         #endregion
     }

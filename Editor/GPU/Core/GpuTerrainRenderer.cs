@@ -342,14 +342,26 @@ namespace __temp.MrPathV2.Editor.GPU
             LayerIndex = layerIndex;
             Strength = strength;
             BlendMode = blendMode;
+            Mask = null;
         }
+
+        // 新增：可携带与该图层关联的遮罩对象（可为空）
+        public LayerConfig(int layerIndex, float strength, BlendMode blendMode, __temp.MrPathV2.Runtime.Core.BlendMasks.BlendMaskBase mask)
+        {
+            LayerIndex = layerIndex;
+            Strength = strength;
+            BlendMode = blendMode;
+            Mask = mask;
+        }
+
         public int LayerIndex { get; }
         public float Strength { get; }
         public BlendMode BlendMode { get; }
+        public __temp.MrPathV2.Runtime.Core.BlendMasks.BlendMaskBase Mask { get; }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(LayerIndex, Strength, BlendMode);
+            return HashCode.Combine(LayerIndex, Strength, BlendMode, Mask != null ? Mask.GetHashCode() : 0);
         }
     }
 

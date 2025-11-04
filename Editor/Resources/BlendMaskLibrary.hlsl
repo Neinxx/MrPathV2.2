@@ -184,12 +184,14 @@ inline float EvaluateShoulder(float signedDistance, float roadWidth, GpuShoulder
 // 主评估函数（统一坐标）：使用 progress / signedDistance / roadWidth
 inline float EvaluateMask(float progress, float signedDistance, float roadWidth, GpuMaskParams mask)
 {
-	if(mask.Type == MASK_TYPE_NONE) return 0.0;
+    // 无遮罩时返回 1.0，使图层仅受 falloff 与不透明度控制，避免被强制清零
+    // 与当前 GPU 管线（未绑定 MaskAtlas）保持可用的默认行为
+    if(mask.Type == MASK_TYPE_NONE) return 1.0;
 
-	float m = 1.0;
-	if(mask.Type == MASK_TYPE_SHOULDER)
-	{
-		m = EvaluateShoulder(signedDistance, roadWidth, mask.Shoulder);
+    float m = 1.0;
+    if(mask.Type == MASK_TYPE_SHOULDER)
+    {
+        m = EvaluateShoulder(signedDistance, roadWidth, mask.Shoulder);
 	}
 	else if(mask.Type == MASK_TYPE_NOISE)
 	{

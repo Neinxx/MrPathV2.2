@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
   m_Name: NewMask 1
   m_EditorClassIdentifier: 
-  smooth: 0.495
-  tiling: {x: 2, y: 8.37}
+  smooth: 0.441
+  tiling: {x: 2, y: 5.96}
   offset: {x: 0, y: 0}
   overallScale: 1
   strength: 0.968

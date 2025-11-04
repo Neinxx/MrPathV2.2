@@ -10,22 +10,12 @@ namespace MrPathV2.Editor.Preview
     /// </summary>
     public class DefaultPreviewGenerator : IPreviewGenerator
     {
-        private readonly GeneratorPreviewMeshController m_Controller;
-
-        public DefaultPreviewGenerator()
-        {
-            m_Controller = new GeneratorPreviewMeshController();
-        }
-
-        public DefaultPreviewGenerator(PreviewMaterialManager materialManager)
-        {
-            m_Controller = new GeneratorPreviewMeshController();
-        }
+        private readonly GeneratorPreviewMeshController _mController = new GeneratorPreviewMeshController();
 
         /// <summary>
         ///     获取当前已生成的预览网格
         /// </summary>
-        public Mesh PreviewMesh => m_Controller.PreviewMesh;
+        public Mesh PreviewMesh => _mController.PreviewMesh;
 
         /// <summary>
         ///     启动异步网格生成流程
@@ -34,27 +24,27 @@ namespace MrPathV2.Editor.Preview
         /// <param name="profile">路径外观配置</param>
         public void StartMeshGeneration(PathSpine spine, PathProfile profile)
         {
-            m_Controller.StartMeshGeneration(spine, profile);
+            _mController.StartMeshGeneration(spine, profile);
         }
 
         /// <summary>
         ///     尝试完成生成并返回是否成功完成
         /// </summary>
         /// <returns>是否完成并已更新 PreviewMesh</returns>
-        public bool TryFinalizeMesh() => m_Controller.TryFinalizeMesh();
+        public bool TryFinalizeMesh() => _mController.TryFinalizeMesh();
 
         /// <summary>
         ///     强制等待Job完成并完成网格生成
         /// </summary>
         /// <returns>是否成功完成网格生成</returns>
-        public bool ForceFinalizeMesh() => m_Controller.ForceFinalizeMesh();
+        public bool ForceFinalizeMesh() => _mController.ForceFinalizeMesh();
 
         /// <summary>
         ///     释放内部资源（如Job与Mesh）
         /// </summary>
         public void Dispose()
         {
-            m_Controller?.Dispose();
+            _mController?.Dispose();
         }
     }
 }

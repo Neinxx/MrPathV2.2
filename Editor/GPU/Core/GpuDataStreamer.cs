@@ -4,6 +4,7 @@ using __temp.MrPathV2.Runtime.Core;
 using UnityEngine;
 using Unity.Collections;
 using Unity.Mathematics;
+using __temp.MrPathV2.Runtime.Core.BlendMasks;
 
 namespace __temp.MrPathV2.Editor.GPU
 {
@@ -254,8 +255,8 @@ namespace __temp.MrPathV2.Editor.GPU
             {
                 var layer = recipe.Layers[i];
 
-                // 默认的无遮罩参数（Type=0，Strength=1，其余为0）
-                var defaultMask = new GpuMaskParams
+                // 计算遮罩参数：优先从 LayerConfig.Mask 填充，否则回退到无遮罩（Type=0, Strength=1）
+                var maskParams = new GpuMaskParams
                 {
                     Type = 0,
                     Strength = 1f,
@@ -264,19 +265,97 @@ namespace __temp.MrPathV2.Editor.GPU
                     Shoulder = new GpuShoulderMaskParams()
                 };
 
+                if (layer.Mask != null)
+                {
+                    var dto = new global::GpuMaskParamsData();
+                    layer.Mask.FillGpuParams(ref dto);
+                    maskParams = ConvertToGpuMaskParams(dto);
+                }
+
                 layerParams[i] = new LayerParamData
                 {
-                    BlendMode = (int)layer.BlendMode,
+                    // 注意：compute 侧的 BlendWeight 期望的枚举序数为：
+                    // 0=Normal(覆盖), 1=Multiply, 2=Add, 3=Overlay, 4=Screen, 5=Lerp, 6=Additive
+                    // 而编辑器 GPU 枚举为：Replace(0), Add(1), Multiply(2), Overlay(3)
+                    // 这里做一次转换，避免 Add/Multiply 语义对调。
+                    BlendMode = MapToComputeBlendOrdinal(layer.BlendMode),
                     Opacity = Mathf.Clamp01(layer.Strength),
                     TextureIndex = 0,
                     TerrainLayerSplatIndex = layer.LayerIndex,
                     TilingOffset = Vector4.zero,
                     TintColor = new Vector4(1, 1, 1, 1),
-                    MaskParams = defaultMask
+                    MaskParams = maskParams
                 };
             }
 
             return _resourceManager.GetOrCreateComputeBuffer("LayerParams", layerParams);
+        }
+
+        // 将编辑器侧 GPU BlendMode 映射为 compute/HLSL 侧期望的整数序数
+        // Editor GPU BlendMode: Replace(0), Add(1), Multiply(2), Overlay(3)
+        // HLSL BlendWeight:     0=Normal,   1=Multiply, 2=Add,     3=Overlay
+        private static int MapToComputeBlendOrdinal(BlendMode mode)
+        {
+            switch (mode)
+            {
+                case BlendMode.Replace: return 0;   // Normal/Override
+                case BlendMode.Add:      return 2;   // Add
+                case BlendMode.Multiply: return 1;   // Multiply
+                case BlendMode.Overlay:  return 3;   // Overlay
+                default:                 return 0;
+            }
+        }
+
+        // 将运行时 DTO（全字段）转换为本管线 compute 所用的紧凑 GPU 结构
+        private static GpuMaskParams ConvertToGpuMaskParams(global::GpuMaskParamsData src)
+        {
+            var result = new GpuMaskParams
+            {
+                Type = src.MaskType,
+                Strength = src.Strength,
+                Padding = Vector2.zero,
+                Noise = new GpuNoiseMaskParams(),
+                Shoulder = new GpuShoulderMaskParams()
+            };
+
+            // 噪声遮罩映射（字段一一对应/或近似）
+            if (src.MaskType == 2) // MASK_TYPE_NOISE
+            {
+                result.Noise = new GpuNoiseMaskParams
+                {
+                    Strength = src.NoiseParams.Strength,
+                    Seed = src.NoiseParams.Seed,
+                    Tiling = new Vector2(src.NoiseParams.Tiling.x, src.NoiseParams.Tiling.y),
+                    Offset = new Vector2(src.NoiseParams.Offset.x, src.NoiseParams.Offset.y),
+                    OverallScale = src.NoiseParams.OverallScale,
+                    Smooth = src.NoiseParams.Smooth,
+                    NoiseScale = new Vector2(src.NoiseParams.NoiseScale.x, src.NoiseParams.NoiseScale.y),
+                    RotationRad = src.NoiseParams.RotationRad,
+                    Octaves = src.NoiseParams.Octaves,
+                    Lacunarity = src.NoiseParams.Lacunarity,
+                    Gain = src.NoiseParams.Gain,
+                    AlgorithmId = src.NoiseParams.AlgorithmId,
+                    UseAsymmetricEdges = src.NoiseParams.UseAsymmetricEdges ? 1 : 0,
+                    EdgeLow = src.NoiseParams.EdgeLow,
+                    EdgeHigh = src.NoiseParams.EdgeHigh,
+                    Pad1 = 0f
+                };
+            }
+            else if (src.MaskType == 1) // MASK_TYPE_SHOULDER
+            {
+                // 计算侧重点：将更全面的 DTO 映射到 compute 侧精简结构
+                result.Shoulder = new GpuShoulderMaskParams
+                {
+                    Width = src.ShoulderParams.ShoulderWidthRatio,
+                    Softness = src.ShoulderParams.EdgeFalloff,
+                    Strength = src.ShoulderParams.ShoulderStrength,
+                    OverallScale = src.ShoulderParams.OverallScale,
+                    Smooth = src.ShoulderParams.Smooth,
+                    Pad = 0f
+                };
+            }
+
+            return result;
         }
 
         private RenderTexture PrepareAlphaMapTexture(UnityEngine.Terrain terrain)
