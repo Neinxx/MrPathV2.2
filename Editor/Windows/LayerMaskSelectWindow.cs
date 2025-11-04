@@ -20,7 +20,7 @@ namespace MrPathV2.Editor.Windows
     public class LayerMaskSelectWindow : EditorWindow
     {
         // 选择成功事件：向外部（Inspector）提供遮罩选择的行级更新
-        public static event System.Action<__temp.MrPathV2.Runtime.Core.RoadLayer, __temp.MrPathV2.Runtime.Core.BlendMasks.BlendMaskBase> OnMaskApplied;
+        public static event Action<RoadLayer, BlendMaskBase> OnMaskApplied;
         private RoadLayer _targetLayer;
         private BlendMaskBase _selected;
         private BlendMaskBase _original; // 原始值：用于未应用时回滚

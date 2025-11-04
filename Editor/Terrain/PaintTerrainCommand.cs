@@ -4,16 +4,16 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Editor.GPU;
+using __temp.MrPathV2.Editor.Core;
 using __temp.MrPathV2.Editor.Settings;
 using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
 using __temp.MrPathV2.Runtime.Jobs;
 using __temp.MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEditor;
+using __temp.MrPathV2.Runtime.Interfaces;
 // <-- 修正：添加 using
 
 // 确保 Painter 命名空间可访问
@@ -300,18 +300,23 @@ namespace __temp.MrPathV2.Editor.Terrain
             Vector2Int coverageMax,
             CancellationToken token)
         {
-            ITerrainPainter painter;
-            RecipeData cpuRecipeData = default;
+            // CPU 后端仍沿用旧版 ITerrainPainter 执行路径，GPU 后端切换到统一接口 IUnifiedTerrainPainter，去除对 GpuTerrainPainterV2.Instance 的直接依赖。
 
             if (backend == PaintingBackend.CPUJobTwoPass)
             {
+                RecipeData cpuRecipeData = default;
+
                 // 获取CPU配方数据
                 if (backendData.CpuRecipeDataMap == null || !backendData.CpuRecipeDataMap.TryGetValue(terrain, out cpuRecipeData) || !cpuRecipeData.IsCreated)
                 {
                     Debug.LogWarning($"[PaintTerrainCommand] Skipping terrain {terrain.name} due to missing CPU RecipeData.");
                     return Task.CompletedTask;
                 }
-                painter = new CpuTerrainPainter();
+
+                var cpuPainter = new CpuTerrainPainter();
+                return ExecutePainterAsync(cpuPainter, terrain, sharedData.SpineData, sharedData.ProfileData,
+                    cpuRecipeData, sharedData.RoadContour, sharedData.FinalBounds,
+                    coverageMin, coverageMax, token);
             }
             else // GPU_Compute
             {
@@ -322,13 +327,11 @@ namespace __temp.MrPathV2.Editor.Terrain
                     Debug.LogWarning($"[PaintTerrainCommand] 用户取消为地形 {terrain.name} 添加图层，跳过该地形。");
                     return Task.CompletedTask;
                 }
-                // 使用新的GPU管线V2
-                painter = GpuTerrainPainterV2.Instance;
-            }
 
-            return ExecutePainterAsync(painter, terrain, sharedData.SpineData, sharedData.ProfileData,
-                cpuRecipeData, sharedData.RoadContour, sharedData.FinalBounds,
-                coverageMin, coverageMax, token);
+                // 统一到新接口：使用 UnifiedGpuTerrainPainter 执行绘制，避免直接引用旧版管线单例。
+                var unifiedGpuPainter = new UnifiedGpuTerrainPainter();
+                return unifiedGpuPainter.PaintAsync(Creator, false, token);
+            }
         }
 
         /// <summary>
@@ -402,22 +405,14 @@ namespace __temp.MrPathV2.Editor.Terrain
         {
             try
             {
-                switch (painter)
+                if (painter is CpuTerrainPainter cpuPainter)
                 {
-                    // 检查是否为新的GPU管线V2
-                    case GpuTerrainPainterV2 gpuV2Painter:
-                    {
-                        // 使用标准的ITerrainPainter接口方法
-                        await gpuV2Painter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, roadContour, finalBounds, coverageMin, coverageMax, token);
-                        break;
-                    }
-                    case CpuTerrainPainter cpuPainter:
-                        // 使用CPU画笔的完整参数版本
-                        await cpuPainter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, roadContour, finalBounds, coverageMin, coverageMax, token);
-                        break;
-                    default:
-                        Debug.LogError($"[PaintTerrainCommand] 未知的画笔类型: {painter.GetType().Name}");
-                        break;
+                    // 使用CPU画笔的完整参数版本
+                    await cpuPainter.ExecuteAsync(terrain, spineData, profileData, cpuRecipeData, roadContour, finalBounds, coverageMin, coverageMax, token);
+                }
+                else
+                {
+                    Debug.LogError($"[PaintTerrainCommand] 不支持的画笔类型: {painter.GetType().Name}");
                 }
             }
             finally
@@ -427,7 +422,6 @@ namespace __temp.MrPathV2.Editor.Terrain
                 {
                     cpuRecipeData.Dispose();
                 }
-                // GPU V2 管线不需要额外的数据管理器清理
             }
         }
 

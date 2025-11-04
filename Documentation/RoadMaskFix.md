@@ -113,3 +113,13 @@ if (maskGate <= 0.0) return;  // 如果不在道路区域，直接返回
 - `GpuComputeDispatcher.cs` - 参数绑定和着色器调度
 - `PaintSplatmapCompute.compute` - 计算着色器实现
 - `RoadMaskTest.cs` - 测试验证脚本
+
+## 新增：遮罩缺失时的防守逻辑（2025-11）
+
+- 新增计算着色器 Uniform `int use_road_mask`：为 `1` 时启用 `road_mask` 的阈值门控；为 `0` 时不采样遮罩，仅依赖 ROI 与距离逻辑绘制，避免未绑定遮罩导致“全图禁绘”。
+- CPU 侧在 `UnifiedGpuTerrainPainter.ExecuteComputeShader` 中绑定 `use_road_mask`（`roadMask ? 1 : 0`）。
+- 统一参数名称：计算着色器使用 `road_width`；CPU 侧改为设置 `road_width`（替换原先误用的 `path_width`）。
+
+### 验证要点
+- 日志或断点确认：`use_road_mask` 在两种路径下正确设置为 `0/1`；`road_width` 与路径配置一致。
+- 可视验证：去掉遮罩绑定时仍可在 ROI 内看到道路涂抹；绑定遮罩后，非道路区域不再被绘制。

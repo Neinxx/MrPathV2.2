@@ -1,7 +1,11 @@
 using UnityEngine;
 using UnityEditor;
 using System.Diagnostics;
+using __temp.MrPathV2.Editor.Core;
+using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Editor.Terrain;
 using __temp.MrPathV2.Editor.GPU;
+using MrPathV2.Editor.Preview;
 
 namespace __temp.MrPathV2.Editor.Examples
 {
@@ -62,14 +66,30 @@ namespace __temp.MrPathV2.Editor.Examples
                 $"性能提升显著！", "确定");
         }
 
+        private static LayerConfig[] GenerateTestLayers()
+        {
+            // 生成简单的三层测试配置：替换/相加/相乘
+            // 注意：这里的 LayerIndex 指向地形的图层索引，示例默认从0开始
+            return new LayerConfig[]
+            {
+                new(layerIndex: 0, strength: 0.9f, blendMode: GPU.BlendMode.Replace),
+                new(layerIndex: 1, strength: 0.7f, blendMode: GPU.BlendMode.Add),
+                new(layerIndex: 2, strength: 0.5f, blendMode: GPU.BlendMode.Multiply)
+            };
+        }
+
+
         [MenuItem("MrPath/GPU Pipeline/Clear All Cache")]
         public static void ClearAllCache()
         {
             try
             {
-                GpuTerrainPainterV2.Instance.ClearCache();
-                UnityEngine.Debug.Log("GPU缓存已清除");
-                EditorUtility.DisplayDialog("成功", "GPU缓存已清除", "确定");
+                // 统一接口：清理全局 GPU 预览缓存 + 释放未使用资源
+                GpuPreviewCache.ClearAllManually();
+                Resources.UnloadUnusedAssets();
+                System.GC.Collect();
+                UnityEngine.Debug.Log("GPU预览缓存及未使用资源已清理");
+                EditorUtility.DisplayDialog("成功", "GPU预览缓存及未使用资源已清理", "确定");
             }
             catch (System.Exception ex)
             {
@@ -85,17 +105,25 @@ namespace __temp.MrPathV2.Editor.Examples
 
             try
             {
-                var painter = GpuTerrainPainterV2.Instance;
-                var spinePoints = GenerateTestSpinePoints();
-                var layers = GenerateTestLayers();
+                using var painter = new UnifiedGpuTerrainPainter();
 
-                // 测试预览模式
-                bool previewResult = painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
-                UnityEngine.Debug.Log($"预览模式绘制结果: {(previewResult ? "成功" : "失败")}");
+                var creator = CreateTempPathCreator(terrain);
+                if (creator == null)
+                {
+                    UnityEngine.Debug.LogError("无法创建临时 PathCreator，用于测试绘制。");
+                    return;
+                }
 
-                // 测试实际绘制
-                bool paintResult = painter.PaintPath(terrain, spinePoints, 5.0f, layers, false);
-                UnityEngine.Debug.Log($"实际绘制结果: {(paintResult ? "成功" : "失败")}");
+                // 预览模式：仅生成并绑定预览权重，不直接写入地形
+                var preview = painter.Paint(creator, true);
+                UnityEngine.Debug.Log($"预览模式绘制结果: {(preview.Success ? "成功" : "失败")}");
+
+                // 实际绘制：应用到地形的alphamap
+                var applied = painter.Paint(creator, false);
+                UnityEngine.Debug.Log($"实际绘制结果: {(applied.Success ? "成功" : "失败")}");
+
+                // 清理临时对象
+                Object.DestroyImmediate(creator.gameObject);
             }
             catch (System.Exception ex)
             {
@@ -108,58 +136,79 @@ namespace __temp.MrPathV2.Editor.Examples
             UnityEngine.Debug.Log("测试性能...");
 
             var stopwatch = new Stopwatch();
-            var painter = GpuTerrainPainterV2.Instance;
-            var spinePoints = GenerateTestSpinePoints();
-            var layers = GenerateTestLayers();
+            using var painter = new UnifiedGpuTerrainPainter();
+            var creator = CreateTempPathCreator(terrain);
+            if (creator == null)
+            {
+                UnityEngine.Debug.LogError("无法创建临时 PathCreator 用于性能测试。");
+                return;
+            }
 
-            // 预热
-            painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
+            // 预热（预览模式）
+            painter.Paint(creator, true);
 
-            // 性能测试
+            // 性能测试（预览模式多次测量，以避免修改地形）
             const int testCount = 10;
             stopwatch.Start();
 
             for (int i = 0; i < testCount; i++)
             {
-                painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
+                painter.Paint(creator, true);
             }
 
             stopwatch.Stop();
             double averageTime = stopwatch.ElapsedMilliseconds / (double)testCount;
             UnityEngine.Debug.Log($"平均绘制时间: {averageTime:F2} ms");
+
+            Object.DestroyImmediate(creator.gameObject);
         }
 
         private static void TestCacheSystem(UnityEngine.Terrain terrain)
         {
-            UnityEngine.Debug.Log("测试缓存系统...");
+            UnityEngine.Debug.Log("测试预览管线稳定性（统一接口）...");
 
-            var painter = GpuTerrainPainterV2.Instance;
-            var spinePoints = GenerateTestSpinePoints();
-            var layers = GenerateTestLayers();
+            using var painter = new UnifiedGpuTerrainPainter();
+            var creator = CreateTempPathCreator(terrain);
+            if (creator == null)
+            {
+                UnityEngine.Debug.LogError("无法创建临时 PathCreator 用于稳定性测试。");
+                return;
+            }
 
-            // 第一次绘制（应该缓存）
-            var stopwatch = Stopwatch.StartNew();
-            painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
+            var stopwatch = new Stopwatch();
+
+            // 首次预览
+            stopwatch.Start();
+            var r1 = painter.Paint(creator, true);
             stopwatch.Stop();
             var firstTime = stopwatch.ElapsedMilliseconds;
 
-            // 第二次绘制（应该使用缓存）
-            stopwatch.Restart();
-            painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
+            // 第二次预览（相同数据）
+            stopwatch.Reset();
+            stopwatch.Start();
+            var r2 = painter.Paint(creator, true);
             stopwatch.Stop();
             var secondTime = stopwatch.ElapsedMilliseconds;
 
-            UnityEngine.Debug.Log($"首次绘制: {firstTime} ms, 缓存绘制: {secondTime} ms");
-            UnityEngine.Debug.Log($"缓存效果: {(firstTime > secondTime ? "有效" : "需要优化")}");
+            UnityEngine.Debug.Log($"首次预览: {firstTime} ms, 二次预览: {secondTime} ms");
+            UnityEngine.Debug.Log($"结果一致性: {(r1.Success && r2.Success ? "正常" : "异常")}");
+
+            Object.DestroyImmediate(creator.gameObject);
         }
 
         private static double MeasureNewSystemPerformance(UnityEngine.Terrain terrain, Vector3[] spinePoints, LayerConfig[] layers)
         {
-            var painter = GpuTerrainPainterV2.Instance;
+            using var painter = new UnifiedGpuTerrainPainter();
+            var creator = CreateTempPathCreator(terrain, spinePoints);
+            if (creator == null)
+            {
+                UnityEngine.Debug.LogError("无法创建临时 PathCreator 用于性能对比。");
+                return 0.0;
+            }
             var stopwatch = new Stopwatch();
 
-            // 预热
-            painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
+            // 预热（预览模式）
+            painter.Paint(creator, true);
 
             // 测试
             const int iterations = 20;
@@ -167,11 +216,13 @@ namespace __temp.MrPathV2.Editor.Examples
 
             for (int i = 0; i < iterations; i++)
             {
-                painter.PaintPath(terrain, spinePoints, 5.0f, layers, true);
+                painter.Paint(creator, true);
             }
 
             stopwatch.Stop();
-            return stopwatch.ElapsedMilliseconds / (double)iterations;
+            var avg = stopwatch.ElapsedMilliseconds / (double)iterations;
+            Object.DestroyImmediate(creator.gameObject);
+            return avg;
         }
         #endregion
 
@@ -196,21 +247,85 @@ namespace __temp.MrPathV2.Editor.Examples
         {
             return new Vector3[]
             {
-                new Vector3(0, 0, 0),
-                new Vector3(10, 0, 5),
-                new Vector3(20, 0, 10),
-                new Vector3(30, 0, 8),
-                new Vector3(40, 0, 15)
+                new(0, 0, 0),
+                new(10, 0, 5),
+                new(20, 0, 10),
+                new(30, 0, 8),
+                new(40, 0, 15)
             };
         }
 
-        private static LayerConfig[] GenerateTestLayers()
+        // 统一接口：创建一个临时 PathCreator，并以世界坐标添加测试点
+        private static PathCreator CreateTempPathCreator(UnityEngine.Terrain terrain, Vector3[] spinePoints = null)
         {
-            return new LayerConfig[]
+            if (!terrain || terrain.terrainData == null)
             {
-                new LayerConfig(layerIndex: 0, strength: 0.8f, blendMode: BlendMode.Replace),
-                new LayerConfig(layerIndex: 1, strength: 0.6f, blendMode: BlendMode.Add)
+                return null; // 提前返回：无有效地形
+            }
+
+            var go = new GameObject("TempPathCreatorForGpuExample")
+            {
+                hideFlags = HideFlags.HideAndDontSave
             };
+            go.transform.position = terrain.transform.position + Vector3.up * 0.1f; // 轻微抬高避免完全贴地
+
+            var creator = go.AddComponent<PathCreator>();
+            creator.profile = CreateDefaultProfile(terrain);
+
+            var points = spinePoints ?? GenerateTestSpinePoints();
+            // 将测试点偏移到地形范围内（以地形原点为基准）
+            for (int i = 0; i < points.Length; i++)
+            {
+                var world = terrain.transform.position + points[i];
+                creator.ExecuteCommand(new AddPointCommand(world));
+            }
+
+            return creator;
+        }
+
+        // 根据当前地形构建一个简单的路径 Profile 与配方
+        private static PathProfile CreateDefaultProfile(UnityEngine.Terrain terrain)
+        {
+            var profile = ScriptableObject.CreateInstance<PathProfile>();
+            profile.name = "TempProfileForGpuExample";
+            profile.roadWidth = 5.0f;
+            profile.falloffWidth = 3.0f;
+
+            var recipe = ScriptableObject.CreateInstance<StylizedRoadRecipe>();
+            recipe.name = "TempRecipeForGpuExample";
+            recipe.masterOpacity = 1.0f;
+
+            var td = terrain.terrainData;
+            var tls = td != null ? td.terrainLayers : null;
+            if (tls == null || tls.Length == 0)
+            {
+                // 提前返回：地形无图层，创建一个默认层（未绑定具体纹理，仅示例）
+                var defaultLayer = RoadLayer.CreateDefault(0);
+                defaultLayer.opacity = 0.8f;
+                recipe.layers = new System.Collections.Generic.List<RoadLayer> { defaultLayer };
+            }
+            else
+            {
+                // 绑定地形前两个图层（若存在），并设置基础不透明度
+                var l0 = RoadLayer.CreateDefault(0);
+                l0.contentLayer = tls[0];
+                l0.opacity = 0.8f;
+
+                RoadLayer l1 = null;
+                if (tls.Length > 1)
+                {
+                    l1 = RoadLayer.CreateDefault(1);
+                    l1.contentLayer = tls[1];
+                    l1.opacity = 0.6f;
+                }
+
+                recipe.layers = new System.Collections.Generic.List<RoadLayer>();
+                recipe.layers.Add(l0);
+                if (l1 != null) recipe.layers.Add(l1);
+            }
+
+            profile.roadRecipe = recipe;
+            return profile;
         }
         #endregion
     }
@@ -240,11 +355,10 @@ namespace __temp.MrPathV2.Editor.Examples
 
                 try
                 {
-                    var stats = GpuTerrainPainterV2.Instance.GetPerformanceStats();
-                    if (!string.IsNullOrEmpty(stats))
-                    {
-                        //                        UnityEngine.Debug.Log($"[GPU性能监控] {stats}");
-                    }
+                    // 统一接口：轻量监控（仅检测硬件支持与编辑器开关）
+                    var supported = SystemInfo.supportsComputeShaders;
+                    var previewOn = PreviewMaterialManager.EnableGpuPreview;
+                    //UnityEngine.Debug.Log($"[GPU性能监控] ComputeShader支持: {supported}, 预览开关: {previewOn}");
                 }
                 catch
                 {

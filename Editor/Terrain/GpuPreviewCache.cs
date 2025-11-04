@@ -76,5 +76,17 @@ namespace MrPathV2.Editor.Terrain
             }
             TerrainPreviewMap.Clear();
         }
+
+        /// <summary>
+        ///     手动清理所有 GPU 预览缓存。
+        ///     公开给示例与菜单项调用，等价于内部的 ClearAll。
+        ///     - 提前返回：若当前无缓存则直接返回。
+        ///     - 使用 Unity API：释放 RenderTexture 并清空映射。
+        /// </summary>
+        public static void ClearAllManually()
+        {
+            if (TerrainPreviewMap.Count == 0) return;
+            ClearAll();
+        }
     }
 }

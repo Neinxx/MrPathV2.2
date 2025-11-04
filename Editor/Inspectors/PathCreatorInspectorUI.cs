@@ -37,7 +37,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         public VisualElement CreateInspectorGUI(SerializedObject serializedObject)
         {
-            _rootElement = UIResourceLoader.LoadAndCloneByName(nameof(PathCreatorEditor));
+            _rootElement = UIResourceLoader.LoadAndClone<PathCreatorEditor>();
 
             // 自动将 SerializedObject 绑定到 UXML
             _rootElement.Bind(serializedObject);

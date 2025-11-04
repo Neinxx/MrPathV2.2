@@ -8,6 +8,7 @@ using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using __temp.MrPathV2.Editor.Terrain;
+using __temp.MrPathV2.Editor;
 
 namespace MrPathV2.Editor.Windows
 {
@@ -92,8 +93,10 @@ namespace MrPathV2.Editor.Windows
         public void CreateGUI()
         {
             // 加载 UXML 布局
-            var vta = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-                "Assets/__temp/MrPathV2/Editor/Windows/SelectTerrainLayerWindow.uxml");
+            // var vta = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+            //     "Assets/__temp/MrPathV2/Editor/Windows/SelectTerrainLayerWindow.uxml");
+            var vta = UIResourceLoader.LoadUxml(typeof(SelectTerrainLayerWindow));
+
             if (!vta)
             {
                 rootVisualElement.Add(new Label("缺少 UXML: SelectTerrainLayerWindow.uxml"));

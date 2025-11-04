@@ -48,6 +48,7 @@ int    contour_point_count;
 float4 contour_bounds;
 float  mask_threshold;
 float  edge_width_world;
+int    use_road_mask; // 当为1时启用 road_mask 门控；为0时不采样遮罩，按ROI与距离绘制
 
 // Helper function to calculate squared distance
 float distance_sq(float2 a, float2 b)
@@ -226,10 +227,14 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 
     float halfRoad = max(1e-6, road_width * 0.5);
 
-    // 仅用路面遮罩进行门控
-    float mask_sample = road_mask.Load(int3(pixel_coord, 0));
-    float maskGate = (mask_sample > mask_threshold) ? 1.0 : 0.0;
-    if (maskGate <= 0.0) return;
+    // 遮罩门控：默认允许绘制；仅当启用时采样 road_mask 并进行门控
+    float maskGate = 1.0;
+    if (use_road_mask == 1)
+    {
+        float mask_sample = road_mask.Load(int3(pixel_coord, 0));
+        maskGate = (mask_sample > mask_threshold) ? 1.0 : 0.0;
+        if (maskGate <= 0.0) return;
+    }
 
     // 使用 signed_distance 计算边缘因子：中心=1，超出道路+边缘宽度=0
     float edgeFactor = saturate(1.0 - max(0.0, abs(signed_distance) - halfRoad) / max(edge_width_world, 1e-6));

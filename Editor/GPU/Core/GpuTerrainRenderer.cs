@@ -16,6 +16,7 @@ namespace __temp.MrPathV2.Editor.GPU
         private readonly GpuResourceManager _resourceManager;
         private readonly GpuDataStreamer _dataStreamer;
         private readonly GpuComputeDispatcher _computeDispatcher;
+        private __temp.MrPathV2.Editor.GPU.Pipeline.TerrainPaintPipeline _pipeline;
         private readonly GpuRenderCache _renderCache;
         #endregion
 
@@ -31,6 +32,7 @@ namespace __temp.MrPathV2.Editor.GPU
             _dataStreamer = new GpuDataStreamer(_resourceManager);
             _computeDispatcher = new GpuComputeDispatcher(_resourceManager);
             _renderCache = new GpuRenderCache(_resourceManager);
+            _pipeline = new __temp.MrPathV2.Editor.GPU.Pipeline.TerrainPaintPipeline(_dataStreamer, _computeDispatcher);
             
             Initialize();
         }
@@ -84,11 +86,12 @@ namespace __temp.MrPathV2.Editor.GPU
                     return cachedResult;
                 }
 
-                // 2. 准备GPU数据
-                var gpuData = _dataStreamer.PrepareGpuData(terrain, pathData, recipe);
-                
-                // 3. 执行GPU计算
-                var renderTexture = _computeDispatcher.ExecuteCompute(gpuData, isPreview);
+                // 2/3. 执行按阶段的管线（数据准备 + 栅格化）
+                var (renderTexture, cp, pipelineError) = _pipeline.Execute(terrain, pathData, recipe, isPreview);
+                if (!string.IsNullOrEmpty(pipelineError))
+                {
+                    throw new InvalidOperationException(pipelineError);
+                }
                 
                 // 4. 创建结果（包含 ROI 与层数以便高效写回）
                 var result = new GpuRenderResult
@@ -97,9 +100,9 @@ namespace __temp.MrPathV2.Editor.GPU
                     Terrain = terrain,
                     IsPreview = isPreview,
                     Timestamp = DateTime.UtcNow,
-                    CoverageArea = gpuData.ComputeParams.CoverageArea,
-                    AlphamapLayerCount = gpuData.ComputeParams.AlphamapLayerCount,
-                    Resolution = gpuData.ComputeParams.Resolution
+                    CoverageArea = cp.CoverageArea,
+                    AlphamapLayerCount = cp.AlphamapLayerCount,
+                    Resolution = cp.Resolution
                 };
 
                 // 5. 缓存结果

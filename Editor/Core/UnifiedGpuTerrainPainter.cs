@@ -168,31 +168,53 @@ namespace __temp.MrPathV2.Editor.Core
                 // 获取路径宽度参数
                 float roadWidth = pathProfile.roadWidth;
                 float falloffWidth = pathProfile.falloffWidth;
-                float totalWidth = roadWidth + falloffWidth * 2;
+                float totalWidth = roadWidth + falloffWidth * 2f;
 
-                // 计算每个像素
-                for (int y = 0; y < resolution; y++)
+                // 计算路径包围盒（世界坐标）并加上过渡宽度的外扩
+                var min = new Vector2(float.MaxValue, float.MaxValue);
+                var max = new Vector2(float.MinValue, float.MinValue);
+                for (int i = 0; i < points.Length; i++)
                 {
-                    for (int x = 0; x < resolution; x++)
+                    var p = points[i];
+                    min.x = Mathf.Min(min.x, p.x);
+                    min.y = Mathf.Min(min.y, p.z);
+                    max.x = Mathf.Max(max.x, p.x);
+                    max.y = Mathf.Max(max.y, p.z);
+                }
+                // 外扩到道路+过渡宽度
+                var expand = totalWidth * 0.5f;
+                min -= new Vector2(expand, expand);
+                max += new Vector2(expand, expand);
+
+                // 将世界坐标包围盒转换为像素坐标ROI
+                float invSizeX = resolution / terrainSize.x;
+                float invSizeZ = resolution / terrainSize.z;
+                int roiMinX = Mathf.Clamp(Mathf.FloorToInt((min.x - terrainPos.x) * invSizeX), 0, resolution - 1);
+                int roiMaxX = Mathf.Clamp(Mathf.CeilToInt((max.x - terrainPos.x) * invSizeX), 0, resolution - 1);
+                int roiMinY = Mathf.Clamp(Mathf.FloorToInt((min.y - terrainPos.z) * invSizeZ), 0, resolution - 1);
+                int roiMaxY = Mathf.Clamp(Mathf.CeilToInt((max.y - terrainPos.z) * invSizeZ), 0, resolution - 1);
+
+                // 仅在ROI内计算，显著减少像素计算量
+                for (int y = roiMinY; y <= roiMaxY; y++)
+                {
+                    for (int x = roiMinX; x <= roiMaxX; x++)
                     {
                         // 将像素坐标转换为世界坐标
                         float worldX = terrainPos.x + (float)x / resolution * terrainSize.x;
                         float worldZ = terrainPos.z + (float)y / resolution * terrainSize.z;
                         Vector3 worldPos = new Vector3(worldX, 0, worldZ);
 
-                        // 计算到路径的最短距离 - 修复方法调用
+                        // 计算到路径的最短距离
                         float distance = CalculateDistanceToPath(spine, worldPos);
 
                         // 计算遮罩值
                         byte maskValue = 0;
                         if (distance <= roadWidth * 0.5f)
                         {
-                            // 在道路内部
-                            maskValue = 255;
+                            maskValue = 255; // 道路内部
                         }
                         else if (distance <= roadWidth * 0.5f + falloffWidth)
                         {
-                            // 在过渡区域
                             float t = 1.0f - (distance - roadWidth * 0.5f) / falloffWidth;
                             maskValue = (byte)(t * 255);
                         }
@@ -274,7 +296,11 @@ namespace __temp.MrPathV2.Editor.Core
                 int sliceCount = Mathf.Min(layerCount, rt.volumeDepth);
                 for (int layer = 0; layer < sliceCount; layer++)
                 {
-                    var sliceRT = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat);
+                    // 使用与源纹理一致的格式，避免 CopyTexture 因内存大小不同报错
+                    var sliceRT = new RenderTexture(resolution, resolution, 0, rt.format)
+                    {
+                        enableRandomWrite = false
+                    };
                     sliceRT.Create();
                     Graphics.CopyTexture(rt, layer, 0, sliceRT, 0, 0);
 
@@ -311,28 +337,27 @@ namespace __temp.MrPathV2.Editor.Core
                 tempTexture.Apply();
                 RenderTexture.active = null;
 
-                var pixels = tempTexture.GetPixels();
+                var texPixels = tempTexture.GetPixels();
                 for (int y = 0; y < resolution; y++)
                 {
                     for (int x = 0; x < resolution; x++)
                     {
-                        var pixel = pixels[y * resolution + x];
-                        float maskValue = pixel.r; // 使用红色通道作为遮罩值
+                        var maskValue = texPixels[y * resolution + x].r; // [0,1]
+                        if (maskValue <= 0.01f) continue; // 提前返回：无需修改
 
-                        if (maskValue > 0.01f)
+                        // 应用层不透明度；避免对 maskValue 再次插值造成双重衰减
+                        foreach (var layer in pathProfile.roadRecipe.layers)
                         {
-                            // 应用配方层权重
-                            foreach (var layer in pathProfile.roadRecipe.layers)
-                            {
-                                if (layer != null && layerMap.TryGetValue(layer.contentLayer, out int layerIndex) && layerIndex >= 0 && layerIndex < layerCount)
-                                {
-                                    float currentWeight = alphamaps[y, x, layerIndex];
-                                    float targetWeight = layer.opacity * maskValue;
-                                    alphamaps[y, x, layerIndex] = Mathf.Lerp(currentWeight, targetWeight, maskValue);
-                                    NormalizeWeights(alphamaps, y, x, layerCount);
-                                }
-                            }
+                            if (layer == null) continue;
+                            if (!layerMap.TryGetValue(layer.contentLayer, out int layerIndex)) continue;
+                            if (layerIndex < 0 || layerIndex >= layerCount) continue;
+
+                            float strength = Mathf.Clamp01(layer.opacity * maskValue);
+                            alphamaps[y, x, layerIndex] = strength;
                         }
+
+                        // 归一化一次即可，避免每层重复归一化带来的开销
+                        NormalizeWeights(alphamaps, y, x, layerCount);
                     }
                 }
 
@@ -491,16 +516,54 @@ namespace __temp.MrPathV2.Editor.Core
             _paintShader.SetVector("terrain_size", new Vector4(size.x, size.z, 0f, 0f));
 
             // 路径与衰减
-            _paintShader.SetFloat("path_width", computeParams.PathWidth);
+            // 统一参数名称：着色器使用 road_width
+            _paintShader.SetFloat("road_width", computeParams.PathWidth);
             _paintShader.SetFloat("falloff_distance", computeParams.FalloffDistance);
+            // 遮罩阈值与边缘宽度（与计算着色器一致）：阈值用于 road_mask 门控；边缘宽度用于软化道路边缘
+            _paintShader.SetFloat("mask_threshold", 0.5f);
+            _paintShader.SetFloat("edge_width_world", Mathf.Max(0.0001f, computeParams.FalloffDistance));
+            // 遮罩开关：未绑定遮罩时不做遮罩门控，仍仅在 ROI 内执行
+            _paintShader.SetInt("use_road_mask", roadMask ? 1 : 0);
 
             // 分辨率与层数
             _paintShader.SetInts("alphamap_resolution", computeParams.Resolution.x, computeParams.Resolution.y);
             _paintShader.SetInt("alphamap_layer_count", layerCount);
 
-            // 覆盖范围（全图）
-            _paintShader.SetInts("coverage_min", 0, 0);
-            _paintShader.SetInts("coverage_max", computeParams.Resolution.x - 1, computeParams.Resolution.y - 1);
+            // 覆盖范围（路径 ROI）
+            int covMinX = 0, covMinY = 0, covMaxX = computeParams.Resolution.x - 1, covMaxY = computeParams.Resolution.y - 1;
+            try
+            {
+                // 基于 PathData 的结点计算路径包围盒，并按宽度+衰减外扩
+                if (pathData != null && pathData.KnotCount > 0)
+                {
+                    var first = pathData.GetKnot(0).Position;
+                    float minX = first.x, maxX = first.x;
+                    float minZ = first.z, maxZ = first.z;
+                    for (int i = 1; i < pathData.KnotCount; i++)
+                    {
+                        var p = pathData.GetKnot(i).Position;
+                        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+                        if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+                    }
+
+                    var margin = Mathf.Max(0.25f, computeParams.PathWidth * 0.5f + computeParams.FalloffDistance);
+                    minX -= margin; maxX += margin;
+                    minZ -= margin; maxZ += margin;
+
+                    var terrainPos = terrain.GetPosition();
+                    var terrainSize = terrain.terrainData.size;
+                    int res = computeParams.Resolution.x; // square assumption
+
+                    covMinX = Mathf.Clamp(Mathf.FloorToInt(((minX - terrainPos.x) / terrainSize.x) * res), 0, res - 1);
+                    covMaxX = Mathf.Clamp(Mathf.CeilToInt(((maxX - terrainPos.x) / terrainSize.x) * res), 0, res - 1);
+                    covMinY = Mathf.Clamp(Mathf.FloorToInt(((minZ - terrainPos.z) / terrainSize.z) * res), 0, res - 1);
+                    covMaxY = Mathf.Clamp(Mathf.CeilToInt(((maxZ - terrainPos.z) / terrainSize.z) * res), 0, res - 1);
+                }
+            }
+            catch { /* 安全回退到全图 */ }
+
+            _paintShader.SetInts("coverage_min", covMinX, covMinY);
+            _paintShader.SetInts("coverage_max", covMaxX, covMaxY);
 
             // 默认参数与禁用图层混合（无layer_params_buffer）
             _paintShader.SetInt("layer_count", 0);
