@@ -292,8 +292,12 @@ namespace __temp.MrPathV2.Runtime.Jobs
             }
             else
             {
-                // 没有遮罩时不涂绘
-                return 0f;
+                // 没有任何遮罩数据（既无 MaskAtlas 也无 Strips）时：
+                // 约定“空遮罩 = 全通道”，且需与其它路径保持一致（在构建阶段已将遮罩值预乘了opacity）。
+                // 因此这里直接返回该图层的不透明度，等价于“显示该图层，除非显式降低其透明度”。
+                return (Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length)
+                    ? Recipe.Opacities[layerIndex]
+                    : 1f;
             }
         }
 

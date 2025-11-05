@@ -159,9 +159,11 @@ namespace MrPathV2.Editor.Preview
         private void ApplyMaskAtlasToMaterial(Texture2D maskAtlas)
         {
             if (!m_Material.HasProperty(PreviewShaderContracts.Properties.MaskAtlas)) return;
-            
-            m_Material.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, maskAtlas ?? Texture2D.blackTexture);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, maskAtlas && maskAtlas.height > 0 ? 1f / maskAtlas.height : 1f);
+
+            // WYSIWYG: 当未生成Atlas或无层时，使用白色纹理以代表“全通”（权重=1），避免被黑色遮罩清零
+            var safeAtlas = maskAtlas ? maskAtlas : Texture2D.whiteTexture;
+            m_Material.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, safeAtlas);
+            m_Material.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, safeAtlas && safeAtlas.height > 0 ? 1f / safeAtlas.height : 1f);
             m_Material.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
             // Stylized shader expects layer index uniform (always 0 for single-layer preview)
             m_Material.SetFloat(PreviewShaderContracts.Properties.LayerIndex, 0f);
@@ -170,7 +172,8 @@ namespace MrPathV2.Editor.Preview
         private void HandleNoLayersCase()
         {
             if (!m_Material.HasProperty(PreviewShaderContracts.Properties.MaskAtlas)) return;
-            m_Material.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.blackTexture);
+            // 无层时，白色1x1纹理代表“完全可见”的遮罩
+            m_Material.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.whiteTexture);
             m_Material.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, 1f);
         }
         

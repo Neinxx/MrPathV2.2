@@ -112,7 +112,9 @@ namespace MrPathV2.Editor.Preview
             
             // Tiling
             var tiling = (tl && tl.diffuseTexture) ? PreviewPipelineUtility.CalcLayerTiling(_mProfile.roadWidth, tl) : Vector2.one;
-            tilingsArr[index] = new Vector4(tiling.x, tiling.y, 0, 0);
+            var offset = tl ? tl.tileOffset : Vector2.zero;
+            // 将偏移写入 zw，便于 shader 使用 float4(tiling.xy, offset.xy)
+            tilingsArr[index] = new Vector4(tiling.x, tiling.y, offset.x, offset.y);
 
             // Opacity/Blend
             var master = _mProfile.roadRecipe?.masterOpacity ?? 1f;
@@ -189,11 +191,18 @@ namespace MrPathV2.Editor.Preview
                 {
                     _mMaterial.SetTexture($"_Layer{index}_Texture", tex);
                     _mMaterial.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
+                    // 兼容使用 _Layer{index}_Texture 的 shader：同步设置 _ST（缩放/偏移）
+                    var tiling = LayerTilingUtility.CalcLayerTiling(_mProfile.roadWidth, layer);
+                    var offset = layer ? layer.tileOffset : Vector2.zero;
+                    _mMaterial.SetTextureScale($"_Layer{index}_Texture", tiling);
+                    _mMaterial.SetTextureOffset($"_Layer{index}_Texture", offset);
                 }
                 else
                 {
                     _mMaterial.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
                     _mMaterial.SetColor($"_Layer{index}_Color", GetTerrainLayerTint(layer));
+                    _mMaterial.SetTextureScale($"_Layer{index}_Texture", Vector2.one);
+                    _mMaterial.SetTextureOffset($"_Layer{index}_Texture", Vector2.zero);
                 }
             }
             catch (Exception ex)
@@ -202,6 +211,8 @@ namespace MrPathV2.Editor.Preview
                 // Fallback to safe defaults so preview continues rendering
                 _mMaterial.SetTexture($"_Layer{index}_Texture", Texture2D.whiteTexture);
                 _mMaterial.SetColor($"_Layer{index}_Color", Color.white);
+                _mMaterial.SetTextureScale($"_Layer{index}_Texture", Vector2.one);
+                _mMaterial.SetTextureOffset($"_Layer{index}_Texture", Vector2.zero);
             }
         }
         
@@ -238,13 +249,19 @@ namespace MrPathV2.Editor.Preview
             {
                 _mMaterial.SetTexture(PreviewShaderContracts.Properties.LayerTex, tex);
                 var tiling = CalculateLayerTiling(layer);
-                _mMaterial.SetVector(PreviewShaderContracts.Properties.LayerTiling, new Vector4(tiling.x, tiling.y, 0, 0));
+                var offset = layer ? layer.tileOffset : Vector2.zero;
+                _mMaterial.SetVector(PreviewShaderContracts.Properties.LayerTiling, new Vector4(tiling.x, tiling.y, offset.x, offset.y));
+                // 同步设置 LayerTex 的 _ST 方便 shader 使用标准 TRANSFORM_TEX
+                _mMaterial.SetTextureScale(PreviewShaderContracts.Properties.LayerTex, tiling);
+                _mMaterial.SetTextureOffset(PreviewShaderContracts.Properties.LayerTex, offset);
                 _mMaterial.SetColor(PreviewShaderContracts.Properties.LayerTint, GetTerrainLayerTint(layer));
             }
             else
             {
                 _mMaterial.SetTexture(PreviewShaderContracts.Properties.LayerTex, Texture2D.whiteTexture);
                 _mMaterial.SetVector(PreviewShaderContracts.Properties.LayerTiling, Vector4.one);
+                _mMaterial.SetTextureScale(PreviewShaderContracts.Properties.LayerTex, Vector2.one);
+                _mMaterial.SetTextureOffset(PreviewShaderContracts.Properties.LayerTex, Vector2.zero);
                 _mMaterial.SetColor(PreviewShaderContracts.Properties.LayerTint, GetTerrainLayerTint(layer));
             }
         }

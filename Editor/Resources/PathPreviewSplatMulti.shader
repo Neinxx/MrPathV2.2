@@ -106,6 +106,7 @@ Shader "MrPath/PathPreviewSplatMulti"
             #pragma fragment frag
             // REMOVED : Unused multi_compile directive
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            // 统一混合与 MaskAtlas 采样工具（提供 ApplyBlend 与 SampleMaskAtlas2D）
             #include "BlendLayer.hlsl"
 
             struct Attributes {
@@ -131,7 +132,7 @@ Shader "MrPath/PathPreviewSplatMulti"
             TEXTURE2D(_Control2);
             TEXTURE2D(_Control3);
 
-            // Layer textures 0 - 15 with shared samplers
+            // Layer textures 0 - 15 with shared  samplers
             TEXTURE2D(_Layer0_Texture);
             half4 _Layer0_Color;
             TEXTURE2D(_Layer1_Texture);
@@ -283,6 +284,10 @@ Shader "MrPath/PathPreviewSplatMulti"
             #define BlendLayer(baseColor, layerColor, mode, opacity) ApplyBlend(baseColor, layerColor, mode, opacity)
 
             // 根据可用性从 GPU _SplatWeights 或 2D MaskAtlas 采样权重
+            // maskWeight 语义说明：
+            // - 来自地形 splat 权重或路径 MaskAtlas 的每层原始权重，范围约 [0..1]。
+            // - 在片元级对所有层权重求和并归一化，使多层叠加时总量为 1，避免颜色与透明度耦合导致视觉偏暗。
+            // - 最终透明度由各层(归一化权重 × 图层不透明度)累加得到，再乘以 _PreviewAlpha；启用 _OpaquePreview 时强制 1。
             float SampleWeightForLayer(float2 worldUV, float across, float progress, int layerIndex)
             {
                 // 优先使用 GPU 权重

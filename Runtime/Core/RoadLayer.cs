@@ -7,7 +7,7 @@ namespace __temp.MrPathV2.Runtime.Core
     [Serializable]
     public class RoadLayer
     {
-        // 名称与启用状态（纯数据，不依赖 Odin）
+        // 名称与启用状态
         public string name = "Layer";
         public bool enabled = true;
 

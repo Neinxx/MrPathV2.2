@@ -183,7 +183,6 @@ namespace __temp.MrPathV2.Runtime.Core
             {
                 var layer = layers[layerIndex];
                 var mask = layer.Mask;
-                var opacity = Mathf.Clamp01(layer.Opacity);
 
                 for (var py = 0; py < pathSamples; py++)
                 {
@@ -193,7 +192,8 @@ namespace __temp.MrPathV2.Runtime.Core
                         var across01 = (float)px / Mathf.Max(1, atlasWidth - 1);
                         var across = across01 * 2.0f - 1.0f;
                         var value = mask != null ? mask.Evaluate(across, progress, worldWidth, pathLength) : 1.0f;
-                        var finalValue = Mathf.Clamp01(value * opacity);
+                        // 遮罩权重不再叠乘图层不透明度，保持与GPU路径一致（权重仅代表 mask）
+                        var finalValue = Mathf.Clamp01(value);
                         var idx = py + layerIndex * pathSamples;
                         pixels[px + idx * atlasWidth] = new Color32((byte)(finalValue * 255.0f), 0, 0, 255);
                     }

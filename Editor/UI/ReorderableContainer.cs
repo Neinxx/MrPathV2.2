@@ -13,25 +13,25 @@ namespace __temp.MrPathV2.Editor.UI
         public new class UxmlTraits : VisualElement.UxmlTraits { }
 
         // --- 常量与状态 ---
-        private const int c_TransitionTimeMs = 30; // 动画时长 (需匹配 USS)
+        private const int CTransitionTimeMs = 30; // 动画时长 (需匹配 USS)
 
-        private bool m_IsDragging = false;
-        private VisualElement m_DraggedItem;
-        private int m_PlaceholderIndex = -1;
+        private bool _mIsDragging;
+        private VisualElement _mDraggedItem;
+        private int _mPlaceholderIndex = -1;
 
         // 拖动定位相关
-        private Vector2 m_DragStartOffset; // 鼠标点击点到 m_DraggedItem 左上角的偏移 (容器局部坐标)
-        private List<float> m_ChildMidYPositions; // 缓存子项的中线Y坐标 (容器局部坐标)
-        private ScrollView m_ScrollView; // 所在滚动视图 (用于自动滚动与滚轮抑制)
-        private float m_AutoScrollZonePx = 24f; // 触发自动滚动的边缘区域像素
-        private float m_AutoScrollSpeedPx = 6f; // 自动滚动速度 (像素/帧)
-        private float m_ScrollPrevOffsetY = 0f; // 拖拽前的滚动位置（用于恢复）
-        private float m_IndexSwitchDeadZonePx = 8f; // 插入位置切换死区，减少来回跳动
+        private Vector2 _mDragStartOffset; // 鼠标点击点到 m_DraggedItem 左上角的偏移 (容器局部坐标)
+        private List<float> _mChildMidYPositions; // 缓存子项的中线Y坐标 (容器局部坐标)
+        private ScrollView _mScrollView; // 所在滚动视图 (用于自动滚动与滚轮抑制)
+        private const float MAutoScrollZonePx = 24f; // 触发自动滚动的边缘区域像素
+        private const float MAutoScrollSpeedPx = 6f; // 自动滚动速度 (像素/帧)
+        private float _mScrollPrevOffsetY; // 拖拽前的滚动位置（用于恢复）
+        private const float MIndexSwitchDeadZonePx = 8f; // 插入位置切换死区，减少来回跳动
 
         // --- 占位符元素 (双蓝线+间距) ---
-        private VisualElement m_PlaceholderContainer;
-        private VisualElement m_TopLine;
-        private VisualElement m_BottomLine;
+        private VisualElement _mPlaceholderContainer;
+        private VisualElement _mTopLine;
+        private VisualElement _mBottomLine;
 
         // --- 构造函数与初始化 ---
 
@@ -50,28 +50,37 @@ namespace __temp.MrPathV2.Editor.UI
         private void InitializePlaceholderElements()
         {
             // 占位容器
-            m_PlaceholderContainer = new VisualElement { name = "placeholder-container" };
-            m_PlaceholderContainer.style.flexDirection = FlexDirection.Column;
-            m_PlaceholderContainer.style.display = DisplayStyle.None;
+            _mPlaceholderContainer = new VisualElement { name = "placeholder-container",
+                style =
+                {
+                    flexDirection = FlexDirection.Column,
+                    display = DisplayStyle.None
+                }
+            };
 
             // 样式定义 (简化为 C#，推荐在 USS 中定义)
-            m_TopLine = CreateLineElement(true);
-            m_BottomLine = CreateLineElement(false);
+            _mTopLine = CreateLineElement(true);
+            _mBottomLine = CreateLineElement(false);
 
             // 组装占位容器 (TopLine + Spacing [运行时添加] + BottomLine)
-            m_PlaceholderContainer.Add(m_TopLine);
-            m_PlaceholderContainer.Add(m_BottomLine);
+            _mPlaceholderContainer.Add(_mTopLine);
+            _mPlaceholderContainer.Add(_mBottomLine);
 
-            Add(m_PlaceholderContainer);
+            Add(_mPlaceholderContainer);
         }
 
-        private VisualElement CreateLineElement(bool isTop)
+        private static VisualElement CreateLineElement(bool isTop)
         {
-            var line = new VisualElement();
-            line.style.height = 4;
-            line.style.backgroundColor = new Color(0.1f, 0.5f, 0.9f); // 蓝色
-            line.style.marginLeft = 2;
-            line.style.marginRight = 2;
+            var line = new VisualElement
+            {
+                style =
+                {
+                    height = 4,
+                    backgroundColor = new Color(0.1f, 0.5f, 0.9f), // 蓝色
+                    marginLeft = 2,
+                    marginRight = 2
+                }
+            };
 
             // 圆角
             line.style.borderTopLeftRadius = line.style.borderTopRightRadius = isTop ? 2 : 0;
@@ -100,13 +109,13 @@ namespace __temp.MrPathV2.Editor.UI
         private void OnDragUpdated(DragUpdatedEvent evt)
         {
             // 若拖拽尚未初始化（例如从容器内部开始拖拽），尝试初始化
-            if (!m_IsDragging || m_DraggedItem == null)
+            if (!_mIsDragging || _mDraggedItem == null)
             {
                 TryBeginDrag(evt.mousePosition);
             }
 
             // 提前返回：非拖动状态
-            if (!m_IsDragging || m_DraggedItem == null) return;
+            if (!_mIsDragging || _mDraggedItem == null) return;
 
             // 保持拖拽视觉为“移动”，避免出现禁止图标
             DragAndDrop.visualMode = DragAndDropVisualMode.Move;
@@ -118,8 +127,8 @@ namespace __temp.MrPathV2.Editor.UI
             MaybeAutoScroll(evt.mousePosition);
 
             // 2. 计算目标索引并移动占位符
-            int targetIndex = CalculateTargetIndex(evt);
-            if (targetIndex != m_PlaceholderIndex)
+            var targetIndex = CalculateTargetIndex(evt);
+            if (targetIndex != _mPlaceholderIndex)
             {
                 SwapPlaceholderPosition(targetIndex);
                 // 不再在占位符移动时重算中线，避免阈值随布局变动导致来回切换
@@ -131,30 +140,28 @@ namespace __temp.MrPathV2.Editor.UI
         // 封装：尝试初始化拖拽状态（可在 DragEnter/DragUpdated 调用）
         private void TryBeginDrag(Vector2 mousePosition)
         {
-            if (m_IsDragging) return;
-
-            VisualElement draggedItem = DragAndDrop.GetGenericData("ReorderableItem") as VisualElement;
+            if (_mIsDragging) return;
 
             // 如果不是本容器内的重排项，退出
-            if (draggedItem == null || draggedItem.parent != this)
+            if (DragAndDrop.GetGenericData("ReorderableItem") is not VisualElement draggedItem || draggedItem.parent != this)
             {
                 DragAndDrop.visualMode = DragAndDropVisualMode.None;
                 return;
             }
 
             // 1. 初始化状态
-            m_DraggedItem = draggedItem;
-            m_IsDragging = true;
+            _mDraggedItem = draggedItem;
+            _mIsDragging = true;
             DragAndDrop.visualMode = DragAndDropVisualMode.Move;
 
             // 2. 记录初始偏移量和布局数据
-            m_DragStartOffset = WorldToLocal(mousePosition) - m_DraggedItem.layout.position;
+            _mDragStartOffset = WorldToLocal(mousePosition) - _mDraggedItem.layout.position;
             CacheChildMidYPositions();
             // 2.1 关联 ScrollView 并抑制滚轮事件传播
-            m_ScrollView = this.GetFirstAncestorOfType<ScrollView>();
+            _mScrollView = this.GetFirstAncestorOfType<ScrollView>();
             RegisterCallback<WheelEvent>(OnWheelWhileDragging, TrickleDown.TrickleDown);
             // 2.2 记录进入拖拽时的滚动位置
-            m_ScrollPrevOffsetY = m_ScrollView != null ? m_ScrollView.scrollOffset.y : 0f;
+            _mScrollPrevOffsetY = _mScrollView != null ? _mScrollView.scrollOffset.y : 0f;
 
             // 2.3 拖拽期间禁用过渡动画
             AddToClassList("dragging-active");
@@ -163,10 +170,10 @@ namespace __temp.MrPathV2.Editor.UI
             ConfigureDraggedItemAsGhost();
 
             // 4. 初始化并插入占位符
-            m_PlaceholderIndex = IndexOf(m_DraggedItem);
-            SetPlaceholderSpacing(m_DraggedItem.layout.height);
-            Insert(m_PlaceholderIndex, m_PlaceholderContainer);
-            m_PlaceholderContainer.style.display = DisplayStyle.Flex;
+            _mPlaceholderIndex = IndexOf(_mDraggedItem);
+            SetPlaceholderSpacing(_mDraggedItem.layout.height);
+            Insert(_mPlaceholderIndex, _mPlaceholderContainer);
+            _mPlaceholderContainer.style.display = DisplayStyle.Flex;
 
             // 5. 初始移动幽灵到鼠标位置
             UpdateGhostPosition(mousePosition);
@@ -182,7 +189,7 @@ namespace __temp.MrPathV2.Editor.UI
         {
             // 如果拖动退出发生在容器内部，也会触发 FinalizeDrag
             // 如果需要支持外部放置，需要引入更复杂的逻辑
-            if (m_IsDragging)
+            if (_mIsDragging)
             {
                 StartFinalizeAnimation();
             }
@@ -192,55 +199,55 @@ namespace __temp.MrPathV2.Editor.UI
 
         private void ConfigureDraggedItemAsGhost()
         {
-            m_DraggedItem.style.position = Position.Absolute;
-            m_DraggedItem.style.width = m_DraggedItem.layout.width;
-            m_DraggedItem.style.height = m_DraggedItem.layout.height;
-            m_DraggedItem.pickingMode = PickingMode.Ignore; // 忽略鼠标事件
-            m_DraggedItem.BringToFront();
-            m_DraggedItem.AddToClassList("dragging"); // 应用 USS 动画样式
+            _mDraggedItem.style.position = Position.Absolute;
+            _mDraggedItem.style.width = _mDraggedItem.layout.width;
+            _mDraggedItem.style.height = _mDraggedItem.layout.height;
+            _mDraggedItem.pickingMode = PickingMode.Ignore; // 忽略鼠标事件
+            _mDraggedItem.BringToFront();
+            _mDraggedItem.AddToClassList("dragging"); // 应用 USS 动画样式
         }
 
         private void CacheChildMidYPositions()
         {
-            m_ChildMidYPositions = new List<float>();
+            _mChildMidYPositions = new List<float>();
 
             // 缓存所有非拖动子项的中线Y坐标 (容器局部坐标)
-            foreach (var child in Children().Where(c => c != m_DraggedItem && c != m_PlaceholderContainer))
+            foreach (var child in Children().Where(c => c != _mDraggedItem && c != _mPlaceholderContainer))
             {
-                float midY = child.layout.y + child.layout.height / 2f;
-                m_ChildMidYPositions.Add(midY);
+                var midY = child.layout.y + child.layout.height / 2f;
+                _mChildMidYPositions.Add(midY);
             }
         }
 
         private void UpdateGhostPosition(Vector2 worldMousePos)
         {
             // 将鼠标世界坐标转换为容器的局部坐标
-            Vector2 containerLocalPos = WorldToLocal(worldMousePos);
+            var containerLocalPos = WorldToLocal(worldMousePos);
 
             // 设置 Ghost 的绝对位置 (实现鼠标点击点跟随)
             // 修复：限制 top 在容器范围内，left 固定为 0，避免滚动条因布局外溢跳动
-            float desiredTop = containerLocalPos.y - m_DragStartOffset.y;
-            float maxTop = layout.height - m_DraggedItem.layout.height;
+            var desiredTop = containerLocalPos.y - _mDragStartOffset.y;
+            var maxTop = layout.height - _mDraggedItem.layout.height;
             if (maxTop < 0) maxTop = 0;
-            m_DraggedItem.style.top = Mathf.Clamp(desiredTop, 0, maxTop);
-            m_DraggedItem.style.left = 0;
+            _mDraggedItem.style.top = Mathf.Clamp(desiredTop, 0, maxTop);
+            _mDraggedItem.style.left = 0;
         }
 
         private int CalculateTargetIndex(DragUpdatedEvent evt)
         {
             // 使用“被拖动元素的中心线”作为换位判定依据（更贴近原生规则）
-            Vector2 containerLocalMousePos = WorldToLocal(evt.mousePosition);
-            float ghostTopY = containerLocalMousePos.y - m_DragStartOffset.y; // 幽灵项顶部Y（容器局部）
-            float ghostCenterY = ghostTopY + (m_DraggedItem?.layout.height ?? 0f) / 2f; // 中心线Y
+            var containerLocalMousePos = WorldToLocal(evt.mousePosition);
+            var ghostTopY = containerLocalMousePos.y - _mDragStartOffset.y; // 幽灵项顶部Y（容器局部）
+            var ghostCenterY = ghostTopY + (_mDraggedItem?.layout.height ?? 0f) / 2f; // 中心线Y
 
-            int insertionIndex = 0;
-            float closestBoundaryDist = float.MaxValue;
+            var insertionIndex = 0;
+            var closestBoundaryDist = float.MaxValue;
 
             // 遍历缓存的中线Y坐标，找到插入点
             // insertionIndex 是在**不包含 Ghost 元素**的逻辑列表中的索引
-            for (int i = 0; i < m_ChildMidYPositions.Count; i++)
+            for (var i = 0; i < _mChildMidYPositions.Count; i++)
             {
-                if (ghostCenterY > m_ChildMidYPositions[i])
+                if (ghostCenterY > _mChildMidYPositions[i])
                 {
                     insertionIndex = i + 1;
                 }
@@ -249,14 +256,14 @@ namespace __temp.MrPathV2.Editor.UI
                     break;
                 }
                 // 记录与最近边界的距离，用于插入死区判断
-                float dist = Mathf.Abs(ghostCenterY - m_ChildMidYPositions[i]);
+                var dist = Mathf.Abs(ghostCenterY - _mChildMidYPositions[i]);
                 if (dist < closestBoundaryDist) closestBoundaryDist = dist;
             }
 
             // 在边界附近设置死区，减少来回跳动（保留当前占位索引）
-            if (m_PlaceholderIndex >= 0 && closestBoundaryDist <= m_IndexSwitchDeadZonePx)
+            if (_mPlaceholderIndex >= 0 && closestBoundaryDist <= MIndexSwitchDeadZonePx)
             {
-                return m_PlaceholderIndex;
+                return _mPlaceholderIndex;
             }
 
             // 实际插入到 Hierarchy 中的索引就是 insertionIndex
@@ -266,8 +273,8 @@ namespace __temp.MrPathV2.Editor.UI
         private void SetPlaceholderSpacing(float height)
         {
             // 1. 如果已经有间距元素，先移除
-            if (m_PlaceholderContainer.childCount == 3)
-                m_PlaceholderContainer.RemoveAt(1);
+            if (_mPlaceholderContainer.childCount == 3)
+                _mPlaceholderContainer.RemoveAt(1);
 
             // 2. 创建新的间距元素
             var spacing = new VisualElement();
@@ -277,7 +284,7 @@ namespace __temp.MrPathV2.Editor.UI
             spacing.style.height = height;
 
             // 4. 将其插入到占位容器
-            m_PlaceholderContainer.Insert(1, spacing);
+            _mPlaceholderContainer.Insert(1, spacing);
         }
 
         private void SwapPlaceholderPosition(int targetIndex)
@@ -286,13 +293,13 @@ namespace __temp.MrPathV2.Editor.UI
             if (targetIndex < 0) targetIndex = 0;
             if (targetIndex > childCount) targetIndex = childCount;
             // 将“非拖动子项索引”映射为真实层级索引
-            int draggedIndex = IndexOf(m_DraggedItem);
-            int actualIndex = (targetIndex <= draggedIndex) ? targetIndex : targetIndex + 1;
+            var draggedIndex = IndexOf(_mDraggedItem);
+            var actualIndex = (targetIndex <= draggedIndex) ? targetIndex : targetIndex + 1;
 
-            Remove(m_PlaceholderContainer);
-            Insert(actualIndex, m_PlaceholderContainer);
+            Remove(_mPlaceholderContainer);
+            Insert(actualIndex, _mPlaceholderContainer);
             // 用目标的“非拖动子项索引”作为占位符逻辑索引，避免受拖动项影响出现抖动
-            m_PlaceholderIndex = targetIndex;
+            _mPlaceholderIndex = targetIndex;
         }
 
         // --- 动画与清理 ---
@@ -300,51 +307,51 @@ namespace __temp.MrPathV2.Editor.UI
         private void StartFinalizeAnimation()
         {
             // 提前返回
-            if (!m_IsDragging || m_DraggedItem == null) return;
+            if (!_mIsDragging || _mDraggedItem == null) return;
 
             // 1. 计算 Ghost 最终目标位置：占位符当前的布局位置
-            Vector2 targetLayoutPos = m_PlaceholderContainer.layout.position;
+            var targetLayoutPos = _mPlaceholderContainer.layout.position;
 
             // 2. 保留占位符的间距，临时隐藏上下蓝线，避免高度突变造成滚动条上跳
-            m_TopLine.style.display = DisplayStyle.None;
-            m_BottomLine.style.display = DisplayStyle.None;
+            _mTopLine.style.display = DisplayStyle.None;
+            _mBottomLine.style.display = DisplayStyle.None;
 
             // 3. 设置 Ghost 的目标位置 (触发 Ghost 飞入动画)
-            m_DraggedItem.style.top = targetLayoutPos.y;
-            m_DraggedItem.style.left = targetLayoutPos.x;
+            _mDraggedItem.style.top = targetLayoutPos.y;
+            _mDraggedItem.style.left = targetLayoutPos.x;
 
             // 4. 安排任务，在动画结束后执行 Hierarchy 插入和样式清理
-            this.schedule.Execute(FinalizeDrag).StartingIn(c_TransitionTimeMs);
+            this.schedule.Execute(FinalizeDrag).StartingIn(CTransitionTimeMs);
 
         }
 
         private void FinalizeDrag()
         {
             // 提前返回
-            if (!m_IsDragging || m_DraggedItem == null) return;
+            if (!_mIsDragging || _mDraggedItem == null) return;
 
             // 1. 插入到最终位置
-            if (m_PlaceholderIndex != -1)
+            if (_mPlaceholderIndex != -1)
             {
                 // 占位符已经被移除，m_PlaceholderIndex 为“非拖动子项”的逻辑索引
                 // 需要将其映射为真实层级索引（包含拖动项本身）
-                int draggedIndex = IndexOf(m_DraggedItem);
-                int actualIndex = (m_PlaceholderIndex <= draggedIndex) ? m_PlaceholderIndex : m_PlaceholderIndex + 1;
+                var draggedIndex = IndexOf(_mDraggedItem);
+                var actualIndex = (_mPlaceholderIndex <= draggedIndex) ? _mPlaceholderIndex : _mPlaceholderIndex + 1;
                 // 插入前设置淡入动画的初始透明度
-                m_DraggedItem.style.opacity = 0f;
-                Insert(actualIndex, m_DraggedItem);
+                _mDraggedItem.style.opacity = 0f;
+                Insert(actualIndex, _mDraggedItem);
             }
 
             // 2. 清理样式 (恢复到布局流中)
-            m_DraggedItem.style.position = Position.Relative;
-            m_DraggedItem.style.width = StyleKeyword.Auto;
-            m_DraggedItem.style.height = StyleKeyword.Auto;
-            m_DraggedItem.style.top = StyleKeyword.Auto;
-            m_DraggedItem.style.left = StyleKeyword.Auto;
-            m_DraggedItem.pickingMode = PickingMode.Position;
-            m_DraggedItem.RemoveFromClassList("dragging");
+            _mDraggedItem.style.position = Position.Relative;
+            _mDraggedItem.style.width = StyleKeyword.Auto;
+            _mDraggedItem.style.height = StyleKeyword.Auto;
+            _mDraggedItem.style.top = StyleKeyword.Auto;
+            _mDraggedItem.style.left = StyleKeyword.Auto;
+            _mDraggedItem.pickingMode = PickingMode.Position;
+            _mDraggedItem.RemoveFromClassList("dragging");
             // 应用插入后淡入效果（交由 USS 控制），并在下一帧提升到不透明
-            var fadeItem = m_DraggedItem; // 捕获局部引用，避免后续清理将其置空
+            var fadeItem = _mDraggedItem; // 捕获局部引用，避免后续清理将其置空
             fadeItem?.AddToClassList("reordered-fade-in");
             this.schedule.Execute(() =>
             {
@@ -355,69 +362,68 @@ namespace __temp.MrPathV2.Editor.UI
             }).ExecuteLater(1);
 
             // 2.1 清理占位符与样式
-            if (Contains(m_PlaceholderContainer)) Remove(m_PlaceholderContainer);
-            m_TopLine.style.display = DisplayStyle.Flex;
-            m_BottomLine.style.display = DisplayStyle.Flex;
+            if (Contains(_mPlaceholderContainer)) Remove(_mPlaceholderContainer);
+            _mTopLine.style.display = DisplayStyle.Flex;
+            _mBottomLine.style.display = DisplayStyle.Flex;
             RemoveFromClassList("dragging-active");
 
             // 2.2 恢复滚动位置，避免拖拽结束时滚动条上移
-            if (m_ScrollView != null)
+            if (_mScrollView != null)
             {
-                float viewportH = m_ScrollView.contentViewport.layout.height;
-                float contentH = m_ScrollView.contentContainer.layout.height;
-                float max = Mathf.Max(0f, contentH - viewportH);
-                var offset = m_ScrollView.scrollOffset;
-                offset.y = Mathf.Clamp(m_ScrollPrevOffsetY, 0f, max);
-                m_ScrollView.scrollOffset = offset;
+                var viewportH = _mScrollView.contentViewport.layout.height;
+                var contentH = _mScrollView.contentContainer.layout.height;
+                var max = Mathf.Max(0f, contentH - viewportH);
+                var offset = _mScrollView.scrollOffset;
+                offset.y = Mathf.Clamp(_mScrollPrevOffsetY, 0f, max);
+                _mScrollView.scrollOffset = offset;
             }
 
             // 3. 清理状态
-            m_IsDragging = false;
-            m_DraggedItem = null;
-            m_PlaceholderIndex = -1;
+            _mIsDragging = false;
+            _mDraggedItem = null;
+            _mPlaceholderIndex = -1;
             // 3.1 解除滚轮事件抑制，清空 ScrollView 引用
             UnregisterCallback<WheelEvent>(OnWheelWhileDragging, TrickleDown.TrickleDown);
-            m_ScrollView = null;
+            _mScrollView = null;
         }
 
         // --- 事件与自动滚动 ---
 
         private void OnWheelWhileDragging(WheelEvent evt)
         {
-            if (!m_IsDragging) return;
+            if (!_mIsDragging) return;
             // 抑制滚轮事件，避免拖拽中视图滚动造成抖动和误插入
             evt.StopPropagation();
         }
 
         private void MaybeAutoScroll(Vector2 worldMousePos)
         {
-            if (m_ScrollView == null) return;
+            if (_mScrollView == null) return;
 
-            Rect svWorld = m_ScrollView.worldBound;
-            float zone = m_AutoScrollZonePx;
+            var svWorld = _mScrollView.worldBound;
 
             // 计算滚动目标
-            var offset = m_ScrollView.scrollOffset;
-            float viewportH = m_ScrollView.contentViewport.layout.height;
-            float contentH = m_ScrollView.contentContainer.layout.height;
-            float max = Mathf.Max(0f, contentH - viewportH);
+            var offset = _mScrollView.scrollOffset;
+            var viewportH = _mScrollView.contentViewport.layout.height;
+            var contentH = _mScrollView.contentContainer.layout.height;
+            var max = Mathf.Max(0f, contentH - viewportH);
 
-            bool scrolled = false;
+            var scrolled = false;
 
-            if (worldMousePos.y < svWorld.yMin + zone)
+            if (worldMousePos.y < svWorld.yMin + MAutoScrollZonePx)
             {
-                offset.y = Mathf.Max(0f, offset.y - m_AutoScrollSpeedPx);
+                offset.y = Mathf.Max(0f, offset.y - MAutoScrollSpeedPx);
                 scrolled = true;
             }
-            else if (worldMousePos.y > svWorld.yMax - zone)
+            else if (worldMousePos.y > svWorld.yMax - MAutoScrollZonePx)
             {
-                offset.y = Mathf.Min(max, offset.y + m_AutoScrollSpeedPx);
+                offset.y = Mathf.Min(max, offset.y + MAutoScrollSpeedPx);
                 scrolled = true;
             }
 
             if (scrolled)
             {
-                m_ScrollView.scrollOffset = offset;
+                _mScrollView.scrollOffset = offset;
             }
         }
     }

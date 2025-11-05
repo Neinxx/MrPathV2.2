@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -45,7 +46,7 @@ namespace __temp.MrPathV2.Editor.Stores
         public void AddRecent(TerrainLayer layer)
         {
             if (!layer) return; // 早退
-            recentLayers.RemoveAll(l => l == null || l == layer);
+            recentLayers.RemoveAll(l => !l || l == layer);
             recentLayers.Insert(0, layer);
             if (recentLayers.Count > MaxRecent) recentLayers.RemoveRange(MaxRecent, recentLayers.Count - MaxRecent);
             MarkDirty();
@@ -84,28 +85,55 @@ namespace __temp.MrPathV2.Editor.Stores
 
         private static string EnsureDefaultStorePath()
         {
-            var folder = "Assets/MrPathV2/Editor/Stores";
-            EnsureFolderExists("Assets/MrPathV2");
-            EnsureFolderExists("Assets/MrPathV2/Editor");
-            EnsureFolderExists(folder);
-            return folder + "/TerrainLayerPickerStore.asset";
+            // 动态定位 MrPathV2 根目录，并确保 Settings 目录存在
+            var root = GetPluginRootFolder();
+            var settings = $"{root}/Settings";
+            EnsureFolderPath(settings);
+            return $"{settings}/TerrainLayerPickerStore.asset";
         }
 
-        private static void EnsureFolderExists(string folder)
+        // 解析插件根目录（包含 "MrPathV2" 的文件夹），支持插件位于 Assets 下任意层级
+        private static string GetPluginRootFolder()
         {
-            if (!AssetDatabase.IsValidFolder(folder))
+            try
             {
-                var segments = folder.Split('/');
-                var current = segments[0];
-                for (var i = 1; i < segments.Length; i++)
+                var temp = CreateInstance<TerrainLayerPickerStore>();
+                var ms = MonoScript.FromScriptableObject(temp);
+                DestroyImmediate(temp);
+                var scriptPath = AssetDatabase.GetAssetPath(ms);
+                if (string.IsNullOrEmpty(scriptPath)) return "Assets/MrPathV2";
+                scriptPath = scriptPath.Replace('\\', '/');
+                var parts = scriptPath.Split('/');
+                for (int i = 0; i < parts.Length; i++)
                 {
-                    var next = current + "/" + segments[i];
-                    if (!AssetDatabase.IsValidFolder(next))
+                    if (string.Equals(parts[i], "MrPathV2", System.StringComparison.OrdinalIgnoreCase))
                     {
-                        AssetDatabase.CreateFolder(current, segments[i]);
+                        return string.Join("/", parts.Take(i + 1));
                     }
-                    current = next;
                 }
+            }
+            catch { }
+            // Fallback：默认返回 Assets/MrPathV2
+            return "Assets/MrPathV2";
+        }
+
+        // 确保形如 "Assets/AAA/BBB" 的 Unity 相对路径存在
+        private static void EnsureFolderPath(string unityFolderPath)
+        {
+            if (string.IsNullOrEmpty(unityFolderPath)) return;
+            unityFolderPath = unityFolderPath.Replace('\\', '/');
+            var parts = unityFolderPath.Split(new[] {'/'}, System.StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return;
+            var current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                var next = parts[i];
+                var candidate = $"{current}/{next}";
+                if (!AssetDatabase.IsValidFolder(candidate))
+                {
+                    AssetDatabase.CreateFolder(current, next);
+                }
+                current = candidate;
             }
         }
 

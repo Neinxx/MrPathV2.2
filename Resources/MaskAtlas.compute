@@ -188,23 +188,24 @@ float EvaluateGradientMask(float progress, float strength)
 // --- Main unified EvaluateMask ---
 float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth, float pathLen)
 {
-	float maskValue = 0.0;
-	switch(maskParams.maskType)
-	{
-	case MASK_TYPE_SHOULDER:
-		maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
-		break;
-	case MASK_TYPE_NOISE:
-		maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos, roadWidth, pathLen);
-		break;
-	case MASK_TYPE_GRADIENT:
-		maskValue = EvaluateGradientMask(progress, 1.0);
-		break;
-	default:
-		maskValue = 0.0;
-		break;
-	}
-	return saturate(maskValue * maskParams.strength);
+    float maskValue = 0.0;
+    switch(maskParams.maskType)
+    {
+    case MASK_TYPE_SHOULDER:
+        maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
+        break;
+    case MASK_TYPE_NOISE:
+        maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos, roadWidth, pathLen);
+        break;
+    case MASK_TYPE_GRADIENT:
+        maskValue = EvaluateGradientMask(progress, 1.0);
+        break;
+    default:
+        // 无遮罩（MASK_TYPE_NONE）视为“全通”，与CPU路径和Editor逻辑保持一致
+        maskValue = 1.0;
+        break;
+    }
+    return saturate(maskValue * maskParams.strength);
 }
 
 // --- Backward-compatible wrapper (old signature) ---

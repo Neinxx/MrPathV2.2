@@ -302,13 +302,15 @@ namespace MrPathV2.Editor.Preview
             if (!gpuPreviewAvailable)
             {
                 SetupMaskTextures(profile);
+                // CPU 路径：推送 Terrain 参数，供 shader 进行世界坐标采样
+                PushCpuTerrainParameters();
             }
             else
             {
-                // Bind minimal placeholder to avoid shader degradation to opaque rectangle when depending on MaskAtlas
-                if (Current.HasProperty(PreviewShaderContracts.Properties.MaskAtlas)) 
-                    Current.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.blackTexture);
-                if (Current.HasProperty(PreviewShaderContracts.Properties.AtlasInvHeight)) 
+                // WYSIWYG: 即使使用 GPU 权重，也提供“白色”占位Atlas，避免任何地方将两者相乘导致变黑
+                if (Current.HasProperty(PreviewShaderContracts.Properties.MaskAtlas))
+                    Current.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.whiteTexture);
+                if (Current.HasProperty(PreviewShaderContracts.Properties.AtlasInvHeight))
                     Current.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, 1f);
             }
 #else
@@ -346,6 +348,11 @@ namespace MrPathV2.Editor.Preview
 
             // Ensure single-layer preview can also get mask texture (layer 0) to apply transparency gradient
             SetupMaskTextures(profile);
+
+#if UNITY_EDITOR
+            // Stylized 的 CPU 预览同样需要 Terrain 参数用于世界坐标与地形 UV 的换算
+            PushCpuTerrainParameters();
+#endif
         }
 
         private enum ShaderFlavor
@@ -618,6 +625,29 @@ namespace MrPathV2.Editor.Preview
             var gpuBinder = new PreviewGpuBinder();
             gpuBinder.SetTargetTerrain(m_TargetTerrain);
             gpuBinder.TryBindGpuPreview(Current, EnableGpuPreview, profile.roadRecipe);
+        }
+
+        /// <summary>
+        /// 在 CPU 预览路径推送 Terrain 参数，保持与 GPU 预览一致的世界坐标采样。
+        /// </summary>
+        private void PushCpuTerrainParameters()
+        {
+            if (!Current) return;
+            if (!m_TargetTerrain) return;
+            var td = m_TargetTerrain.terrainData;
+            if (!td) return;
+
+            var pos = m_TargetTerrain.GetPosition();
+            var size = td.size;
+            if (Current.HasProperty(PreviewShaderContracts.Properties.TerrainPosition))
+                Current.SetVector(PreviewShaderContracts.Properties.TerrainPosition, new Vector4(pos.x, pos.z, 0f, 0f));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.TerrainSize))
+                Current.SetVector(PreviewShaderContracts.Properties.TerrainSize, new Vector4(size.x, size.z, 0f, 0f));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.AlphamapResolution))
+            {
+                var res = td.alphamapResolution;
+                Current.SetVector(PreviewShaderContracts.Properties.AlphamapResolution, new Vector4(res, res, 0f, 0f));
+            }
         }
 #endif
 

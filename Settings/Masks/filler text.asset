@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a170167bff96cff4783bf136b840dda5, type: 3}
-  m_Name: NewMask
+  m_Name: filler text
   m_EditorClassIdentifier: 
-  smooth: 0.694
-  tiling: {x: 2.49, y: 2.72}
-  offset: {x: 3.25, y: 0}
-  overallScale: 1.125
+  smooth: 0.1
+  tiling: {x: 2, y: 2}
+  offset: {x: 0, y: 0}
+  overallScale: 1
   gradient:
     serializedVersion: 2
     m_Curve:

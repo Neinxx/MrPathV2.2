@@ -12,8 +12,8 @@ namespace __temp.MrPathV2.Editor.UI
         public new class UxmlTraits : VisualElement.UxmlTraits { }
 
         // --- 拖拽句柄控制 ---
-        private VisualElement m_DragHandle;   // 指定拖拽句柄
-        private bool m_HandleOnly = false;    // 仅在句柄上允许拖动
+        private VisualElement _mDragHandle;   // 指定拖拽句柄
+        private bool _mHandleOnly;    // 仅在句柄上允许拖动
 
         // --- 构造函数 ---
 
@@ -28,15 +28,15 @@ namespace __temp.MrPathV2.Editor.UI
 
         private void OnPointerDown(PointerDownEvent evt)
         {
-            if (evt.button != 0 || !(parent is ReorderableContainer))
+            if (evt.button != 0 || parent is not ReorderableContainer)
             {
                 return;
             }
             // 仅句柄拖动限制：允许句柄及其子元素触发
-            if (m_HandleOnly && m_DragHandle != null)
+            if (_mHandleOnly && _mDragHandle != null)
             {
                 var targetVe = evt.target as VisualElement;
-                bool onHandleOrDescendant = targetVe != null && (targetVe == m_DragHandle || m_DragHandle.Contains(targetVe));
+                var onHandleOrDescendant = targetVe != null && (targetVe == _mDragHandle || _mDragHandle.Contains(targetVe));
                 if (!onHandleOrDescendant)
                 {
                     return;
@@ -55,19 +55,19 @@ namespace __temp.MrPathV2.Editor.UI
         /// </summary>
         public void SetDragHandle(VisualElement handle, bool handleOnly = true)
         {
-            m_DragHandle = handle;
-            m_HandleOnly = handleOnly;
+            _mDragHandle = handle;
+            _mHandleOnly = handleOnly;
 
-            if (m_DragHandle != null)
+            if (_mDragHandle != null)
             {
-                m_DragHandle.style.cursor = new StyleCursor(Cursorer.DefaultCursor(Cursorer.CursorType.MoveArrow));
+                _mDragHandle.style.cursor = new StyleCursor(Cursorer.DefaultCursor(Cursorer.CursorType.MoveArrow));
             }
 
-            if (m_HandleOnly)
+            if (_mHandleOnly)
             {
                 // 句柄接管事件，避免整个项触发拖拽
                 UnregisterCallback<PointerDownEvent>(OnPointerDown);
-                m_DragHandle?.RegisterCallback<PointerDownEvent>(OnPointerDown);
+                _mDragHandle?.RegisterCallback<PointerDownEvent>(OnPointerDown);
             }
             else
             {
@@ -87,15 +87,15 @@ namespace __temp.MrPathV2.Editor.UI
                 return (Cursor)ret;
             }
 
-            private static PropertyInfo _defaultCursorId;
+            private static PropertyInfo s_DefaultCursorId;
             private static PropertyInfo DefaultCursorId
             {
                 get
                 {
-                    if (_defaultCursorId != null) return _defaultCursorId;
-                    _defaultCursorId = typeof(Cursor).GetProperty("defaultCursorId",
+                    if (s_DefaultCursorId != null) return s_DefaultCursorId;
+                    s_DefaultCursorId = typeof(Cursor).GetProperty("defaultCursorId",
                         BindingFlags.NonPublic | BindingFlags.Instance);
-                    return _defaultCursorId;
+                    return s_DefaultCursorId;
                 }
             }
 

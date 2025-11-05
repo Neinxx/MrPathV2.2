@@ -20,11 +20,47 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
-    - _MaskAtlas:
+    - _Control0:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Control1:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Control2:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Control3:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Layer0_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer10_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer11_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer12_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer13_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer14_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer15_Texture:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -40,23 +76,85 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _Layer4_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer5_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer6_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer7_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer8_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Layer9_Texture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _LayerTextures:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MaskAtlas:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _ZTest: 8
-    - _PreviewAlpha: 1
-    - _MaskStrength: 1
-    - _AtlasInvHeight: 1
-    - _MaskThreshold: 0
     - _AcrossScale: 1
+    - _AtlasInvHeight: 1
+    - _LayerCount: 0
+    - _MaskStrength: 1
+    - _MaskThreshold: 1
     - _MeshRepeatAcross: 1
     - _MeshRepeatAlong: 1
-    - _LayerCount: 0
+    - _OpaquePreview: 0
     - _PathSamples: 64
+    - _PreviewAlpha: 1
+    - _UseLayerTexArray: 0
+    - _ZTest: 8
     m_Colors:
     - _Layer0_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer0_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer10_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer10_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer11_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer11_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer12_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer12_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer13_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer13_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer14_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer14_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer15_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer15_Tiling: {r: 1, g: 1, b: 0, a: 0}
     - _Layer1_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer1_Tiling: {r: 1, g: 1, b: 0, a: 0}
     - _Layer2_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer2_Tiling: {r: 1, g: 1, b: 0, a: 0}
     - _Layer3_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer3_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer4_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer4_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer5_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer5_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer6_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer6_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer7_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer7_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer8_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer8_Tiling: {r: 1, g: 1, b: 0, a: 0}
+    - _Layer9_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Layer9_Tiling: {r: 1, g: 1, b: 0, a: 0}
   m_BuildTextureStacks: []
 --- !u!114 &3749868378845796724
 MonoBehaviour:
