@@ -170,15 +170,17 @@ private (float r, float g, float b, float a) PerformTextureBlending(float normal
 
     for (var k = 0; k < layerCount; k++)
     {
-        float layerMask = GetLayerMask(k, normalizedDist, pathProgress);
+        var rawMask = GetLayerMask(k, normalizedDist, pathProgress);
+        var opacity = math.saturate(Recipe.Opacities[k]);
+        var layerValue = rawMask * opacity; // 统一在混合阶段乘以每层不透明度
         var blendMode = Recipe.BlendModes[k];
 
         switch (k)
         {
-            case 0: r = TerrainJobsUtility.Blend(r, layerMask, blendMode); break;
-            case 1: g = TerrainJobsUtility.Blend(g, layerMask, blendMode); break;
-            case 2: b = TerrainJobsUtility.Blend(b, layerMask, blendMode); break;
-            case 3: a = TerrainJobsUtility.Blend(a, layerMask, blendMode); break;
+            case 0: r = TerrainJobsUtility.Blend(r, layerValue, blendMode); break;
+            case 1: g = TerrainJobsUtility.Blend(g, layerValue, blendMode); break;
+            case 2: b = TerrainJobsUtility.Blend(b, layerValue, blendMode); break;
+            case 3: a = TerrainJobsUtility.Blend(a, layerValue, blendMode); break;
         }
     }
 
@@ -207,7 +209,8 @@ private float GetLayerMask(int layerIndex, float normalizedDist, float pathProgr
     }
     else
     {
-        return TerrainJobsUtility.EvaluateStrip(Recipe.Strips, Recipe.StripSlices[layerIndex], Recipe.StripResolution, normalizedDist) * Recipe.Opacities[layerIndex];
+        // 仅返回原始遮罩值，不在此处乘以不透明度
+        return TerrainJobsUtility.EvaluateStrip(Recipe.Strips, Recipe.StripSlices[layerIndex], Recipe.StripResolution, normalizedDist);
     }
 }
 

@@ -220,7 +220,8 @@ namespace __temp.MrPathV2.Editor.Terrain
             if (width <= 0.0001f)
                 width = Mathf.Max(0.01f, map != null ? 1f : 1f); // 宽度参与遮罩采样，非 0 即可
 
-            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent);
+            var threshold = (pathProfile != null && pathProfile.opaquePreview) ? 0.2f : 0f;
+            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent, threshold);
         }
     }
 }

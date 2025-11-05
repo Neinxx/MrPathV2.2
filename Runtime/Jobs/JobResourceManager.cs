@@ -100,7 +100,11 @@ namespace __temp.MrPathV2.Runtime.Jobs
             float roadWorldWidth, float roadWorldLength,
             Allocator allocator = Allocator.Persistent)
         {
-            return CreateResource(() => new RecipeData(pathProfile, terrainLayerMap, roadWorldWidth, roadWorldLength, allocator));
+            return CreateResource(() =>
+            {
+                var threshold = (pathProfile != null && pathProfile.opaquePreview) ? 0.2f : 0f;
+                return new RecipeData(pathProfile, terrainLayerMap, roadWorldWidth, roadWorldLength, allocator, threshold);
+            });
         }
 
         /// <summary>

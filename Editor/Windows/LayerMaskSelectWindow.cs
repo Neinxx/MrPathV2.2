@@ -1,78 +1,118 @@
 #if UNITY_EDITOR
+
 using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using __temp.MrPathV2.Editor;
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Editor.Services;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
-using UnityEditor.UIElements;
-using __temp.MrPathV2.Editor;
+// 假设这些辅助类和运行时核心类型已存在于项目中
+// 存放 MaskAssetService 和 MaskUsageIndex
 
 namespace MrPathV2.Editor.Windows
 {
     /// <summary>
-    /// LayerMaskSelectWindow
-    /// 顶部列表（可搜索滚动）+ 底部参数（可拖拽分割调整高度）。
-    /// 选中即应用到 RoadLayer.layerMask；遵循提前返回与单一职责原则。
+    ///     LayerMaskSelectWindow (优化版)
+    ///     核心职责：管理 UI 流程、展示列表和详情，将资产操作和索引扫描委托给服务层。
     /// </summary>
     public class LayerMaskSelectWindow : EditorWindow
     {
+        private const float ThumbSize = 40f;
+        private static LayerMaskSelectWindow s_Instance; // 单例实例
+
+
+        // --- 状态字段 ---
+        private readonly List<BlendMaskBase> _visibleList = new List<BlendMaskBase>();
+        private bool _applied; // 是否已最终应用（双击或关闭时应用）
+
+        // --- 服务层引用 (依赖注入) ---
+        private LayerMaskAssetService _assetService;
+        private VisualElement _details; // MaskOSBox (详情/参数区)
+        private ListView _listView;
+        private DropdownField _maskTypeDropdown; // 用于新建类型的选择
+        private TextField _nameField; // 新建名称输入
+        private Button _newBtn;
+        private BlendMaskBase _original; // 原始值：用于未应用时回滚
+
+        // --- UITK 元素引用 ---
+        private VisualElement _rootElement;
+        private string _search = string.Empty;
+        private ToolbarSearchField _searchField;
+        private BlendMaskBase _selected; // 当前选中（列表/预览）
+        private UnityEditor.Editor _selectedEditor; // 参数区渲染器
+        private RoadLayer _targetLayer;
+
+        // --- 静态事件 ---
+        public static event Action<RoadLayer, BlendMaskBase> OnMaskApplied;
+
+        #region 生命周期与初始化
+
+        private void OnEnable()
+        {
+            // 确保服务被初始化
+            _assetService = new LayerMaskAssetService();
+
+        }
+
+        private void OnDisable()
+        {
+            CleanupSelectedEditor();
+
+            // 卫语句：已应用或无目标时，不进行回滚
+            if (_applied || _targetLayer == null) return;
+
+            // 安全回滚：使用 Undo 确保回滚操作可撤销
+            //  Undo.RecordObject(_targetLayer, "Revert Mask Selection");//可以迁移到SO实现
+            _targetLayer.layerMask = _original;
+        }
+
+        private void OnDestroy()
+        {
+            if (s_Instance == this)
+                s_Instance = null;
+        }
+
+        public void CreateGUI()
+        {
+            SetupRootElement();
+            BindUIElements();
+            SetupListView();
+            BindSearchField();
+            SetupMaskDropdown();
+            BindCreateButton();
+        }
+
+        public static void Open(RoadLayer layer, BlendMaskBase current)
+        {
+            if (s_Instance != null)
+            {
+                FocusExistingInstance(layer, current);
+                return;
+            }
+
+            CreateAndShowNewInstance(layer, current);
+        }
+
         // 新入口：作为 Mask 资产管理器打开（不绑定 RoadLayer）
         [MenuItem("MrPath/Masks/Mask Manager")]
         public static void OpenManager()
         {
             Open(null, null);
         }
-        private static LayerMaskSelectWindow s_Instance; // 单例实例
 
-        // 选择成功事件：向外部（Inspector）提供遮罩选择的行级更新
-        public static event Action<RoadLayer, BlendMaskBase> OnMaskApplied;
-        private RoadLayer _targetLayer;
-        private BlendMaskBase _selected;
-        private BlendMaskBase _original; // 原始值：用于未应用时回滚
-        private bool _applied; // 是否已最终应用（双击）
-        private UnityEditor.Editor _selectedEditor; // 参数区渲染
-
-        private readonly List<BlendMaskBase> _masks = new List<BlendMaskBase>();
-        private readonly Dictionary<int, Texture2D> _iconCache = new Dictionary<int, Texture2D>();
-        // 移除 IMGUI 滚动状态字段，UITK 不需要这些
-        private string _search = string.Empty;
-
-        // 新建遮罩相关
-        private Type[] _availableMaskTypes = Array.Empty<Type>();
-        private int _createTypeIndex;
-        private const string NewMaskName = "NewMask";
-
-        // 已移除拖拽分割条相关字段（保留UITK固定高度实现）
-
-        // --- UITK 重构新增字段 ---
-        private VisualElement _rootElement;
-        private VisualElement _contentRoot;
-        private ListView _listView;
-        private VisualElement _details; // 绑定到 UXML 中的 MaskOSBox
-        private ToolbarSearchField _searchField; // 绑定到 UXML 中的 ToolbarSearchField
-        private float _thumbSize = 42f; // 默认缩略图尺寸（固定，已移除缩放控件）
-        private Button _newBtn; // 来自 UXML（文本：新建噪声），可选
-        private DropdownField _maskEnumDropdown; // 动态生成的“MaskEnum”，用于类型选择
-        private TextField _nameField; // UXML中的名称输入（可选）
-        private readonly List<BlendMaskBase> _visibleList = new List<BlendMaskBase>();
-        // 遮罩使用信息缓存：key 为 Mask InstanceID，value 为精简的引用摘要
-        private readonly Dictionary<int, string> _usageLabelCache = new Dictionary<int, string>();
-
-        public static void Open(RoadLayer layer, BlendMaskBase current)
+        private static void FocusExistingInstance(RoadLayer layer, BlendMaskBase current)
         {
-            // 单例：若已打开则聚焦并复用（避免多窗口资源占用）
-            if (s_Instance != null)
-            {
-                s_Instance.minSize = new Vector2(520, 360);
-                s_Instance.Initialize(layer, current);
-                s_Instance.Focus();
-                return;
-            }
+            s_Instance.Initialize(layer, current);
+            s_Instance.Focus();
+        }
 
+        private static void CreateAndShowNewInstance(RoadLayer layer, BlendMaskBase current)
+        {
             var win = GetWindow<LayerMaskSelectWindow>(true, "Layer Mask Select", true);
             s_Instance = win;
             win.minSize = new Vector2(520, 360);
@@ -85,379 +125,575 @@ namespace MrPathV2.Editor.Windows
             _targetLayer = layer;
             _selected = current;
             _original = current;
-            _availableMaskTypes = FindAvailableMaskTypes();
-            if (_availableMaskTypes == null || _availableMaskTypes.Length == 0)
-                _availableMaskTypes = new[]
-                {
-                    typeof(BlendMaskBase)
-                };
-            RebuildList();
-            RecreateEditor();
-        }
+            _applied = false; // 每次打开重置应用状态
 
-        private void OnDisable()
-        {
-            if (_selectedEditor)
+            // 委托数据加载/索引重建
+            _assetService.Initialize();
+
+
+            // 确保类型列表可用
+            if (!_assetService.AvailableMaskTypes.Any())
             {
-                DestroyImmediate(_selectedEditor);
-                _selectedEditor = null;
+                _assetService.SetFallbackMaskType();
             }
 
-            // 未最终应用则回滚到原始值，交互行为与 SelectTerrainLayerWindow 保持一致
-            if (!_applied && _targetLayer != null)
-            {
-                _targetLayer.layerMask = _original;
-            }
+            // UI 数据填充
+            SetupMaskDropdownChoices();
+            InitializeListViewData();
+            RecreateEditor(); // 确保参数区准备好
+            UpdateDetailsPanel(); // 刷新参数区内容
         }
 
-        private void OnDestroy()
-        {
-            // 释放单例引用
-            if (s_Instance == this) s_Instance = null;
-        }
+        #endregion
 
-        // 取消失焦自动关闭，确保新建遮罩与编辑参数时窗口保持打开
-        private void OnLostFocus()
-        {
-            // 保持窗口，不执行 Close()
-        }
+        #region UITK 设置与绑定
 
-
-        // --- UITK: 构建界面 ---
-        public void CreateGUI()
+        private void SetupRootElement()
         {
-            // 使用 UXML 构建界面，确保布局与效果图一致
             _rootElement = rootVisualElement;
             _rootElement.Clear();
 
+
             var vta = UIResourceLoader.LoadUxml(typeof(LayerMaskSelectWindow));
+            var styleSheet = UIResourceLoader.LoadUss(typeof(LayerMaskSelectWindow));
+            if (styleSheet != null)
+            {
+                // 将样式表添加到根视觉元素的 styleSheets 列表中
+                _rootElement.styleSheets.Add(styleSheet);
+            }
+            else
+            {
+                Debug.LogError($"[LayerMaskSelectWindow] 无法加载样式表: {styleSheet}. 请检查文件路径和资产是否存在。");
+            }
             if (vta != null)
             {
                 vta.CloneTree(_rootElement);
             }
-            else
-            {
-                // 兜底：若 UXML 未找到，维持最小可用界面
-                _rootElement.style.flexDirection = FlexDirection.Column;
-            }
 
-            // 不加载外部样式以避免橙色选中效果
+        }
 
-            // 绑定 UXML 元素
+        private void BindUIElements()
+        {
             _searchField = _rootElement.Q<ToolbarSearchField>("ToolbarSearchField");
-            var listContainer = _rootElement.Q<VisualElement>("MaskList");
-            _details = _rootElement.Q<VisualElement>("MaskOSBox") ?? new VisualElement
-            {
-                name = "MaskOSBox"
-            };
-            if (_details.parent == null) _rootElement.Add(_details);
+            _details = _rootElement.Q<VisualElement>("MaskOSBox");
+            _maskTypeDropdown = _rootElement.Q<DropdownField>("MaskDropDownField");
+            _nameField = _rootElement.Q<TextField>("MaskName");
+            _newBtn = _rootElement.Q<Button>("CreateMask");
+        }
 
-            // 创建 ListView 并添加到 UXML 的列表容器
-            _listView = new ListView
+        private void SetupListView()
+        {
+            // 简化 ListView 实例化
+            _listView = new ListView(_visibleList)
             {
                 name = "MaskListView",
                 selectionType = SelectionType.Multiple,
-                showBorder = false,
                 fixedItemHeight = 52,
-                style =
-                {
-                    flexGrow = 1
-                },
-                makeItem = MakeListItem,
+                makeItem = CreateListItem,
                 bindItem = BindListItem
             };
-            _listView.onSelectionChange += items =>
-            {
-                var m = items.FirstOrDefault() as BlendMaskBase;
-                ApplySelection(m);
-                UpdateDetailsPanel();
-            };
-            _listView.onItemsChosen += items =>
-            {
-                var m = items.FirstOrDefault() as BlendMaskBase;
-                ApplySelection(m);
-                // 双击确认后关闭窗口
-                Close();
-            };
-            if (listContainer != null) listContainer.Add(_listView);
-            else _rootElement.Add(_listView);
 
-            // 快捷键：F2重命名、Delete批量删除
+            _listView.onSelectionChange += OnListViewSelectionChanged;
+            _listView.onItemsChosen += OnListViewItemsChosen;
             _listView.RegisterCallback<KeyDownEvent>(OnListKeyDown);
 
-            // 搜索框绑定
-            if (_searchField != null)
-            {
-                _searchField.value = _search;
-                _searchField.RegisterValueChangedCallback(ev =>
-                {
-                    _search = ev.newValue?.Trim() ?? string.Empty;
-                    RebuildVisibleList();
-                    _listView?.RefreshItems();
-                });
-            }
+            _rootElement.Q<VisualElement>("MaskList")?.Add(_listView);
+        }
 
-
-            _availableMaskTypes = FindAvailableMaskTypes();
-            var typeNames = (_availableMaskTypes ?? Array.Empty<Type>()).Select(t => t.Name).ToList();
-            if (typeNames.Count == 0) typeNames.Add("BlendMaskBase");
-            var maskDropdown = _rootElement.Q<DropdownField>("MaskDropDownField");
-            if (maskDropdown != null)
-            {
-                maskDropdown.name = "Masks";
-                maskDropdown.choices = typeNames;
-                maskDropdown.value = typeNames[Mathf.Clamp(_createTypeIndex, 0, typeNames.Count - 1)];
-                maskDropdown.RegisterValueChangedCallback(ev =>
-                {
-                    var idx = typeNames.IndexOf(ev.newValue);
-                    _createTypeIndex = Mathf.Clamp(idx, 0, typeNames.Count - 1);
-                });
-                _maskEnumDropdown = maskDropdown;
-            }
-
-
-            _nameField = _rootElement.Q<TextField>("MaskName");
-            if (_nameField == null)
-            {
-                Debug.Log("TextField name is not matching!");
-            }
-
-            // 使用固定缩略图尺寸 40x40
-            _thumbSize = 40f;
-
-
-            _newBtn = _rootElement.Q<Button>("CreateMask");
-
-            if (_newBtn != null)
-            {
-                _newBtn.clicked += () =>
-                {
-
-                    var types = _availableMaskTypes ?? Array.Empty<Type>();
-                    var idx = Mathf.Clamp(_createTypeIndex, 0, types.Length - 1);
-                    var type = types.Length > 0 ? types[idx] : typeof(BlendMaskBase);
-                    var nameHint = _nameField != null ? _nameField.value : NewMaskName;
-                    CreateNewMaskAsset(type, nameHint);
-                    RebuildVisibleList();
-                    _listView?.RefreshItems();
-                };
-            }
-
-            // 数据初始化
-            RebuildList();
+        private void InitializeListViewData()
+        {
             RebuildVisibleList();
             _listView.itemsSource = _visibleList;
-            // 默认选中 Layer 当前遮罩
-            var defaultIndex = (_selected != null) ? _visibleList.IndexOf(_selected) : -1;
-            if (defaultIndex < 0) defaultIndex = 0;
-            _listView.SetSelection(defaultIndex);
-            // 确保默认选中项在可视区域内，提升可用性
-            _listView.ScrollToItem(defaultIndex);
-            UpdateDetailsPanel();
 
-            // 固定参数区初始高度（移除分割条与拖拽）
-            // var detailsGroup = _details.parent;
-            // if (detailsGroup != null) detailsGroup.style.flexGrow = 0;
-            // _details.style.height = 820f;
+            // 默认选中 Layer 当前遮罩，否则选中 Null (index 0)
+            var defaultIndex = _selected != null ? _visibleList.IndexOf(_selected) : 0;
+            defaultIndex = Mathf.Max(0, defaultIndex); // 确保不小于 0
+
+            _listView.SetSelection(defaultIndex);
+            _listView.ScrollToItem(defaultIndex);
+            _listView.RefreshItems();
         }
+
+        private void BindSearchField()
+        {
+            if (_searchField == null) return;
+            _searchField.value = _search;
+            _searchField.RegisterValueChangedCallback(OnSearchValueChanged);
+        }
+
+        private void SetupMaskDropdown()
+        {
+            // 初始值在 Initialize 中设置
+            _maskTypeDropdown?.RegisterValueChangedCallback(OnMaskTypeChanged);
+        }
+
+        private void SetupMaskDropdownChoices()
+        {
+            if (_maskTypeDropdown == null) return;
+
+            var typeNames = _assetService.AvailableMaskTypes.Select(t => t.Name).ToList();
+            _maskTypeDropdown.choices = typeNames;
+            // 确保选择一个有效类型
+            if (typeNames.Any())
+            {
+                _maskTypeDropdown.value = typeNames.FirstOrDefault() ?? string.Empty;
+            }
+        }
+
+        private void BindCreateButton()
+        {
+            if (_newBtn == null) return;
+            _newBtn.clicked += OnCreateButtonClicked;
+        }
+
+        #endregion
+
+        #region 数据与列表管理
 
         private void RebuildVisibleList()
         {
             _visibleList.Clear();
-            var query = string.IsNullOrWhiteSpace(_search) ? null : _search.Trim();
-            var source = _masks.Where(m => m);
-            if (query != null)
+            _visibleList.Insert(0, null); // 顶部添加 Null 项用于清空遮罩槽位
+
+            var query = _search.Trim();
+            var masks = _assetService.AllMasks
+                .Where(m => m != null); // 确保非空
+
+            if (!string.IsNullOrWhiteSpace(query))
             {
-                source = source.Where(m => m.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
+                masks = masks.Where(m => m.name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
             }
-            _visibleList.AddRange(source.OrderBy(m => m.name));
-            // 顶部添加 Null 项用于清空遮罩槽位
-            _visibleList.Insert(0, null);
+
+            // 列表排序应委托给 AssetService，此处只处理过滤
+            _visibleList.AddRange(masks.OrderBy(m => m.name));
         }
 
-        private VisualElement MakeListItem()
+        // 统一的刷新流程
+        private void RefreshAfterAssetOperation()
         {
+            _assetService.ReloadMasksAndCache();
+
+
+            RebuildVisibleList();
+            _listView.RefreshItems();
+
+            // 确保当前选中项的详情正确
+            UpdateDetailsPanel();
+        }
+
+        #endregion
+
+        #region 事件处理
+
+        private void OnSearchValueChanged(ChangeEvent<string> evt)
+        {
+            _search = evt.newValue?.Trim() ?? string.Empty;
+            RebuildVisibleList();
+            _listView?.RefreshItems();
+            _listView?.ScrollToItem(0); // 搜索后回到顶部
+        }
+
+        private void OnListViewSelectionChanged(IEnumerable<object> items)
+        {
+            var m = items.FirstOrDefault() as BlendMaskBase;
+            SelectMask(m); // 单击选择：仅预览
+            UpdateDetailsPanel();
+        }
+
+        private void OnListViewItemsChosen(IEnumerable<object> items)
+        {
+            var m = items.FirstOrDefault() as BlendMaskBase;
+            ApplySelection(m); // 双击确认：应用并关闭
+            Close();
+        }
+
+        private static void OnMaskTypeChanged(ChangeEvent<string> evt)
+        {
+            // 无需 _createTypeIndex 字段，直接通过名称查找类型
+        }
+
+        private void OnCreateButtonClicked()
+        {
+            var typeName = _maskTypeDropdown?.value;
+            var maskType = _assetService.AvailableMaskTypes.FirstOrDefault(t => t.Name == typeName);
+
+            if (maskType == null)
+            {
+                EditorUtility.DisplayDialog("错误", "请选择一个有效的遮罩类型。", "确定");
+                return;
+            }
+
+            var nameHint = _nameField?.value;
+
+            // 委托给服务层处理创建和资产保存
+            var newMask = _assetService.CreateNewMaskAsset(maskType, nameHint);
+
+            if (newMask == null) return;
+
+            // 刷新列表并选中新创建的遮罩
+            RefreshAfterAssetOperation();
+            SelectMaskInListView(newMask);
+            ApplySelection(newMask); // 创建即应用
+        }
+
+        private void SelectMaskInListView(BlendMaskBase mask)
+        {
+            var index = _visibleList.IndexOf(mask);
+            if (index < 0) return;
+
+            _listView.SetSelection(index);
+            _listView.ScrollToItem(index);
+            SelectMask(mask);
+        }
+
+        #endregion
+
+        #region 列表行渲染 (MakeItem, BindItem)
+
+        private VisualElement CreateListItem()
+        {
+            // 1. 行容器 (name="row", class="list-item-row")
             var row = new VisualElement
             {
                 name = "row",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    paddingLeft = 6,
-                    paddingRight = 6,
-                    paddingTop = 6,
-                    paddingBottom = 6,
-                    marginBottom = 0,
-                    height = 52, // 固定行高，避免 ListView 选中偏移
-                    overflow = Overflow.Hidden,
-                    flexShrink = 0
-                }
+                // 样式由 USS 文件中的 .list-item-row 规则控制
             };
+            row.AddToClassList("list-item-row");
 
-            // 行级右键菜单：删除/重命名/复制（含撤销支持）
             row.AddManipulator(new ContextualMenuManipulator(PopulateRowContextMenu));
 
+            // 2. 图标 (name="icon")
             var icon = new Image
             {
-                name = "icon",
-                style =
-                {
-                    width = _thumbSize,
-                    height = _thumbSize,
-                    marginRight = 8
-                },
-                scaleMode = ScaleMode.ScaleToFit
-            };
-            var mName = new Label
-            {
-                name = "name",
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Normal,
-                    fontSize = 13
-                }
-            };
-            var sub = new Label
-            {
-                name = "sub",
-                style =
-                {
-                    color = new Color(0.8f, 0.8f, 0.8f),
-                    opacity = 0.65f,
-                    marginTop = 0
-                }
+                name = "icon"
             };
 
-            var content = new VisualElement
+            // 3. 文本内容容器 (name="content")
+            var labelContent = new VisualElement
             {
-                name = "content",
-                style =
-                {
-                    flexDirection = FlexDirection.Column,
-                    flexGrow = 1
-                }
+                name = "content"
             };
 
-            // 行尾：使用标记徽标（仅在有引用时显示）
-            var tail = new VisualElement
+            // 4. 主标签 (name="name")
+            var nameLabel = new Label
             {
-                name = "tail",
-                style =
-                {
-                    flexDirection = FlexDirection.Row,
-                    alignItems = Align.Center,
-                    justifyContent = Justify.FlexEnd,
-                    flexShrink = 0,
-                }
+                name = "name"
             };
-            var usage = new Label
+
+            // 5. 重命名输入框 (name="name-edit")
+            var nameEdit = new TextField
             {
-                name = "usage",
-                style =
-                {
-                    unityFontStyleAndWeight = FontStyle.Normal,
-                    fontSize = 11,
-                    color = new Color(0.82f, 0.9f, 0.82f, 0.95f),
-                    backgroundColor = new Color(0.18f, 0.64f, 0.32f, 0.16f),
-                    paddingLeft = 6,
-                    paddingRight = 6,
-                    paddingTop = 2,
-                    paddingBottom = 2,
-                    marginLeft = 10,
-                    borderTopLeftRadius = 999,
-                    borderTopRightRadius = 999,
-                    borderBottomLeftRadius = 999,
-                    borderBottomRightRadius = 999,
-                    overflow = Overflow.Hidden,
-                    unityTextAlign = TextAnchor.MiddleCenter,
-                    display = DisplayStyle.None
-                }
+                name = "name-edit"
             };
-            tail.Add(usage);
+
+            // 6. 次级标签 (name="sub")
+            var subLabel = new Label
+            {
+                name = "sub"
+            };
+
+            // 7. 组装结构
+            labelContent.Add(nameLabel);
+            labelContent.Add(nameEdit);
+            labelContent.Add(subLabel);
 
             row.Add(icon);
-            content.Add(mName);
-            content.Add(sub);
-            row.Add(content);
-            row.Add(tail);
+            row.Add(labelContent);
+
             return row;
         }
 
+
+        // LayerMaskSelectWindow.cs (修复后的 BindListItem)
+
         private void BindListItem(VisualElement element, int index)
         {
-            if (index < 0 || index >= _visibleList.Count) return;
-            var m = _visibleList[index];
-            element.userData = m; // 绑定数据到容器，便于选中样式更新
-            var row = element.Q<VisualElement>("row") ?? element;
-            row.userData = m; // 行本身也存储数据，UpdateSelectionStyles 使用
-            var icon = element.Q<Image>("icon");
-            var mName = element.Q<Label>("name");
-            var sub = element.Q<Label>("sub");
-            var usage = element.Q<Label>("usage");
+            // 边界检查
+            if (!IsValidIndex(index)) return;
 
-            // 处理图标显示，为null时使用半透明黑色圆角图标
-            if (m == null)
+            var mask = _visibleList[index];
+            var row = SetupElementUserData(element, mask); // SetupElementUserData 返回了 row
+
+            var icon = element.Q<Image>("icon");
+            var label = element.Q<Label>("name");
+            var sub = element.Q<Label>("sub");
+
+            // ** 状态重置：确保重命名状态被清除 **
+            if (row.ClassListContains("renaming"))
             {
-                // 设置默认的半透明黑色圆角图标
-                icon.image = CreateNullIcon();
-                mName.text = "Null";
-                sub.text = "None";
-                if (usage != null) usage.style.display = DisplayStyle.None;
+                row.RemoveFromClassList("renaming");
+            }
+
+
+
+            UpdateElementContent(icon, label, sub, mask);
+        }
+
+// 边界检查辅助方法
+        private bool IsValidIndex(int index) => index >= 0 && index < _visibleList.Count;
+
+        // 设置用户数据辅助方法
+        private static VisualElement SetupElementUserData(VisualElement element, object mask)
+        {
+            element.userData = mask;
+            var row = element.Q<VisualElement>("row") ?? element;
+            row.userData = mask;
+            return row;
+        }
+
+// 应用图标样式辅助方法
+
+
+// 更新元素内容辅助方法
+        private void UpdateElementContent(Image icon, Label label, Label sub, BlendMaskBase mask)
+        {
+            if (mask == null)
+            {
+                UpdateNullContent(icon, label, sub);
             }
             else
             {
-                // 使用正常的缩略图
-                icon.image = GetMaskThumbnail(m);
-                mName.text = m.name;
-                sub.text = m.GetType().Name;
-                // 行尾使用标记：仅在被引用时显示，文本为精简摘要
-                if (usage != null)
-                {
-                    var id = m.GetInstanceID();
-                    if (_usageLabelCache.TryGetValue(id, out var summary) && !string.IsNullOrEmpty(summary))
-                    {
-                        usage.text = summary;
-                        usage.tooltip = summary;
-                        usage.style.display = DisplayStyle.Flex;
-                    }
-                    else
-                    {
-                        usage.text = string.Empty;
-                        usage.tooltip = null;
-                        usage.style.display = DisplayStyle.None;
-                    }
-                }
+                UpdateMaskContent(icon, label, sub, mask);
             }
-
-            // 统一应用缩略图尺寸
-            icon.style.width = _thumbSize;
-            icon.style.height = _thumbSize;
-            // 添加圆角样式
-            icon.style.borderTopLeftRadius = 8;
-            icon.style.borderTopRightRadius = 8;
-            icon.style.borderBottomLeftRadius = 8;
-            icon.style.borderBottomRightRadius = 8;
         }
 
-        // 右键菜单构建（按行数据）
+// 更新空内容辅助方法
+        private void UpdateNullContent(Image icon, Label label, Label sub)
+        {
+            if (icon != null) icon.image = _assetService.NullIcon;
+            if (label != null) label.text = "Null";
+            if (sub != null) sub.text = "None";
+        }
+
+// 更新掩码内容辅助方法
+        private void UpdateMaskContent(Image icon, Label label, Label sub, BlendMaskBase mask)
+        {
+            if (icon != null) icon.image = _assetService.GetMaskThumbnail(mask);
+            if (label != null) label.text = mask.name;
+            if (sub != null) sub.text = mask.GetType().Name;
+        }
+
+        // 抽取样式设置
+
+        #endregion
+
+        #region 右键菜单与快捷键处理
+
         private void PopulateRowContextMenu(ContextualMenuPopulateEvent evt)
         {
-            var targetVe = evt.target as VisualElement;
-            var mask = GetMaskFromElement(targetVe);
+            var mask = GetMaskFromElement(evt.target as VisualElement);
 
-            // 为 Null 项提供快捷清空应用；其他项提供增删改
             if (mask == null)
             {
                 evt.menu.AppendAction("Clear and Apply to Layer", _ => ApplySelection(null));
-                return; // 提前返回
+                return;
             }
 
+            var targetVe = GetRowElementFromChild(evt.target as VisualElement);
+
             evt.menu.AppendAction("Ping Asset", _ => EditorGUIUtility.PingObject(mask));
-            evt.menu.AppendAction("Rename", _ => BeginInlineRename(GetRowElementFromChild(targetVe), mask));
+            // 重命名使用 ScheduleRename
+            evt.menu.AppendAction("Rename", _ => BeginInlineRename(targetVe, mask));
+            // 复制/删除委托给服务
             evt.menu.AppendAction("Duplicate", _ => DuplicateMaskAsset(mask));
             evt.menu.AppendSeparator();
             evt.menu.AppendAction("Delete", _ => DeleteMaskAsset(mask));
+        }
+
+        private void DuplicateMaskAsset(BlendMaskBase mask)
+        {
+            var newMask = _assetService.DuplicateMaskAsset(mask);
+            if (newMask == null) return;
+
+            RefreshAfterAssetOperation();
+            SelectMaskInListView(newMask);
+        }
+
+        private void DeleteMaskAsset(BlendMaskBase mask)
+        {
+            if (mask == null) return;
+
+            // 委托删除
+            _assetService.DeleteMaskAssets(new List<BlendMaskBase>
+            {
+                mask
+            });
+            RefreshAfterAssetOperation();
+
+            // 如果删除了当前选中项，则选中 Null
+            if (_selected != mask) return;
+            ApplySelection(null);
+            _listView.SetSelection(0);
+            _listView.ScrollToItem(0);
+        }
+
+        // 简化快捷键逻辑：Delete 统一调用 DeleteSelectedMasks
+        private void OnListKeyDown(KeyDownEvent evt)
+        {
+            if (evt.target is TextField) return; // 正在编辑文本，忽略
+
+            switch (evt.keyCode)
+            {
+                case KeyCode.F2:
+                    HandleRenameKey();
+                    evt.StopPropagation();
+                    break;
+                case KeyCode.Delete:
+                    DeleteSelectedMasks();
+                    evt.StopPropagation();
+                    break;
+            }
+        }
+
+        private void HandleRenameKey()
+        {
+            var index = _listView.selectedIndices?.FirstOrDefault() ?? -1;
+            if (index <= 0 || index >= _visibleList.Count) return; // 忽略 Null (index 0)
+
+            _listView.ScrollToItem(index);
+
+            EditorApplication.delayCall += () =>
+            {
+                var mask = _visibleList[index];
+                var row = FindRowElementForIndex(index);
+                if (row != null && mask != null)
+                    BeginInlineRename(row, mask);
+            };
+        }
+
+        private void DeleteSelectedMasks()
+        {
+            if (_listView?.selectedIndices == null || !_visibleList.Any()) return;
+
+            var masksToDelete = _listView.selectedIndices
+                .Where(idx => idx > 0 && idx < _visibleList.Count) // 忽略 Null 项
+                .Select(idx => _visibleList[idx])
+                .Where(mask => mask != null)
+                .ToList();
+
+            if (masksToDelete.Count == 0) return;
+
+            // 委托批量删除
+            _assetService.DeleteMaskAssets(masksToDelete);
+            RefreshAfterAssetOperation();
+
+            // 如果当前选中被删除，则应用 null
+            if (masksToDelete.Contains(_selected))
+            {
+                ApplySelection(null);
+            }
+
+            _listView.ClearSelection();
+            _listView.SetSelection(0);
+            _listView.ScrollToItem(0);
+        }
+
+        private VisualElement FindRowElementForIndex(int index)
+        {
+            var mask = index >= 0 && index < _visibleList.Count ? _visibleList[index] : null;
+            if (mask == null && index != 0) return null;
+
+            // 优化查询：只查询当前可见的行，通过 userData 比对
+            var rows = _listView.Query<VisualElement>("row").ToList();
+            return rows.FirstOrDefault(r => (BlendMaskBase)r.userData == mask);
+        }
+
+        // 重命名逻辑简化：委托给服务层处理数据修改，窗口只处理 UI 切换
+        // LayerMaskSelectWindow.cs (BeginInlineRename)
+
+        // LayerMaskSelectWindow.cs (优化后的 BeginInlineRename)
+
+        private void BeginInlineRename(VisualElement row, BlendMaskBase mask)
+        {
+            if (row == null || mask == null) return;
+
+            var nameLabel = row.Q<Label>("name");
+            var nameEdit = row.Q<TextField>("name-edit");
+
+            if (nameEdit == null || nameLabel == null) return;
+
+            // **核心：添加状态类**
+            row.AddToClassList("renaming"); // 让 USS 接管 Label/TextField 的显示切换
+
+            nameEdit.value = mask.name;
+
+            // ** 优化点：只调用一次延时执行 **
+            // 延时一帧（1毫秒）来确保元素在 display: flex 之后，能正确获取焦点和全选。
+            nameEdit.schedule.Execute(() =>
+            {
+                nameEdit.Focus();
+                nameEdit.SelectAll();
+            }).ExecuteLater(1);
+
+            // 确保上下文包含 row 元素
+            var context = (nameLabel, mask, row);
+
+            // ... (后续事件清理和绑定逻辑保持不变) ...
+            // ...
+            nameEdit.userData = context;
+            nameEdit.RegisterCallback<KeyDownEvent, (Label, BlendMaskBase, VisualElement)>(OnRenameKeyDown, context);
+            nameEdit.RegisterCallback<FocusOutEvent, (Label, BlendMaskBase, VisualElement)>(OnRenameFocusOut, context);
+        }
+
+        private void OnRenameKeyDown(KeyDownEvent e, (Label nameLabel, BlendMaskBase mask, VisualElement row) context)
+        {
+            var nameEdit = e.currentTarget as TextField;
+            if (nameEdit == null) return;
+
+            switch (e.keyCode)
+            {
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter:
+                    CommitRename(nameEdit, context.nameLabel, context.mask, context.row); // 传入 row
+                    e.StopPropagation();
+                    break;
+                case KeyCode.Escape:
+                    CancelRename(nameEdit, context.nameLabel, context.row); // 传入 row
+                    e.StopPropagation();
+                    break;
+            }
+        }
+
+        private void OnRenameFocusOut(FocusOutEvent e, (Label nameLabel, BlendMaskBase mask, VisualElement row) context)
+        {
+            if (e.currentTarget is TextField nameEdit)
+            {
+                CommitRename(nameEdit, context.nameLabel, context.mask, context.row); // 传入 row
+            }
+        }
+
+        private void CancelRename(TextField nameEdit, Label nameLabel, VisualElement row)
+        {
+            if (row.ClassListContains("renaming")) // 确保不会重复移除
+            {
+                row.RemoveFromClassList("renaming");
+            }
+
+            // 2. 清理值（可选，但推荐）
+            nameEdit.value = string.Empty;
+
+            // 3. 关键：解绑事件（防止事件处理器在元素回收后被错误触发）
+            //    虽然 UIToolkit 理论上会处理，但手动解绑是最安全的防御性编程
+            nameEdit.UnregisterCallback<KeyDownEvent, (Label, BlendMaskBase, VisualElement)>(OnRenameKeyDown);
+            nameEdit.UnregisterCallback<FocusOutEvent, (Label, BlendMaskBase, VisualElement)>(OnRenameFocusOut);
+        }
+
+// LayerMaskSelectWindow.cs (CommitRename - 移除状态类)
+        private void CommitRename(TextField nameEdit, Label nameLabel, BlendMaskBase mask, VisualElement row)
+        {
+            var newName = nameEdit.value?.Trim();
+            if (string.IsNullOrEmpty(newName) || newName == mask.name)
+            {
+                CancelRename(nameEdit, nameLabel, row); // 传入 row
+                return;
+            }
+
+            _assetService.RenameMaskAsset(mask, newName);
+            CancelRename(nameEdit, nameLabel, row);
+            RefreshAfterAssetOperation();
+
+            // if (nameLabel != null) nameLabel.text = mask.name; // 从 mask 获取新名称，因为服务已更新它
+            // CancelRename(nameEdit, nameLabel, row); // 传入 row
         }
 
         private static BlendMaskBase GetMaskFromElement(VisualElement ve)
@@ -471,77 +707,6 @@ namespace MrPathV2.Editor.Windows
             return null;
         }
 
-        private void BeginInlineRename(VisualElement row, BlendMaskBase mask)
-        {
-            if (row == null || !mask) return;
-            var nameLabel = row.Q<Label>("name");
-            var nameEdit = row.Q<TextField>("name-edit");
-            if (nameEdit == null)
-            {
-                nameEdit = new TextField
-                {
-                    name = "name-edit",
-                    style =
-                    {
-                        display = DisplayStyle.None
-                    }
-                };
-                var content = row.Q<VisualElement>("content") ?? row;
-                content.Add(nameEdit);
-            }
-
-            nameEdit.value = mask.name;
-            nameEdit.style.display = DisplayStyle.Flex;
-            if (nameLabel != null) nameLabel.style.display = DisplayStyle.None;
-            nameEdit.Focus();
-
-            void Cancel()
-            {
-                nameEdit.style.display = DisplayStyle.None;
-                if (nameLabel != null) nameLabel.style.display = DisplayStyle.Flex;
-            }
-
-            nameEdit.RegisterCallback<KeyDownEvent>(e =>
-            {
-                if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
-                {
-                    Commit();
-                    e.StopPropagation();
-                }
-                else if (e.keyCode == KeyCode.Escape)
-                {
-                    Cancel();
-                    e.StopPropagation();
-                }
-            });
-            nameEdit.RegisterCallback<FocusOutEvent>(_ => Commit());
-            return;
-
-            void Commit()
-            {
-                var newName = nameEdit.value?.Trim();
-                if (string.IsNullOrEmpty(newName))
-                {
-                    Cancel();
-                    return;
-                }
-                Undo.RegisterCompleteObjectUndo(mask, "Rename Mask");
-                mask.name = newName;
-                EditorUtility.SetDirty(mask);
-                AssetDatabase.SaveAssets();
-                RebuildList();
-                RebuildVisibleList();
-                _listView.itemsSource = _visibleList;
-                _listView.RefreshItems();
-                if (nameLabel != null)
-                {
-                    nameLabel.text = newName;
-                    nameLabel.style.display = DisplayStyle.Flex;
-                }
-                nameEdit.style.display = DisplayStyle.None;
-            }
-        }
-
         private static VisualElement GetRowElementFromChild(VisualElement ve)
         {
             while (ve != null)
@@ -552,470 +717,117 @@ namespace MrPathV2.Editor.Windows
             return null;
         }
 
-        private void DuplicateMaskAsset(BlendMaskBase mask)
+        #endregion
+
+        #region 详情/参数区管理
+
+        private void CleanupSelectedEditor()
         {
-            if (!mask) return; // 提前返回
-            var srcPath = AssetDatabase.GetAssetPath(mask);
-            if (string.IsNullOrEmpty(srcPath)) return; // 提前返回
-
-            var folder = Path.GetDirectoryName(srcPath)?.Replace('\\', '/');
-            if (string.IsNullOrEmpty(folder)) folder = "Assets";
-
-            var newName = ObjectNames.GetUniqueName(_masks.Where(x => x).Select(x => x.name).ToArray(), mask.name + " Copy");
-            var newObj = Instantiate(mask);
-            newObj.name = newName;
-            var newPath = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{newName}.asset");
-            AssetDatabase.CreateAsset(newObj, newPath);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-
-            _masks.Add(newObj);
-            _iconCache[newObj.GetInstanceID()] = AssetPreview.GetMiniThumbnail(newObj);
-            RebuildVisibleList();
-            _listView.itemsSource = _visibleList;
-            _listView.RefreshItems();
-
-            var idx = _visibleList.IndexOf(newObj);
-            if (idx < 0) return;
-            _listView.SetSelection(idx);
-            _listView.ScrollToItem(idx);
-            SelectMask(newObj);
-        }
-
-        private void DeleteMaskAsset(BlendMaskBase mask)
-        {
-            if (!mask) return; // 提前返回
-            if (mask == null) return;
-            var path = AssetDatabase.GetAssetPath(mask);
-            if (!string.IsNullOrEmpty(path)) AssetDatabase.DeleteAsset(path);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-
-            // 刷新列表与选择
-            RebuildList();
-            RebuildVisibleList();
-            _listView.itemsSource = _visibleList;
-            _listView.RefreshItems();
-
-            // 若当前选中被删除，自动清空应用
-            if (_selected != null && _masks.Contains(_selected)) return;
-            ApplySelection(null);
-            _listView.SetSelection(0);
-            _listView.ScrollToItem(0);
-            UpdateDetailsPanel();
-        }
-
-        // 批量删除所选遮罩（无确认、无撤销）
-        private void DeleteSelectedMasks()
-        {
-            if (_listView == null || _visibleList == null) return;
-            var indices = _listView.selectedIndices?.ToList() ?? new List<int>();
-            if (indices.Count == 0) return;
-
-            // 先收集再删除，避免索引变化
-            var toDelete = Enumerable.ToList((from idx in indices where idx >= 0 && idx < _visibleList.Count select _visibleList[idx] into m where m != null select m));
-
-            foreach (var path in toDelete.Select(m => AssetDatabase.GetAssetPath(m)).Where(path => !string.IsNullOrEmpty(path)))
-            {
-                AssetDatabase.DeleteAsset(path);
-            }
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-
-            RebuildList();
-            RebuildVisibleList();
-            _listView.itemsSource = _visibleList;
-            _listView.RefreshItems();
-
-            ApplySelection(null);
-            _listView.ClearSelection();
-            _listView.SetSelection(0);
-            _listView.ScrollToItem(0);
-            UpdateDetailsPanel();
-        }
-
-        // 快捷键处理：F2 重命名、Delete 批量删除
-        private void OnListKeyDown(KeyDownEvent e)
-        {
-            // 若正在编辑文本，则忽略删除/重命名快捷键
-            if (e.target is TextField { name: "name-edit" } tf && tf.style.display == DisplayStyle.Flex)
-            {
-                return;
-            }
-
-            if (e.keyCode == KeyCode.F2)
-            {
-                var idxEnum = _listView?.selectedIndices;
-                if (idxEnum == null) return;
-                var idx = idxEnum.FirstOrDefault();
-                if (idx < 0 || idx >= _visibleList.Count) return;
-                // 保证可见后再启动重命名
-                _listView.ScrollToItem(idx);
-                EditorApplication.delayCall += () =>
-                {
-                    var mask = _visibleList[idx];
-                    if (mask == null) return;
-                    var row = FindRowElementForIndex(idx);
-                    if (row != null) BeginInlineRename(row, mask);
-                };
-                e.StopPropagation();
-            }
-            else if (e.keyCode == KeyCode.Delete)
-            {
-                DeleteSelectedMasks();
-                e.StopPropagation();
-            }
-        }
-
-        // 在当前可见的行中查找指定索引的行元素
-        private VisualElement FindRowElementForIndex(int index)
-        {
-            var mask = (index >= 0 && index < _visibleList.Count) ? _visibleList[index] : null;
-            if (mask == null && index != 0) return null; // 允许 index==0 的 Null 行
-            var rows = _listView.Query<VisualElement>(name: "row").ToList();
-            return rows.FirstOrDefault(r => (BlendMaskBase)r.userData == mask);
-        }
-
-
-        // 创建半透明黑色圆角图标
-        private static Texture2D CreateNullIcon()
-        {
-            // 创建一个简单的2D纹理作为默认图标
-            const int size = 32; // 图标尺寸
-            var nullIcon = new Texture2D(size, size);
-            var pixels = new Color32[size * size];
-
-            // 设置半透明黑色 (alpha值设为100，范围0-255)
-            var nullColor = new Color32(0, 0, 0, 42);
-
-            // 填充所有像素
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = nullColor;
-            }
-
-            nullIcon.SetPixels32(pixels);
-            nullIcon.Apply();
-            return nullIcon;
-        }
-
-        private Texture2D GetMaskThumbnail(BlendMaskBase m)
-        {
-            if (!m) return null;
-            var id = m.GetInstanceID();
-            if (_iconCache.TryGetValue(id, out var tex) && tex) return tex;
-            tex = AssetPreview.GetMiniThumbnail(m);
-            _iconCache[id] = tex;
-            return tex;
+            if (_selectedEditor == null) return;
+            DestroyImmediate(_selectedEditor);
+            _selectedEditor = null;
         }
 
         private void UpdateDetailsPanel()
         {
-            if (_details == null) return; // 提前返回
+            if (_details == null) return;
             _details.Clear();
-            var target = _selected;
-            if (!target)
+
+            if (_selected == null)
             {
-                _details.Add(new Label("未选择遮罩"));
-                return; // 提前返回
+                _details.Add(new Label("未选择遮罩 (Null)"));
+                CleanupSelectedEditor();
+                return;
             }
 
-            // 为减少首次选中卡顿：延迟构建 Inspector 到下一帧
+            // 统一使用 UIToolkit 的 InspectorElement，简化逻辑
             _details.Add(new Label("正在加载参数…"));
-            EditorApplication.delayCall += () =>
-            {
-                if (_details == null) return;
-                // 选中已变化则取消
-                if (_selected != target) return;
-                try
-                {
-                    _details.Clear();
-                    var inspector = new InspectorElement(target);
-                    _details.Add(inspector);
-                }
-                catch
-                {
-                    try
-                    {
-                        if (_selectedEditor)
-                        {
-                            DestroyImmediate(_selectedEditor);
-                            _selectedEditor = null;
-                        }
-                        _selectedEditor = UnityEditor.Editor.CreateEditor(target);
-                        var ui = _selectedEditor.CreateInspectorGUI();
-                        _details.Add(ui ?? new IMGUIContainer(() => _selectedEditor.OnInspectorGUI()));
-                    }
-                    catch (Exception ex)
-                    {
-                        _details.Add(new Label($"Inspector 构建失败: {ex.Message}"));
-                    }
-                }
-            };
+            EditorApplication.delayCall += UpdateInspectorOnNextFrame;
         }
 
-
-        private void ApplySelection(BlendMaskBase m)
+        private void UpdateInspectorOnNextFrame()
         {
-            _selected = m;
+            if (_details == null || _selected == null) return;
+
+            // 如果选中项在 delayCall 期间被销毁，则取消
+            if (!EditorUtility.IsPersistent(_selected)) return;
+
+            try
+            {
+                _details.Clear();
+                // 推荐：直接使用 InspectorElement，它会处理 SerializedObject 和 Editor 的生命周期
+                var inspector = new InspectorElement(_selected);
+                _details.Add(inspector);
+            }
+            catch (Exception ex)
+            {
+                // 确保 IMGUI 兜底逻辑也被移除，统一 UITK 风格
+                _details.Clear();
+                _details.Add(new Label($"Inspector 加载失败: {ex.Message}"));
+                Debug.LogError($"Failed to load Inspector for {_selected.name}: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 选中与应用
+
+        private void SelectMask(BlendMaskBase mask)
+        {
+            _selected = mask;
+            // 单击：仅预览，不设置 _applied=true
             if (_targetLayer != null)
             {
-                _targetLayer.layerMask = m;
-                _applied = true;
-                // 最终应用后通知
-                try
-                {
-                    OnMaskApplied?.Invoke(_targetLayer, m);
-                }
-                catch
-                {
-                    // ignored
-                }
-                // 应用可能改变引用关系：重建索引并刷新可见行
-                RebuildUsageIndex();
-                _listView?.RefreshItems();
+                _targetLayer.layerMask = mask;
+
+            }
+
+            RecreateEditor();
+            UpdateDetailsPanel();
+        }
+
+        private void ApplySelection(BlendMaskBase mask)
+        {
+            _selected = mask;
+
+            if (_targetLayer != null)
+            {
+                _targetLayer.layerMask = mask;
+                _applied = true; // 最终应用标记
+                NotifyMaskApplied(mask);
             }
             else
             {
-                _applied = false;
+                _applied = false; // 资产管理器模式，不标记应用
             }
-            RecreateEditor();
-            UpdateDetailsPanel();
-            // 单击应用不关闭窗口，双击由 onItemsChosen 关闭
-        }
 
-        // 单击选择：仅预览并刷新参数区，不触发最终应用事件
-        private void SelectMask(BlendMaskBase m)
-        {
-            _selected = m;
-            if (_targetLayer != null)
-            {
-                _targetLayer.layerMask = m;
-            }
-            RecreateEditor();
+            // 应用可能改变引用关系，立即刷新列表使用信息
+
+            _listView?.RefreshItems();
+
+            RecreateEditor(); // 确保选中项的编辑器正确
             UpdateDetailsPanel();
         }
 
-        private void RebuildList()
+        private void NotifyMaskApplied(BlendMaskBase mask)
         {
-            _masks.Clear();
-            _iconCache.Clear();
-            var guids = AssetDatabase.FindAssets("t:BlendMaskBase");
-            foreach (var g in guids)
+            try
             {
-                var path = AssetDatabase.GUIDToAssetPath(g);
-                var m = AssetDatabase.LoadAssetAtPath<BlendMaskBase>(path);
-                if (!m) continue;
-                _masks.Add(m);
-                _iconCache[m.GetInstanceID()] = AssetPreview.GetMiniThumbnail(m);
+                OnMaskApplied?.Invoke(_targetLayer, mask);
             }
-            _masks.Sort((a, b) => string.Compare(a.name, b.name, StringComparison.Ordinal));
-            // 重建“使用中”索引缓存
-            RebuildUsageIndex();
+            catch
+            {
+                // ignored
+            }
         }
 
         private void RecreateEditor()
         {
-            if (_selectedEditor)
-            {
-                DestroyImmediate(_selectedEditor);
-                _selectedEditor = null;
-            }
-            if (_selected) _selectedEditor = UnityEditor.Editor.CreateEditor(_selected);
+            CleanupSelectedEditor();
+            // 在 UpdateInspectorOnNextFrame 中处理编辑器的创建
         }
 
-        // --- 新建遮罩工具 ---
-        private static Type[] FindAvailableMaskTypes()
-        {
-            return AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(a => a.GetTypes())
-                .Where(t => t.IsClass && !t.IsAbstract && t.IsSubclassOf(typeof(BlendMaskBase)))
-                .ToArray();
-        }
-
-        private void CreateNewMaskAsset(Type maskType, string nameHint)
-        {
-            if (maskType == null || !typeof(BlendMaskBase).IsAssignableFrom(maskType))
-            {
-                EditorUtility.DisplayDialog("错误", "无效的遮罩类型。", "确定");
-                return; // 提前返回
-            }
-
-
-            // 获取插件根目录，并确保 MrPathV2/Settings/Masks 路径存在（动态定位，不硬编码 Assets 下具体位置）
-            var defaultStorePath = GetMasksFolder();
-
-
-            // 确定资产的干净名称
-            var cleanName = string.IsNullOrWhiteSpace(nameHint)
-                ? maskType.Name
-                : nameHint.Trim();
-
-            // 生成唯一的资产路径
-            var assetPath = AssetDatabase.GenerateUniqueAssetPath($"{defaultStorePath}/{cleanName}.asset");
-            Debug.Log($"默认存储路径：{assetPath}");
-            var instance = CreateInstance(maskType) as BlendMaskBase;
-            if (!instance)
-            {
-                EditorUtility.DisplayDialog("错误", "创建遮罩实例失败。", "确定");
-                return; // 提前返回
-            }
-
-            AssetDatabase.CreateAsset(instance, assetPath);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-
-            // 更新列表并应用到目标图层
-            _masks.Add(instance);
-            _iconCache[instance.GetInstanceID()] = AssetPreview.GetMiniThumbnail(instance);
-            ApplySelection(instance);
-            Repaint();
-        }
-        // 解析插件根目录（包含 "MrPathV2" 的文件夹），支持插件位于 Assets 下任意层级
-        private string GetPluginRootFolder()
-        {
-            try
-            {
-                var ms = MonoScript.FromScriptableObject(this);
-                var scriptPath = AssetDatabase.GetAssetPath(ms);
-                if (string.IsNullOrEmpty(scriptPath)) return "Assets/MrPathV2";
-                scriptPath = scriptPath.Replace('\\', '/');
-                var parts = scriptPath.Split('/');
-                for (int i = 0; i < parts.Length; i++)
-                {
-                    if (string.Equals(parts[i], "MrPathV2", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return string.Join("/", parts.Take(i + 1));
-                    }
-                }
-            }
-            catch { }
-            // Fallback：默认返回 Assets/MrPathV2
-            return "Assets/MrPathV2";
-        }
-
-        // 返回并确保存在的 Masks 存储目录（MrPathV2/Settings/Masks）
-        private string GetMasksFolder()
-        {
-            var root = GetPluginRootFolder();
-            var masks = $"{root}/Settings/Masks";
-            EnsureFolderPath(masks);
-            return masks;
-        }
-
-        // 确保形如 "Assets/AAA/BBB" 的 Unity 相对路径存在
-        private static void EnsureFolderPath(string unityFolderPath)
-        {
-            if (string.IsNullOrEmpty(unityFolderPath)) return;
-            unityFolderPath = unityFolderPath.Replace('\\', '/');
-            var parts = unityFolderPath.Split(new[]
-            {
-                '/'
-            }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0) return;
-            var current = parts[0];
-            for (int i = 1; i < parts.Length; i++)
-            {
-                var next = parts[i];
-                var candidate = $"{current}/{next}";
-                if (!AssetDatabase.IsValidFolder(candidate))
-                {
-                    AssetDatabase.CreateFolder(current, next);
-                }
-                current = candidate;
-            }
-        }
-
-        // 构建遮罩被引用的摘要缓存（按 Mask 聚合，文本尽量简洁）
-        private void RebuildUsageIndex()
-        {
-            _usageLabelCache.Clear();
-            try
-            {
-                // 全量检索所有 StylizedRoadRecipe 资产，避免仅扫描已加载对象漏报
-                var recipeGuids = AssetDatabase.FindAssets("t:StylizedRoadRecipe");
-                var recipes = new List<StylizedRoadRecipe>(recipeGuids.Length);
-                foreach (var guid in recipeGuids)
-                {
-                    var path = AssetDatabase.GUIDToAssetPath(guid);
-                    var recipe = AssetDatabase.LoadAssetAtPath<StylizedRoadRecipe>(path);
-                    if (recipe) recipes.Add(recipe);
-                }
-                // 兜底：若项目中无资产，仍扫描已加载对象，保证编辑器中临时对象也能显示
-                if (recipes.Count == 0)
-                {
-                    recipes.AddRange(Resources.FindObjectsOfTypeAll<StylizedRoadRecipe>() ?? Array.Empty<StylizedRoadRecipe>());
-                }
-                if (recipes is null) return; // 无配方则无引用
-
-                // 统计 (maskId, recipe) -> 次数
-                var pairCount = new Dictionary<(int maskId, StylizedRoadRecipe recipe), int>();
-                foreach (var recipe in recipes)
-                {
-                    if (recipe == null) continue;
-                    var layers = recipe.layers; // 直接访问序列化字段
-                    if (layers == null) continue;
-                    for (var i = 0; i < layers.Count; i++)
-                    {
-                        var layer = layers[i];
-                        if (layer == null) continue;
-                        var mask = layer.layerMask;
-                        if (!mask) continue;
-                        var key = (mask.GetInstanceID(), recipe);
-                        pairCount.TryGetValue(key, out var c);
-                        pairCount[key] = c + 1;
-                    }
-                }
-
-                // 聚合到每个 mask 上，生成精简摘要
-                var byMask = new Dictionary<int, List<(string recipeName, int count)>>();
-                foreach (var kv in pairCount)
-                {
-                    var maskId = kv.Key.maskId;
-                    var recipe = kv.Key.recipe;
-                    var count = kv.Value;
-                    if (!byMask.TryGetValue(maskId, out var list))
-                    {
-                        list = new List<(string, int)>();
-                        byMask[maskId] = list;
-                    }
-                    var rName = recipe ? recipe.name : "Recipe";
-                    list.Add((rName, count));
-                }
-
-                foreach (var kv in byMask)
-                {
-                    var entries = kv.Value.OrderByDescending(x => x.count).ToList();
-                    string text;
-                    if (entries.Count == 1)
-                    {
-                        var (rn, count) = entries[0];
-                        text = count > 1 ? $"{rn}×{count}" : rn;
-                    }
-                    else
-                    {
-                        var parts = new List<string>();
-                        for (int i = 0; i < Mathf.Min(entries.Count, 2); i++)
-                        {
-                            var (rn, c) = entries[i];
-                            parts.Add(c > 1 ? $"{rn}×{c}" : rn);
-                        }
-                        if (entries.Count > 2)
-                        {
-                            parts.Add($"+{entries.Count - 2}");
-                        }
-                        text = string.Join(", ", parts);
-                    }
-                    // 在文本前添加简洁的点缀，提升视觉识别但保持克制
-                    _usageLabelCache[kv.Key] = string.IsNullOrEmpty(text) ? string.Empty : $"• {text}";
-                }
-            }
-            catch
-            {
-                // 忽略编辑器态扫描异常，避免打断使用
-            }
-        }
-
+        #endregion
     }
 }
 #endif

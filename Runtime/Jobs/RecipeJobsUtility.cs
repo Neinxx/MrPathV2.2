@@ -21,6 +21,8 @@ namespace __temp.MrPathV2.Runtime.Jobs
         [ReadOnly] public NativeArray<int> TerrainLayerIndices; // 与 Terrain 的 splat 索引对应（预览可为 -1）
         [ReadOnly] public NativeArray<int> BlendModes; // 对应 BlendMode 的枚举整数值
         [ReadOnly] public NativeArray<float> Opacities; // 每层不透明度（0~1）
+        // 预览/GPU一致的遮罩阈值（0..1），在构建 Atlas/Strips 时应用塑形
+        [ReadOnly] public float MaskThreshold;
 
         // 统一的遮罩采样条：把每层的遮罩（Gradient/Noise/Texture）采样为固定长度的一维数组
         [ReadOnly] public NativeArray<float> Strips; // 长度 = stripResolution * Length
@@ -39,8 +41,9 @@ namespace __temp.MrPathV2.Runtime.Jobs
         public int Length { get; set; }
 
         public RecipeData(PathProfile pathProfile, Dictionary<TerrainLayer, int> terrainLayerMap,
-                  float roadWorldWidth, float roadWorldLength, Allocator allocator) : this()
+                  float roadWorldWidth, float roadWorldLength, Allocator allocator, float maskThreshold = 0f) : this()
       {
+    MaskThreshold = Mathf.Clamp01(maskThreshold);
     // 初始化基础数据结构
     InitializeBaseData(pathProfile, allocator);
 
@@ -172,8 +175,11 @@ private void InitializeStripData(PathProfile pathProfile, float roadWorldWidth, 
                 v = Mathf.Clamp01(activeMask.Evaluate(pos, roadWorldWidth, roadWorldLength));
             }
 
-            // 默认填充 1 (不影响底层)，再应用不透明度
-            v = Mathf.Clamp01(v * Opacities[i]);
+            // 与预览/GPU一致：在构建期应用阈值塑形；不再在数据内预乘不透明度
+            if (MaskThreshold > 0f)
+            {
+                v = Mathf.Clamp01((v - MaskThreshold) / Mathf.Max(1e-5f, 1f - MaskThreshold));
+            }
             Strips[stripOffset + s] = v;
         }
 
@@ -210,8 +216,11 @@ private void InitializeMaskAtlasData(PathProfile pathProfile, float roadWorldWid
                     v = Mathf.Clamp01(activeMask.Evaluate(pos, pathProgress, roadWorldWidth, roadWorldLength));
                 }
 
-                // 应用不透明度（已与 GPU 对齐）：mask * per-layer opacity * masterOpacity
-                v = Mathf.Clamp01(v * Opacities[layerIndex]);
+                // 与预览/GPU一致：在构建期应用阈值塑形；不再在数据内预乘不透明度
+                if (MaskThreshold > 0f)
+                {
+                    v = Mathf.Clamp01((v - MaskThreshold) / Mathf.Max(1e-5f, 1f - MaskThreshold));
+                }
 
                 // 写入 atlas
                 MaskAtlas[rowIndex * AtlasWidth + x] = v;
@@ -264,7 +273,9 @@ private void InitializeMaskAtlasData(PathProfile pathProfile, float roadWorldWid
             if (width <= 0.0001f)
                 width = Mathf.Max(0.01f, map != null ? 1f : 1f); // 宽度参与遮罩采样，非 0 即可
 
-            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent);
+            // 与预览一致：当开启不透明预览时使用 0.2 的遮罩阈值，否则为 0
+            var threshold = (pathProfile != null && pathProfile.opaquePreview) ? 0.2f : 0f;
+            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent, threshold);
         }
 
         /// <summary>
@@ -284,7 +295,7 @@ private void InitializeMaskAtlasData(PathProfile pathProfile, float roadWorldWid
             const float defaultWorldWidth = 5f;   // 与 PathProfile 默认一致
             const float defaultPathLength = 100f; // 与预览遮罩采样默认一致
 
-            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator);
+            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator, 0f);
 
 #if UNITY_EDITOR
             if (Application.isPlaying)
@@ -309,7 +320,7 @@ private void InitializeMaskAtlasData(PathProfile pathProfile, float roadWorldWid
             const float defaultWorldWidth = 5f;
             const float defaultPathLength = 100f;
 
-            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator);
+            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator, 0f);
 
 #if UNITY_EDITOR
             if (Application.isPlaying)

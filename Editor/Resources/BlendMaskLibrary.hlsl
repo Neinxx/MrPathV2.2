@@ -14,7 +14,6 @@ struct GpuNoiseMaskParams {
 	int    Octaves; // fBm 层数
 	float  Lacunarity; // 频率增长系数
 	float  Gain; // 幅度衰减系数
-	int    AlgorithmId; // 0=Perlin, 1=Simple
 	int    UseAsymmetricEdges; // 是否启用非对称平滑
 	float  EdgeLow; // Edge1（低阈值）
 	float  EdgeHigh; // Edge2（高阈值）
@@ -67,94 +66,89 @@ inline float2 ComputeMaskUV(float progress, float signedDistance, float roadWidt
 	return float2(u, v);
 }
 
-// 噪声工具（置于库内部，供 EvaluateNoise 使用）
+// 旋转工具（供 EvaluateNoise 使用）
 inline float2 rotate2(float2 p, float a)
 {
-	float s = sin(a), c = cos(a);
-	return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+    float s = sin(a), c = cos(a);
+    return float2(c * p.x - s * p.y, s * p.x + c * p.y);
 }
 
-inline float noise_fade(float t) { return t * t * (3.0 - 2.0 * t); }
+// 统一噪声源：外部 Noise LUT（CPU/GPU 共享）
+Texture2D<float> _NoiseLUT;   // R 通道 0..1 噪声
+int              _NoiseLutSize; // LUT 尺寸（正方形）
 
-inline float hash21(float2 p)
+// 计算着色器中无法依赖采样器状态，这里手写重复环绕的双线性采样
+inline float SampleNoiseLUT(float2 uv)
 {
-	p = frac(p * float2(123.34, 345.45));
-	p += dot(p, p + 34.345);
-	return frac(p.x * p.y);
-}
-
-inline float grad2(float2 ip, float2 f)
-{
-	float  a = hash21(ip) * 6.28318530718;
-	float2 g = float2(cos(a), sin(a));
-	return dot(g, f);
-}
-
-inline float perlin2d(float2 p)
-{
-	float2 ip = floor(p);
-	float2 f = frac(p);
-	float2 u = float2(noise_fade(f.x), noise_fade(f.y));
-	float  n00 = grad2(ip + float2(0, 0), f - float2(0, 0));
-	float  n10 = grad2(ip + float2(1, 0), f - float2(1, 0));
-	float  n01 = grad2(ip + float2(0, 1), f - float2(0, 1));
-	float  n11 = grad2(ip + float2(1, 1), f - float2(1, 1));
-	float  nx0 = lerp(n00, n10, u.x);
-	float  nx1 = lerp(n01, n11, u.x);
-	return lerp(nx0, nx1, u.y);
-}
-
-inline float sampleBaseNoise(float2 p, int algo) { return (algo == 0) ? perlin2d(p) : sin(p.x) * cos(p.y); }
-
-inline float fbm2d(float2 p, int octaves, float lacunarity, float gain, int algo)
-{
-	float amp = 0.5;
-	float freq = 1.0;
-	float sum = 0.0;
-	[loop] for(int i = 0; i < octaves; i++)
-	{
-		sum += sampleBaseNoise(p * freq, algo) * amp;
-		freq *= max(lacunarity, 1.0);
-		amp *= saturate(gain);
-	}
-	return sum;
+    if (_NoiseLutSize <= 0) return 0.5;
+    float2 st = frac(uv) * (float)_NoiseLutSize - 0.5;
+    uint2 i0 = (uint2)floor(st);
+    float2 f = frac(st);
+    uint2 i1 = i0 + uint2(1, 0);
+    uint2 i2 = i0 + uint2(0, 1);
+    uint2 i3 = i0 + uint2(1, 1);
+    int size = _NoiseLutSize;
+    uint2 wrap = uint2(size, size);
+    uint2 w0 = (i0 % wrap + wrap) % wrap;
+    uint2 w1 = (i1 % wrap + wrap) % wrap;
+    uint2 w2 = (i2 % wrap + wrap) % wrap;
+    uint2 w3 = (i3 % wrap + wrap) % wrap;
+    float c00 = _NoiseLUT.Load(uint3(w0, 0)).r;
+    float c10 = _NoiseLUT.Load(uint3(w1, 0)).r;
+    float c01 = _NoiseLUT.Load(uint3(w2, 0)).r;
+    float c11 = _NoiseLUT.Load(uint3(w3, 0)).r;
+    float cx0 = lerp(c00, c10, f.x);
+    float cx1 = lerp(c01, c11, f.x);
+    return lerp(cx0, cx1, f.y);
 }
 
 inline float EvaluateNoise(float progress, float signedDistance, float roadWidth, GpuNoiseMaskParams p)
 {
-	float2 uv = ComputeMaskUV(progress, signedDistance, roadWidth, p);
+    float2 uv = ComputeMaskUV(progress, signedDistance, roadWidth, p);
 
-	// 细节缩放与旋转（OverallScale 不再缩放 UV）
-	float2 m = uv;
-	m = m * float2(max(p.NoiseScale.x, 1e-6), max(p.NoiseScale.y, 1e-6));
-	m = rotate2(m, p.RotationRad);
-	m += float2(p.Seed * 17.0, p.Seed * 29.0);
+    // 细节缩放与旋转（OverallScale 不再缩放 UV）
+    float2 m = uv;
+    m = m * float2(max(p.NoiseScale.x, 1e-6), max(p.NoiseScale.y, 1e-6));
+    m = rotate2(m, p.RotationRad);
+    m += float2(p.Seed * 17.0, p.Seed * 29.0);
 
-	int   oct = max(p.Octaves, 1);
-	float n = fbm2d(m, oct, max(p.Lacunarity, 1.0), p.Gain, p.AlgorithmId); // [-1,1]
-	float n01 = n * 0.5 + 0.5;
+    // 使用共享 Noise LUT 的 fBm 采样（统一 CPU/GPU）
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float sum = 0.0;
+    float norm = 0.0;
+    int   oct = max(p.Octaves, 1);
+    [loop] for(int i = 0; i < oct; ++i)
+    {
+        float s = SampleNoiseLUT(m * frequency);
+        sum += s * amplitude;
+        norm += amplitude;
+        frequency *= max(1.0, p.Lacunarity);
+        amplitude *= saturate(p.Gain);
+    }
+    float n01 = (norm > 1e-5) ? (sum / norm) : 0.0;
 
-	// 与 CPU ApplySmoothing 一致：先整体缩放，再做平滑
-	float pre = saturate(n01 * p.Strength) * p.OverallScale;
-	if (p.Smooth <= 1e-5 && p.UseAsymmetricEdges == 0)
-	{
-		return saturate(pre);
-	}
-	// 非对称优先：当启用时直接使用 EdgeLow/EdgeHigh
-	if (p.UseAsymmetricEdges != 0)
-	{
-		float e0 = p.EdgeLow;
-		float e1 = p.EdgeHigh;
-		if (e0 > e1)
-		{
-			float t = e0; e0 = e1; e1 = t;
-		}
-		return saturate(smoothstep(e0, e1, pre));
-	}
-	// 退回对称 Smooth 模式
-	float edge0 = p.Smooth * 0.5;
-	float edge1 = 1.0 - p.Smooth * 0.5;
-	return saturate(smoothstep(edge0, edge1, pre));
+    // 与 CPU ApplySmoothing 一致：先整体缩放，再做平滑
+    float pre = saturate(n01 * p.Strength) * p.OverallScale;
+    if (p.Smooth <= 1e-5 && p.UseAsymmetricEdges == 0)
+    {
+        return saturate(pre);
+    }
+    // 非对称优先：当启用时直接使用 EdgeLow/EdgeHigh
+    if (p.UseAsymmetricEdges != 0)
+    {
+        float e0 = p.EdgeLow;
+        float e1 = p.EdgeHigh;
+        if (e0 > e1)
+        {
+            float t = e0; e0 = e1; e1 = t;
+        }
+        return saturate(smoothstep(e0, e1, pre));
+    }
+    // 退回对称 Smooth 模式
+    float edge0 = p.Smooth * 0.5;
+    float edge1 = 1.0 - p.Smooth * 0.5;
+    return saturate(smoothstep(edge0, edge1, pre));
 }
 
 // 肩部遮罩：根据与路径的距离（signedDistance）生成两侧肩部影响

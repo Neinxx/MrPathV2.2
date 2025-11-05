@@ -96,7 +96,6 @@ namespace __temp.MrPathV2.Editor.GPU
             public int Octaves;
             public float Lacunarity;
             public float Gain;
-            public int AlgorithmId;
             public int UseAsymmetricEdges;
             public float EdgeLow;
             public float EdgeHigh;
@@ -334,7 +333,6 @@ namespace __temp.MrPathV2.Editor.GPU
                     Octaves = src.NoiseParams.Octaves,
                     Lacunarity = src.NoiseParams.Lacunarity,
                     Gain = src.NoiseParams.Gain,
-                    AlgorithmId = src.NoiseParams.AlgorithmId,
                     UseAsymmetricEdges = src.NoiseParams.UseAsymmetricEdges ? 1 : 0,
                     EdgeLow = src.NoiseParams.EdgeLow,
                     EdgeHigh = src.NoiseParams.EdgeHigh,

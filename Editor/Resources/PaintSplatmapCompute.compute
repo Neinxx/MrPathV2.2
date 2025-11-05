@@ -14,10 +14,10 @@
 
 // Structs (must be defined before use)
 struct layer_params {
-    int           blend_mode;
+    uint           blend_mode;
     float         opacity;
-    int           texture_index;
-    int           terrain_layer_splat_index;
+    uint           texture_index;
+    uint           terrain_layer_splat_index;
     float4        tiling_offset;
     float4        tint_color;
     GpuMaskParams mask_params;
@@ -34,24 +34,24 @@ Texture2D<float> road_mask;
 Texture2D<float> road_sdf;
 
 // Uniforms
-int    layer_count;
-int    alphamap_layer_count;
-int    spine_point_count;
+uint    layer_count;
+uint    alphamap_layer_count;
+uint    spine_point_count;
 float  falloff_distance;
 float  road_width;
 float2 terrain_size;
 float2 terrain_position;
-int2   alphamap_resolution;
-int2   terrain_offset;
-int2   alphamap_offset;
-int2   coverage_min;
-int2   coverage_max;
-int    debug_mode;
-int    contour_point_count;
+uint2   alphamap_resolution;
+uint2   terrain_offset;
+uint2   alphamap_offset;
+uint2   coverage_min;
+uint2   coverage_max;
+uint    debug_mode;
+uint    contour_point_count;
 float4 contour_bounds;
 float  mask_threshold;
 float  edge_width_world;
-int    use_road_mask; // 当为1时启用 road_mask 门控；为0时不采样遮罩，按ROI与距离绘制
+uint    use_road_mask; // 当为1时启用 road_mask 门控；为0时不采样遮罩，按ROI与距离绘制
 
 // Helper function to calculate squared distance
 float distance_sq(float2 a, float2 b)
@@ -60,22 +60,22 @@ float distance_sq(float2 a, float2 b)
     return dot(diff, diff);
 }
 
-bool is_point_in_aabb(float2 p, float4 b)
+bool is_pouint_in_aabb(float2 p, float4 b)
 {
     return !(p.x < b.x || p.y < b.y || p.x > b.z || p.y > b.w);
 }
 
 bool perform_ray_casting(float2 p)
 {
-    int n = contour_point_count;
-    if (n < 3) return is_point_in_aabb(p, contour_bounds);
+    uint n = contour_point_count;
+    if (n < 3) return is_pouint_in_aabb(p, contour_bounds);
     bool inside = false;
-    for (int i = 0, j = n - 1; i < n; j = i++)
+    for (uint i = 0, j = n - 1; i < n; j = i++)
     {
         float2 pi = road_contour[i];
         float2 pj = road_contour[j];
-        bool intersect = (pi.y > p.y) != (pj.y > p.y);
-        if (!intersect) continue;
+        bool uintersect = (pi.y > p.y) != (pj.y > p.y);
+        if (!uintersect) continue;
         float denom = pj.y - pi.y;
         if (abs(denom) <= 1e-6) continue;
         float ix = (pj.x - pi.x) * (p.y - pi.y) / denom + pi.x;
@@ -110,11 +110,13 @@ float distance_to_contour_edge(float2 p)
     return d;
 }
 
-float3 calculate_distance_progress_signed(float2 world_pos, StructuredBuffer<float3> spine_data, int spine_point_count)
+float3 calculate_distance_progress_signed(float2 world_pos, StructuredBuffer<float3> spine_data, uint spine_point_count)
 {
     float totalLen = 0.0f;
 
-    for(int segIdx = 0; segIdx < spine_point_count - 1; segIdx++)
+    int spCount = (int)spine_point_count;
+    int segMax = max(0, spCount - 1);
+    for(int segIdx = 0; segIdx < segMax; segIdx++)
     {
         float2 s = spine_data[segIdx].xz;
         float2 e = spine_data[segIdx + 1].xz;
@@ -128,7 +130,7 @@ float3 calculate_distance_progress_signed(float2 world_pos, StructuredBuffer<flo
     float accum_len = 0.0f;
     float signed_dist = 0.0f;
 
-    for(int seg_idx2 = 0; seg_idx2 < spine_point_count - 1; seg_idx2++)
+    for(int seg_idx2 = 0; seg_idx2 < segMax; seg_idx2++)
     {
         float3 p1 = spine_data[seg_idx2];
         float3 p2 = spine_data[seg_idx2 + 1];
@@ -140,17 +142,17 @@ float3 calculate_distance_progress_signed(float2 world_pos, StructuredBuffer<flo
         float  segment_len = sqrt(max(0.0f, segment_len_sq));
 
         float  t = 0.0f;
-        float2 closest_point = segment_start; 
+        float2 closest_pouint = segment_start;
         float  distSq = FLT_INF;
 
         if(segment_len_sq > 1e-8f)
         {
             t = saturate(dot(world_pos - segment_start, segment_dir) / segment_len_sq);
-            closest_point = segment_start + t * segment_dir;
-            float2 to_point = world_pos - closest_point;
+            closest_pouint = segment_start + t * segment_dir;
+            float2 to_pouint = world_pos - closest_pouint;
             float2 normal2d = (segment_len_sq > 0.0f) ? normalize(float2(-segment_dir.y, segment_dir.x)) : float2(0.0f, 1.0f);
-            distSq = dot(to_point, to_point);
-            float dist_signed = dot(to_point, normal2d);
+            distSq = dot(to_pouint, to_pouint);
+            float dist_signed = dot(to_pouint, normal2d);
             if(distSq < min_distance_sq)
             {
                 min_distance_sq = distSq;
@@ -172,31 +174,31 @@ float4 clamp_to_linear(float4 value)
 }
 
 // 工具：读取/写入指定 splat 通道
-float read_splat_weight(int2 pixel_coord, int splat_index)
+float read_splat_weight(uint2 pixel_coord, uint splat_index)
 {
-    int slice = splat_index / 4;
-    int ch = splat_index % 4;
-    float4 v = clamp_to_linear(splat_weights[int3(pixel_coord, slice)]);
+    uint slice = splat_index / 4;
+    uint ch = splat_index % 4;
+    float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
     return (ch == 0) ? v.r : (ch == 1) ? v.g : (ch == 2) ? v.b : v.a;
 }
 
-void write_splat_weight(int2 pixel_coord, int splat_index, float value)
+void write_splat_weight(uint2 pixel_coord, uint splat_index, float value)
 {
-    int slice = splat_index / 4;
-    int ch = splat_index % 4;
-    float4 v = clamp_to_linear(splat_weights[int3(pixel_coord, slice)]);
+    uint slice = splat_index / 4;
+    uint ch = splat_index % 4;
+    float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
     value = saturate(value);
     if(ch == 0) v.r = value;
     else if(ch == 1) v.g = value;
     else if(ch == 2) v.b = value;
     else v.a = value;
-    splat_weights[int3(pixel_coord, slice)] = clamp_to_linear(v);
+    splat_weights[uint3(pixel_coord, slice)] = clamp_to_linear(v);
 }
 
-bool is_recipe_splat(int splat_index)
+bool is_recipe_splat(uint splat_index)
 {
     [loop]
-    for(int i = 0; i < layer_count; i++)
+    for(uint i = 0; i < layer_count; i++)
     {
         if(layer_params_buffer[i].terrain_layer_splat_index == splat_index)
             return true;
@@ -204,10 +206,16 @@ bool is_recipe_splat(int splat_index)
     return false;
 }
 
+// 与预览 Shader 保持一致的阈值塑形（clip 效果）
+inline float ApplyMaskThreshold(float value, float threshold)
+{
+    return saturate((value - threshold) / max(1e-5, 1.0 - threshold));
+}
+
 [numthreads(8, 8, 1)]
 void paint_terrain(uint3 id : SV_DispatchThreadID)
 {
-    int2 pixel_coord = int2(id.xy) + alphamap_offset;
+    uint2 pixel_coord = uint2(id.xy) + alphamap_offset;
 
     if(pixel_coord.x < 0 || pixel_coord.y < 0 || pixel_coord.x >= alphamap_resolution.x || pixel_coord.y >= alphamap_resolution.y) return;
 
@@ -225,7 +233,7 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     float maskGate = 1.0;
     if (use_road_mask == 1)
     {
-        float mask_sample = road_mask.Load(int3(pixel_coord, 0));
+        float mask_sample = road_mask.Load(uint3(pixel_coord, 0));
         maskGate = (mask_sample > mask_threshold) ? 1.0 : 0.0;
         if (maskGate <= 0.0) return;
     }
@@ -242,7 +250,7 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
             uvOut = ComputeMaskUV(progress, signed_distance, road_width, layer0.mask_params.Noise);
         }
         // 调试输出也确保在有效范围
-        splat_weights[int3(pixel_coord, 0)] = clamp_to_linear(float4(uvOut.x, uvOut.y, 0, 1));
+        splat_weights[uint3(pixel_coord, 0)] = clamp_to_linear(float4(uvOut.x, uvOut.y, 0, 1));
         return;
     }
 
@@ -250,7 +258,7 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     else if (debug_mode == 2)
     {
         float fall = edgeFactor;
-        splat_weights[int3(pixel_coord, 0)] = clamp_to_linear(float4(fall, 0, 0, 1));
+        splat_weights[uint3(pixel_coord, 0)] = clamp_to_linear(float4(fall, 0, 0, 1));
         return;
     }
 
@@ -258,7 +266,7 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     // 步骤1：统计非配方层的原始总和（用于后续按剩余量缩放）
     float others_sum = 0.0;
     [loop]
-    for(int s = 0; s < alphamap_layer_count; s++)
+    for(uint s = 0; s < alphamap_layer_count; s++)
     {
         if(!is_recipe_splat(s))
         {
@@ -269,16 +277,19 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     // 步骤2：计算配方层的总贡献（自透明+按剩余量分配，不写回）
     float remaining = 1.0;
     float sum_recipe = 0.0;
+    if (layer_count == 0) return; // 提前返回避免下溢
     [loop]
-    for(int layerIdx = layer_count - 1; layerIdx >= 0; layerIdx--)
+    // 使用唯一的循环控制变量名，避免 D3D FXC 在同一作用域内认为重名冲突
+    for(int layer_scan_idx = (int)layer_count - 1; layer_scan_idx >= 0; layer_scan_idx--)
     {
-        layer_params layer = layer_params_buffer[layerIdx];
-        int splat_idx = layer.terrain_layer_splat_index;
-        if(splat_idx < 0 || splat_idx >= alphamap_layer_count) continue;
+        layer_params layer = layer_params_buffer[layer_scan_idx];
+        uint splat_idx = layer.terrain_layer_splat_index;
+        if(splat_idx >= alphamap_layer_count) continue;
 
         float2 world_pos2 = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
         float mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
-        float self_alpha = saturate(layer.opacity * edgeFactor * mask_value) * maskGate;
+        float mask_shaped = ApplyMaskThreshold(mask_value, mask_threshold);
+        float self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate;
         float contribute = min(self_alpha, remaining);
         if(contribute > 1e-6)
         {
@@ -294,7 +305,7 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     if(scale < 1.0 - 1e-6)
     {
         [loop]
-        for(int s = 0; s < alphamap_layer_count; s++)
+        for(uint s = 0; s < alphamap_layer_count; s++)
         {
             if(!is_recipe_splat(s))
             {
@@ -307,15 +318,17 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     // 步骤4：写入配方层的贡献（再次遍历以避免存临时数组）
     remaining = 1.0;
     [loop]
-    for(int layerIdx = layer_count - 1; layerIdx >= 0; layerIdx--)
+    // 再次遍历写入贡献，循环变量保持不同名称以兼容旧编译器
+    for(int layer_write_idx = (int)layer_count - 1; layer_write_idx >= 0; layer_write_idx--)
     {
-        layer_params layer = layer_params_buffer[layerIdx];
-        int splat_idx = layer.terrain_layer_splat_index;
-        if(splat_idx < 0 || splat_idx >= alphamap_layer_count) continue;
+        layer_params layer = layer_params_buffer[layer_write_idx];
+        uint splat_idx = layer.terrain_layer_splat_index;
+        if(splat_idx >= alphamap_layer_count) continue;
 
         float2 world_pos2 = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
         float mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
-        float self_alpha = saturate(layer.opacity * edgeFactor * mask_value) * maskGate;
+        float mask_shaped = ApplyMaskThreshold(mask_value, mask_threshold);
+        float self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate;
         float contribute = min(self_alpha, remaining);
         write_splat_weight(pixel_coord, splat_idx, contribute);
         remaining = max(0.0, remaining - contribute);

@@ -35,7 +35,6 @@ struct GpuNoiseMaskParams {
 	int    Octaves;
 	float  Lacunarity;
 	float  Gain;
-	int    AlgorithmId; // 统一算法调度 ID
 	int    UseAsymmetricEdges;
 	float  EdgeLow;
 	float  EdgeHigh;
@@ -52,32 +51,33 @@ struct GpuMaskParams {
 
 // Removed alias macros to avoid field name collisions across structs
 
-// --- Simple noise helpers (placeholder, fast pseudo-perlin) ---
-float SimpleNoise(float2 uv)
+// --- External noise LUT (unified CPU/GPU source) ---
+Texture2D<float> _NoiseLUT;   // R channel contains noise [0,1]
+int              _NoiseLutSize; // width == height
+
+// Manual bilinear sampling with repeat wrap (compute shaders cannot use Material samplers)
+float SampleNoiseLUT(float2 uv)
 {
-	return frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453);
-}
-
-float PerlinNoise(float2 uv, float scale)
-{
-	uv *= max(1e-5, scale);
-	float2 i = floor(uv);
-	float2 f = frac(uv);
-
-	float a = SimpleNoise(i);
-	float b = SimpleNoise(i + float2(1.0, 0.0));
-	float c = SimpleNoise(i + float2(0.0, 1.0));
-	float d = SimpleNoise(i + float2(1.0, 1.0));
-
-	float2 u = f * f * (3.0 - 2.0 * f);
-	float  res = lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
-	return res;
-}
-
-// --- Smoothing helper ---
-float ApplySmoothing(float value, float smoothing)
-{
-	return smoothstep(0.0, 1.0, value * (1.0 + smoothing));
+    if (_NoiseLutSize <= 0) return 0.5;
+    float2 st = frac(uv) * (float)_NoiseLutSize - 0.5;
+    uint2 i0 = (uint2)floor(st);
+    float2 f = frac(st);
+    uint2 i1 = i0 + uint2(1, 0);
+    uint2 i2 = i0 + uint2(0, 1);
+    uint2 i3 = i0 + uint2(1, 1);
+    int size = _NoiseLutSize;
+    uint2 wrap = uint2(size, size);
+	uint2 w0 = (i0 % wrap + wrap) % wrap;
+	uint2 w1 = (i1 % wrap + wrap) % wrap;
+	uint2 w2 = (i2 % wrap + wrap) % wrap;
+	uint2 w3 = (i3 % wrap + wrap) % wrap;
+    float c00 = _NoiseLUT.Load(uint3(w0, 0)).r;
+    float c10 = _NoiseLUT.Load(uint3(w1, 0)).r;
+    float c01 = _NoiseLUT.Load(uint3(w2, 0)).r;
+    float c11 = _NoiseLUT.Load(uint3(w3, 0)).r;
+    float cx0 = lerp(c00, c10, f.x);
+    float cx1 = lerp(c01, c11, f.x);
+    return lerp(cx0, cx1, f.y);
 }
 
 // --- Evaluate shoulder mask (distance-based, unified) ---
@@ -131,28 +131,20 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
 	float2 seedOffset = float2(sx - floor(sx), sy - floor(sy));
 	ruv += seedOffset;
 
-	// fBm sampling
-	float amplitude = 1.0;
-	float frequency = 1.0;
-	float sum = 0.0;
-	float norm = 0.0;
-	int   oct = max(1, p.Octaves);
-	for(int i = 0; i < oct; ++i)
-	{
-		float sample = 0.0;
-		if(p.AlgorithmId == 1)
-		{
-			sample = SimpleNoise(ruv * frequency);
-		}
-		else
-		{
-			sample = PerlinNoise(ruv * frequency, 1.0);
-		}
-		sum += sample * amplitude;
-		norm += amplitude;
-		frequency *= max(1.0, p.Lacunarity);
-		amplitude *= saturate(p.Gain);
-	}
+    // fBm sampling (always use shared Noise LUT)
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float sum = 0.0;
+    float norm = 0.0;
+    int   oct = max(1, p.Octaves);
+    for(int i = 0; i < oct; ++i)
+    {
+        float sample = SampleNoiseLUT(ruv * frequency);
+        sum += sample * amplitude;
+        norm += amplitude;
+        frequency *= max(1.0, p.Lacunarity);
+        amplitude *= saturate(p.Gain);
+    }
 	float n = (norm > 1e-5) ? (sum / norm) : 0.0;
 
 	// Match CPU ApplySmoothing: scale then smooth
@@ -226,6 +218,13 @@ int   _LayerCount;
 int   _PathSamples;
 float _WorldWidth;
 float _PathLength;
+float _MaskThreshold;
+
+// Map 0..1 to [0 when below t, 1 when >=1], smooth ramp in between
+inline float ApplyMaskThreshold(float v, float t)
+{
+    return saturate((v - t) / max(1e-5, 1.0 - t));
+}
 
 [numthreads(8,8,1)]
 void BuildAtlas(uint3 id : SV_DispatchThreadID)
@@ -246,9 +245,10 @@ void BuildAtlas(uint3 id : SV_DispatchThreadID)
 	float posAcross = across * 2.0 - 1.0; // - 1..1, center = 0
 	float pathProgress = (float)pathRow / max(1, _PathSamples - 1);
 
-	GpuMaskParams p = _MaskParams[layerIndex];
-	float         weight = EvaluateMask(posAcross, pathProgress, _WorldWidth, _PathLength, p);
-	float         opacity = _Opacities[layerIndex];
-
-	_Atlas[int2(idxX, idxY)] = float4(weight, 0, 0, 1);
+    GpuMaskParams p = _MaskParams[layerIndex];
+    float         weight = EvaluateMask(posAcross, pathProgress, _WorldWidth, _PathLength, p);
+    float         opacity = _Opacities[layerIndex];
+    // 阈值塑形前移到 Atlas 构建阶段，采样侧不再重复塑形
+    float shaped = ApplyMaskThreshold(weight, saturate(_MaskThreshold));
+    _Atlas[int2(idxX, idxY)] = float4(shaped, 0, 0, 1);
 }

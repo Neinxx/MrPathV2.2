@@ -1,5 +1,6 @@
 using System;
 using __temp.MrPathV2.Editor.GPU.Core;
+using __temp.MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -47,6 +48,10 @@ namespace __temp.MrPathV2.Editor.GPU
             public static readonly int RoadSDF = Shader.PropertyToID("road_sdf");
             public static readonly int MaskThreshold = Shader.PropertyToID("mask_threshold");
             public static readonly int UseRoadMask = Shader.PropertyToID("use_road_mask");
+
+            // 噪声LUT（统一 CPU/GPU 来源）
+            public static readonly int NoiseLUT = Shader.PropertyToID("_NoiseLUT");
+            public static readonly int NoiseLutSize = Shader.PropertyToID("_NoiseLutSize");
         }
         #endregion
 
@@ -138,8 +143,8 @@ namespace __temp.MrPathV2.Editor.GPU
 
             try
             {
-                // 1. 绑定所有参数
-                BindComputeParameters(dataPacket);
+                // 1. 绑定所有参数（含预览阈值）
+                BindComputeParameters(dataPacket, isPreview);
 
                 // 2. 计算线程组数量：使用 ROI 局部调度，减少无关像素计算
                 var cp = dataPacket.ComputeParams;
@@ -168,7 +173,7 @@ namespace __temp.MrPathV2.Editor.GPU
         #endregion
 
         #region Parameter Binding
-        private void BindComputeParameters(GpuDataStreamer.GpuDataPacket dataPacket)
+        private void BindComputeParameters(GpuDataStreamer.GpuDataPacket dataPacket, bool isPreview)
         {
             var shader = _paintTerrainShader.Shader;
             var kernel = _paintTerrainShader.KernelIndex;
@@ -201,8 +206,9 @@ namespace __temp.MrPathV2.Editor.GPU
             shader.SetInts(ShaderProperties.CoverageMin, minX, minY);
             shader.SetInts(ShaderProperties.CoverageMax, maxX, maxY);
 
-            // 遮罩阈值
-            shader.SetFloat(ShaderProperties.MaskThreshold, 0.5f);
+            // 遮罩阈值：预览与正式保持一致的语义
+            var threshold = isPreview ? 0.2f : 0f;
+            shader.SetFloat(ShaderProperties.MaskThreshold, threshold);
             shader.SetInt(ShaderProperties.UseRoadMask, dataPacket.RoadMask != null ? 1 : 0);
 
             // 绑定缓冲区
@@ -230,6 +236,18 @@ namespace __temp.MrPathV2.Editor.GPU
             }
             // 可选：SDF 路面距离场（目前未使用）
             // if (roadSDFTexture != null) shader.SetTexture(kernel, ShaderProperties.RoadSDF, roadSDFTexture);
+
+            // 绑定统一噪声LUT（供 BlendMaskLibrary.hlsl 使用）
+            var lut = NoiseLutProvider.GetOrCreateLut();
+            if (lut != null)
+            {
+                shader.SetInt(ShaderProperties.NoiseLutSize, lut.width);
+                shader.SetTexture(kernel, ShaderProperties.NoiseLUT, lut);
+            }
+            else
+            {
+                shader.SetInt(ShaderProperties.NoiseLutSize, 0);
+            }
         }
         #endregion
 
@@ -286,8 +304,8 @@ namespace __temp.MrPathV2.Editor.GPU
                 var shader = _paintTerrainShader.Shader;
                 var kernel = _paintTerrainShader.KernelIndex;
 
-                // 绑定基础参数
-                BindComputeParameters(dataPacket);
+                // 绑定基础参数（含预览阈值）
+                BindComputeParameters(dataPacket, isPreview);
 
                 // 绑定额外的遮罩纹理
                 if (roadMask != null)

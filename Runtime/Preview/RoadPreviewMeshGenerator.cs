@@ -238,7 +238,8 @@ namespace __temp.MrPathV2.Runtime.Preview
                         // 临时 Profile 仅为 RecipeData 提供 recipe 引用
                         var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
                         tmpProfile.roadRecipe = recipeSo;
-                        Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator);
+                        var threshold = (profile != null && profile.opaquePreview) ? 0.2f : 0f;
+                        Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator, threshold);
 #if UNITY_EDITOR
                         if (Application.isPlaying)
                             UnityEngine.Object.Destroy(tmpProfile);
@@ -260,7 +261,8 @@ namespace __temp.MrPathV2.Runtime.Preview
                         var tmpRecipe = ScriptableObject.CreateInstance<StylizedRoadRecipe>();
                         var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
                         tmpProfile.roadRecipe = tmpRecipe;
-                        Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator);
+                        var threshold2 = (profile != null && profile.opaquePreview) ? 0.2f : 0f;
+                        Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator, threshold2);
 #if UNITY_EDITOR
                         if (Application.isPlaying)
                         {

@@ -8,6 +8,11 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
     /// </summary>
     public abstract class BlendMaskBase : ScriptableObject
     {
+        /// <summary>
+        /// 指示该遮罩是否支持 GPU 路径（Compute/HLSL 参数打包）。
+        /// 缺省为 true，个别复杂、仅 CPU 的遮罩可重写为 false。
+        /// </summary>
+        public virtual bool SupportsGpu => true;
 
         // --- GPU 参数打包：统一接口 ---
         /// <summary>
@@ -155,7 +160,6 @@ public struct GpuNoiseMaskParamsData
     public int Octaves;
     public float Lacunarity;
     public float Gain;
-    public int AlgorithmId;
     public bool UseAsymmetricEdges;
     public float EdgeLow;
     public float EdgeHigh;

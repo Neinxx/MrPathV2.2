@@ -33,50 +33,11 @@ namespace MrPathV2.Editor.Preview
 
         // Future: cached 2D mask atlas
         private Texture2D m_MaskAtlas;
-        private RenderTexture m_LayerRtArray;
+        // 使用专用管理器复用并缓存 Texture2DArray，避免每帧重建
+        private PreviewTextureArrayManager m_TexArrayMgr;
+        private bool m_ArrayFallbackWarned;
 
-        // Texture array cache mechanism
-        private struct TextureArrayCacheKey
-        {
-            public readonly int LayerCount;
-            public readonly int Width;
-            public readonly int Height;
-            public readonly string TextureHashes; // Hash combination of all textures
-
-            public TextureArrayCacheKey(int layerCount, int width, int height, string textureHashes)
-            {
-                LayerCount = layerCount;
-                Width = width;
-                Height = height;
-                TextureHashes = textureHashes;
-            }
-
-            public override bool Equals(object obj)
-            {
-                if (!(obj is TextureArrayCacheKey)) return false;
-                var other = (TextureArrayCacheKey)obj;
-                return LayerCount == other.LayerCount &&
-                       Width == other.Width &&
-                       Height == other.Height &&
-                       TextureHashes == other.TextureHashes;
-            }
-
-            public override int GetHashCode()
-            {
-                unchecked
-                {
-                    var hash = 17;
-                    hash = hash * 31 + LayerCount;
-                    hash = hash * 31 + Width;
-                    hash = hash * 31 + Height;
-                    hash = hash * 31 + (TextureHashes?.GetHashCode() ?? 0);
-                    return hash;
-                }
-            }
-        }
-
-        private TextureArrayCacheKey? m_CurrentCacheKey;
-        private CommandBuffer m_ReusableCommandBuffer; // Reusable CommandBuffer
+        // 旧的纹理数组缓存键机制与可复用命令缓冲已不再使用，移除以保持类的纯净
 
         // Record path length for building MaskAtlas
         private float m_PathLength = -1f;
@@ -108,6 +69,15 @@ namespace MrPathV2.Editor.Preview
 
             var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
             var processedLayerCount = parameterSetter.SetLayerParametersAsArrays(maxLayers, layers);
+            if (processedLayerCount == 0)
+            {
+                // 提前返回：无有效图层时，确保禁用数组路径并返回
+                if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray))
+                    Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
+                if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
+                    Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+                return 0;
+            }
 
 #if UNITY_EDITOR
             // Push splat index array required for GPU preview
@@ -174,16 +144,12 @@ namespace MrPathV2.Editor.Preview
             // Prefer array path: as long as all layers have textures (sizes can be inconsistent, GPU Blit automatically scales to the first texture size)
             var canUseArray = sliceCount > 0;
 
-            // Check if cache is available
+            // 复用单例管理器，避免每帧构造导致缓存丢失
             var textureHashes = textureHashBuilder.ToString();
-            var newCacheKey = new TextureArrayCacheKey(sliceCount, width, height, textureHashes);
-            var canReuseCache = m_CurrentCacheKey.HasValue && m_CurrentCacheKey.Value.Equals(newCacheKey) && m_LayerRtArray != null && m_LayerRtArray.IsCreated();
-
             if (canUseArray)
             {
-                var textureArrayManager = new PreviewTextureArrayManager();
-                var success = textureArrayManager.TryCreateAndBindTextureArray(Current, texList, width, height, textureHashes);
-                
+                m_TexArrayMgr ??= new PreviewTextureArrayManager();
+                var success = m_TexArrayMgr.TryCreateAndBindTextureArray(Current, texList, width, height, textureHashes);
                 if (!success)
                 {
                     HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
@@ -199,7 +165,11 @@ namespace MrPathV2.Editor.Preview
 
         private void HandleFallbackTextureBinding(int maxLayers, int layerCount, IReadOnlyList<RoadLayer> layers, PathProfile profile, PreviewMaterialParameterSetter parameterSetter)
         {
-            Debug.LogWarning("[PreviewMaterialManager] Texture2DArray not available or missing textures, fallback to per-layer binding.");
+            if (!m_ArrayFallbackWarned)
+            {
+                Debug.LogWarning("[PreviewMaterialManager] Texture2DArray not available or missing textures, fallback to per-layer binding.");
+                m_ArrayFallbackWarned = true;
+            }
             if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray)) 
                 Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
             if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures)) 
@@ -562,14 +532,13 @@ namespace MrPathV2.Editor.Preview
         // New: release layer texture array to avoid resource leaks
         private void ReleaseLayerTexArray()
         {
-            if (m_LayerRtArray != null)
+            if (m_TexArrayMgr != null)
             {
-                m_LayerRtArray.Release();
-                Object.DestroyImmediate(m_LayerRtArray);
-                m_LayerRtArray = null;
+                // 交由管理器释放内部 RTArray 与命令缓冲
+                m_TexArrayMgr.Cleanup();
+                m_TexArrayMgr = null;
             }
-            // Clear cache key
-            m_CurrentCacheKey = null;
+            m_ArrayFallbackWarned = false;
         }
 
         /// <summary>
@@ -578,11 +547,6 @@ namespace MrPathV2.Editor.Preview
         public void Cleanup()
         {
             ReleaseLayerTexArray();
-            if (m_ReusableCommandBuffer != null)
-            {
-                m_ReusableCommandBuffer.Release();
-                m_ReusableCommandBuffer = null;
-            }
         }
 
         private bool EnsureMaterial(Material template)

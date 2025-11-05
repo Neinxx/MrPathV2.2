@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using __temp.MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -33,7 +34,8 @@ namespace __temp.MrPathV2.Runtime.Core
             IList<PreviewPipelineUtility.PreviewLayerInfo> layers,
             float worldWidth,
             float pathLength = 100f,
-            int baseResolution = 256)
+            int baseResolution = 256,
+            float maskThreshold = 0f)
         {
             using (ProfilingMarkers.MaskAtlasGeneratorBuild.Auto())
             {
@@ -77,13 +79,26 @@ namespace __temp.MrPathV2.Runtime.Core
                     };
                 }
 
+                // 若任何遮罩声明不支持 GPU，则强制走 CPU 路径，确保稳定性
+                var allGpuSupported = true;
+                for (var i = 0; i < layers.Count; i++)
+                {
+                    var m = layers[i].Mask;
+                    if (m != null && !m.SupportsGpu)
+                    {
+                        allGpuSupported = false;
+                        break;
+                    }
+                }
+
                 // Try GPU path (compute shader in Resources: MaskAtlas.compute)
-                var cs = Resources.Load<ComputeShader>("MaskAtlas");
-                if (cs != null)
+                var supportsCompute = SystemInfo.supportsComputeShaders;
+                var cs = (supportsCompute && allGpuSupported) ? Resources.Load<ComputeShader>("MaskAtlas") : null;
+                if (cs != null && cs.HasKernel("BuildAtlas"))
                 {
                     try
                     {
-                        return BuildAtlasGpu(cs, reuse, layers, worldWidth, pathLength, width, pathSamples);
+                        return BuildAtlasGpu(cs, reuse, layers, worldWidth, pathLength, width, pathSamples, maskThreshold);
                     }
                     catch (Exception e)
                     {
@@ -92,7 +107,7 @@ namespace __temp.MrPathV2.Runtime.Core
                 }
 
                 // CPU fallback
-                BuildAtlasCpu(reuse, layers, worldWidth, pathLength, width, pathSamples);
+                BuildAtlasCpu(reuse, layers, worldWidth, pathLength, width, pathSamples, maskThreshold);
                 return reuse;
             }
         }
@@ -104,7 +119,8 @@ namespace __temp.MrPathV2.Runtime.Core
             float worldWidth,
             float pathLength,
             int atlasWidth,
-            int pathSamples)
+            int pathSamples,
+            float maskThreshold)
         {
             var layerCount = layers.Count;
             var atlasHeight = layerCount * pathSamples;
@@ -141,6 +157,20 @@ namespace __temp.MrPathV2.Runtime.Core
             cs.SetBuffer(kernel, "_MaskParams", maskBuf);
             cs.SetBuffer(kernel, "_Opacities", opaBuf);
             cs.SetTexture(kernel, "_Atlas", rt);
+            cs.SetFloat("_MaskThreshold", Mathf.Clamp01(maskThreshold));
+
+            // Bind shared Noise LUT for unified CPU/GPU noise sampling
+            var lut = NoiseLutProvider.GetOrCreateLut();
+            if (lut != null)
+            {
+                cs.SetInt("_NoiseLutSize", lut.width);
+                cs.SetTexture(kernel, "_NoiseLUT", lut);
+            }
+            else
+            {
+                // 若生成失败，置尺寸为0，compute侧将使用0.5常量，保持健壮
+                cs.SetInt("_NoiseLutSize", 0);
+            }
 
             var gx = Mathf.CeilToInt(atlasWidth / 8.0f);
             var gy = Mathf.CeilToInt(atlasHeight / 8.0f);
@@ -170,7 +200,8 @@ namespace __temp.MrPathV2.Runtime.Core
             float worldWidth,
             float pathLength,
             int atlasWidth,
-            int pathSamples)
+            int pathSamples,
+            float maskThreshold)
         {
             var layerCount = layers.Count;
             var atlasHeight = layerCount * pathSamples;
@@ -193,7 +224,8 @@ namespace __temp.MrPathV2.Runtime.Core
                         var across = across01 * 2.0f - 1.0f;
                         var value = mask != null ? mask.Evaluate(across, progress, worldWidth, pathLength) : 1.0f;
                         // 遮罩权重不再叠乘图层不透明度，保持与GPU路径一致（权重仅代表 mask）
-                        var finalValue = Mathf.Clamp01(value);
+                        var shaped = (maskThreshold <= 0f) ? value : Mathf.Clamp01((value - maskThreshold) / Mathf.Max(1e-5f, 1f - maskThreshold));
+                        var finalValue = Mathf.Clamp01(shaped);
                         var idx = py + layerIndex * pathSamples;
                         pixels[px + idx * atlasWidth] = new Color32((byte)(finalValue * 255.0f), 0, 0, 255);
                     }
@@ -210,7 +242,7 @@ namespace __temp.MrPathV2.Runtime.Core
                 MaskType = 0,
                 Strength = 1.0f
             };
-            if (mask == null) return gpuMask;
+            if (mask == null || !mask.SupportsGpu) return gpuMask;
 
             // 统一从遮罩对象收集参数
             var dto = new GpuMaskParamsData();
@@ -248,7 +280,6 @@ namespace __temp.MrPathV2.Runtime.Core
                 Octaves = dto.NoiseParams.Octaves,
                 Lacunarity = dto.NoiseParams.Lacunarity,
                 Gain = dto.NoiseParams.Gain,
-                AlgorithmId = dto.NoiseParams.AlgorithmId,
                 UseAsymmetricEdges = dto.NoiseParams.UseAsymmetricEdges ? 1 : 0,
                 EdgeLow = dto.NoiseParams.EdgeLow,
                 EdgeHigh = dto.NoiseParams.EdgeHigh,
@@ -289,7 +320,6 @@ namespace __temp.MrPathV2.Runtime.Core
             public int Octaves;
             public float Lacunarity;
             public float Gain;
-            public int AlgorithmId;
             public int UseAsymmetricEdges;
             public float EdgeLow;
             public float EdgeHigh;

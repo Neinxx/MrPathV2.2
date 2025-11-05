@@ -255,8 +255,9 @@ namespace __temp.MrPathV2.Editor.Core
             // 解析地形层映射
             var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, pathProfile);
 
-            // 创建CPU配方数据
-            return new RecipeData(pathProfile, layerMap, 0f, 0f, Allocator.TempJob);
+            // 创建CPU配方数据（阈值与预览一致：opaquePreview=0.2，否则0）
+            var threshold = (pathProfile != null && pathProfile.opaquePreview) ? 0.2f : 0f;
+            return new RecipeData(pathProfile, layerMap, 0f, 0f, Allocator.TempJob, threshold);
         }
 
         private (NativeArray<float2> contour, float4 bounds) GenerateRoadContour(PathData pathData, PathProfile pathProfile)

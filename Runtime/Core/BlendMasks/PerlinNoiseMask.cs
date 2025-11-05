@@ -1,4 +1,5 @@
 using UnityEngine;
+using __temp.MrPathV2.Runtime.Core.Noise;
 // for GpuMaskParamsData
 
 namespace __temp.MrPathV2.Runtime.Core.BlendMasks
@@ -71,7 +72,8 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             var norm = 0f;
             for (var i = 0; i < octaves; i++)
             {
-                sum += Mathf.PerlinNoise(ruv.x * frequency, ruv.y * frequency) * amplitude;
+                var s = NoiseLutProvider.Sample01(ruv.x * frequency, ruv.y * frequency);
+                sum += s * amplitude;
                 norm += amplitude;
                 frequency *= Mathf.Max(1f, lacunarity);
                 amplitude *= Mathf.Clamp01(gain);
@@ -118,7 +120,6 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             dst.NoiseParams.Octaves = octaves;
             dst.NoiseParams.Lacunarity = lacunarity;
             dst.NoiseParams.Gain = gain;
-            dst.NoiseParams.AlgorithmId = (int)NoiseAlgorithmId.Perlin;
             dst.NoiseParams.UseAsymmetricEdges = useAsymmetricEdges;
             dst.NoiseParams.EdgeLow = edgeLow;
             dst.NoiseParams.EdgeHigh = edgeHigh;

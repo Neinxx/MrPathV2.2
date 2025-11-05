@@ -1,0 +1,165 @@
+:root {
+    --text-primary: rgb(204, 204, 204);
+    --text-secondary: rgb(153, 153, 153);
+    --bg-hover: rgba(50, 50, 50, 0.4);
+    --bg-selected: rgb(42, 72, 102);
+    --icon-size: 40px;
+    --border-radius: 4px;
+    --item-height: 52px;
+}
+
+#MaskListView {
+    flex-grow: 1;
+}
+
+.list-item-row {
+    flex-direction: row;
+    align-items: center;
+    padding: 6px;
+    height: var(--item-height);
+    overflow: hidden;
+    flex-shrink: 0;
+    background-color: rgba(0, 0, 0, 0);
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    transition-duration: 200ms;
+    border-left-color: rgb(54, 54, 54);
+    border-right-color: rgb(54, 54, 54);
+    border-top-color: rgb(54, 54, 54);
+    border-bottom-color: rgb(54, 54, 54);
+    transition-property: border-color;
+    transition-delay: 0ms;
+    border-left-width: 0;
+    border-right-width: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    justify-content: space-around;
+}
+
+.list-item-row:hover {
+    transition-property: border-color;
+    transition-duration: 1ms;
+    transition-delay: 0ms;
+    border-left-color: rgba(0, 0, 0, 0.09);
+    border-right-color: rgba(0, 0, 0, 0.09);
+    border-top-color: rgba(0, 0, 0, 0.09);
+    border-bottom-color: rgba(0, 0, 0, 0.09);
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    transition-timing-function: ease-in;
+    background-color: rgba(24, 24, 24, 0.14);
+}
+
+.list-item-row:selected {
+    transition-property: border-color, -unity-font;
+    transition-duration: 50ms, 10ms;
+    transition-delay: 0ms, 0s;
+    border-left-color: rgba(255, 121, 0, 0.47);
+    border-right-color: rgba(255, 121, 0, 0.47);
+    border-top-color: rgba(255, 121, 0, 0.47);
+    border-bottom-color: rgba(255, 121, 0, 0.47);
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    transition-timing-function: ease-out, ease;
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+    color: rgb(166, 95, 32);
+    font-size: 16px;
+    -unity-font-style: bold;
+}
+
+#icon {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    margin-right: 12px;
+    border-radius: 8px;
+    -unity-background-scale-mode: scale-to-fit;
+    background-color: rgba(41, 41, 41, 0.06);
+    border-left-color: rgba(0, 0, 0, 0.06);
+    border-right-color: rgba(0, 0, 0, 0.06);
+    border-top-color: rgba(0, 0, 0, 0.06);
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top-width: 3px;
+    border-bottom-width: 3px;
+}
+
+#content {
+    flex-direction: row;
+    flex-grow: 1;
+    overflow: hidden;
+    padding-right: 10px;
+    margin-bottom: 0;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+#name {
+    font-size: 16px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    -unity-font-style: bold;
+    -unity-text-align: middle-left;
+}
+
+#sub {
+    font-size: 14px;
+    color: rgb(103, 103, 103);
+    margin-top: 0;
+    margin-bottom: 2px;
+    margin-right: 0;
+    margin-left: 0;
+    -unity-font-style: bold-and-italic;
+}
+
+#name-edit {
+    display: none;
+    font-size: 13px;
+    color: var(--text-primary);
+    background-color: transparent;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+    flex-grow: 1;
+}
+
+.renaming #name-edit {
+    display: flex;
+}
+
+.renaming #name {
+    display: none;
+}

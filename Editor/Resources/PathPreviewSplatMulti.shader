@@ -324,8 +324,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                     progress,
                     layerIndex,
                     _PathSamples,
-                    _AtlasInvHeight,
-                    _MaskThreshold) * _MaskStrength;
+                    _AtlasInvHeight) * _MaskStrength;
             }
 
             half4 frag(Varyings input) : SV_Target
@@ -355,19 +354,20 @@ Shader "MrPath/PathPreviewSplatMulti"
 
                 float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
 
-                for (int i = 0; i < maxLayers; i++)
+                // 使用不同循环变量名以避免 D3D FXC 在同一作用域内报重名冲突
+                for (int j = 0; j < maxLayers; j++)
                 {
-                    float weight = (invTotal > 0.0) ? saturate(weights[i] * invTotal) : 0.0;
+                    float weight = (invTotal > 0.0) ? saturate(weights[j] * invTotal) : 0.0;
                     if (weight < 0.0004) continue;
 
-                    float2 layerTiling = GetLayerTiling(i);
+                    float2 layerTiling = GetLayerTiling(j);
                     float2 layerUV = input.worldUV * layerTiling;
-                    half4  layerColor = SampleLayerTexture(i, layerUV);
-                    layerColor *= GetLayerTint(i);
+                    half4  layerColor = SampleLayerTexture(j, layerUV);
+                    layerColor *= GetLayerTint(j);
                     layerColor.a *= weight;
 
-                    float layerOpacity = GetLayerOpacity(i);
-                    float blendMode = GetLayerBlendMode(i);
+                    float layerOpacity = GetLayerOpacity(j);
+                    float blendMode = GetLayerBlendMode(j);
                     float blendOpacity = layerOpacity;
 
                     finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);

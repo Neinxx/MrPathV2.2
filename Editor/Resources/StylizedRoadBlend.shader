@@ -103,8 +103,7 @@ Shader "MrPathV2/StylizedRoadBlend"
                     pathProgress,
                     _LayerIndex,
                     _PathSamples,
-                    _AtlasInvHeight,
-                    _MaskThreshold);
+                    _AtlasInvHeight);
 
                 // 移除硬裁剪早退，改为软透明混合，依赖 mask 透明度进行平滑过渡
                 float4 prevResult = tex2D(_PrevResultTex, IN.uv);

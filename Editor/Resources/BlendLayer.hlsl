@@ -57,27 +57,26 @@ inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, f
 // atlasInvHeight = 1.0 / (layerCount * pathSamples)
 // -----------------------------------------------------------------------------
 inline float SampleMaskAtlas2D(
-	Texture2D    maskAtlas,
-	SamplerState samp,
-	float        across, // 0..1 distance across road (normalizedDist)
-	float        pathProgress, // 0..1 along road
-	float        layerIndex, // int but pass as float to avoid int ops
-	float        pathSamples, // rows per layer
-	float        atlasInvHeight,
-	float        maskThreshold)
+    Texture2D    maskAtlas,
+    SamplerState samp,
+    float        across, // 0..1 distance across road (normalizedDist)
+    float        pathProgress, // 0..1 along road
+    float        layerIndex, // int but pass as float to avoid int ops
+    float        pathSamples, // rows per layer
+    float        atlasInvHeight)
 {
-	across = saturate(across);
-	pathProgress = saturate(pathProgress);
+    across = saturate(across);
+    pathProgress = saturate(pathProgress);
 
 	// Compute row index = layerIndex * pathSamples + pathProgress*(pathSamples-1)
 	float row = layerIndex * pathSamples + pathProgress * (pathSamples - 1.0);
 	// +0.5 for texel center
 	float  v = (row + 0.5) * atlasInvHeight;
-	float2 uvAtlas = float2(across, v);
+    float2 uvAtlas = float2(across, v);
 
-	float mask = maskAtlas.Sample(samp, uvAtlas).r;
-	mask = saturate((mask - maskThreshold) / max(1e-5, 1.0 - maskThreshold));
-	return mask;
+    // 阈值塑形已在 MaskAtlas.compute/CPU 构建阶段完成，这里只读取原值
+    float mask = maskAtlas.Sample(samp, uvAtlas).r;
+    return saturate(mask);
 }
 
 

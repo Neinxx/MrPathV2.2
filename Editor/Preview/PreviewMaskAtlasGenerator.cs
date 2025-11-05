@@ -148,8 +148,15 @@ namespace MrPathV2.Editor.Preview
             var worldWidth = Mathf.Max(0.1f, m_Profile.roadWidth);
             // Use the real path length pushed externally; if unknown, use conservative default
             var effectivePathLength = m_PathLength > 0f ? m_PathLength : 100f;
-            
-            return PreviewPipelineUtility.BuildMaskAtlas(existingAtlas, layerInfos, worldWidth, effectivePathLength);
+
+            // 从材质读取阈值，驱动 Atlas 构建期的阈值塑形
+            float maskThreshold = 0f;
+            if (m_Material != null && m_Material.HasProperty(PreviewShaderContracts.Properties.MaskThreshold))
+            {
+                maskThreshold = m_Material.GetFloat(PreviewShaderContracts.Properties.MaskThreshold);
+            }
+
+            return PreviewPipelineUtility.BuildMaskAtlas(existingAtlas, layerInfos, worldWidth, effectivePathLength, 256, maskThreshold);
         }
         
         /// <summary>

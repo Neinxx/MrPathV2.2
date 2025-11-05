@@ -46,7 +46,13 @@ namespace __temp.MrPathV2.Runtime.Core
         /// <param name="worldWidth">道路宽度，用于 EvaluateMask。</param>
         /// <param name="pathLength">道路长度，用于 EvaluateMask。</param>
         /// <returns>生成好的 Texture2D。</returns>
-        public static Texture2D BuildMaskAtlas(Texture2D reuse, IList<PreviewLayerInfo> layers, float worldWidth, float pathLength = 100f, int baseResolution = 256) => MaskAtlasGenerator.BuildMaskAtlas(reuse, layers, worldWidth, pathLength, baseResolution);
+        public static Texture2D BuildMaskAtlas(
+            Texture2D reuse,
+            IList<PreviewLayerInfo> layers,
+            float worldWidth,
+            float pathLength = 100f,
+            int baseResolution = 256,
+            float maskThreshold = 0f) => MaskAtlasGenerator.BuildMaskAtlas(reuse, layers, worldWidth, pathLength, baseResolution, maskThreshold);
 
         /// <summary>
         ///     描述一层用于预览或绘制的所有信息。
