@@ -7,7 +7,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     两阶段地形绘制的第一阶段：计算每个像素与路径的关系并缓存。
@@ -32,13 +32,15 @@ namespace __temp.MrPathV2.Runtime.Jobs
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Execute(int index) // 索引范围 [0, totalPixelsInBounds - 1]
         {
-            var numPixelsX = CoverageMax.x - CoverageMin.x + 1;
+            // 半开区间：[min,max) => 宽度为差值，不 +1
+            var numPixelsX = CoverageMax.x - CoverageMin.x;
             var localY = index / numPixelsX;
             var localX = index % numPixelsX;
             var x = CoverageMin.x + localX;
             var y = CoverageMin.y + localY;
 
-            if (y > CoverageMax.y || !IsPixelInRoadContour(x, y, out var worldPos2D) || !CalculateDistanceAndProgress(worldPos2D, out var normalizedDist, out var pathProgress))
+            // 独占上界：y 不应等于 CoverageMax.y
+            if (y >= CoverageMax.y || !IsPixelInRoadContour(x, y, out var worldPos2D) || !CalculateDistanceAndProgress(worldPos2D, out var normalizedDist, out var pathProgress))
             {
                 PixelInfoMap[index] = new RoadPixelInfo
                 {
@@ -58,10 +60,11 @@ namespace __temp.MrPathV2.Runtime.Jobs
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool IsPixelInRoadContour(int x, int y, out float2 worldPos2D)
         {
-            var invResolution = 1f / (AlphamapResolution - 1);
+            // 统一采样到像素中心：与 GPU 纹理采样对齐
+            var invResolution = 1f / AlphamapResolution;
             worldPos2D = new float2(
-                TerrainPos.x + x * invResolution * TerrainSize.x,
-                TerrainPos.z + y * invResolution * TerrainSize.z
+                TerrainPos.x + (x + 0.5f) * invResolution * TerrainSize.x,
+                TerrainPos.z + (y + 0.5f) * invResolution * TerrainSize.z
             );
             return TerrainJobsUtility.IsPointInContour(worldPos2D, ContourBounds, RoadContour);
         }

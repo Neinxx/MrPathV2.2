@@ -2,7 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     演示如何使用PathCreator.GetPathLength()方法的示例脚本

@@ -6,7 +6,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     内存跟踪器：监控NativeArray分配和释放，检测内存泄漏
@@ -43,7 +43,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 StackTrace = Application.isEditor ? Environment.StackTrace : "N/A"
             };
 
-            var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
+            var ptr = array.GetUnsafePtr();
             SActiveAllocations.TryAdd(new IntPtr(ptr), info);
 
             // 更新统计信息
@@ -71,7 +71,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
             try
             {
                 if (!array.IsCreated) return;
-                var ptr = NativeArrayUnsafeUtility.GetUnsafePtr(array);
+                var ptr = array.GetUnsafePtr();
                 if (SActiveAllocations.TryRemove(new IntPtr(ptr), out var info))
                 {
                     Interlocked.Increment(ref m_STotalDeallocations);
@@ -94,7 +94,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
             try
             {
                 if (!list.IsCreated) return;
-                var ptr = NativeListUnsafeUtility.GetUnsafePtr(list);
+                var ptr = list.GetUnsafePtr();
                 if (SActiveAllocations.TryRemove((IntPtr)ptr, out var info))
                 {
                     Interlocked.Increment(ref m_STotalDeallocations);

@@ -1,8 +1,8 @@
 using Unity.Collections;
 using Unity.Mathematics;
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     public static class RoadContourGenerator
     {

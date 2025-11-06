@@ -169,7 +169,7 @@ Shader "MrPath/PathPreviewSplatMulti"
             half4 _Layer15_Color;
             // 新增：统一的图层贴图数组（Texture2DArray），用于替代逐层采样
             TEXTURE2D_ARRAY(_LayerTextures);
-            
+
             // Mask atlas and other properties
             TEXTURE2D(_MaskAtlas);
             // 新增：GPU 计算的地形权重数组
@@ -197,7 +197,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                 float  _LayerSplatIndices[16];
                 float  _UseSplatWeights;
                 // 新增：是否使用图层贴图数组采样
-                float  _UseLayerTexArray;
+                float _UseLayerTexArray;
                 // 新增：ROI 边界（世界坐标 XZ 平面）
                 float4 _PreviewBounds;
             CBUFFER_END
@@ -219,7 +219,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                 // 统一本地变量以避免 FXC 报“潜在未初始化”警告
                 half4 result = half4(1, 1, 1, 1);
                 // 优先使用 Texture2DArray 采样，提升一致性与效率
-                if (_UseLayerTexArray > 0.5)
+                if(_UseLayerTexArray > 0.5)
                 {
                     result = SAMPLE_TEXTURE2D_ARRAY_LOD(_LayerTextures, sampler_LinearRepeat, uv, layerIndex, 0);
                     return result;
@@ -227,22 +227,38 @@ Shader "MrPath/PathPreviewSplatMulti"
                 // 回退到逐层纹理属性采样（用于编辑器无法构建数组或尺寸/格式不一致的情况）
                 switch(layerIndex)
                 {
-                case 0:  result = SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 1:  result = SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 2:  result = SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 3:  result = SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 4:  result = SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 5:  result = SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 6:  result = SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 7:  result = SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 8:  result = SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 9:  result = SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 10: result = SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 11: result = SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 12: result = SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 13: result = SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 14: result = SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0); break;
-                case 15: result = SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 0: result = SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 1: result = SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 2: result = SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 3: result = SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 4: result = SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 5: result = SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 6: result = SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 7: result = SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 8: result = SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 9: result = SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 10: result = SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 11: result = SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 12: result = SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 13: result = SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 14: result = SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 15: result = SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
                 default: /* keep default white */ break;
                 }
                 return result;
@@ -268,23 +284,23 @@ Shader "MrPath/PathPreviewSplatMulti"
             {
                 switch(layerIndex)
                 {
-                case 0:  return _Layer0_Color;
-                case 1:  return _Layer1_Color;
-                case 2:  return _Layer2_Color;
-                case 3:  return _Layer3_Color;
-                case 4:  return _Layer4_Color;
-                case 5:  return _Layer5_Color;
-                case 6:  return _Layer6_Color;
-                case 7:  return _Layer7_Color;
-                case 8:  return _Layer8_Color;
-                case 9:  return _Layer9_Color;
+                case 0: return _Layer0_Color;
+                case 1: return _Layer1_Color;
+                case 2: return _Layer2_Color;
+                case 3: return _Layer3_Color;
+                case 4: return _Layer4_Color;
+                case 5: return _Layer5_Color;
+                case 6: return _Layer6_Color;
+                case 7: return _Layer7_Color;
+                case 8: return _Layer8_Color;
+                case 9: return _Layer9_Color;
                 case 10: return _Layer10_Color;
                 case 11: return _Layer11_Color;
                 case 12: return _Layer12_Color;
                 case 13: return _Layer13_Color;
                 case 14: return _Layer14_Color;
                 case 15: return _Layer15_Color;
-                default: return half4(1,1,1,1);
+                default: return half4(1, 1, 1, 1);
                 }
             }
 
@@ -308,8 +324,17 @@ Shader "MrPath/PathPreviewSplatMulti"
                         uint   slice = (uint)splatIndex / 4u;
                         uint   channel = (uint)splatIndex % 4u;
                         float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
-                        half4 rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
+                        half4  rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
                         weight = (channel == 0) ? rgba.r : (channel == 1) ? rgba.g : (channel == 2) ? rgba.b : rgba.a;
+                        // 统一与 CPU 路径的强度与阈值塑形：
+                        // 强度：整体缩放权重
+                        weight *= _MaskStrength;
+                        // 阈值：仅在阈值>0时进行软门限塑形，保证边缘清晰（与 Atlas 构建效果一致）
+                        if(_MaskThreshold > 0.0001)
+                        {
+                            // 线性从阈值到1映射；与 CPU 构建阶段的 shaping 保持一致性
+                            weight = saturate((weight - _MaskThreshold) / max(1.0 - _MaskThreshold, 0.0001));
+                        }
                         return weight;
                     }
                     // splatIndex 无效时保持 0
@@ -324,6 +349,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                     layerIndex,
                     _PathSamples,
                     _AtlasInvHeight) * _MaskStrength;
+                // CPU 路径的阈值塑形已在 Atlas 构建阶段完成，这里只保持缩放并返回
                 return weight;
             }
 
@@ -332,7 +358,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                 // ROI 早退：严格与预览网格边界对齐，减少无效片元计算
                 // _PreviewBounds = (minX, minZ, maxX, maxZ)
                 float2 wuv = input.worldUV;
-                if (wuv.x < _PreviewBounds.x || wuv.x > _PreviewBounds.z ||
+                if(wuv.x < _PreviewBounds.x || wuv.x > _PreviewBounds.z ||
                     wuv.y < _PreviewBounds.y || wuv.y > _PreviewBounds.w)
                 {
                     return half4(0, 0, 0, 0);
@@ -348,13 +374,13 @@ Shader "MrPath/PathPreviewSplatMulti"
                 // 初始完全透明
                 half4 finalColor = half4(0, 0, 0, 0);
 
-                int maxLayers = min(_LayerCount, 16);
+                int   maxLayers = min(_LayerCount, 16);
                 float compositeAlpha = 0.0; // 汇总各层归一化权重 * 不透明度
 
                 // 统一路径：采样所有层权重并归一化，不区分来源（GPU 或 MaskAtlas）
                 float weights[16];
                 float total = 0.0;
-                for (int i = 0; i < maxLayers; i++)
+                for(int i = 0; i < maxLayers; i++)
                 {
                     float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
                     weights[i] = w;
@@ -364,10 +390,10 @@ Shader "MrPath/PathPreviewSplatMulti"
                 float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
 
                 // 使用不同循环变量名以避免 D3D FXC 在同一作用域内报重名冲突
-                for (int j = 0; j < maxLayers; j++)
+                for(int j = 0; j < maxLayers; j++)
                 {
                     float weight = (invTotal > 0.0) ? saturate(weights[j] * invTotal) : 0.0;
-                    if (weight < 0.0004) continue;
+                    if(weight < 0.0004) continue;
 
                     float2 layerTiling = GetLayerTiling(j);
                     float2 layerUV = input.worldUV * layerTiling;
@@ -385,11 +411,11 @@ Shader "MrPath/PathPreviewSplatMulti"
 
                 // 透明度与滑块结合：按合成权重驱动显示强度，避免因颜色暗导致过度透明
                 finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(compositeAlpha) * saturate(_PreviewAlpha);
-              //  finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(finalColor.a) * saturate(_PreviewAlpha);
-                 return finalColor;
-             }
-             ENDHLSL
-         }
-     }
-     FallBack "Hidden/Universal Render Pipeline/FallbackError"
- }
+                //  finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(finalColor.a) * saturate(_PreviewAlpha);
+                return finalColor;
+            }
+            ENDHLSL
+        }
+    }
+    FallBack "Hidden/Universal Render Pipeline/FallbackError"
+}

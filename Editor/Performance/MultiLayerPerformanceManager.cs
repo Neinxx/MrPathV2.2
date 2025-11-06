@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Performance
+namespace MrPathV2.Editor.Performance
 {
     /// <summary>
     ///     多层性能管理器：监控和优化大量层时的内存使用和渲染性能

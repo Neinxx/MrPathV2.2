@@ -1,10 +1,11 @@
 using System.Collections.Generic;
+using MrPathV2.Editor;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using __temp.MrPathV2.Editor; // UIResourceLoader
+// UIResourceLoader
 
-namespace __temp.MrPathV2.Editor.UI
+namespace MrPathV2.Editor.UI
 {
     public class Testss : EditorWindow
     {
@@ -16,19 +17,26 @@ namespace __temp.MrPathV2.Editor.UI
         private const string X_BUTTON_NAME = "XButton";
 
         private ReorderableContainerV2 m_Container;
+        private readonly List<ReorderableItem> m_Items = new List<ReorderableItem>();
         private VisualTreeAsset roadLayerUI;
-        private List<ReorderableItem> m_Items = new List<ReorderableItem>();
 
-        [MenuItem("Window/My Reorderable Window")]
-        public static void ShowWindow()
+        // 清理事件避免内存泄漏
+        private void OnDestroy()
         {
-            GetWindow<Testss>("Reorderable List");
+            foreach (var item in m_Items)
+            {
+                var xButton = item.Q<Button>(X_BUTTON_NAME);
+                if (xButton != null)
+                {
+                    xButton.clicked -= () => OnRemoveButtonClick(item);
+                }
+            }
         }
 
         public void CreateGUI()
         {
             var root = rootVisualElement;
-        
+
             // 加载主UI并添加错误处理
             var visualTree = LoadUxmlAsset<VisualTreeAsset>(MAIN_UXML_PATH);
             if (visualTree == null)
@@ -54,7 +62,7 @@ namespace __temp.MrPathV2.Editor.UI
             // 获取UI元素并验证
             var drapableRoot = root.Q<VisualElement>(DRAPABLE_ROOT_NAME);
             var addButton = root.Q<Button>(ADD_BUTTON_NAME);
-        
+
             if (drapableRoot == null)
             {
                 Debug.LogError($"Could not find VisualElement with name: {DRAPABLE_ROOT_NAME}");
@@ -76,15 +84,21 @@ namespace __temp.MrPathV2.Editor.UI
             }
         }
 
+        [MenuItem("Window/My Reorderable Window")]
+        public static void ShowWindow()
+        {
+            GetWindow<Testss>("Reorderable List");
+        }
+
         /// <summary>
-        /// 初始化可重排容器
+        ///     初始化可重排容器
         /// </summary>
         private void InitializeContainer(VisualElement parent)
         {
             m_Container = new ReorderableContainerV2();
             m_Container.style.flexGrow = 1;
             m_Container.style.flexShrink = 1;
-        
+
             // 添加已存在的项
             foreach (var item in m_Items)
             {
@@ -92,12 +106,12 @@ namespace __temp.MrPathV2.Editor.UI
                 RegisterRemoveButtonEvent(item);
                 m_Container.Add(item);
             }
-        
+
             parent.Add(m_Container);
         }
 
         /// <summary>
-        /// 添加新项按钮点击事件
+        ///     添加新项按钮点击事件
         /// </summary>
         private void OnAddButtonClick()
         {
@@ -111,17 +125,17 @@ namespace __temp.MrPathV2.Editor.UI
             var roadLayerItem = roadLayerUI.Instantiate();
             var reorderableItem = new ReorderableItem();
             reorderableItem.Add(roadLayerItem);
-        
+
             // 注册删除按钮事件
             RegisterRemoveButtonEvent(reorderableItem);
-        
+
             // 添加到容器和列表
             m_Container.Add(reorderableItem);
             m_Items.Add(reorderableItem);
         }
 
         /// <summary>
-        /// 为项注册删除按钮事件
+        ///     为项注册删除按钮事件
         /// </summary>
         private void RegisterRemoveButtonEvent(ReorderableItem item)
         {
@@ -139,7 +153,7 @@ namespace __temp.MrPathV2.Editor.UI
         }
 
         /// <summary>
-        /// 删除项按钮点击事件
+        ///     删除项按钮点击事件
         /// </summary>
         private void OnRemoveButtonClick(ReorderableItem item)
         {
@@ -154,7 +168,7 @@ namespace __temp.MrPathV2.Editor.UI
         }
 
         /// <summary>
-        /// 加载UXML资源的通用方法
+        ///     加载UXML资源的通用方法
         /// </summary>
         private T LoadUxmlAsset<T>(string path) where T : Object
         {
@@ -164,19 +178,6 @@ namespace __temp.MrPathV2.Editor.UI
                 Debug.LogError($"Failed to load asset at path: {path}");
             }
             return asset;
-        }
-
-        // 清理事件避免内存泄漏
-        private void OnDestroy()
-        {
-            foreach (var item in m_Items)
-            {
-                var xButton = item.Q<Button>(X_BUTTON_NAME);
-                if (xButton != null)
-                {
-                    xButton.clicked -= () => OnRemoveButtonClick(item);
-                }
-            }
         }
     }
 }

@@ -4,10 +4,10 @@ using UnityEditor;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Editor.GPU;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Editor.Core;
-using BlendMode = __temp.MrPathV2.Editor.GPU.BlendMode;
+using MrPathV2.Editor.GPU;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Editor.Core;
+using BlendMode = MrPathV2.Editor.GPU.BlendMode;
 using UnityEditorInternal;
 using System.Threading;
 

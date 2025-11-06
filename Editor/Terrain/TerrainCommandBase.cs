@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     public abstract class TerrainCommandBase
     {

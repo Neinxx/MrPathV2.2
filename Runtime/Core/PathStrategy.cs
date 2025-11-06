@@ -3,7 +3,7 @@
 using MrPathV2.Runtime.Preview;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【最终圆满版 • 法则基石】
@@ -12,6 +12,8 @@ namespace __temp.MrPathV2.Runtime.Core
     {
         [Header("法则外观定义")]
         public PathDrawingStyle drawingStyle;
+
+        public abstract PreviewLineRenderer.LineType GetLineTypeToCleanup();
 
 
         #region 数学法则契约 (Math Law Contract)
@@ -33,8 +35,6 @@ namespace __temp.MrPathV2.Runtime.Core
         }
 
         #endregion
-
-        public abstract PreviewLineRenderer.LineType GetLineTypeToCleanup();
 
 #if UNITY_EDITOR
         #region 绘制与交互契约 (Drawing & Interaction Contract)

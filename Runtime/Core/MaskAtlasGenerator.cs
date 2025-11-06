@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
-using __temp.MrPathV2.Runtime.Core.Noise;
+using MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     Generates a 2-D mask atlas containing the 1-D mask lookup for every blend layer *and*
@@ -93,7 +93,7 @@ namespace __temp.MrPathV2.Runtime.Core
 
                 // Try GPU path (compute shader in Resources: MaskAtlas.compute)
                 var supportsCompute = SystemInfo.supportsComputeShaders;
-                var cs = (supportsCompute && allGpuSupported) ? Resources.Load<ComputeShader>("MaskAtlas") : null;
+                var cs = supportsCompute && allGpuSupported ? Resources.Load<ComputeShader>("MaskAtlas") : null;
                 if (cs != null && cs.HasKernel("BuildAtlas"))
                 {
                     try
@@ -224,7 +224,7 @@ namespace __temp.MrPathV2.Runtime.Core
                         var across = across01 * 2.0f - 1.0f;
                         var value = mask != null ? mask.Evaluate(across, progress, worldWidth, pathLength) : 1.0f;
                         // 遮罩权重不再叠乘图层不透明度，保持与GPU路径一致（权重仅代表 mask）
-                        var shaped = (maskThreshold <= 0f) ? value : Mathf.Clamp01((value - maskThreshold) / Mathf.Max(1e-5f, 1f - maskThreshold));
+                        var shaped = maskThreshold <= 0f ? value : Mathf.Clamp01((value - maskThreshold) / Mathf.Max(1e-5f, 1f - maskThreshold));
                         var finalValue = Mathf.Clamp01(shaped);
                         var idx = py + layerIndex * pathSamples;
                         pixels[px + idx * atlasWidth] = new Color32((byte)(finalValue * 255.0f), 0, 0, 255);

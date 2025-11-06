@@ -1,13 +1,14 @@
 using System;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2.Runtime.Core.Noise
+namespace MrPathV2.Runtime.Core.Noise
 {
     /// <summary>
-    /// 提供统一的噪声LUT纹理给 CPU 和 GPU：
-    /// - 首次调用时通过 ComputeShader 生成周期性（可重复）的基础噪声纹理；
-    /// - 纹理将被缓存，并在 CPU 遮罩中使用 GetPixelBilinear 进行采样；
-    /// - GPU 侧在构建遮罩图集时将该纹理绑定到 Compute 着色器。
+    ///     提供统一的噪声LUT纹理给 CPU 和 GPU：
+    ///     - 首次调用时通过 ComputeShader 生成周期性（可重复）的基础噪声纹理；
+    ///     - 纹理将被缓存，并在 CPU 遮罩中使用 GetPixelBilinear 进行采样；
+    ///     - GPU 侧在构建遮罩图集时将该纹理绑定到 Compute 着色器。
     /// </summary>
     public static class NoiseLutProvider
     {
@@ -20,7 +21,7 @@ namespace __temp.MrPathV2.Runtime.Core.Noise
         private static int s_Period;
 
         /// <summary>
-        /// 返回（并在必要时生成）用于 CPU/GPU 采样的噪声LUT纹理。
+        ///     返回（并在必要时生成）用于 CPU/GPU 采样的噪声LUT纹理。
         /// </summary>
         public static Texture2D GetOrCreateLut(int size = DefaultSize, int period = DefaultPeriod)
         {
@@ -86,7 +87,7 @@ namespace __temp.MrPathV2.Runtime.Core.Noise
                         {
                             rt.Release();
 #if UNITY_EDITOR
-                            UnityEngine.Object.DestroyImmediate(rt);
+                            Object.DestroyImmediate(rt);
 #else
                             UnityEngine.Object.Destroy(rt);
 #endif
@@ -100,7 +101,7 @@ namespace __temp.MrPathV2.Runtime.Core.Noise
         }
 
         /// <summary>
-        /// 绑定 LUT 到 ComputeShader 的纹理参数（如 _NoiseLUT）。
+        ///     绑定 LUT 到 ComputeShader 的纹理参数（如 _NoiseLUT）。
         /// </summary>
         public static void BindToCompute(ComputeShader cs, int kernel, string textureName = "_NoiseLUT")
         {
@@ -112,7 +113,7 @@ namespace __temp.MrPathV2.Runtime.Core.Noise
         }
 
         /// <summary>
-        /// CPU 采样（0..1），内部自动做 Repeat（使用 frac）。建议在外部调用前先将 uv 做旋转/缩放等。
+        ///     CPU 采样（0..1），内部自动做 Repeat（使用 frac）。建议在外部调用前先将 uv 做旋转/缩放等。
         /// </summary>
         public static float Sample01(float u, float v)
         {
@@ -136,48 +137,60 @@ namespace __temp.MrPathV2.Runtime.Core.Noise
             var colors = new Color[size * size];
 
             // Tileable value noise on integer lattice with given period
-            float Fade(float t) => t * t * (3f - 2f * t);
+            float Fade(float t)
+            {
+                return t * t * (3f - 2f * t);
+            }
+
             float Hash(int ix, int iy)
             {
                 unchecked
                 {
-                    uint x = (uint)ix; uint y = (uint)iy;
-                    uint h = x * 374761393u + y * 668265263u;
-                    h ^= h >> 17; h *= 0xed5ad4bbu;
-                    h ^= h >> 11; h *= 0xac4c1b51u;
-                    h ^= h >> 15; h *= 0x31848babu;
+                    var x = (uint)ix;
+                    var y = (uint)iy;
+                    var h = x * 374761393u + y * 668265263u;
+                    h ^= h >> 17;
+                    h *= 0xed5ad4bbu;
+                    h ^= h >> 11;
+                    h *= 0xac4c1b51u;
+                    h ^= h >> 15;
+                    h *= 0x31848babu;
                     h ^= h >> 14;
                     return (h & 0xFFFFFF) / (float)0x1000000; // 0..1
                 }
             }
 
-            for (int y = 0; y < size; y++)
+            for (var y = 0; y < size; y++)
             {
-                for (int x = 0; x < size; x++)
+                for (var x = 0; x < size; x++)
                 {
                     var uvx = (x + 0.5f) / Mathf.Max(1, size);
                     var uvy = (y + 0.5f) / Mathf.Max(1, size);
                     var px = uvx * period;
                     var py = uvy * period;
-                    int ix = Mathf.FloorToInt(px);
-                    int iy = Mathf.FloorToInt(py);
-                    float fx = px - ix;
-                    float fy = py - iy;
+                    var ix = Mathf.FloorToInt(px);
+                    var iy = Mathf.FloorToInt(py);
+                    var fx = px - ix;
+                    var fy = py - iy;
 
-                    int ix1 = (ix + 1) % period; if (ix1 < 0) ix1 += period;
-                    int iy1 = (iy + 1) % period; if (iy1 < 0) iy1 += period;
-                    ix = ix % period; if (ix < 0) ix += period;
-                    iy = iy % period; if (iy < 0) iy += period;
+                    var ix1 = (ix + 1) % period;
+                    if (ix1 < 0) ix1 += period;
+                    var iy1 = (iy + 1) % period;
+                    if (iy1 < 0) iy1 += period;
+                    ix = ix % period;
+                    if (ix < 0) ix += period;
+                    iy = iy % period;
+                    if (iy < 0) iy += period;
 
-                    float v00 = Hash(ix, iy);
-                    float v10 = Hash(ix1, iy);
-                    float v01 = Hash(ix, iy1);
-                    float v11 = Hash(ix1, iy1);
-                    float ux = Fade(fx);
-                    float uy = Fade(fy);
-                    float a = Mathf.Lerp(v00, v10, ux);
-                    float b = Mathf.Lerp(v01, v11, ux);
-                    float n = Mathf.Lerp(a, b, uy);
+                    var v00 = Hash(ix, iy);
+                    var v10 = Hash(ix1, iy);
+                    var v01 = Hash(ix, iy1);
+                    var v11 = Hash(ix1, iy1);
+                    var ux = Fade(fx);
+                    var uy = Fade(fy);
+                    var a = Mathf.Lerp(v00, v10, ux);
+                    var b = Mathf.Lerp(v01, v11, ux);
+                    var n = Mathf.Lerp(a, b, uy);
                     colors[x + y * size] = new Color(n, n, n, 1f);
                 }
             }

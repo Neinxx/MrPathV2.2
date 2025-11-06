@@ -1,10 +1,9 @@
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Strategies
+namespace MrPathV2.Runtime.Strategies
 {
     /// <summary>
     ///     Defines the mathematical and editor behavior for a Catmull-Rom spline path.
@@ -169,10 +168,7 @@ namespace __temp.MrPathV2.Runtime.Strategies
             }
         }
 
-        public override PreviewLineRenderer.LineType GetLineTypeToCleanup()
-        {
-            return PreviewLineRenderer.LineType.ControlLine;
-        }
+        public override PreviewLineRenderer.LineType GetLineTypeToCleanup() => PreviewLineRenderer.LineType.ControlLine;
 
         #endregion
 #endif

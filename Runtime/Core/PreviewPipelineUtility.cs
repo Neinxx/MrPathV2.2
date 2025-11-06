@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
-using __temp.MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Jobs;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     统一 CPU/GPU/Terrain 三端的混合与采样逻辑，确保所见即所得。
@@ -26,7 +26,7 @@ namespace __temp.MrPathV2.Runtime.Core
             // 无遮罩应视为“全通”权重=1：
             // 1) 与 GPU/CPU Atlas 生成保持一致（默认白色/1.0）
             // 2) 满足“Recipe 中的子层无 mask 时应正常显示地形图层”的需求
-            (mask == null) ? 1f : Mathf.Clamp01(mask.Evaluate(pos, pathProgress, worldWidth, pathLength));
+            mask == null ? 1f : Mathf.Clamp01(mask.Evaluate(pos, pathProgress, worldWidth, pathLength));
 
         /// <summary>
         ///     兼容旧接口：若未提供 pathProgress，则使用 0.5f 作为默认值（路径中点）

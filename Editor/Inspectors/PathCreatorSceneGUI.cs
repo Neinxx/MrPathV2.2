@@ -1,22 +1,20 @@
-using __temp.MrPathV2.Editor.Tools;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Settings;
-using __temp.MrPathV2.Runtime.Strategies;
-using MrPathV2.Runtime.Preview;
+using MrPathV2.Editor.Tools;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Settings;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
 using UnityEditorTools = UnityEditor.Tools;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
-    /// 处理PathCreator的Scene GUI逻辑
+    ///     处理PathCreator的Scene GUI逻辑
     /// </summary>
     public class PathCreatorSceneGUI
     {
-        private readonly PathCreator _targetCreator;
         private readonly PathEditorContext _ctx;
+        private readonly PathCreator _targetCreator;
 
         public PathCreatorSceneGUI(PathCreator target, PathEditorContext context)
         {
@@ -25,7 +23,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 在场景中绘制的调度中心
+        ///     在场景中绘制的调度中心
         /// </summary>
         public void OnSceneGUI()
         {
@@ -59,22 +57,20 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 处理无效上下文的情况
+        ///     处理无效上下文的情况
         /// </summary>
-        private void HandleInvalidContext()
-        { }
+        private void HandleInvalidContext() { }
 
         /// <summary>
-        /// 根据需要激活预览管理器
+        ///     根据需要激活预览管理器
         /// </summary>
         /// <summary>
-        /// 重置预览状态
+        ///     重置预览状态
         /// </summary>
-        private static void ResetPreviewState()
-        { }
+        private static void ResetPreviewState() { }
 
         /// <summary>
-        /// 同步拖拽状态到全局多路径预览
+        ///     同步拖拽状态到全局多路径预览
         /// </summary>
         private void SynchronizeDragState()
         {

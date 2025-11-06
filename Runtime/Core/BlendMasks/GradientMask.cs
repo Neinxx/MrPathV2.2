@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Gradient Mask")]
     public class GradientMask : BlendMaskBase

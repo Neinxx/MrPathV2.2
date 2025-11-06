@@ -2,40 +2,50 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Editor.Stores;
-using __temp.MrPathV2.Editor.Terrain;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Editor.Stores;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Providers;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Windows
+namespace MrPathV2.Editor.Windows
 {
     /// <summary>
-    /// 高性能、简洁的 TerrainLayer 选择器窗口。
-    /// 扩展功能：标记道路覆盖地形持有的layer，智能分配按钮
+    ///     高性能、简洁的 TerrainLayer 选择器窗口。
+    ///     扩展功能：标记道路覆盖地形持有的layer，智能分配按钮
     /// </summary>
     public class TerrainLayerPickerWindow : EditorWindow
     {
-        private enum Tab
-        {
-            CurrentTerrain,
-            AllScene,
-            RecentAndFavorites
-        }
 
         private static RoadLayer s_TargetLayer;
         private static TerrainLayer s_CurrentValue;
         private static PathCreator s_ContextPathCreator; // 新增：上下文PathCreator
+        private readonly HashSet<TerrainLayer> _roadCoveredLayers = new HashSet<TerrainLayer>(); // 新增：道路覆盖地形持有的layers
 
         private Tab _activeTab = Tab.CurrentTerrain;
-        private string _search = string.Empty;
-        private Vector2 _scroll;
-        private TerrainLayerPickerStore _store;
+        private List<TerrainLayer> _cacheAllScene = new List<TerrainLayer>();
 
         private List<TerrainLayer> _cacheCurrentTerrain = new List<TerrainLayer>();
-        private List<TerrainLayer> _cacheAllScene = new List<TerrainLayer>();
-        private readonly HashSet<TerrainLayer> _roadCoveredLayers = new HashSet<TerrainLayer>(); // 新增：道路覆盖地形持有的layers
+        private Vector2 _scroll;
+        private string _search = string.Empty;
         private TerrainLayer _selectedLayerForAssign; // 新增：选中的待分配layer
+        private TerrainLayerPickerStore _store;
+
+        private void OnEnable()
+        {
+            _store = TerrainLayerPickerStore.GetOrCreate();
+            RefreshCaches();
+        }
+
+        private void OnGUI()
+        {
+            DrawToolbar();
+            DrawSearch();
+            EditorGUILayout.Space(6);
+            DrawSmartAssignSection(); // 新增：智能分配区域
+            DrawList();
+        }
 
         public static void Open(RoadLayer targetLayer, TerrainLayer currentValue = null, PathCreator contextPathCreator = null)
         {
@@ -47,12 +57,6 @@ namespace __temp.MrPathV2.Editor.Windows
             win.Show();
         }
 
-        private void OnEnable()
-        {
-            _store = TerrainLayerPickerStore.GetOrCreate();
-            RefreshCaches();
-        }
-
         private void RefreshCaches()
         {
             _cacheCurrentTerrain = TerrainLayerCollector.GetLayersFromCurrentTerrain();
@@ -61,7 +65,7 @@ namespace __temp.MrPathV2.Editor.Windows
         }
 
         /// <summary>
-        /// 刷新道路覆盖地形持有的layers
+        ///     刷新道路覆盖地形持有的layers
         /// </summary>
         private void RefreshRoadCoveredLayers()
         {
@@ -80,7 +84,7 @@ namespace __temp.MrPathV2.Editor.Windows
         }
 
         /// <summary>
-        /// 从覆盖的地形中提取图层并添加到集合中
+        ///     从覆盖的地形中提取图层并添加到集合中
         /// </summary>
         private void AddLayersFromCoveredTerrains()
         {
@@ -92,7 +96,7 @@ namespace __temp.MrPathV2.Editor.Windows
         }
 
         /// <summary>
-        /// 从单个地形中添加图层
+        ///     从单个地形中添加图层
         /// </summary>
         private void AddTerrainLayers(UnityEngine.Terrain terrain)
         {
@@ -105,15 +109,12 @@ namespace __temp.MrPathV2.Editor.Windows
         }
 
         /// <summary>
-        /// 检查地形是否有有效的图层数据
+        ///     检查地形是否有有效的图层数据
         /// </summary>
-        private static bool HasValidTerrainLayers(UnityEngine.Terrain terrain)
-        {
-            return terrain?.terrainData?.terrainLayers is { Length: > 0 };
-        }
+        private static bool HasValidTerrainLayers(UnityEngine.Terrain terrain) => terrain?.terrainData?.terrainLayers is { Length: > 0 };
 
         /// <summary>
-        /// 获取PathCreator覆盖的地形
+        ///     获取PathCreator覆盖的地形
         /// </summary>
         private static List<UnityEngine.Terrain> GetCoveredTerrains(PathCreator creator)
         {
@@ -125,7 +126,7 @@ namespace __temp.MrPathV2.Editor.Windows
             try
             {
                 // 采样路径脊线
-                var heightProvider = new Runtime.Providers.TerrainHeightProvider();
+                var heightProvider = new TerrainHeightProvider();
 
                 var spine = PathSampler.SamplePath(creator, heightProvider);
 
@@ -159,11 +160,11 @@ namespace __temp.MrPathV2.Editor.Windows
             if (spine.VertexCount == 0)
                 return new Vector4(0, 0, 0, 0);
 
-            var halfWidth = (profile.roadWidth * 0.5f) + profile.falloffWidth;
+            var halfWidth = profile.roadWidth * 0.5f + profile.falloffWidth;
             float minX = float.MaxValue, minZ = float.MaxValue;
             float maxX = float.MinValue, maxZ = float.MinValue;
 
-            for (int i = 0; i < spine.VertexCount; i++)
+            for (var i = 0; i < spine.VertexCount; i++)
             {
                 var point = spine.Points[i];
                 minX = Mathf.Min(minX, point.x - halfWidth);
@@ -182,22 +183,10 @@ namespace __temp.MrPathV2.Editor.Windows
             return new Vector4(pos.x, pos.z, pos.x + size.x, pos.z + size.z);
         }
 
-        private static bool BoundsOverlap(Vector4 a, Vector4 b)
-        {
-            return !(a.z <= b.x || a.x >= b.z || a.w <= b.y || a.y >= b.w);
-        }
-
-        private void OnGUI()
-        {
-            DrawToolbar();
-            DrawSearch();
-            EditorGUILayout.Space(6);
-            DrawSmartAssignSection(); // 新增：智能分配区域
-            DrawList();
-        }
+        private static bool BoundsOverlap(Vector4 a, Vector4 b) => !(a.z <= b.x || a.x >= b.z || a.w <= b.y || a.y >= b.w);
 
         /// <summary>
-        /// 绘制智能分配区域
+        ///     绘制智能分配区域
         /// </summary>
         private void DrawSmartAssignSection()
         {
@@ -230,7 +219,7 @@ namespace __temp.MrPathV2.Editor.Windows
         }
 
         /// <summary>
-        /// 执行智能分配
+        ///     执行智能分配
         /// </summary>
         private void ExecuteSmartAssign(TerrainLayer layer)
         {
@@ -527,22 +516,29 @@ namespace __temp.MrPathV2.Editor.Windows
             return RecipeLayerCache.GetRecipeForLayer(layer);
         }
 
+        private enum Tab
+        {
+            CurrentTerrain,
+            AllScene,
+            RecentAndFavorites
+        }
+
         /// <summary>
-        /// 配方和图层的缓存类，用于优化查找性能
+        ///     配方和图层的缓存类，用于优化查找性能
         /// </summary>
         private static class RecipeLayerCache
         {
+            // 缓存有效期（秒）
+            private const float CacheExpireTime = 5f;
             // 缓存配方与图层的映射关系
             private static readonly Dictionary<RoadLayer, StylizedRoadRecipe> SLayerToRecipeMap = new Dictionary<RoadLayer, StylizedRoadRecipe>();
             // 缓存所有已加载的配方
             private static StylizedRoadRecipe[] s_CachedRecipes = Array.Empty<StylizedRoadRecipe>();
             // 上次刷新缓存的时间
             private static float s_LastCacheRefreshTime;
-            // 缓存有效期（秒）
-            private const float CacheExpireTime = 5f;
 
             /// <summary>
-            /// 根据图层获取对应的配方
+            ///     根据图层获取对应的配方
             /// </summary>
             public static StylizedRoadRecipe GetRecipeForLayer(RoadLayer layer)
             {
@@ -563,16 +559,13 @@ namespace __temp.MrPathV2.Editor.Windows
             }
 
             /// <summary>
-            /// 检查是否需要刷新缓存
+            ///     检查是否需要刷新缓存
             /// </summary>
-            private static bool ShouldRefreshCache()
-            {
-                return Time.realtimeSinceStartup - s_LastCacheRefreshTime > CacheExpireTime ||
-                       s_CachedRecipes.Length == 0;
-            }
+            private static bool ShouldRefreshCache() => Time.realtimeSinceStartup - s_LastCacheRefreshTime > CacheExpireTime ||
+                                                        s_CachedRecipes.Length == 0;
 
             /// <summary>
-            /// 刷新缓存
+            ///     刷新缓存
             /// </summary>
             private static void RefreshCache()
             {
@@ -597,7 +590,7 @@ namespace __temp.MrPathV2.Editor.Windows
             }
 
             /// <summary>
-            /// 未缓存的查找方式（备用方案）
+            ///     未缓存的查找方式（备用方案）
             /// </summary>
             private static StylizedRoadRecipe FindRecipeForLayerUncached(RoadLayer layer)
             {

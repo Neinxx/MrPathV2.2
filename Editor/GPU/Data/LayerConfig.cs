@@ -1,11 +1,11 @@
 using System;
 using UnityEngine;
 
-namespace MrPath.Editor.GPU.Data
+namespace MrPathV2.Editor.GPU.Data
 {
     /// <summary>
-    /// 图层配置数据结构
-    /// 用于定义地形图层的绘制参数
+    ///     图层配置数据结构
+    ///     用于定义地形图层的绘制参数
     /// </summary>
     [Serializable]
     public class LayerConfig
@@ -17,11 +17,9 @@ namespace MrPath.Editor.GPU.Data
 
         [Header("高级设置")]
         public Vector4 MaskParams = Vector4.zero;
-        public bool UseCustomBlending = false;
+        public bool UseCustomBlending;
 
-        public LayerConfig()
-        {
-        }
+        public LayerConfig() { }
 
         public LayerConfig(int layerIndex, float strength, BlendMode blendMode)
         {
@@ -30,10 +28,7 @@ namespace MrPath.Editor.GPU.Data
             BlendMode = blendMode;
         }
 
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(LayerIndex, Strength, BlendMode, MaskParams);
-        }
+        public override int GetHashCode() => HashCode.Combine(LayerIndex, Strength, BlendMode, MaskParams);
 
         public override bool Equals(object obj)
         {
@@ -49,7 +44,7 @@ namespace MrPath.Editor.GPU.Data
     }
 
     /// <summary>
-    /// 混合模式枚举
+    ///     混合模式枚举
     /// </summary>
     public enum BlendMode
     {

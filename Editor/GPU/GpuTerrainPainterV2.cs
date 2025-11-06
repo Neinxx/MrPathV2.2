@@ -2,16 +2,16 @@ using System;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEditor;
-using __temp.MrPathV2.Editor.Terrain; // legacy interface namespace
-using __temp.MrPathV2.Runtime.Jobs;
+using MrPathV2.Editor.Terrain; // legacy interface namespace
+using MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using System.Threading;
-using __temp.MrPathV2.Editor.Core; // IUnifiedTerrainPainter
-using __temp.MrPathV2.Runtime.Core; // PathCreator / PathData / PathProfile / StylizedRoadRecipe
+using MrPathV2.Editor.Core; // IUnifiedTerrainPainter
+using MrPathV2.Runtime.Core; // PathCreator / PathData / PathProfile / StylizedRoadRecipe
 using System.Linq;
 
-namespace __temp.MrPathV2.Editor.GPU
+namespace MrPathV2.Editor.GPU
 {
     /// <summary>
     /// 新版 GPU 地形绘制器 - 简洁统一接口

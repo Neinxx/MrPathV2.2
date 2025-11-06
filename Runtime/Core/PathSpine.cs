@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【最终纯净版】路径骨架数据结构。
@@ -45,10 +45,10 @@ namespace __temp.MrPathV2.Runtime.Core
         /// </summary>
         public PathSpine(Vector3[] points, Vector3[] tangents, Vector3[] surfaceNormals, float[] timestamps)
         {
-            this.Points = points;
-            this.Tangents = tangents;
-            this.SurfaceNormals = surfaceNormals;
-            this.Timestamps = timestamps;
+            Points = points;
+            Tangents = tangents;
+            SurfaceNormals = surfaceNormals;
+            Timestamps = timestamps;
         }
 
         #endregion

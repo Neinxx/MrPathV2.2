@@ -1,13 +1,13 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 // For PathSpine, PathProfile etc.
 
-namespace __temp.MrPathV2.Editor.Terrain // Or Runtime.Interfaces
+namespace MrPathV2.Editor.Terrain // Or Runtime.Interfaces
 {
     /// <summary>
     ///     Interface for terrain painting strategies (CPU or GPU).

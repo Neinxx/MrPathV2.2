@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【第三步：万法归一的容器】

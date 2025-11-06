@@ -1,8 +1,8 @@
 using System;
-using __temp.MrPathV2.Runtime.Memory;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 
-namespace __temp.MrPathV2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     临时索引数组管理器，专门处理异步网格操作中的 NativeArray 生命周期

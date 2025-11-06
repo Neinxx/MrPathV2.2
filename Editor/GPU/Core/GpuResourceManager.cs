@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.GPU.Core
+namespace MrPathV2.Editor.GPU.Core
 {
     public sealed class GpuResourceManager : IDisposable
     {

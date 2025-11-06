@@ -1,17 +1,17 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Jobs;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 // <-- 确保 using
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     public class CpuTerrainPainter : ITerrainPainter
     {
@@ -29,7 +29,9 @@ namespace __temp.MrPathV2.Editor.Terrain
         {
             await ExecuteAsyncInternal(terrain, spineData, profileData, recipeData, roadContour, contourBounds, coverageMin, coverageMax, token);
         }
+        // -----------------------------
 
+        public void Dispose() { }
 
 
         // 保留原有的完整参数版本供内部使用
@@ -56,8 +58,9 @@ namespace __temp.MrPathV2.Editor.Terrain
             // 仅读取覆盖区域，避免整张控制纹理的昂贵复制
             var startX = Mathf.Clamp(coverageMin.x, 0, resolution - 1);
             var startY = Mathf.Clamp(coverageMin.y, 0, resolution - 1);
-            var numPixelsX = Mathf.Clamp(coverageMax.x - coverageMin.x + 1, 0, resolution - startX);
-            var numPixelsY = Mathf.Clamp(coverageMax.y - coverageMin.y + 1, 0, resolution - startY);
+            // 半开区间：[min,max) => 宽高为差值，不 +1
+            var numPixelsX = Mathf.Clamp(coverageMax.x - coverageMin.x, 0, resolution - startX);
+            var numPixelsY = Mathf.Clamp(coverageMax.y - coverageMin.y, 0, resolution - startY);
             var totalPixelsInBounds = numPixelsX * numPixelsY;
 
             var alphamaps3D = td.GetAlphamaps(startX, startY, numPixelsX, numPixelsY);
@@ -147,9 +150,6 @@ namespace __temp.MrPathV2.Editor.Terrain
                 pixelInfoMap.SafeDispose();
             }
         }
-        // -----------------------------
-
-        public void Dispose() { }
 
         // --- Data Conversion Helpers ---
         private static void ConvertAlphamaps3DTo1D(float[,,] source, NativeArray<float> destination)

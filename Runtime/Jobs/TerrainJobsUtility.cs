@@ -2,7 +2,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     Terrain 作业的通用辅助函数：曲线评估与轮廓点检测。
@@ -68,7 +68,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
             {
                 return false;
             }
-            
+
             return true;
         }
 
@@ -78,10 +78,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
         /// <param name="p">检查的点</param>
         /// <param name="bounds">边界框 (xmin, ymin, xmax, ymax)</param>
         /// <returns>点是否在边界框内</returns>
-        private static bool IsPointInAABB(float2 p, float4 bounds)
-        {
-            return !(p.x < bounds.x || p.y < bounds.y || p.x > bounds.z || p.y > bounds.w);
-        }
+        private static bool IsPointInAABB(float2 p, float4 bounds) => !(p.x < bounds.x || p.y < bounds.y || p.x > bounds.z || p.y > bounds.w);
 
         /// <summary>
         ///     使用Ray casting算法检查点是否在轮廓内
@@ -93,39 +90,39 @@ namespace __temp.MrPathV2.Runtime.Jobs
         {
             var inside = false;
             var n = contour.Length;
-        
+
             for (int i = 0, j = n - 1; i < n; j = i++)
             {
                 var pi = contour[i];
                 var pj = contour[j];
-        
+
                 // 验证轮廓点的有效性
                 if (!IsValidPoint(pi) || !IsValidPoint(pj))
                 {
                     continue; // 跳过无效的轮廓点
                 }
-        
+
                 // 增强数值稳定性的交点检测
                 if (!CheckIntersection(p, pi, pj))
                 {
                     continue;
                 }
-        
+
                 // 计算交点X坐标
                 var intersectionX = CalculateIntersectionX(p, pi, pj);
-                
+
                 // 更新内部状态
                 if (p.x < intersectionX)
                 {
                     inside = !inside;
                 }
             }
-            
+
             return inside;
         }
 
         /// <summary>
-        /// 检查点与线段是否相交
+        ///     检查点与线段是否相交
         /// </summary>
         /// <param name="p">检查的点</param>
         /// <param name="pi">线段起点</param>
@@ -138,14 +135,14 @@ namespace __temp.MrPathV2.Runtime.Jobs
             {
                 return false;
             }
-        
+
             var denominator = pj.y - pi.y;
             // 避免除零，使用更大的epsilon值提高稳定性
             return math.abs(denominator) > 1e-6f;
         }
 
         /// <summary>
-        /// 计算交点的X坐标
+        ///     计算交点的X坐标
         /// </summary>
         /// <param name="p">检查的点</param>
         /// <param name="pi">线段起点</param>
@@ -214,117 +211,105 @@ namespace __temp.MrPathV2.Runtime.Jobs
             {
                 return 0f; // 参数无效，返回默认值
             }
-        
+
             // 处理无效的归一化距离
             normalizedDist = HandleInvalidNormalizedDistance(normalizedDist);
-        
+
             // 计算实际参数
             var (start, _, actualCount, effectiveResolution) = CalculateActualParameters(slice, stripResolution, strips.Length);
-        
+
             // 检查是否需要返回默认值
             if (ShouldReturnDefaultValue(actualCount, effectiveResolution))
             {
                 return GetDefaultValue(strips, start);
             }
-        
+
             // 计算插值参数
             var (idxA, idxB, w) = CalculateInterpolationParameters(normalizedDist, effectiveResolution, actualCount);
-        
+
             // 获取采样值
             var (a, b) = GetSampleValues(strips, start, idxA, idxB);
-        
+
             // 执行插值并返回结果
             return PerformInterpolation(a, b, w);
         }
-        
+
         /// <summary>
         ///     验证输入参数的有效性
-        ///     </summary>
-        private static bool ValidateInputParameters(NativeArray<float> strips, int2 slice, int stripResolution)
-        {
-            return strips.IsCreated && stripResolution > 1 && slice is { y: > 0, x: >= 0 } && slice.x < strips.Length;
-        }
-        
+        /// </summary>
+        private static bool ValidateInputParameters(NativeArray<float> strips, int2 slice, int stripResolution) => strips.IsCreated && stripResolution > 1 && slice is { y: > 0, x: >= 0 } && slice.x < strips.Length;
+
         /// <summary>
         ///     处理无效的归一化距离值
-        ///     </summary>
-        private static float HandleInvalidNormalizedDistance(float normalizedDist)
-        {
-            return math.isnan(normalizedDist) || math.isinf(normalizedDist) ? 0f : normalizedDist;
-        }
-        
+        /// </summary>
+        private static float HandleInvalidNormalizedDistance(float normalizedDist) => math.isnan(normalizedDist) || math.isinf(normalizedDist) ? 0f : normalizedDist;
+
         /// <summary>
         ///     计算实际参数
-        ///     </summary>
+        /// </summary>
         private static (int start, int count, int actualCount, int effectiveResolution) CalculateActualParameters(int2 slice, int stripResolution, int stripsLength)
         {
             var start = slice.x;
             var count = slice.y;
             var actualCount = math.min(count, stripsLength - start);
             var effectiveResolution = math.min(stripResolution, actualCount);
-            
+
             return (start, count, actualCount, effectiveResolution);
         }
-        
+
         /// <summary>
         ///     检查是否应该返回默认值
-        ///     </summary>
-        private static bool ShouldReturnDefaultValue(int actualCount, int effectiveResolution)
-        {
-            return actualCount <= 0 || effectiveResolution <= 1;
-        }
-        
+        /// </summary>
+        private static bool ShouldReturnDefaultValue(int actualCount, int effectiveResolution) => actualCount <= 0 || effectiveResolution <= 1;
+
         /// <summary>
         ///     获取默认值
-        ///     </summary>
+        /// </summary>
         private static float GetDefaultValue(NativeArray<float> strips, int start)
         {
             var value = strips[start];
             return math.isnan(value) || math.isinf(value) ? 0f : value;
         }
-        
+
         /// <summary>
         ///     计算插值参数
-        ///     </summary>
+        /// </summary>
         private static (int idxA, int idxB, float w) CalculateInterpolationParameters(float normalizedDist, int effectiveResolution, int actualCount)
         {
             // 归一化到 [0, effectiveResolution-1]
             var fIndex = math.saturate(normalizedDist) * (effectiveResolution - 1);
             var idxA = math.clamp((int)math.floor(fIndex), 0, effectiveResolution - 1);
             var idxB = math.clamp(idxA + 1, 0, effectiveResolution - 1);
-        
+
             // 确保索引不会越界
             idxA = math.min(idxA, actualCount - 1);
             idxB = math.min(idxB, actualCount - 1);
-        
+
             var w = fIndex - idxA;
             w = math.saturate(w); // 确保权重在有效范围内
-            
+
             return (idxA, idxB, w);
         }
-        
+
         /// <summary>
         ///     获取采样值
-        ///     </summary>
+        /// </summary>
         private static (float a, float b) GetSampleValues(NativeArray<float> strips, int start, int idxA, int idxB)
         {
             var a = strips[start + idxA];
             var b = strips[start + idxB];
-        
+
             // 验证采样值的有效性
             if (math.isnan(a) || math.isinf(a)) a = 0f;
             if (math.isnan(b) || math.isinf(b)) b = 0f;
-            
+
             return (a, b);
         }
-        
+
         /// <summary>
         ///     执行插值计算
-        ///     </summary>
-        private static float PerformInterpolation(float a, float b, float w)
-        {
-            return math.lerp(a, b, w);
-        }
+        /// </summary>
+        private static float PerformInterpolation(float a, float b, float w) => math.lerp(a, b, w);
 
         /// <summary>
         ///     共享的灰度 Blend 算法，匹配编辑器预览与 GPU 权重库实现。
@@ -365,121 +350,109 @@ namespace __temp.MrPathV2.Runtime.Jobs
         ///     normalizedDist: 0..1 横向坐标 (左0, 右1，非对称)
         ///     pathProgress: 0..1 沿路径的进度 (0=起点,1=终点)
         ///     pathSamples: atlas 中纵向采样行数。
-        ///     </summary>
+        /// </summary>
         public static float SampleMaskAtlas(NativeArray<float> atlas, int atlasWidth, int pathSamples, int layerIndex, float normalizedDist, float pathProgress)
         {
             // 验证输入参数
             if (!ValidateAtlasParameters(atlas, atlasWidth, pathSamples))
                 return 0f;
-        
+
             // 处理无效的输入值
             normalizedDist = HandleInvalidValue(normalizedDist, 0f);
             pathProgress = HandleInvalidValue(pathProgress, 0.5f);
-        
+
             // 计算图层行起始位置
             var layerRowStart = layerIndex * pathSamples;
             var atlasHeight = atlas.Length / atlasWidth;
-            
+
             // 验证图层索引
             if (!ValidateLayerIndex(layerRowStart, atlasHeight))
                 return 0f;
-        
+
             // 计算双线性插值坐标
             var (maxX, maxY) = CalculateMaxCoordinates(atlasWidth, pathSamples);
             var (_, xA, xB, wx) = CalculateXCoordinates(normalizedDist, maxX);
             var (_, yA, yB, wy) = CalculateYCoordinates(pathProgress, maxY);
-        
+
             // 获取四个邻居值
             var (v00, v10, v01, v11) = GetNeighborValues(atlas, atlasWidth, layerRowStart, xA, xB, yA, yB);
-        
+
             // 处理无效值
             v00 = HandleInvalidValue(v00, 0f);
             v10 = HandleInvalidValue(v10, 0f);
             v01 = HandleInvalidValue(v01, 0f);
             v11 = HandleInvalidValue(v11, 0f);
-        
+
             // 执行双线性插值并返回结果
             return PerformBilinearInterpolation(v00, v10, v01, v11, wx, wy);
         }
-        
+
         /// <summary>
         ///     验证Atlas参数的有效性
-        ///     </summary>
-        private static bool ValidateAtlasParameters(NativeArray<float> atlas, int atlasWidth, int pathSamples)
-        {
-            return atlas is { IsCreated: true, Length: > 0 } && atlasWidth > 0 && pathSamples > 0;
-        }
-        
+        /// </summary>
+        private static bool ValidateAtlasParameters(NativeArray<float> atlas, int atlasWidth, int pathSamples) => atlas is { IsCreated: true, Length: > 0 } && atlasWidth > 0 && pathSamples > 0;
+
         /// <summary>
         ///     处理无效值
-        ///     </summary>
-        private static float HandleInvalidValue(float value, float defaultValue)
-        {
-            return math.isnan(value) || math.isinf(value) ? defaultValue : value;
-        }
-        
+        /// </summary>
+        private static float HandleInvalidValue(float value, float defaultValue) => math.isnan(value) || math.isinf(value) ? defaultValue : value;
+
         /// <summary>
         ///     验证图层索引的有效性
-        ///     </summary>
-        private static bool ValidateLayerIndex(int layerRowStart, int atlasHeight)
-        {
-            return layerRowStart >= 0 && layerRowStart < atlasHeight;
-        }
-        
+        /// </summary>
+        private static bool ValidateLayerIndex(int layerRowStart, int atlasHeight) => layerRowStart >= 0 && layerRowStart < atlasHeight;
+
         /// <summary>
         ///     计算最大坐标值
-        ///     </summary>
-        private static (int maxX, int maxY) CalculateMaxCoordinates(int atlasWidth, int pathSamples)
-        {
-            return (atlasWidth - 1, pathSamples - 1);
-        }
-        
+        /// </summary>
+        private static (int maxX, int maxY) CalculateMaxCoordinates(int atlasWidth, int pathSamples) => (atlasWidth - 1, pathSamples - 1);
+
         /// <summary>
         ///     计算X轴坐标参数
-        ///     </summary>
+        /// </summary>
         private static (float fX, int xA, int xB, float wx) CalculateXCoordinates(float normalizedDist, int maxX)
         {
             var fX = math.saturate(normalizedDist) * maxX;
             var xA = (int)math.floor(fX);
             var xB = math.min(xA + 1, maxX);
             var wx = fX - xA;
-            
+
             return (fX, xA, xB, wx);
         }
-        
+
         /// <summary>
         ///     计算Y轴坐标参数
-        ///     </summary>
+        /// </summary>
         private static (float fY, int yA, int yB, float wy) CalculateYCoordinates(float pathProgress, int maxY)
         {
             var fY = math.saturate(pathProgress) * maxY;
             var yA = (int)math.floor(fY);
             var yB = math.min(yA + 1, maxY);
             var wy = fY - yA;
-            
+
             return (fY, yA, yB, wy);
         }
-        
+
         /// <summary>
         ///     获取四个邻居值
-        ///     </summary>
+        /// </summary>
         private static (float v00, float v10, float v01, float v11) GetNeighborValues(
             NativeArray<float> atlas, int atlasWidth, int layerRowStart, int xA, int xB, int yA, int yB)
         {
             var rowAOffset = (layerRowStart + yA) * atlasWidth;
             var rowBOffset = (layerRowStart + yB) * atlasWidth;
-        
+
             var v00 = atlas[rowAOffset + xA];
             var v10 = atlas[rowAOffset + xB];
             var v01 = atlas[rowBOffset + xA];
             var v11 = atlas[rowBOffset + xB];
-            
+
             return (v00, v10, v01, v11);
         }
-        
+
         /// <summary>
         ///     执行双线性插值
-        ///     </summary>
+        /// </summary>
         private static float PerformBilinearInterpolation(float v00, float v10, float v01, float v11, float wx, float wy)
         {
             var v0 = math.lerp(v00, v10, wx);
@@ -520,7 +493,5 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 }
             }
         }
-
-       
     }
 }

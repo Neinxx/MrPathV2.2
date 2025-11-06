@@ -1,20 +1,21 @@
 // ReSharper disable InconsistentNaming
 
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 // 确保引用了 PathProfile
 using objiect = UnityEngine.Object;
-// 确保引用了 UIResourceLoader
-// 引入刷新管理器
 
-namespace __temp.MrPathV2.Editor.Inspectors
+
+namespace MrPathV2.Editor.Inspectors
 {
 
     [CustomEditor(typeof(PathProfile))]
     public class PathProfileEditor : UnityEditor.Editor
     {
+        // 复合视图
+        private CompositeCurveView _compositeView;
 
         private StylizedRoadRecipe _currentRecipeRef;
 
@@ -24,11 +25,10 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         // 在 CreateInspectorGUI 中查询的
         private FloatField _heightOffsetField;
+        private SliderInt _longitudinalSegmentsSlider;
         private FloatField _meshWidthField; // 对应 "MeshWithField"
         private Toggle _opaquePreviewToggle;
         private VisualElement _previewContent;
-        // 复合视图
-        private CompositeCurveView _compositeView;
 
         // --- 内嵌 Recipe 编辑器 ---
         private VisualElement _recipeContainer;
@@ -37,7 +37,6 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private VisualElement _rootElement;
         private Toggle _showMeshToggle;
         private SliderInt _smoothnessSlider;
-        private SliderInt _longitudinalSegmentsSlider;
         private Toggle _snappingToggle;
 
         // 订阅的 Profile 实例引用，用于解除订阅
@@ -187,8 +186,6 @@ namespace __temp.MrPathV2.Editor.Inspectors
         /// <summary>
         ///     仅做 UI 联动，不处理刷新（依赖数据层 OnValidate）。
         /// </summary>
-
-
         /// <summary>
         ///     注册那些有特殊交互逻辑的控件（纯 UI 联动）。
         /// </summary>

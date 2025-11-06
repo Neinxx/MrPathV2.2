@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
     ///     解析 StylizedRoadRecipe 中的 TerrainLayer，并与目标 Terrain 进行比对。
@@ -101,12 +101,9 @@ namespace __temp.MrPathV2.Editor.Terrain
         /// <summary>
         ///     检查输入参数是否有效
         /// </summary>
-        private static bool IsInputValid(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe)
-        {
-            return terrain &&
-                   terrain.terrainData &&
-                   recipe;
-        }
+        private static bool IsInputValid(UnityEngine.Terrain terrain, StylizedRoadRecipe recipe) => terrain &&
+                                                                                                    terrain.terrainData &&
+                                                                                                    recipe;
 
         /// <summary>
         ///     获取现有图层映射
@@ -160,10 +157,7 @@ namespace __temp.MrPathV2.Editor.Terrain
         /// <summary>
         ///     检查道路图层是否有效
         /// </summary>
-        private static bool IsRoadLayerValid(RoadLayer roadLayer)
-        {
-            return roadLayer != null && roadLayer.contentLayer;
-        }
+        private static bool IsRoadLayerValid(RoadLayer roadLayer) => roadLayer != null && roadLayer.contentLayer;
 
         /// <summary>
         ///     添加缺失图层

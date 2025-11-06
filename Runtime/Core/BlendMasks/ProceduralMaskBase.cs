@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     public abstract class ProceduralMaskBase : BlendMaskBase
     {

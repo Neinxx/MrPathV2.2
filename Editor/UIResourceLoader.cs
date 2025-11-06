@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 // using System.Linq; // <-- 不再需要
 
-namespace __temp.MrPathV2.Editor
+namespace MrPathV2.Editor
 {
     /// <summary>
     ///     自动加载与指定类型同名的 .uxml 和 .uss 资源。

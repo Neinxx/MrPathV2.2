@@ -3,10 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Editor;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
-using MrPathV2.Editor.Services;
+using MrPathV2.Editor;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -355,7 +354,7 @@ namespace MrPathV2.Editor.Windows
             // 1. 行容器 (name="row", class="list-item-row")
             var row = new VisualElement
             {
-                name = "row",
+                name = "row"
                 // 样式由 USS 文件中的 .list-item-row 规则控制
             };
             row.AddToClassList("list-item-row");
@@ -423,7 +422,6 @@ namespace MrPathV2.Editor.Windows
             {
                 row.RemoveFromClassList("renaming");
             }
-
 
 
             UpdateElementContent(icon, label, sub, mask);

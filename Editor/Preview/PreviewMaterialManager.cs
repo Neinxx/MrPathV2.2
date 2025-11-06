@@ -1,15 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
 using MrPathV2.Runtime.Preview;
-using UnityEditor;
 using UnityEngine;
-using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Preview;
-using __temp.MrPathV2.Editor.Terrain;
-
 
 
 #if UNITY_EDITOR
@@ -25,27 +22,27 @@ namespace MrPathV2.Editor.Preview
     /// </summary>
     public sealed class PreviewMaterialManager : IDisposable
     {
-        private readonly List<Material> m_CachedList = new List<Material>(1);
-        private bool m_Dirty = true;
-        private ShaderFlavor m_Flavor = ShaderFlavor.Unknown;
-
-        private int m_LastHash = -1;
 
         // Cached combined mask LUT (RGBA channels for up to 4 layers)
         // private Texture2D _maskLUT;
         private static Texture2D m_TransparentPrevTex; // 1x1 RGBA(0,0,0,0)
+        private readonly List<Material> m_CachedList = new List<Material>(1);
+        private bool m_ArrayFallbackWarned;
+        private bool m_Dirty = true;
+        private bool m_Disposed;
+        private ShaderFlavor m_Flavor = ShaderFlavor.Unknown;
+
+        private int m_LastHash = -1;
 
         // Future: cached 2D mask atlas
         private Texture2D m_MaskAtlas;
-        // 使用专用管理器复用并缓存 Texture2DArray，避免每帧重建
-        private PreviewTextureArrayManager m_TexArrayMgr;
-        private bool m_ArrayFallbackWarned;
 
         // 旧的纹理数组缓存键机制与可复用命令缓冲已不再使用，移除以保持类的纯净
 
         // Record path length for building MaskAtlas
         private float m_PathLength = -1f;
-        private bool m_Disposed;
+        // 使用专用管理器复用并缓存 Texture2DArray，避免每帧重建
+        private PreviewTextureArrayManager m_TexArrayMgr;
 
         public Material Current { get; private set; }
 
@@ -107,9 +104,9 @@ namespace MrPathV2.Editor.Preview
 
             // Collect textures for trying to build Texture2DArray
             var texList = new List<Texture2D>();
-            int sliceCount = 0;
+            var sliceCount = 0;
             int width = -1, height = -1;
-            var textureHashBuilder = new System.Text.StringBuilder();
+            var textureHashBuilder = new StringBuilder();
 
             for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
             {
@@ -208,7 +205,8 @@ namespace MrPathV2.Editor.Preview
 
 #if UNITY_EDITOR
         /// <summary>
-        ///     Sets the Terrain associated with the current preview (used to get cached alphamap RenderTextureArray from <see cref="Gpu Preview Cache" />)
+        ///     Sets the Terrain associated with the current preview (used to get cached alphamap RenderTextureArray from
+        ///     <see cref="Gpu Preview Cache" />)
         /// </summary>
         /// <param name="terrain">Target Terrain</param>
         public void SetTargetTerrain(UnityEngine.Terrain terrain)
@@ -233,7 +231,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// 绑定预览 ROI 边界到材质（世界坐标 XZ）。
+        ///     绑定预览 ROI 边界到材质（世界坐标 XZ）。
         /// </summary>
         public void SetPreviewBounds(Vector4 boundsXZ)
         {
@@ -399,7 +397,7 @@ namespace MrPathV2.Editor.Preview
                 hash = hash * 31 + count.GetHashCode();
                 if (layers == null || count == 0) return hash;
 
-                for (int i = 0; i < count; i++)
+                for (var i = 0; i < count; i++)
                 {
                     var rl = layers[i];
                     if (rl == null)
@@ -460,14 +458,14 @@ namespace MrPathV2.Editor.Preview
                             hash = hash * 31 + mask.overallScale.GetHashCode();
 
                             // Procedural base class (Strength/Seed)
-                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.ProceduralMaskBase proc)
+                            if (mask is ProceduralMaskBase proc)
                             {
                                 hash = hash * 31 + proc.strength.GetHashCode();
                                 hash = hash * 31 + proc.seed.GetHashCode();
                             }
 
                             // Noise classes
-                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.NoiseMask noise)
+                            if (mask is NoiseMask noise)
                             {
                                 hash = hash * 31 + noise.noiseScale.x.GetHashCode();
                                 hash = hash * 31 + noise.noiseScale.y.GetHashCode();
@@ -480,7 +478,7 @@ namespace MrPathV2.Editor.Preview
                                 hash = hash * 31 + noise.edgeLow.GetHashCode();
                                 hash = hash * 31 + noise.edgeHigh.GetHashCode();
                             }
-                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.PerlinNoiseMask pnoise)
+                            if (mask is PerlinNoiseMask pnoise)
                             {
                                 hash = hash * 31 + pnoise.noiseScale.x.GetHashCode();
                                 hash = hash * 31 + pnoise.noiseScale.y.GetHashCode();
@@ -494,7 +492,7 @@ namespace MrPathV2.Editor.Preview
                                 hash = hash * 31 + pnoise.edgeHigh.GetHashCode();
                             }
                             // Shoulder mask
-                            if (mask is __temp.MrPathV2.Runtime.Core.BlendMasks.ShoulderMask shoulder)
+                            if (mask is ShoulderMask shoulder)
                             {
                                 hash = hash * 31 + shoulder.shoulderWidthRatio.GetHashCode();
                                 hash = hash * 31 + shoulder.shoulderStrength.GetHashCode();
@@ -563,7 +561,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Clean up all resources, including CommandBuffer
+        ///     Clean up all resources, including CommandBuffer
         /// </summary>
         public void Cleanup()
         {
@@ -613,7 +611,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// 在 CPU 预览路径推送 Terrain 参数，保持与 GPU 预览一致的世界坐标采样。
+        ///     在 CPU 预览路径推送 Terrain 参数，保持与 GPU 预览一致的世界坐标采样。
         /// </summary>
         private void PushCpuTerrainParameters()
         {

@@ -3,9 +3,6 @@
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     height: auto;
-    margin-bottom: 1.5px;
-    padding-left: 1.5px;
-    padding-right: 1.5px;
     background-color: rgb(84, 84, 84); /* [cite: 7] */
     color: rgb(219, 219, 219);
     border-radius: 4px;
@@ -13,11 +10,9 @@
     opacity: 1;
     flex-grow: 0;
     justify-content: flex-start;
-    padding-top: 1.5px;
-    padding-bottom: 2px; /* [cite: 8] */
-    margin-left: 1.5px;
-    margin-right: 1.5px;
-    margin-top: 2px;
+    /* [cite: 8] */
+    padding: 2px 2px 2px;
+    margin: 2px 2px 2px;
 }
 
 .terrain-op-button:hover {
@@ -43,10 +38,8 @@
 .separator {
     height: 1px;
     background-color: rgba(0, 0, 0, 0.3); /* [cite: 11] */
-    margin-top: 3px;
-    margin-bottom: 3px;
-    margin-left: 4px;
-    margin-right: 4px; /* [cite: 12] */
+    /* [cite: 12] */
+    margin: 3px 4px;
 }
 
 
@@ -106,14 +99,9 @@
 
 #operationsContainerWrapper {
     flex-grow: 0;
-    margin-left: 0;
-    margin-right: 0;
-    margin-top: 0;
-    margin-bottom: 1.5px;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 4px; /* [cite: 19] */
-    padding-bottom: 4px;
+    margin: 0 0 2px;
+    /* [cite: 19] */
+    padding: 4px;
     flex-shrink: 1;
     /* 高度改为 auto (原 49px) */
     height: auto;

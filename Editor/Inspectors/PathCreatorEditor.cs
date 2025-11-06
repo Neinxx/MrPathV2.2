@@ -1,15 +1,31 @@
 #if UNITY_EDITOR
 using System;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Editor.GPU;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     [CustomEditor(typeof(PathCreator))]
     public class PathCreatorEditor : UnityEditor.Editor
     {
+
+        #region 场景 GUI (OnSceneGUI)
+
+        private void OnSceneGUI()
+        {
+            _sceneGUI?.OnSceneGUI();
+        }
+
+        #endregion
+
+        #region GUI 绘制 (UI Toolkit)
+
+        public override VisualElement CreateInspectorGUI() => _inspectorUI?.CreateInspectorGUI(serializedObject);
+
+        #endregion
         #region 字段
 
         private PathCreator _targetCreator;
@@ -69,7 +85,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             {
                 try
                 {
-                    var _ = GPU.GpuTerrainPainterV2.Instance;
+                    var _ = GpuTerrainPainterV2.Instance;
                 }
                 catch (Exception e)
                 {
@@ -139,24 +155,6 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         #endregion
 
-        #region GUI 绘制 (UI Toolkit)
-
-        public override VisualElement CreateInspectorGUI()
-        {
-            return _inspectorUI?.CreateInspectorGUI(serializedObject);
-        }
-
-        #endregion
-
-        #region 场景 GUI (OnSceneGUI)
-
-        private void OnSceneGUI()
-        {
-            _sceneGUI?.OnSceneGUI();
-        }
-
-        #endregion
-
         #region 事件处理器
 
         private void OnCurveDefinitionChanged()
@@ -176,7 +174,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private void OnUndoRedo() => MarkPathAsDirty();
 
         /// <summary>
-        /// 当 Profile 资产本身被修改时调用
+        ///     当 Profile 资产本身被修改时调用
         /// </summary>
         private void OnProfileModified()
         {
@@ -223,7 +221,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 当在Inspector中创建新的Profile时调用
+        ///     当在Inspector中创建新的Profile时调用
         /// </summary>
         /// <param name="newProfile">新创建的Profile</param>
         public void OnProfileCreated(PathProfile newProfile)

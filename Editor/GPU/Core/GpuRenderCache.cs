@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2.Editor.GPU.Core;
+using MrPathV2.Editor.GPU.Core;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.GPU
+namespace MrPathV2.Editor.GPU
 {
     /// <summary>
     /// 智能GPU渲染缓存系统 - 高效的缓存管理和失效策略
@@ -107,7 +107,7 @@ namespace __temp.MrPathV2.Editor.GPU
             try
             {
                 // 启动定期清理定时器
-                _cleanupTimer = new System.Threading.Timer(PerformCleanup, null, 
+                _cleanupTimer = new System.Threading.Timer(PerformCleanup, null,
                     TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
                 _isInitialized = true;
@@ -145,7 +145,7 @@ namespace __temp.MrPathV2.Editor.GPU
                     {
                         RemoveCacheEntry(key, entry);
                     }
-                    
+
                     _stats.RecordMiss();
                     return false;
                 }
@@ -391,7 +391,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
             var rt = result.RenderTexture;
             long pixelCount = (long)rt.width * rt.height * rt.volumeDepth;
-            
+
             // 估算每像素字节数（基于格式）
             int bytesPerPixel = rt.format switch
             {
@@ -412,7 +412,7 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             if (_isDisposed)
                 throw new ObjectDisposedException(nameof(GpuRenderCache));
-            
+
             if (!_isInitialized)
                 throw new InvalidOperationException("GpuRenderCache 未初始化");
         }

@@ -3,7 +3,7 @@
 using System;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     【第一步：铸造风骨】

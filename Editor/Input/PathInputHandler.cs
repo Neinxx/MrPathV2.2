@@ -1,8 +1,8 @@
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Input
+namespace MrPathV2.Editor.Input
 {
     /// <summary>
     ///     【不动明王之掌 • 终极版】

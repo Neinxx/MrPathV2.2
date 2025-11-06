@@ -1,12 +1,12 @@
 using System;
-using __temp.MrPathV2.Editor.GPU.Core;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Editor.GPU.Core;
+using MrPathV2.Runtime.Core;
 using UnityEngine;
 using Unity.Collections;
 using Unity.Mathematics;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core.BlendMasks;
 
-namespace __temp.MrPathV2.Editor.GPU
+namespace MrPathV2.Editor.GPU
 {
     /// <summary>
     /// GPU数据流传输器 - 高效的CPU-GPU数据传输
@@ -298,10 +298,10 @@ namespace __temp.MrPathV2.Editor.GPU
             switch (mode)
             {
                 case BlendMode.Replace: return 0;   // Normal/Override
-                case BlendMode.Add:      return 2;   // Add
+                case BlendMode.Add: return 2;   // Add
                 case BlendMode.Multiply: return 1;   // Multiply
-                case BlendMode.Overlay:  return 3;   // Overlay
-                default:                 return 0;
+                case BlendMode.Overlay: return 3;   // Overlay
+                default: return 0;
             }
         }
 

@@ -1,10 +1,10 @@
 using System;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     基于 <see cref="RoadPreviewMeshGenerator" /> 的轻量级预览网格控制器。
@@ -15,14 +15,6 @@ namespace __temp.MrPathV2.Runtime.Preview
     /// </summary>
     public sealed class GeneratorPreviewMeshController : IDisposable
     {
-
-        private enum MeshGenerationState
-        {
-            Idle,
-            Generating,
-            Ready,
-            Failed
-        }
 
         private readonly RoadPreviewMeshGenerator _meshGenerator;
         private readonly TempIndicesManager _tempIndicesManager;
@@ -144,6 +136,14 @@ namespace __temp.MrPathV2.Runtime.Preview
         private void DisposeCurrentJob()
         {
             _meshGenerator?.Release();
+        }
+
+        private enum MeshGenerationState
+        {
+            Idle,
+            Generating,
+            Ready,
+            Failed
         }
 
         #region API 与旧 PreviewMeshController 保持一致

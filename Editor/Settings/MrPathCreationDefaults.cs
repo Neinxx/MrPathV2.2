@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Settings
+namespace MrPathV2.Editor.Settings
 {
     /// <summary>
     ///     专门负责新路径创建时的所有默认值。

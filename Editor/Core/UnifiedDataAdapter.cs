@@ -1,21 +1,21 @@
 using System;
+using MrPathV2.Runtime.Core;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using __temp.MrPathV2.Runtime.Core;
 
-namespace __temp.MrPathV2.Editor.Core
+namespace MrPathV2.Editor.Core
 {
     /// <summary>
-    /// 统一数据适配器 - 将CPU数据源转换为GPU绘制所需的格式
-    /// 遵循Unity最佳实践：单一职责、依赖注入、内存安全
+    ///     统一数据适配器 - 将CPU数据源转换为GPU绘制所需的格式
+    ///     遵循Unity最佳实践：单一职责、依赖注入、内存安全
     /// </summary>
     public static class UnifiedDataAdapter
     {
         #region GPU Data Structures
 
         /// <summary>
-        /// GPU绘制所需的路径数据（从CPU PathData + PathProfile转换而来）
+        ///     GPU绘制所需的路径数据（从CPU PathData + PathProfile转换而来）
         /// </summary>
         public struct GpuPathData : IDisposable
         {
@@ -35,7 +35,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// GPU绘制所需的配方数据（从CPU StylizedRoadRecipe转换而来）
+        ///     GPU绘制所需的配方数据（从CPU StylizedRoadRecipe转换而来）
         /// </summary>
         public struct GpuRecipeData : IDisposable
         {
@@ -54,7 +54,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// GPU层配置（从CPU RoadLayer转换而来）
+        ///     GPU层配置（从CPU RoadLayer转换而来）
         /// </summary>
         [Serializable]
         public struct LayerConfig
@@ -66,7 +66,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// 混合模式枚举
+        ///     混合模式枚举
         /// </summary>
         public enum BlendMode
         {
@@ -81,7 +81,7 @@ namespace __temp.MrPathV2.Editor.Core
         #region Conversion Methods
 
         /// <summary>
-        /// 将CPU PathData转换为GPU所需格式
+        ///     将CPU PathData转换为GPU所需格式
         /// </summary>
         /// <param name="cpuPathData">CPU路径数据</param>
         /// <param name="pathProfile">路径配置文件</param>
@@ -105,14 +105,14 @@ namespace __temp.MrPathV2.Editor.Core
 
             // 转换脊线点
             var spinePoints = new NativeArray<float3>(knotCount, allocator);
-            for (int i = 0; i < knotCount; i++)
+            for (var i = 0; i < knotCount; i++)
             {
                 var knot = cpuPathData.GetKnot(i);
                 spinePoints[i] = knot.Position;
             }
 
             // 计算路径长度
-            float pathLength = CalculatePathLength(spinePoints);
+            var pathLength = CalculatePathLength(spinePoints);
 
             // 计算路径边界
             var pathBounds = CalculatePathBounds(spinePoints, pathProfile.roadWidth);
@@ -132,7 +132,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// 将CPU StylizedRoadRecipe转换为GPU所需格式
+        ///     将CPU StylizedRoadRecipe转换为GPU所需格式
         /// </summary>
         /// <param name="cpuRecipe">CPU道路配方</param>
         /// <param name="pathProfile">路径配置文件</param>
@@ -156,7 +156,7 @@ namespace __temp.MrPathV2.Editor.Core
 
             // 转换层配置（严格来源于 Recipe：layer.blendMode、opacity、enabled）
             var layers = new NativeArray<LayerConfig>(activeLayers.Count, allocator);
-            for (int i = 0; i < activeLayers.Count; i++)
+            for (var i = 0; i < activeLayers.Count; i++)
             {
                 var cpuLayer = activeLayers[i];
                 layers[i] = new LayerConfig
@@ -182,7 +182,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// 创建完整的GPU绘制数据包
+        ///     创建完整的GPU绘制数据包
         /// </summary>
         /// <param name="cpuPathData">CPU路径数据</param>
         /// <param name="pathProfile">路径配置文件</param>
@@ -209,8 +209,8 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (spinePoints.Length < 2) return 0f;
 
-            float totalLength = 0f;
-            for (int i = 1; i < spinePoints.Length; i++)
+            var totalLength = 0f;
+            for (var i = 1; i < spinePoints.Length; i++)
             {
                 totalLength += math.distance(spinePoints[i - 1], spinePoints[i]);
             }
@@ -225,7 +225,7 @@ namespace __temp.MrPathV2.Editor.Core
             var min = spinePoints[0];
             var max = spinePoints[0];
 
-            for (int i = 1; i < spinePoints.Length; i++)
+            for (var i = 1; i < spinePoints.Length; i++)
             {
                 min = math.min(min, spinePoints[i]);
                 max = math.max(max, spinePoints[i]);
@@ -237,7 +237,7 @@ namespace __temp.MrPathV2.Editor.Core
 
             return new Bounds(
                 (min + max) * 0.5f,
-                (max - min) + expansion * 2f
+                max - min + expansion * 2f
             );
         }
 
@@ -266,14 +266,14 @@ namespace __temp.MrPathV2.Editor.Core
             var normals = new Vector3[knotCount];
             var timestamps = new float[knotCount];
 
-            for (int i = 0; i < knotCount; i++)
+            for (var i = 0; i < knotCount; i++)
             {
                 var knot = cpuPathData.GetKnot(i);
                 points[i] = knot.Position;
                 timestamps[i] = i;
 
-                Vector3 prev = i > 0 ? cpuPathData.GetKnot(i - 1).Position : knot.Position;
-                Vector3 next = i < knotCount - 1 ? cpuPathData.GetKnot(i + 1).Position : knot.Position;
+                var prev = i > 0 ? cpuPathData.GetKnot(i - 1).Position : knot.Position;
+                var next = i < knotCount - 1 ? cpuPathData.GetKnot(i + 1).Position : knot.Position;
                 var tangent = next - prev;
                 tangents[i] = tangent.sqrMagnitude > 0f ? tangent.normalized : Vector3.forward;
                 normals[i] = Vector3.up;
@@ -282,12 +282,10 @@ namespace __temp.MrPathV2.Editor.Core
             return new PathSpine(points, tangents, normals, timestamps);
         }
 
-        private static int GetTerrainLayerIndex(TerrainLayer terrainLayer)
-        {
+        private static int GetTerrainLayerIndex(TerrainLayer terrainLayer) =>
             // 这里需要实现地形层索引的查找逻辑
             // 暂时返回0，实际实现需要查找地形层在TerrainData中的索引
-            return 0;
-        }
+            0;
 
         private static BlendMode ConvertBlendMode(Runtime.Core.BlendMode cpuBlendMode)
         {
@@ -322,7 +320,7 @@ namespace __temp.MrPathV2.Editor.Core
             }
 
             var keys = new NativeArray<Keyframe>(curve.keys.Length, allocator);
-            for (int i = 0; i < curve.keys.Length; i++)
+            for (var i = 0; i < curve.keys.Length; i++)
             {
                 keys[i] = curve.keys[i];
             }
@@ -333,7 +331,7 @@ namespace __temp.MrPathV2.Editor.Core
     }
 
     /// <summary>
-    /// GPU绘制数据包 - 包含所有GPU绘制所需的数据
+    ///     GPU绘制数据包 - 包含所有GPU绘制所需的数据
     /// </summary>
     public struct GpuRenderData : IDisposable
     {

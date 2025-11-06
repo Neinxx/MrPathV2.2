@@ -1,11 +1,11 @@
 using System;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
     ///     复合曲线视图：在一个视图中并排展示 CrossSection 与 FalloffShape。
@@ -18,30 +18,30 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private const int SampleCount = 128;
         private const float HandleBaseRadius = 3f; // 更小的句柄半径
         private const float PickRadius = 3f; // 更小的拾取半径
+
+        // --- UI Toolkit 新增：工具列與畫布 ---
+        private readonly IMGUIContainer _canvas;
         // 编辑与联动控制
         private bool _autoLinkStartTangent; // 起点切线自动适配 CrossSection 边缘（默认关闭）
+        // 新增：左侧编辑状态
+        private bool _draggingCross;
         private bool _draggingFalloff;
+        private int _dragKeyIndexCross = -1;
         private int _dragKeyIndexFalloff = -1;
+        private float _edgeHeightForView; // 当前右缘高度（供归一化与绘制）
         // 删除 Align Right Edge，固定右缘对齐
         private bool _editFalloffInView = true; // 在视图上直接编辑 FalloffShape
+        // 新增：显示模式与范围控制
+        private bool _fitPerPanel = true; // 每个面板自适应纵向范围以便编辑
+        private int _hoverKeyIndexCross = -1;
         // 交互可见性与可点击性（缩小）
         private int _hoverKeyIndexFalloff = -1;
         private float _lastAppliedStartTangent = float.NaN;
         private bool _linkEndpoints; // 开启视图偏移对齐（默认关闭）
-        private PathProfile _profile;
-        // 新增：左侧编辑状态
-        private bool _draggingCross;
-        private int _dragKeyIndexCross = -1;
-        private int _hoverKeyIndexCross = -1;
-        // 新增：显示模式与范围控制
-        private bool _fitPerPanel = true; // 每个面板自适应纵向范围以便编辑
         private bool _normalizedView; // 归一化显示比例信息（0..1）
-        private float _edgeHeightForView; // 当前右缘高度（供归一化与绘制）
+        private PathProfile _profile;
         private float _terrainBaseForView; // 当前基准高度（通常为 0）
-        
-        // --- UI Toolkit 新增：工具列與畫布 ---
-        private readonly IMGUIContainer _canvas;
-        
+
         public CompositeCurveView()
         {
             // 套用樣式（若存在同名 USS）
@@ -91,11 +91,31 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 tooltip = "以 0..1 歸一化顯示（比較直觀）"
             };
 
-            autoLinkStartTangentToggle.RegisterValueChangedCallback(evt => { _autoLinkStartTangent = evt.newValue; _canvas?.MarkDirtyRepaint(); });
-            editFalloffToggle.RegisterValueChangedCallback(evt => { _editFalloffInView = evt.newValue; _canvas?.MarkDirtyRepaint(); });
-            linkEndpointsToggle.RegisterValueChangedCallback(evt => { _linkEndpoints = evt.newValue; _canvas?.MarkDirtyRepaint(); });
-            fitPerPanelToggle.RegisterValueChangedCallback(evt => { _fitPerPanel = evt.newValue; _canvas?.MarkDirtyRepaint(); });
-            normalizedViewToggle.RegisterValueChangedCallback(evt => { _normalizedView = evt.newValue; _canvas?.MarkDirtyRepaint(); });
+            autoLinkStartTangentToggle.RegisterValueChangedCallback(evt =>
+            {
+                _autoLinkStartTangent = evt.newValue;
+                _canvas?.MarkDirtyRepaint();
+            });
+            editFalloffToggle.RegisterValueChangedCallback(evt =>
+            {
+                _editFalloffInView = evt.newValue;
+                _canvas?.MarkDirtyRepaint();
+            });
+            linkEndpointsToggle.RegisterValueChangedCallback(evt =>
+            {
+                _linkEndpoints = evt.newValue;
+                _canvas?.MarkDirtyRepaint();
+            });
+            fitPerPanelToggle.RegisterValueChangedCallback(evt =>
+            {
+                _fitPerPanel = evt.newValue;
+                _canvas?.MarkDirtyRepaint();
+            });
+            normalizedViewToggle.RegisterValueChangedCallback(evt =>
+            {
+                _normalizedView = evt.newValue;
+                _canvas?.MarkDirtyRepaint();
+            });
 
             toolbar.Add(autoLinkStartTangentToggle);
             toolbar.Add(editFalloffToggle);
@@ -242,172 +262,176 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         private void DrawFalloff(Rect rect, Vector2 yRange)
-{
-    var curve = _profile.falloffShape;
-    if (curve == null || curve.length == 0) return;
+        {
+            var curve = _profile.falloffShape;
+            if (curve == null || curve.length == 0) return;
 
-    Handles.color = new Color(1f, 0.65f, 0.25f, 0.95f);
-    Vector3? last = null;
-    for (var i = 0; i <= SampleCount; i++)
-    {
-        var t = i / (float)SampleCount;
-        var w = Mathf.Clamp01(curve.Evaluate(t));
-        var vView = Mathf.Clamp01(w);
-        var px = Mathf.Lerp(rect.xMin, rect.xMax, t);
-        var py = Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, vView));
-        var p = new Vector3(px, py);
-        if (last.HasValue) Handles.DrawLine(last.Value, p);
-        last = p;
-    }
+            Handles.color = new Color(1f, 0.65f, 0.25f, 0.95f);
+            Vector3? last = null;
+            for (var i = 0; i <= SampleCount; i++)
+            {
+                var t = i / (float)SampleCount;
+                var w = Mathf.Clamp01(curve.Evaluate(t));
+                var vView = Mathf.Clamp01(w);
+                var px = Mathf.Lerp(rect.xMin, rect.xMax, t);
+                var py = Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, vView));
+                var p = new Vector3(px, py);
+                if (last.HasValue) Handles.DrawLine(last.Value, p);
+                last = p;
+            }
 
-    Handles.color = new Color(1f, 1f, 1f, 0.18f);
-    Handles.DrawLine(new Vector3(rect.xMin, rect.yMax), new Vector3(rect.xMin, rect.yMin));
-    Handles.DrawLine(new Vector3(rect.xMax, rect.yMax), new Vector3(rect.xMax, rect.yMin));
+            Handles.color = new Color(1f, 1f, 1f, 0.18f);
+            Handles.DrawLine(new Vector3(rect.xMin, rect.yMax), new Vector3(rect.xMin, rect.yMin));
+            Handles.DrawLine(new Vector3(rect.xMax, rect.yMax), new Vector3(rect.xMax, rect.yMin));
 
-    DrawFalloffHandles(rect, yRange);
-}
+            DrawFalloffHandles(rect, yRange);
+        }
 
         // 绘制 Falloff 的关键点圆形句柄，并对悬停/拖动进行高亮
         private void DrawFalloffHandles(Rect rect, Vector2 yRange)
-{
-    var fo = _profile.falloffShape;
-    if (fo == null) return;
+        {
+            var fo = _profile.falloffShape;
+            if (fo == null) return;
 
-    var dpiScale = Mathf.Max(1f, EditorGUIUtility.pixelsPerPoint);
-    var baseRadius = HandleBaseRadius * dpiScale;
+            var dpiScale = Mathf.Max(1f, EditorGUIUtility.pixelsPerPoint);
+            var baseRadius = HandleBaseRadius * dpiScale;
 
-    for (var i = 0; i < fo.length; i++)
-    {
-        var k = fo[i];
-        var px = Mathf.Lerp(rect.xMin, rect.xMax, k.time);
-        var vView = Mathf.Clamp01(k.value);
-         var py = Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, vView));
+            for (var i = 0; i < fo.length; i++)
+            {
+                var k = fo[i];
+                var px = Mathf.Lerp(rect.xMin, rect.xMax, k.time);
+                var vView = Mathf.Clamp01(k.value);
+                var py = Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, vView));
 
-        var isEndpoint = k.time is <= 0.0005f or >= 0.9995f;
-        if (isEndpoint) continue;
-        var r = baseRadius * (i == _hoverKeyIndexFalloff || _draggingFalloff && i == _dragKeyIndexFalloff ? 1.3f : 1f);
+                var isEndpoint = k.time is <= 0.0005f or >= 0.9995f;
+                if (isEndpoint) continue;
+                var r = baseRadius * (i == _hoverKeyIndexFalloff || _draggingFalloff && i == _dragKeyIndexFalloff ? 1.3f : 1f);
 
-        Handles.color = new Color(1f, 0.55f, 0.1f, 0.95f);
-        Handles.DrawSolidDisc(new Vector3(px, py, 0f), Vector3.forward, r);
-        Handles.color = new Color(0f, 0f, 0f, 0.9f);
-        Handles.DrawWireDisc(new Vector3(px, py, 0f), Vector3.forward, r);
-    }
-}
+                Handles.color = new Color(1f, 0.55f, 0.1f, 0.95f);
+                Handles.DrawSolidDisc(new Vector3(px, py, 0f), Vector3.forward, r);
+                Handles.color = new Color(0f, 0f, 0f, 0.9f);
+                Handles.DrawWireDisc(new Vector3(px, py, 0f), Vector3.forward, r);
+            }
+        }
 
         // 交互：直接编辑 FalloffShape（右侧面板）
         /// <summary>
-        /// 处理Falloff编辑的主要方法
+        ///     处理Falloff编辑的主要方法
         /// </summary>
         private void HandleFalloffEditing(Rect rect, Vector2 yRange)
-{
-    if (!_editFalloffInView) return;
-    var e = Event.current;
-    if (e == null) return;
-
-    var fo = _profile.falloffShape;
-    if (fo == null) return;
-
-    Func<float, float> toPixelYFromWeight = w =>
-     {
-         var v = Mathf.Clamp01(w);
-         return Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, v));
-     };
-
-    var pickRadius = Mathf.Max(PickRadius, 5f) * Mathf.Max(1f, EditorGUIUtility.pixelsPerPoint);
-
-    switch (e.type)
-    {
-        case EventType.MouseDown:
         {
-            if (!rect.Contains(e.mousePosition)) return;
-            var nearest = FindNearestKeyIndex(fo,
-                t => Mathf.Lerp(rect.xMin, rect.xMax, t),
-                toPixelYFromWeight,
-                e.mousePosition,
-                pickRadius);
+            if (!_editFalloffInView) return;
+            var e = Event.current;
+            if (e == null) return;
 
-            switch (e.button)
+            var fo = _profile.falloffShape;
+            if (fo == null) return;
+
+            Func<float, float> toPixelYFromWeight = w =>
             {
-                case 0 when nearest >= 0:
-                    _draggingFalloff = true;
-                    _dragKeyIndexFalloff = nearest;
-                    e.Use();
+                var v = Mathf.Clamp01(w);
+                return Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, v));
+            };
+
+            var pickRadius = Mathf.Max(PickRadius, 5f) * Mathf.Max(1f, EditorGUIUtility.pixelsPerPoint);
+
+            switch (e.type)
+            {
+                case EventType.MouseDown:
+                {
+                    if (!rect.Contains(e.mousePosition)) return;
+                    var nearest = FindNearestKeyIndex(fo,
+                        t => Mathf.Lerp(rect.xMin, rect.xMax, t),
+                        toPixelYFromWeight,
+                        e.mousePosition,
+                        pickRadius);
+
+                    switch (e.button)
+                    {
+                        case 0 when nearest >= 0:
+                            _draggingFalloff = true;
+                            _dragKeyIndexFalloff = nearest;
+                            e.Use();
+                            return;
+                        case 0 when e.clickCount == 2:
+                        {
+                            var t = Mathf.Clamp01(Mathf.InverseLerp(rect.xMin, rect.xMax, e.mousePosition.x));
+                            var w = Mathf.Clamp01(Mathf.InverseLerp(rect.yMax, rect.yMin, e.mousePosition.y));
+                            if (t is < 0.02f or > 0.98f) return;
+                            Undo.RecordObject(_profile, "Add Falloff Key");
+                            fo.AddKey(new Keyframe(t, w));
+                            EditorUtility.SetDirty(_profile);
+                            MarkDirtyRepaint();
+                            e.Use();
+                            return;
+                        }
+                        case 1 when nearest >= 0:
+                        {
+                            var k = fo[nearest];
+                            if (k.time is > 0.0005f and < 0.9995f)
+                            {
+                                Undo.RecordObject(_profile, "Delete Falloff Key");
+                                fo.RemoveKey(nearest);
+                                EditorUtility.SetDirty(_profile);
+                                MarkDirtyRepaint();
+                            }
+                            e.Use();
+                            break;
+                        }
+                    }
+
                     return;
-                case 0 when e.clickCount == 2:
+                }
+                case EventType.MouseDrag when _draggingFalloff:
                 {
                     var t = Mathf.Clamp01(Mathf.InverseLerp(rect.xMin, rect.xMax, e.mousePosition.x));
                     var w = Mathf.Clamp01(Mathf.InverseLerp(rect.yMax, rect.yMin, e.mousePosition.y));
-                    if (t is < 0.02f or > 0.98f) return;
-                    Undo.RecordObject(_profile, "Add Falloff Key");
-                    fo.AddKey(new Keyframe(t, w));
+                    var k = fo[_dragKeyIndexFalloff];
+                    if (k.time is <= 0.0005f or >= 0.9995f)
+                    {
+                        _draggingFalloff = false;
+                        _dragKeyIndexFalloff = -1;
+                        return;
+                    }
+                    Undo.RecordObject(_profile, "Move Falloff Key");
+                    var newKey = new Keyframe(t, w)
+                    {
+                        inTangent = k.inTangent,
+                        outTangent = k.outTangent
+                    };
+                    fo.MoveKey(_dragKeyIndexFalloff, newKey);
                     EditorUtility.SetDirty(_profile);
                     MarkDirtyRepaint();
                     e.Use();
                     return;
                 }
-                case 1 when nearest >= 0:
+                case EventType.MouseUp when _draggingFalloff:
+                    _draggingFalloff = false;
+                    _dragKeyIndexFalloff = -1;
+                    e.Use();
+                    return;
+                case EventType.MouseMove:
                 {
-                    var k = fo[nearest];
-                    if (k.time is > 0.0005f and < 0.9995f)
+                    var nearest = FindNearestKeyIndex(fo,
+                        t => Mathf.Lerp(rect.xMin, rect.xMax, t),
+                        toPixelYFromWeight,
+                        e.mousePosition,
+                        pickRadius);
+                    if (nearest >= 0)
                     {
-                        Undo.RecordObject(_profile, "Delete Falloff Key");
-                        fo.RemoveKey(nearest);
-                        EditorUtility.SetDirty(_profile);
+                        var kNearest = fo[nearest];
+                        if (kNearest.time <= 0.0005f || kNearest.time >= 0.9995f)
+                            nearest = -1;
+                    }
+                    if (_hoverKeyIndexFalloff != nearest)
+                    {
+                        _hoverKeyIndexFalloff = nearest;
                         MarkDirtyRepaint();
                     }
-                    e.Use();
-                    break;
+                    return;
                 }
             }
-
-            return;
         }
-        case EventType.MouseDrag when _draggingFalloff:
-        {
-            var t = Mathf.Clamp01(Mathf.InverseLerp(rect.xMin, rect.xMax, e.mousePosition.x));
-            var w = Mathf.Clamp01(Mathf.InverseLerp(rect.yMax, rect.yMin, e.mousePosition.y));
-            var k = fo[_dragKeyIndexFalloff];
-            if (k.time is <= 0.0005f or >= 0.9995f)
-            {
-                _draggingFalloff = false;
-                _dragKeyIndexFalloff = -1;
-                return;
-            }
-            Undo.RecordObject(_profile, "Move Falloff Key");
-            var newKey = new Keyframe(t, w) { inTangent = k.inTangent, outTangent = k.outTangent };
-            fo.MoveKey(_dragKeyIndexFalloff, newKey);
-            EditorUtility.SetDirty(_profile);
-            MarkDirtyRepaint();
-            e.Use();
-            return;
-        }
-        case EventType.MouseUp when _draggingFalloff:
-            _draggingFalloff = false;
-            _dragKeyIndexFalloff = -1;
-            e.Use();
-            return;
-        case EventType.MouseMove:
-        {
-            var nearest = FindNearestKeyIndex(fo,
-                t => Mathf.Lerp(rect.xMin, rect.xMax, t),
-                toPixelYFromWeight,
-                e.mousePosition,
-                pickRadius);
-            if (nearest >= 0)
-            {
-                var kNearest = fo[nearest];
-                if (kNearest.time <= 0.0005f || kNearest.time >= 0.9995f)
-                    nearest = -1;
-            }
-            if (_hoverKeyIndexFalloff != nearest)
-            {
-                _hoverKeyIndexFalloff = nearest;
-                MarkDirtyRepaint();
-            }
-            return;
-        }
-    }
-}
 
 
         private static int FindNearestKeyIndex(AnimationCurve curve,
@@ -519,7 +543,11 @@ namespace __temp.MrPathV2.Editor.Inspectors
             var startIdx = -1;
             for (var i = 0; i < fo.length; i++)
             {
-                if (Mathf.Abs(fo[i].time - 0f) <= 0.0005f) { startIdx = i; break; }
+                if (Mathf.Abs(fo[i].time - 0f) <= 0.0005f)
+                {
+                    startIdx = i;
+                    break;
+                }
             }
             if (startIdx < 0) return;
 
@@ -539,7 +567,6 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
 
-
 // 新增：左侧 CrossSection 关键点句柄绘制（跳过端点）
         private void DrawCrossSectionHandles(Rect rect, Vector2 yRange)
         {
@@ -552,13 +579,13 @@ namespace __temp.MrPathV2.Editor.Inspectors
             for (var i = 0; i < cs.length; i++)
             {
                 var k = cs[i];
-                var isEndpoint = Mathf.Abs(k.time - (-1f)) <= 0.0005f || Mathf.Abs(k.time - 1f) <= 0.0005f;
+                var isEndpoint = Mathf.Abs(k.time - -1f) <= 0.0005f || Mathf.Abs(k.time - 1f) <= 0.0005f;
                 if (isEndpoint) continue; // 端点不可拖动，不绘制
 
                 var px = Mathf.Lerp(rect.xMin, rect.xMax, (k.time + 1f) * 0.5f);
                 var v = Mathf.Clamp(k.value, yRange.x, yRange.y);
                 var py = Mathf.Lerp(rect.yMax, rect.yMin, Mathf.InverseLerp(yRange.x, yRange.y, v));
-                var r = baseRadius * ((_draggingCross && i == _dragKeyIndexCross) || i == _hoverKeyIndexCross ? 1.3f : 1f);
+                var r = baseRadius * (_draggingCross && i == _dragKeyIndexCross || i == _hoverKeyIndexCross ? 1.3f : 1f);
 
                 Handles.color = new Color(0.35f, 0.78f, 1f, 0.95f);
                 Handles.DrawSolidDisc(new Vector3(px, py, 0f), Vector3.forward, r);
@@ -594,7 +621,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     if (nearest >= 0)
                     {
                         var kNearest = cs[nearest];
-                        if (Mathf.Abs(kNearest.time - (-1f)) <= 0.0005f || Mathf.Abs(kNearest.time - 1f) <= 0.0005f)
+                        if (Mathf.Abs(kNearest.time - -1f) <= 0.0005f || Mathf.Abs(kNearest.time - 1f) <= 0.0005f)
                             nearest = -1;
                     }
                     if (e.button == 0 && nearest >= 0)
@@ -610,7 +637,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                             var t = Mathf.Clamp(Time(e.mousePosition.x), -1f, 1f);
                             var v = Value(e.mousePosition.y);
                             // 避免在端点附近添加
-                            if (Mathf.Abs(t - (-1f)) <= 0.02f || Mathf.Abs(t - 1f) <= 0.02f) return;
+                            if (Mathf.Abs(t - -1f) <= 0.02f || Mathf.Abs(t - 1f) <= 0.02f) return;
                             Undo.RecordObject(_profile, "Add CrossSection Key");
                             cs.AddKey(new Keyframe(t, v));
                             EditorUtility.SetDirty(_profile);
@@ -621,7 +648,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     else if (e.button == 1 && nearest >= 0)
                     {
                         var k = cs[nearest];
-                        if (Mathf.Abs(k.time - (-1f)) > 0.0005f && Mathf.Abs(k.time - 1f) > 0.0005f)
+                        if (Mathf.Abs(k.time - -1f) > 0.0005f && Mathf.Abs(k.time - 1f) > 0.0005f)
                         {
                             Undo.RecordObject(_profile, "Delete CrossSection Key");
                             cs.RemoveKey(nearest);
@@ -638,7 +665,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     var v = Value(e.mousePosition.y);
                     var k = cs[_dragKeyIndexCross];
                     // 端点不允许拖动
-                    if (Mathf.Abs(k.time - (-1f)) <= 0.0005f || Mathf.Abs(k.time - 1f) <= 0.0005f)
+                    if (Mathf.Abs(k.time - -1f) <= 0.0005f || Mathf.Abs(k.time - 1f) <= 0.0005f)
                     {
                         _draggingCross = false;
                         _dragKeyIndexCross = -1;
@@ -667,7 +694,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     if (nearest >= 0)
                     {
                         var kNearest = cs[nearest];
-                        if (Mathf.Abs(kNearest.time - (-1f)) <= 0.0005f || Mathf.Abs(kNearest.time - 1f) <= 0.0005f)
+                        if (Mathf.Abs(kNearest.time - -1f) <= 0.0005f || Mathf.Abs(kNearest.time - 1f) <= 0.0005f)
                             nearest = -1;
                     }
                     if (_hoverKeyIndexCross != nearest)
@@ -680,9 +707,15 @@ namespace __temp.MrPathV2.Editor.Inspectors
             }
             return;
 
-            float Value(float py) => Mathf.Lerp(yRange.x, yRange.y, Mathf.InverseLerp(rect.yMax, rect.yMin, py));
+            float Value(float py)
+            {
+                return Mathf.Lerp(yRange.x, yRange.y, Mathf.InverseLerp(rect.yMax, rect.yMin, py));
+            }
 
-            float Time(float px) => Mathf.Lerp(-1f, 1f, Mathf.InverseLerp(rect.xMin, rect.xMax, px));
+            float Time(float px)
+            {
+                return Mathf.Lerp(-1f, 1f, Mathf.InverseLerp(rect.xMin, rect.xMax, px));
+            }
         }
     }
 }

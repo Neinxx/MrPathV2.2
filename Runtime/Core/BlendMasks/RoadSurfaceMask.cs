@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     路面遮罩：主要作用于道路中心区域的遮罩类型

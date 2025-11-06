@@ -1,7 +1,7 @@
-using __temp.MrPathV2.Editor.Operations;
+using MrPathV2.Editor.Operations;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Settings
+namespace MrPathV2.Editor.Settings
 {
     /// <summary>
     ///     管理数据驱动的地形操作按钮列表。

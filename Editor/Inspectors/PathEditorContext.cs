@@ -1,24 +1,24 @@
 using System;
-using __temp.MrPathV2.Editor.Input;
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Editor.Terrain;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
-using __temp.MrPathV2.Runtime.Providers;
 using MrPathV2.Editor.Preview;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Providers;
+using MrPathV2.Editor.Input;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
     ///     路径编辑器上下文，封装编辑器依赖项并提供统一的访问接口
     /// </summary>
     public class PathEditorContext : IDisposable
     {
+        private bool m_Disposed; // 防止重复释放
         private MrPathProjectSettings m_MrPathProjectSettings;
         private EditorRefreshManager m_RefreshManager;
-        private bool m_Disposed; // 防止重复释放
 
         public PathEditorContext(PathCreator target)
         {
@@ -128,7 +128,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 try
                 {
                     // 统一使用全局预览系统
-                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: true, mesh: true, materials: true);
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, true, true, true);
                 }
                 catch (Exception ex)
                 {
@@ -146,7 +146,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             {
                 try
                 {
-                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: true, mesh: true, materials: false);
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, true, true, false);
                 }
                 catch (Exception ex)
                 {
@@ -164,7 +164,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             {
                 try
                 {
-                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: false, mesh: true, materials: false);
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, false, true, false);
                 }
                 catch (Exception ex)
                 {
@@ -182,7 +182,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             {
                 try
                 {
-                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, spine: false, mesh: false, materials: true);
+                    MultiPathPreviewRenderer.MarkCreatorDirty(Target, false, false, true);
                 }
                 catch (Exception ex)
                 {

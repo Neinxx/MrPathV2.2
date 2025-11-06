@@ -4,15 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 using Random = UnityEngine.Random;
 
-namespace __temp.MrPathV2.Runtime.Jobs.Examples
+namespace MrPathV2.Runtime.Jobs.Examples
 {
     /// <summary>
     ///     改进的Job实现示例，展示如何使用新的内存管理工具

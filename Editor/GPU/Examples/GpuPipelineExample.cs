@@ -1,13 +1,13 @@
 using UnityEngine;
 using UnityEditor;
 using System.Diagnostics;
-using __temp.MrPathV2.Editor.Core;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Editor.Core;
+using MrPathV2.Runtime.Core;
 using MrPathV2.Editor.Terrain;
-using __temp.MrPathV2.Editor.GPU;
+using MrPathV2.Editor.GPU;
 using MrPathV2.Editor.Preview;
 
-namespace __temp.MrPathV2.Editor.Examples
+namespace MrPathV2.Editor.Examples
 {
     /// <summary>
     /// 新GPU绘制管线使用示例

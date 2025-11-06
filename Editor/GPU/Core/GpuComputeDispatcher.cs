@@ -1,10 +1,10 @@
 using System;
-using __temp.MrPathV2.Editor.GPU.Core;
-using __temp.MrPathV2.Runtime.Core.Noise;
+using MrPathV2.Editor.GPU.Core;
+using MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace __temp.MrPathV2.Editor.GPU
+namespace MrPathV2.Editor.GPU
 {
     /// <summary>
     /// GPU计算调度器 - 高效的计算着色器调度和执行

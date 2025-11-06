@@ -1,8 +1,8 @@
 using System;
 using UnityEngine;
-using __temp.MrPathV2.Editor.GPU.Core;
+using MrPathV2.Editor.GPU.Core;
 
-namespace __temp.MrPathV2.Editor.GPU.Pipeline
+namespace MrPathV2.Editor.GPU.Pipeline
 {
     /// <summary>
     /// 管线阶段接口（单一职责）：每个阶段只处理自身逻辑并暴露明确的输入输出。

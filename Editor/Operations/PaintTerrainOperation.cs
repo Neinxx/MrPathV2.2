@@ -1,9 +1,9 @@
-using __temp.MrPathV2.Editor.Terrain;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Operations
+namespace MrPathV2.Editor.Operations
 {
     /// <summary>
     ///     绘制纹理操作定义

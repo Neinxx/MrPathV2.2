@@ -1,25 +1,23 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Editor.GPU;
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Jobs;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Editor.GPU;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
-    /// 绘制纹理命令：桥接旧命令入口与新统一绘制架构。
-    /// - 遵循提前返回与单一职责：输入校验、层解析、绘制执行解耦。
-    /// - 支持 CPU/GPU/Auto 后端选择（项目高级设置）。
-    /// - 针对每块地形仅处理覆盖区域，避免全贴图拷贝。
+    ///     绘制纹理命令：桥接旧命令入口与新统一绘制架构。
+    ///     - 遵循提前返回与单一职责：输入校验、层解析、绘制执行解耦。
+    ///     - 支持 CPU/GPU/Auto 后端选择（项目高级设置）。
+    ///     - 针对每块地形仅处理覆盖区域，避免全贴图拷贝。
     /// </summary>
     public sealed class PaintTerrainCommand : TerrainCommandBase
     {
@@ -31,7 +29,7 @@ namespace __temp.MrPathV2.Editor.Terrain
             Auto = 2
         }
 
-        public PaintTerrainCommand(PathCreator creator, Runtime.Interfaces.IHeightProvider heightProvider)
+        public PaintTerrainCommand(PathCreator creator, IHeightProvider heightProvider)
             : base(creator, heightProvider) { }
 
         public override string GetCommandName() => "绘制纹理 (Paint Terrain)";
@@ -125,7 +123,11 @@ namespace __temp.MrPathV2.Editor.Terrain
                 {
                     // 提前返回：无效条目不参与检测
                     if (rl == null || !rl.contentLayer) continue;
-                    if (!map.ContainsKey(rl.contentLayer)) { anyMissing = true; break; }
+                    if (!map.ContainsKey(rl.contentLayer))
+                    {
+                        anyMissing = true;
+                        break;
+                    }
                 }
                 if (anyMissing) break;
             }
@@ -134,7 +136,9 @@ namespace __temp.MrPathV2.Editor.Terrain
             if (!anyMissing)
             {
                 foreach (var t in terrains)
+                {
                     result[t] = LayerResolver.ResolveSmart(t, recipe);
+                }
                 return result;
             }
 
@@ -167,24 +171,32 @@ namespace __temp.MrPathV2.Editor.Terrain
             var pos = terrain.GetPosition();
             var size = td.size;
 
-            // 映射到 [0, res-1]
-            float ToPixelX(float x) => (x - pos.x) / size.x * (res - 1);
-            float ToPixelY(float z) => (z - pos.z) / size.z * (res - 1);
+            // 映射到 [0, res]（半开区间）：与GPU端保持一致
+            float ToPixelX(float x)
+            {
+                return (x - pos.x) / size.x * res;
+            }
+
+            float ToPixelY(float z)
+            {
+                return (z - pos.z) / size.z * res;
+            }
 
             var minX = Mathf.FloorToInt(Mathf.Min(ToPixelX(boundsXZ.x), ToPixelX(boundsXZ.z)));
             var maxX = Mathf.CeilToInt(Mathf.Max(ToPixelX(boundsXZ.x), ToPixelX(boundsXZ.z)));
             var minY = Mathf.FloorToInt(Mathf.Min(ToPixelY(boundsXZ.y), ToPixelY(boundsXZ.w)));
             var maxY = Mathf.CeilToInt(Mathf.Max(ToPixelY(boundsXZ.y), ToPixelY(boundsXZ.w)));
 
-            // 裁剪至有效范围
-            minX = Mathf.Clamp(minX, 0, res - 1);
-            maxX = Mathf.Clamp(maxX, 0, res - 1);
-            minY = Mathf.Clamp(minY, 0, res - 1);
-            maxY = Mathf.Clamp(maxY, 0, res - 1);
+            // 裁剪至有效范围（独占上界）：max 允许等于 res
+            minX = Mathf.Clamp(minX, 0, res);
+            maxX = Mathf.Clamp(maxX, 0, res);
+            minY = Mathf.Clamp(minY, 0, res);
+            maxY = Mathf.Clamp(maxY, 0, res);
 
             coverageMin = new Vector2Int(minX, minY);
             coverageMax = new Vector2Int(maxX, maxY);
-            pixelCount = Mathf.Max(0, (maxX - minX + 1) * (maxY - minY + 1));
+            // 采用半开区间：[min,max) => 宽高为差值，不 +1
+            pixelCount = Mathf.Max(0, (maxX - minX) * (maxY - minY));
         }
 
         // 选择 CPU 或 GPU 实现（遵循项目高级设置；Auto 模式按像素阈值与硬件能力切换）
@@ -204,7 +216,7 @@ namespace __temp.MrPathV2.Editor.Terrain
                 return pixelCount >= threshold;
             }
 
-            return UseGpu() ? (ITerrainPainter)GpuTerrainPainterV2.Instance : new CPUJobTwoPass();
+            return UseGpu() ? GpuTerrainPainterV2.Instance : new CPUJobTwoPass();
         }
 
         // 配方数据：根据地形图层映射，计算道路宽与近似长度
@@ -214,13 +226,15 @@ namespace __temp.MrPathV2.Editor.Terrain
             // 道路总长度（沿骨架）
             var length = 0f;
             for (var i = 1; i < spine.VertexCount; i++)
+            {
                 length += Vector3.Distance(spine.Points[i - 1], spine.Points[i]);
+            }
 
             // 若未从 recipe 提供宽度覆盖，则用 Profile 宽度
             if (width <= 0.0001f)
                 width = Mathf.Max(0.01f, map != null ? 1f : 1f); // 宽度参与遮罩采样，非 0 即可
 
-            var threshold = (pathProfile != null && pathProfile.opaquePreview) ? 0.2f : 0f;
+            var threshold = pathProfile != null && pathProfile.opaquePreview ? 0.2f : 0f;
             return new RecipeData(pathProfile, map, width, length, Allocator.Persistent, threshold);
         }
     }

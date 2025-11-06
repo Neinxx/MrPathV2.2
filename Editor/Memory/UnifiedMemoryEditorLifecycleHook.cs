@@ -1,11 +1,11 @@
 #if UNITY_EDITOR
-using __temp.MrPathV2.Runtime.Memory;
+using MrPathV2.Runtime.Memory;
 using UnityEditor;
 
-namespace __temp.MrPathV2.Editor.Memory
+namespace MrPathV2.Editor.Memory
 {
     /// <summary>
-    /// Ensures UnifiedMemoryManager is disposed during editor domain reloads and on editor quit.
+    ///     Ensures UnifiedMemoryManager is disposed during editor domain reloads and on editor quit.
     /// </summary>
     public static class UnifiedMemoryEditorLifecycleHook
     {

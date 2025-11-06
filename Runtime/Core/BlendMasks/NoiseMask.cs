@@ -1,8 +1,8 @@
+using MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
-using __temp.MrPathV2.Runtime.Core.Noise;
 // for GpuMaskParamsData
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Noise Mask")]
     public class NoiseMask : ProceduralMaskBase
@@ -31,12 +31,12 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
 
         [Header("Smoothing / 非对称 Edge1/Edge2")]
         [Tooltip("启用后使用非对称阈值进行平滑（SmoothStep(edgeLow, edgeHigh)）。关闭则使用对称 smooth 参数。")]
-        public bool useAsymmetricEdges = false;
+        public bool useAsymmetricEdges;
 
-        [Range(0f, 1f), Tooltip("下阈值（Edge1）。建议 < EdgeHigh。")]
+        [Range(0f, 1f)] [Tooltip("下阈值（Edge1）。建议 < EdgeHigh。")]
         public float edgeLow = 0.25f;
 
-        [Range(0f, 1f), Tooltip("上阈值（Edge2）。建议 > EdgeLow。")]
+        [Range(0f, 1f)] [Tooltip("上阈值（Edge2）。建议 > EdgeLow。")]
         public float edgeHigh = 0.75f;
 
         private void OnValidate()
@@ -47,7 +47,9 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             edgeHigh = Mathf.Clamp01(edgeHigh);
             if (edgeHigh < edgeLow)
             {
-                var t = edgeLow; edgeLow = edgeHigh; edgeHigh = t;
+                var t = edgeLow;
+                edgeLow = edgeHigh;
+                edgeHigh = t;
             }
         }
 
@@ -102,7 +104,12 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             {
                 var e0 = Mathf.Clamp01(edgeLow);
                 var e1 = Mathf.Clamp01(edgeHigh);
-                if (e1 < e0) { var t = e0; e0 = e1; e1 = t; }
+                if (e1 < e0)
+                {
+                    var t = e0;
+                    e0 = e1;
+                    e1 = t;
+                }
                 if (maskValue <= e0) return 0f;
                 if (maskValue >= e1) return 1f;
                 var t2 = (maskValue - e0) / Mathf.Max(1e-6f, e1 - e0);

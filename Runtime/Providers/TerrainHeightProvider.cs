@@ -2,16 +2,17 @@
 
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Interfaces;
-using __temp.MrPathV2.Runtime.Memory;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using UnityEngine;
 
 // NEW: access UnifiedMemory and MemoryOwner
-namespace __temp.MrPathV2.Runtime.Providers
+namespace MrPathV2.Runtime.Providers
 {
     public class TerrainHeightProvider : IHeightProvider
     {
+        private const float TERRAIN_CHECK_INTERVAL = 1.0f; // 每秒最多检查一次terrain变化
 
         // 订阅过的 TerrainData 集合，用于在释放或重建缓存时解绑事件
         private readonly HashSet<TerrainData> _mSubscribedTerrainData = new HashSet<TerrainData>();
@@ -19,11 +20,10 @@ namespace __temp.MrPathV2.Runtime.Providers
         private readonly List<TerrainCache> _mTerrainCaches = new List<TerrainCache>();
         private bool _mIsDirty = true; // 初始状态为"脏"，强制在第一次使用时构建缓存
         private bool _mIsInitialized;
-        
+        private float _mLastCheckTime;
+
         // 性能优化：缓存terrain状态，避免频繁检查
         private int _mLastTerrainCount = -1;
-        private float _mLastCheckTime = 0f;
-        private const float TERRAIN_CHECK_INTERVAL = 1.0f; // 每秒最多检查一次terrain变化
 
         /// <summary>
         ///     【新增】从外部标记缓存为“过时”的公共方法
@@ -74,7 +74,7 @@ namespace __temp.MrPathV2.Runtime.Providers
         }
 
         /// <summary>
-        /// 【核心】在需要时才构建或重建缓存 - 性能优化版本
+        ///     【核心】在需要时才构建或重建缓存 - 性能优化版本
         /// </summary>
         private void EnsureCacheIsUpToDate()
         {
@@ -82,67 +82,65 @@ namespace __temp.MrPathV2.Runtime.Providers
             if (_mIsInitialized && !_mIsDirty)
             {
                 var currentTime = Time.realtimeSinceStartup;
-                
+
                 // 如果距离上次检查时间不足间隔，直接返回
                 if (currentTime - _mLastCheckTime < TERRAIN_CHECK_INTERVAL)
                     return;
-                
+
                 // 更新检查时间
                 _mLastCheckTime = currentTime;
-                
+
                 // 快速检查：只比较terrain数量
                 var activeTerrains = Terrain.activeTerrains;
                 var currentTerrainCount = activeTerrains?.Length ?? 0;
-                
+
                 if (currentTerrainCount == _mLastTerrainCount)
                     return; // 数量没变，认为没有变化
-                
+
                 // 数量变了，标记为脏数据
                 _mLastTerrainCount = currentTerrainCount;
                 _mIsDirty = true;
             }
-            
+
             // 需要更新缓存
             if (!ShouldUpdateCache())
                 return;
-        
+
             // 执行缓存更新流程
             CleanupOldCache();
             InitializeNewCache();
         }
-        
+
         /// <summary>
-        /// 检查是否需要更新缓存 - 简化版本
+        ///     检查是否需要更新缓存 - 简化版本
         /// </summary>
         /// <returns>是否需要更新缓存</returns>
-        private bool ShouldUpdateCache()
-        {
+        private bool ShouldUpdateCache() =>
             // 只检查脏标记，terrain变化检查已移至EnsureCacheIsUpToDate
-            return _mIsDirty;
-        }
-        
+            _mIsDirty;
+
         /// <summary>
-        /// 清理旧的缓存数据
+        ///     清理旧的缓存数据
         /// </summary>
         private void CleanupOldCache()
         {
             UnsubscribeAllTerrainData();
-            
+
             foreach (var cache in _mTerrainCaches)
             {
                 cache.Dispose();
             }
-            
+
             _mTerrainCaches.Clear();
         }
-        
+
         /// <summary>
-        /// 初始化新的缓存数据
+        ///     初始化新的缓存数据
         /// </summary>
         private void InitializeNewCache()
         {
             var activeTerrains = Terrain.activeTerrains;
-            
+
             // 如果没有活动地形，标记为未初始化并返回
             if (activeTerrains == null || activeTerrains.Length == 0)
             {
@@ -150,7 +148,7 @@ namespace __temp.MrPathV2.Runtime.Providers
                 _mIsDirty = false;
                 return;
             }
-        
+
             // 为每个地形创建缓存
             foreach (var terrain in activeTerrains)
             {
@@ -160,27 +158,27 @@ namespace __temp.MrPathV2.Runtime.Providers
                     Debug.LogWarning("[TerrainHeightProvider] Skipping null terrain in activeTerrains");
                     continue;
                 }
-                
+
                 // 检查地形数据是否为null
                 if (terrain.terrainData == null)
                 {
                     Debug.LogWarning($"[TerrainHeightProvider] Terrain '{terrain.name}' has null terrainData, skipping");
                     continue;
                 }
-                
+
                 CreateTerrainCache(terrain);
             }
-        
+
             _mIsInitialized = true;
             _mIsDirty = false;
-            
+
             // 更新terrain计数缓存
             _mLastTerrainCount = activeTerrains?.Length ?? 0;
             _mLastCheckTime = Time.realtimeSinceStartup;
         }
-        
+
         /// <summary>
-        /// 为单个地形创建缓存
+        ///     为单个地形创建缓存
         /// </summary>
         /// <param name="terrain">地形对象</param>
         private void CreateTerrainCache(Terrain terrain)
@@ -191,17 +189,17 @@ namespace __temp.MrPathV2.Runtime.Providers
                 Debug.LogError("[TerrainHeightProvider] Cannot create cache for null terrain");
                 return;
             }
-            
+
             var data = terrain.terrainData;
             if (data == null)
             {
                 Debug.LogError($"[TerrainHeightProvider] Cannot create cache for terrain '{terrain.name}' - terrainData is null");
                 return;
             }
-            
+
             var position = terrain.GetPosition();
             var size = data.size;
-            
+
             // 轻量化缓存：仅保存必要的元数据，按需采样高度与法线
             _mTerrainCaches.Add(new TerrainCache
             {
@@ -213,7 +211,7 @@ namespace __temp.MrPathV2.Runtime.Providers
                 Position = position,
                 Size = size
             });
-        
+
             // 订阅地形数据的高度变更事件
             SubscribeTerrainData(data);
         }

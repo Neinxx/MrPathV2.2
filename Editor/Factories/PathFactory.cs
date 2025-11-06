@@ -1,9 +1,9 @@
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Factories
+namespace MrPathV2.Editor.Factories
 {
     /// <summary>
     ///     路径创建工厂，负责创建配置完整的路径对象
@@ -27,8 +27,8 @@ namespace __temp.MrPathV2.Editor.Factories
 
             // 确定对象名称
             var objectName = creationDefaults?.defaultObjectName ?? "MrPath";
-         
-            
+
+
             var defaultLength = creationDefaults?.defaultLineLength ?? 10f;
 
             // 创建游戏对象并注册撤销

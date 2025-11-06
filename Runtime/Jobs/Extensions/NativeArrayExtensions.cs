@@ -1,10 +1,11 @@
 using System;
-using __temp.MrPathV2.Runtime.Memory;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Memory;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Jobs.Extensions
+namespace MrPathV2.Runtime.Jobs.Extensions
 {
     /// <summary>
     ///     NativeArray扩展方法，提供内存跟踪和安全释放功能
@@ -67,7 +68,7 @@ namespace __temp.MrPathV2.Runtime.Jobs.Extensions
             catch (Exception)
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-              //  Debug.LogWarning($"释放NativeArray时发生异常(可能已释放): {ex.Message}");
+                //  Debug.LogWarning($"释放NativeArray时发生异常(可能已释放): {ex.Message}");
 #endif
             }
         }

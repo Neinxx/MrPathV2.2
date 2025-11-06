@@ -1,8 +1,9 @@
 using System;
 using UnityEngine;
-using __temp.MrPathV2.Editor.GPU.Core;
+using MrPathV2.Editor.GPU.Core;
+using MrPathV2.Editor.GPU.Pipeline;
 
-namespace __temp.MrPathV2.Editor.GPU.Pipeline.Stages
+namespace MrPathV2.Editor.GPU.Pipeline.Stages
 {
     /// <summary>
     /// 栅格化阶段（Compute Shader 调度）：

@@ -5,7 +5,7 @@ using UnityEngine;
 // 用于 .ToArray()
 using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     错误级别枚举
@@ -59,6 +59,16 @@ namespace __temp.MrPathV2.Runtime.Core
         private const int MaxHistorySize = 100;
         private static readonly Queue<ErrorInfo> ErrorHistory = new Queue<ErrorInfo>();
 
+        /// <summary>
+        ///     [新增] 用于 O(1) 计数的数组。
+        /// </summary>
+        private static readonly int[] ErrorCounts = new int[Enum.GetValues(typeof(ErrorLevel)).Length];
+
+        /// <summary>
+        ///     [新增] 用于线程安全的锁对象。
+        /// </summary>
+        private static readonly object HistoryLock = new object();
+
         // --- 新增：最佳实践 ---
 
         /// <summary>
@@ -73,16 +83,6 @@ namespace __temp.MrPathV2.Runtime.Core
         ///     如果设为 Error，则 Info 和 Warning 将被忽略。
         /// </summary>
         public static ErrorLevel MinLogLevel { get; set; } = ErrorLevel.Info;
-
-        /// <summary>
-        ///     [新增] 用于 O(1) 计数的数组。
-        /// </summary>
-        private static readonly int[] ErrorCounts = new int[Enum.GetValues(typeof(ErrorLevel)).Length];
-
-        /// <summary>
-        ///     [新增] 用于线程安全的锁对象。
-        /// </summary>
-        private static readonly object HistoryLock = new object();
 
         // -------------------------
 
@@ -295,7 +295,7 @@ namespace __temp.MrPathV2.Runtime.Core
             lock (HistoryLock)
             {
                 // 从最小级别开始检查到最高级别
-                for (int i = (int)minLevel; i < ErrorCounts.Length; i++)
+                for (var i = (int)minLevel; i < ErrorCounts.Length; i++)
                 {
                     if (ErrorCounts[i] > 0)
                         return true;

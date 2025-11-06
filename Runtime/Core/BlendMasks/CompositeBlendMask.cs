@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Composite Mask")]
     public class CompositeBlendMask : BlendMaskBase
@@ -13,14 +13,6 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             Multiply,
             Max,
             Min
-        }
-
-        [Serializable]
-        public class Entry
-        {
-            public bool enabled = true;
-            public BlendMaskBase mask;
-            [Range(0f, 1f)] public float weight = 1f;
         }
 
         [Tooltip("组合模式：加法/乘法/最大/最小")] public CompositeMode mode = CompositeMode.Multiply;
@@ -39,7 +31,7 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
                 case CompositeMode.Multiply:
                 {
                     var result = 1f;
-                    for (int i = 0; i < entries.Count; i++)
+                    for (var i = 0; i < entries.Count; i++)
                     {
                         var e = entries[i];
                         if (e == null || !e.enabled || e.mask == null) continue;
@@ -53,7 +45,7 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
                 case CompositeMode.Add:
                 {
                     var sum = 0f;
-                    for (int i = 0; i < entries.Count; i++)
+                    for (var i = 0; i < entries.Count; i++)
                     {
                         var e = entries[i];
                         if (e == null || !e.enabled || e.mask == null) continue;
@@ -66,7 +58,7 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
                 case CompositeMode.Max:
                 {
                     var mx = 0f;
-                    for (int i = 0; i < entries.Count; i++)
+                    for (var i = 0; i < entries.Count; i++)
                     {
                         var e = entries[i];
                         if (e == null || !e.enabled || e.mask == null) continue;
@@ -79,7 +71,7 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
                 case CompositeMode.Min:
                 {
                     var mn = 1f;
-                    for (int i = 0; i < entries.Count; i++)
+                    for (var i = 0; i < entries.Count; i++)
                     {
                         var e = entries[i];
                         if (e == null || !e.enabled || e.mask == null) continue;
@@ -92,6 +84,14 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
                 default:
                     return 1f;
             }
+        }
+
+        [Serializable]
+        public class Entry
+        {
+            public bool enabled = true;
+            public BlendMaskBase mask;
+            [Range(0f, 1f)] public float weight = 1f;
         }
     }
 }

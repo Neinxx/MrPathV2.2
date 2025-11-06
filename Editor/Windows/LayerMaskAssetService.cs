@@ -5,16 +5,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using MrPathV2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEngine;
-
+using Object = UnityEngine.Object;
 // 假设 BlendMaskBase 位于此命名空间
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
 
-namespace MrPathV2.Editor.Services
+namespace MrPathV2.Editor.Windows
 {
     /// <summary>
-    /// 遮罩资产服务：管理 BlendMaskBase 资产的 CURD、加载、缓存和类型发现。
+    ///     遮罩资产服务：管理 BlendMaskBase 资产的 CURD、加载、缓存和类型发现。
     /// </summary>
     public class LayerMaskAssetService
     {
@@ -22,8 +22,8 @@ namespace MrPathV2.Editor.Services
 
         private readonly List<BlendMaskBase> _allMasks = new List<BlendMaskBase>();
         private readonly Dictionary<int, Texture2D> _iconCache = new Dictionary<int, Texture2D>();
-        private Texture2D _nullIcon;
         private Type[] _availableMaskTypes = Array.Empty<Type>();
+        private Texture2D _nullIcon;
 
         // --- 公开属性 ---
         public IReadOnlyList<BlendMaskBase> AllMasks => _allMasks;
@@ -108,7 +108,7 @@ namespace MrPathV2.Editor.Services
             var baseName = source.name + " Copy";
             var newName = ObjectNames.GetUniqueName(_allMasks.Select(x => x.name).ToArray(), baseName);
 
-            var newObj = UnityEngine.Object.Instantiate(source);
+            var newObj = Object.Instantiate(source);
             newObj.name = newName;
 
             var newPath = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{newName}.asset");
@@ -234,7 +234,7 @@ namespace MrPathV2.Editor.Services
             try
             {
                 // 1. 明确我们要找的类型（用 typeof 替代原来的类型引用）
-                Type targetType = typeof(LayerMaskAssetService);
+                var targetType = typeof(LayerMaskAssetService);
 
                 // 2. 查找 AssetDatabase 中所有与该类型名匹配的 MonoScript 资产
                 //    t:MonoScript 确保只搜索脚本文件

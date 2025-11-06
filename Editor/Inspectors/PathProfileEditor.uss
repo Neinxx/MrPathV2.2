@@ -118,32 +118,6 @@
     margin-top: 10px;
 }
 
-.EnumField {
-    flex-grow: 1;
-    background-color: rgba(50, 50, 50, 0.5);
-    border-color: rgb(70, 70, 70);
-    border-radius: 4px;
-    padding: 4px 8px;
-    color: rgb(220, 220, 220);
-}
-
-.EnumField-focus-within {
-    border-color: rgb(90, 120, 180);
-    background-color: rgba(60, 60, 80, 0.5);
-}
-
-.EnumField > .unity-combobox__input > .unity-combobox__dropdown-button {
-    width: 16px;
-    height: 16px;
-    margin-left: 4px;
-    background-color: transparent;
-}
-
-.EnumField > .unity-combobox__input > .unity-base-text {
-    -unity-text-align: middle-left;
-    flex-grow: 1;
-}
-
 .compact-enum {
     min-width: 120px;
     margin: 0 5px;
@@ -151,33 +125,4 @@
 
 .wide-enum {
     margin: 8px 0;
-}
-
-.EnumField > .unity-combobox__popup {
-    background-color: rgba(40, 40, 40, 0.95);
-    border-color: rgb(70, 70, 70);
-    border-radius: 4px;
-    padding: 2px 0;
-}
-
-.EnumField > .unity-combobox__popup > .unity-list-view__item {
-    color: rgb(220, 220, 220);
-    background-color: transparent;
-    padding: 4px 12px;
-    min-height: 24px;
-}
-
-.EnumField > .unity-combobox__popup > .unity-list-view__item:hover {
-    background-color: rgba(70, 100, 180, 0.3);
-}
-
-.EnumField > .unity-combobox__popup > .unity-list-view__item--selected {
-    background-color: rgba(70, 100, 180, 0.5);
-    color: white;
-}
-
-.EnumField > .unity-combobox__popup > .unity-list-view__separator {
-    background-color: rgb(60, 60, 60);
-    height: 1px;
-    margin: 2px 0;
 }

@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
-using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Editor.Core;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
-using __temp.MrPathV2.Editor.Core; // 统一地形绘制接口
+// 统一地形绘制接口
 // 命名空间别名，减少全限定名噪音
 
 namespace MrPathV2.Editor.Preview
@@ -20,15 +21,18 @@ namespace MrPathV2.Editor.Preview
         private static readonly int PreviewAlpha = PreviewShaderContracts.Properties.PreviewAlpha;
         private readonly float _mAlpha;
         private readonly PreviewLineRenderer _mLine = new PreviewLineRenderer();
-
-        private List<Material> _mMaterials = new List<Material>();
         private readonly PreviewMaterialManager _mMatMgr;
 
         private readonly PreviewRenderingOptimizer _mOptimizer = new PreviewRenderingOptimizer();
         private readonly Material _mTemplate;
 
         private Bounds _mBounds;
+        private int _mLastBoundsHash; // 上次道路包围盒哈希（量化）
+        private int _mLastGpuTerrainId; // 上次运行 GPU 预览所使用的 Terrain ID
         private int _mLastProfileHash = -1;
+        private int _mLastSpineHash; // 上次运行时的脊线哈希
+
+        private List<Material> _mMaterials = new List<Material>();
         private bool _mMaterialsDirty = true;
         private Mesh _mMesh;
         private bool _mMeshDirty = true;
@@ -36,9 +40,6 @@ namespace MrPathV2.Editor.Preview
         private int _mSceneCamId;
         private MaterialPropertyBlock _mSingleMpb; // 缓存单材质渲染时的属性块，避免重复分配
         private bool _mSpineDirty = true; // replaced previous _dirty
-        private int _mLastGpuTerrainId; // 上次运行 GPU 预览所使用的 Terrain ID
-        private int _mLastSpineHash;     // 上次运行时的脊线哈希
-        private int _mLastBoundsHash;    // 上次道路包围盒哈希（量化）
         private UnityEngine.Terrain _mTargetTerrain; // 缓存选中的目标地形
 
         public PathPreviewManager(IPreviewGenerator gen, PreviewMaterialManager matMgr, Material template, float alpha)
@@ -81,7 +82,7 @@ namespace MrPathV2.Editor.Preview
         // Backwards compatibility
 
         /// <summary>Main update entry called from editor each frame.</summary>
-               /// <summary>Main update entry called from editor each frame.</summary>
+        /// <summary>Main update entry called from editor each frame.</summary>
         public void Update(PathCreator creator, IHeightProvider heightProvider)
         {
             if (!PreUpdateValidation(creator))
@@ -104,7 +105,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Validates preconditions before update
+        ///     Validates preconditions before update
         /// </summary>
         /// <param name="creator">Path creator</param>
         /// <returns>True if update can proceed</returns>
@@ -136,7 +137,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Updates spine and mesh data
+        ///     Updates spine and mesh data
         /// </summary>
         /// <param name="creator">Path creator</param>
         /// <param name="heightProvider">Height provider</param>
@@ -178,16 +179,22 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Finalizes the mesh generation
+        ///     Finalizes the mesh generation
         /// </summary>
         private void FinalizeMesh()
         {
             try
             {
-                if (!Generator.TryFinalizeMesh() && ((Generator.PreviewMesh?.vertexCount ?? 0) <= 0 || !Generator.ForceFinalizeMesh())) return;
-                if (_mMesh == Generator.PreviewMesh) return;
+                // 确保网格数据已完成并可用
+                if (!Generator.TryFinalizeMesh() && ((Generator.PreviewMesh?.vertexCount ?? 0) <= 0 || !Generator.ForceFinalizeMesh()))
+                    return;
+
+                // 即使 Mesh 实例未变化，也需要刷新包围盒以避免剔除使用旧边界
                 _mMesh = Generator.PreviewMesh;
-                _mBounds = _mMesh ? _mMesh.bounds : default;
+                if (_mMesh)
+                {
+                    _mBounds = _mMesh.bounds;
+                }
             }
             catch (Exception ex)
             {
@@ -196,7 +203,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Sets up material parameters
+        ///     Sets up material parameters
         /// </summary>
         private void SetupMaterialParameters(PathCreator creator)
         {
@@ -216,10 +223,12 @@ namespace MrPathV2.Editor.Preview
                     if (pts != null && pts.Length > 0)
                     {
                         var bounds = new Bounds(pts[0], Vector3.zero);
-                        for (int i = 1; i < pts.Length; i++) bounds.Encapsulate(pts[i]);
+                        for (var i = 1; i < pts.Length; i++) bounds.Encapsulate(pts[i]);
                         bounds.Expand(creator.profile.roadWidth); // 与 GpuTerrainPainterV2.CalculatePathBounds 保持一致
                         var boundsXZ = new Vector4(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z);
                         _mMatMgr.SetPreviewBounds(boundsXZ);
+                        // 使用脊线派生包围盒作为渲染剔除的世界包围盒，避免仅用 Mesh.bounds 导致旧值或局部空间误差
+                        _mBounds = bounds;
                     }
                 }
                 else if (_mMesh)
@@ -237,7 +246,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Updates the target terrain based on the path bounds
+        ///     Updates the target terrain based on the path bounds
         /// </summary>
         /// <param name="creator">Path creator</param>
         private void UpdateTerrainTarget(PathCreator creator)
@@ -269,7 +278,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Finds the best terrain for the current spine
+        ///     Finds the best terrain for the current spine
         /// </summary>
         /// <param name="targetTerrain">Current target terrain</param>
         /// <param name="activeTerrains">Active terrains</param>
@@ -286,10 +295,10 @@ namespace MrPathV2.Editor.Preview
             var (minX, maxX, minZ, maxZ) = CalculateBounds(pts);
             var margin = Mathf.Max(0.25f, creator.profile.roadWidth * 0.5f + creator.profile.falloffWidth);
             var center = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
-            var size = new Vector3(Mathf.Max(0.01f, (maxX - minX) + margin * 2f), 10000f, Mathf.Max(0.01f, (maxZ - minZ) + margin * 2f));
+            var size = new Vector3(Mathf.Max(0.01f, maxX - minX + margin * 2f), 10000f, Mathf.Max(0.01f, maxZ - minZ + margin * 2f));
             var roadBounds = new Bounds(center, size);
             boundsHashNow = CalcBoundsHash(roadBounds);
-            var needRetarget = (targetTerrain == null) || (boundsHashNow != _mLastBoundsHash);
+            var needRetarget = targetTerrain == null || boundsHashNow != _mLastBoundsHash;
 
             if (!needRetarget)
                 return targetTerrain;
@@ -305,7 +314,7 @@ namespace MrPathV2.Editor.Preview
                 if (tb.Intersects(roadBounds))
                 {
                     var (overlapArea, dist) = CalculateOverlapAndDistance(tb, roadBounds, center, t);
-                    if (overlapArea > bestOverlap || (Mathf.Approximately(overlapArea, bestOverlap) && dist < bestDist))
+                    if (overlapArea > bestOverlap || Mathf.Approximately(overlapArea, bestOverlap) && dist < bestDist)
                     {
                         bestOverlap = overlapArea;
                         bestDist = dist;
@@ -318,7 +327,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Calculates min/max bounds for points
+        ///     Calculates min/max bounds for points
         /// </summary>
         /// <param name="pts">Points array</param>
         /// <returns>Min/Max values</returns>
@@ -342,7 +351,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Calculates overlap area and distance between terrain and road bounds
+        ///     Calculates overlap area and distance between terrain and road bounds
         /// </summary>
         /// <param name="tb">Terrain bounds</param>
         /// <param name="roadBounds">Road bounds</param>
@@ -361,7 +370,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Finds the nearest terrain to the path creator
+        ///     Finds the nearest terrain to the path creator
         /// </summary>
         /// <param name="activeTerrains">Active terrains</param>
         /// <param name="creator">Path creator</param>
@@ -387,7 +396,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Runs GPU preview if needed
+        ///     Runs GPU preview if needed
         /// </summary>
         /// <param name="creator">Path creator</param>
         private void RunGpuPreviewIfNeeded(PathCreator creator)
@@ -397,7 +406,7 @@ namespace MrPathV2.Editor.Preview
             var profileHashNow = CalcProfileHash(creator.profile);
             var terrainIdNow = _mTargetTerrain ? _mTargetTerrain.GetInstanceID() : 0;
             var spineHashNow = LatestSpine.HasValue ? CalcSpineHash(LatestSpine.Value) : 0;
-            var cacheHasRt = _mTargetTerrain && Terrain.GpuPreviewCache.TryGet(_mTargetTerrain, out var cachedRt) && cachedRt;
+            var cacheHasRt = _mTargetTerrain && GpuPreviewCache.TryGet(_mTargetTerrain, out var cachedRt) && cachedRt;
             var shouldRunGpu = PreviewMaterialManager.EnableGpuPreview && _mTargetTerrain && LatestSpine.HasValue && (
                 !cacheHasRt || terrainIdNow != _mLastGpuTerrainId || spineHashNow != _mLastSpineHash || profileHashNow != _mLastProfileHash);
 
@@ -433,7 +442,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Updates materials
+        ///     Updates materials
         /// </summary>
         /// <param name="creator">Path creator</param>
         private void UpdateMaterials(PathCreator creator)
@@ -475,7 +484,7 @@ namespace MrPathV2.Editor.Preview
         }
 
         /// <summary>
-        /// Renders the preview if needed
+        ///     Renders the preview if needed
         /// </summary>
         /// <param name="creator">Path creator</param>
         private void RenderIfNeeded(PathCreator creator)
@@ -579,7 +588,7 @@ namespace MrPathV2.Editor.Preview
             unchecked
             {
                 // 量化到0.5米精度，避免浮点微抖导致频繁变化
-                int q = 2; // 1/q 米分辨率 -> 0.5m
+                var q = 2; // 1/q 米分辨率 -> 0.5m
                 var minX = Mathf.RoundToInt(b.min.x * q);
                 var minZ = Mathf.RoundToInt(b.min.z * q);
                 var maxX = Mathf.RoundToInt(b.max.x * q);
@@ -614,7 +623,5 @@ namespace MrPathV2.Editor.Preview
                 return h;
             }
         }
-
-
     }
 }

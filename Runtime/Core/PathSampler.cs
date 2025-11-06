@@ -1,10 +1,10 @@
 // PathSampler.cs (已修正平滑算法调用)
 
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Interfaces;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     public static class PathSampler
     {
@@ -17,14 +17,14 @@ namespace __temp.MrPathV2.Runtime.Core
             {
                 // Comprehensive null checks to prevent null reference exceptions
                 if (creator == null || creator.profile == null || creator.pathData == null) return new PathSpine();
-                
+
                 // Additional validation for transform and path data integrity
                 if (creator.transform == null)
                 {
                     Debug.LogWarning("[PathSampler] PathCreator transform is null, cannot sample path");
                     return new PathSpine();
                 }
-                
+
                 if (creator.NumPoints < 2)
                 {
                     Debug.LogWarning("[PathSampler] PathCreator has insufficient points for sampling");
@@ -151,8 +151,16 @@ namespace __temp.MrPathV2.Runtime.Core
                 var p1 = creator.GetPointAtLocal(creator.NumSegments);
                 if ((p1 - p0).sqrMagnitude < 1e-8f)
                     p1 = p0 + Vector3.forward * 0.02f;
-                points = new List<Vector3> { p0, p1 };
-                cumulativeDistances = new List<float> { 0f, Vector3.Distance(p0, p1) };
+                points = new List<Vector3>
+                {
+                    p0,
+                    p1
+                };
+                cumulativeDistances = new List<float>
+                {
+                    0f,
+                    Vector3.Distance(p0, p1)
+                };
             }
             var sampledPoints = points.ToArray();
             var tangents = RecalculateTangentsFromPoints(sampledPoints);
@@ -162,23 +170,23 @@ namespace __temp.MrPathV2.Runtime.Core
             return new PathSpine(sampledPoints, tangents, upVectors, timestamps);
         }
         // duplicate removed
-        
+
         private static void GeneratePointsBySegments(PathCreator creator, int segments, out List<Vector3> localPoints, out List<float> cumulativeDistances)
         {
             localPoints = new List<Vector3>();
             cumulativeDistances = new List<float>();
             if (creator.NumPoints < 2)
                 return;
-        
+
             segments = Mathf.Max(2, segments);
-        
+
             // 细采样以获得近似弧长
             var finePoints = new List<Vector3>();
             var fineDistances = new List<float>();
             var lastPoint = creator.GetPointAtLocal(0);
             finePoints.Add(lastPoint);
             fineDistances.Add(0f);
-        
+
             var step = Mathf.Max(1f / (creator.NumSegments * 40f), 0.005f);
             var accum = 0f;
             for (var t = step; t <= creator.NumSegments; t += step)
@@ -193,18 +201,18 @@ namespace __temp.MrPathV2.Runtime.Core
                     lastPoint = p;
                 }
             }
-        
+
             if (finePoints.Count < 2)
                 return;
-        
+
             var totalLength = fineDistances[fineDistances.Count - 1];
             if (totalLength <= 0f)
                 return;
-        
+
             var targetSpacing = totalLength / segments; // segments 个区间，生成 segments+1 个点
             localPoints.Add(finePoints[0]);
             cumulativeDistances.Add(0f);
-        
+
             var targetDist = targetSpacing;
             var i = 1; // 从第二个细采样点开始
             while (i < finePoints.Count && targetDist < totalLength - 1e-5f)
@@ -225,7 +233,7 @@ namespace __temp.MrPathV2.Runtime.Core
                     i++;
                 }
             }
-        
+
             // 确保末端点
             localPoints.Add(finePoints[finePoints.Count - 1]);
             cumulativeDistances.Add(totalLength);

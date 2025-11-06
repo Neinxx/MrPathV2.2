@@ -1,7 +1,7 @@
+using MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
-using __temp.MrPathV2.Runtime.Core.Noise;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     笔触条纹遮罩：沿路径方向以条纹/抖动模拟手绘笔触。支持 pathProgress 维度调制。
@@ -14,19 +14,19 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
         public float stripeFrequency = 6f;
 
         [Tooltip("条纹厚度（0..1），越大越宽")]
-        [Range(0f,1f)] public float stripeThickness = 0.35f;
+        [Range(0f, 1f)] public float stripeThickness = 0.35f;
 
         [Tooltip("条纹边缘抖动强度（0..1）")]
-        [Range(0f,1f)] public float jitterStrength = 0.2f;
+        [Range(0f, 1f)] public float jitterStrength = 0.2f;
 
         [Tooltip("沿路径方向的强度渐隐，0=不变，1=从头到尾完全淡出")]
-        [Range(0f,1f)] public float fadeAlongPath = 0.0f;
+        [Range(0f, 1f)] public float fadeAlongPath;
 
         [Tooltip("噪声平铺（用于抖动与条纹扰动）")]
         public Vector2 noiseTiling = new Vector2(2f, 1f);
 
         [Tooltip("噪声旋转（度）")]
-        [Range(-180f,180f)] public float noiseRotationDeg = 0f;
+        [Range(-180f, 180f)] public float noiseRotationDeg;
 
         public override bool SupportsGpu => false; // CPU-only 首版
 
@@ -42,8 +42,8 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
             // 简易噪声扰动：使用 Unity 的 PerlinNoise 作为抖动（0..1）
             var rotRad = noiseRotationDeg * Mathf.Deg2Rad;
             var rot = new Vector2(Mathf.Cos(rotRad), Mathf.Sin(rotRad));
-            var nu = (u * noiseTiling.x) * rot.x - (v * noiseTiling.y) * rot.y + seed * 0.123f;
-            var nv = (u * noiseTiling.x) * rot.y + (v * noiseTiling.y) * rot.x + seed * 0.789f;
+            var nu = u * noiseTiling.x * rot.x - v * noiseTiling.y * rot.y + seed * 0.123f;
+            var nv = u * noiseTiling.x * rot.y + v * noiseTiling.y * rot.x + seed * 0.789f;
             var noise = NoiseLutProvider.Sample01(nu, nv); // 0..1
 
             // 抖动作用到条纹相位与厚度

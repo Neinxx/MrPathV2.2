@@ -1,24 +1,24 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Jobs;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 // 统一使用扩展的安全释放方法
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
-    /// 两阶段 CPU 绘制实现（FindRoadPixelsJob -> PaintSplatmapJob）。
-    /// - 严格遵循提前返回原则：输入、覆盖区域、RecipeData 校验。
-    /// - 单一职责：调度 Job 与数据转换分离。
-    /// - 现代风格：async/await、CancellationToken、NativeArray 安全释放。
-    /// - 与 CpuTerrainPainter 保持算法一致，修复原 CPUJobTwoPass 的语义与稳定性问题。
+    ///     两阶段 CPU 绘制实现（FindRoadPixelsJob -> PaintSplatmapJob）。
+    ///     - 严格遵循提前返回原则：输入、覆盖区域、RecipeData 校验。
+    ///     - 单一职责：调度 Job 与数据转换分离。
+    ///     - 现代风格：async/await、CancellationToken、NativeArray 安全释放。
+    ///     - 与 CpuTerrainPainter 保持算法一致，修复原 CPUJobTwoPass 的语义与稳定性问题。
     /// </summary>
     public class CPUJobTwoPass : ITerrainPainter, IDisposable
     {
@@ -151,8 +151,9 @@ namespace __temp.MrPathV2.Editor.Terrain
 
             var startX = Mathf.Clamp(coverageMin.x, 0, resolution - 1);
             var startY = Mathf.Clamp(coverageMin.y, 0, resolution - 1);
-            var numPixelsX = Mathf.Clamp(coverageMax.x - coverageMin.x + 1, 0, resolution - startX);
-            var numPixelsY = Mathf.Clamp(coverageMax.y - coverageMin.y + 1, 0, resolution - startY);
+            // 半开区间：[min,max) => 宽高为差值，不 +1
+            var numPixelsX = Mathf.Clamp(coverageMax.x - coverageMin.x, 0, resolution - startX);
+            var numPixelsY = Mathf.Clamp(coverageMax.y - coverageMin.y, 0, resolution - startY);
             var totalPixelsInBounds = numPixelsX * numPixelsY;
             return (startX, startY, numPixelsX, numPixelsY, totalPixelsInBounds);
         }

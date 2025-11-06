@@ -1,33 +1,33 @@
 using System;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
-    /// 处理PathCreator的Inspector UI逻辑
+    ///     处理PathCreator的Inspector UI逻辑
     /// </summary>
     public class PathCreatorInspectorUI
     {
         private readonly PathCreatorEditor _editor;
         private readonly PathCreator _targetCreator;
-
-        // UI元素引用
-        private VisualElement _rootElement;
-        private VisualElement _profileMissingWarning;
         private Button _createProfileButton;
         private VisualElement _profileEmbeddedContainer;
-        private VisualElement _recipeEmbeddedContainer;
-        private VisualElement _profileInspectorUI;
-        private VisualElement _recipeInspectorUI;
-        private IMGUIContainer _recipeInspectorIMGUI;
 
         // 内嵌编辑器
         private UnityEditor.Editor _profileEmbeddedEditor;
+        private VisualElement _profileInspectorUI;
+        private VisualElement _profileMissingWarning;
+        private VisualElement _recipeEmbeddedContainer;
         private UnityEditor.Editor _recipeEmbeddedEditor;
+        private IMGUIContainer _recipeInspectorIMGUI;
+        private VisualElement _recipeInspectorUI;
+
+        // UI元素引用
+        private VisualElement _rootElement;
 
         public PathCreatorInspectorUI(PathCreatorEditor editor, PathCreator target)
         {
@@ -94,7 +94,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 当 Profile 属性在 Inspector 中被更改时调用
+        ///     当 Profile 属性在 Inspector 中被更改时调用
         /// </summary>
         private void OnProfilePropertyChanged(SerializedPropertyChangeEvent evt)
         {
@@ -112,7 +112,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 根据当前的 Path Profile 更新嵌套编辑器的UI和实例。
+        ///     根据当前的 Path Profile 更新嵌套编辑器的UI和实例。
         /// </summary>
         private void UpdateEmbeddedEditorUI(PathProfile currentProfile)
         {
@@ -128,7 +128,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 return;
 
             bool hasValidProfile = currentProfile;
-            bool isCurrentlyVisible = _profileEmbeddedContainer.style.display == DisplayStyle.Flex;
+            var isCurrentlyVisible = _profileEmbeddedContainer.style.display == DisplayStyle.Flex;
 
             // 只有在状态真正改变时才更新显示状态，避免不必要的布局重计算
             if (hasValidProfile != isCurrentlyVisible)
@@ -242,8 +242,8 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             // 获取当前配方
             var currentRecipe = currentProfile.roadRecipe;
-            bool shouldShow = currentRecipe != null;
-            bool isCurrentlyVisible = _recipeEmbeddedContainer.style.display == DisplayStyle.Flex;
+            var shouldShow = currentRecipe != null;
+            var isCurrentlyVisible = _recipeEmbeddedContainer.style.display == DisplayStyle.Flex;
 
             // 只有在显示状态真正改变时才更新，避免不必要的重绘
             if (shouldShow != isCurrentlyVisible)
@@ -268,7 +268,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 清理配方编辑器资源
+        ///     清理配方编辑器资源
         /// </summary>
         private void CleanupRecipeEditor()
         {
@@ -286,7 +286,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 设置配方编辑器
+        ///     设置配方编辑器
         /// </summary>
         /// <param name="recipe">要编辑的配方</param>
         private void SetupRecipeEditor(StylizedRoadRecipe recipe)

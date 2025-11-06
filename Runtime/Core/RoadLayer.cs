@@ -1,8 +1,8 @@
 using System;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core.BlendMasks;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     [Serializable]
     public class RoadLayer
@@ -20,7 +20,7 @@ namespace __temp.MrPathV2.Runtime.Core
         public BlendMaskBase layerMask;
 
         /// <summary>
-        /// 创建新图层时的默认值。
+        ///     创建新图层时的默认值。
         /// </summary>
         public static RoadLayer CreateDefault(int index) => new RoadLayer
         {

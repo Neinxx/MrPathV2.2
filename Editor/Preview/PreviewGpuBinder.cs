@@ -1,6 +1,5 @@
 
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
 using UnityEngine;
 #if UNITY_EDITOR

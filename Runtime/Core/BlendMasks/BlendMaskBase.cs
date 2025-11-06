@@ -1,7 +1,7 @@
-using UnityEngine;
 using System.Runtime.InteropServices;
+using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     所有遮罩类型的基类，提供通用的 UV 变换、平滑及整体缩放等功能。
@@ -9,8 +9,8 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
     public abstract class BlendMaskBase : ScriptableObject
     {
         /// <summary>
-        /// 指示该遮罩是否支持 GPU 路径（Compute/HLSL 参数打包）。
-        /// 缺省为 true，个别复杂、仅 CPU 的遮罩可重写为 false。
+        ///     指示该遮罩是否支持 GPU 路径（Compute/HLSL 参数打包）。
+        ///     缺省为 true，个别复杂、仅 CPU 的遮罩可重写为 false。
         /// </summary>
         public virtual bool SupportsGpu => true;
 
@@ -129,47 +129,47 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
 
         #endregion
     }
-}
 
 // 在类定义之前添加以下结构体定义
-[StructLayout(LayoutKind.Sequential)]
-public struct GpuShoulderMaskParamsData
-{
-    public float ShoulderWidthRatio;
-    public float ShoulderStrength;
-    public float EdgeFalloff;
-    public bool EnableLeftShoulder;
-    public bool EnableRightShoulder;
-    public Vector2 Tiling;
-    public Vector2 Offset;
-    public float OverallScale;
-    public float Smooth;
-}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GpuShoulderMaskParamsData
+    {
+        public float ShoulderWidthRatio;
+        public float ShoulderStrength;
+        public float EdgeFalloff;
+        public bool EnableLeftShoulder;
+        public bool EnableRightShoulder;
+        public Vector2 Tiling;
+        public Vector2 Offset;
+        public float OverallScale;
+        public float Smooth;
+    }
 
-[StructLayout(LayoutKind.Sequential)]
-public struct GpuNoiseMaskParamsData
-{
-    public float Strength;
-    public float Seed;
-    public Vector2 Tiling;
-    public Vector2 Offset;
-    public float OverallScale;
-    public float Smooth;
-    public Vector2 NoiseScale;
-    public float RotationRad;
-    public int Octaves;
-    public float Lacunarity;
-    public float Gain;
-    public bool UseAsymmetricEdges;
-    public float EdgeLow;
-    public float EdgeHigh;
-}
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GpuNoiseMaskParamsData
+    {
+        public float Strength;
+        public float Seed;
+        public Vector2 Tiling;
+        public Vector2 Offset;
+        public float OverallScale;
+        public float Smooth;
+        public Vector2 NoiseScale;
+        public float RotationRad;
+        public int Octaves;
+        public float Lacunarity;
+        public float Gain;
+        public bool UseAsymmetricEdges;
+        public float EdgeLow;
+        public float EdgeHigh;
+    }
 
-[StructLayout(LayoutKind.Sequential)]
-public struct GpuMaskParamsData
-{
-    public int MaskType;
-    public float Strength;
-    public GpuNoiseMaskParamsData NoiseParams;
-    public GpuShoulderMaskParamsData ShoulderParams;
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GpuMaskParamsData
+    {
+        public int MaskType;
+        public float Strength;
+        public GpuNoiseMaskParamsData NoiseParams;
+        public GpuShoulderMaskParamsData ShoulderParams;
+    }
 }

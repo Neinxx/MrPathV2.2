@@ -1,10 +1,9 @@
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Strategies
+namespace MrPathV2.Runtime.Strategies
 {
     /// <summary>
     ///     【最终圆满版 • 千变万化之法】
@@ -309,10 +308,7 @@ namespace __temp.MrPathV2.Runtime.Strategies
             return bestT;
         }
 
-        public override PreviewLineRenderer.LineType GetLineTypeToCleanup()
-        {
-            return PreviewLineRenderer.LineType.PathCurve;
-        }
+        public override PreviewLineRenderer.LineType GetLineTypeToCleanup() => PreviewLineRenderer.LineType.PathCurve;
 
         #endregion
     }

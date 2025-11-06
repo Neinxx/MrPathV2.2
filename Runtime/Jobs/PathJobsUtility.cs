@@ -1,14 +1,14 @@
 // 文件路径: Runtime/Jobs/PathJobsUtility.cs (曲线烘焙版)
 
 using System;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
-namespace __temp.MrPathV2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     public static class PathJobsUtility
     {

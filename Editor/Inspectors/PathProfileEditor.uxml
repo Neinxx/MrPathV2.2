@@ -31,8 +31,8 @@
             <ui:GroupBox name="MeshSettings" class="settings-group" style="flex-grow: 1; flex-shrink: 1; justify-content: space-around; flex-basis: auto; height: auto; min-height: 130px; max-height: none;">
                 <ui:Label text="Mesh Settings" class="group-header" />
                 <ui:Toggle label="ForceHorizontal" name="ForceHorizontalField" binding-path="forceHorizontal" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; height: 16px; padding-left: 9px; padding-right: 6px; margin-top: 1px; margin-bottom: 4px; margin-left: 5px; margin-right: 5px; min-height: 20px;" />
-                <ui:SliderInt picking-mode="Ignore" label="LongitudinalSegments" value="32" high-value="100" name="LongitudinalSegmentsField" binding-path="longitudinalSegments" style="min-height: 20px; margin-left: 5px; margin-right: 5px; padding-left: 9px; padding-right: 6px; margin-bottom: 4px;" />
-                <ui:SliderInt label="CrossSectionSegments" high-value="100" name="CrossSectionSegmentsField" binding-path="crossSectionSegments" low-value="3" style="padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-bottom: 4px; min-height: 20px;" />
+                <ui:SliderInt picking-mode="Ignore" label="LongitudinalSegments" value="32" high-value="300" name="LongitudinalSegmentsField" binding-path="longitudinalSegments" low-value="2" style="min-height: 20px; margin-left: 5px; margin-right: 5px; padding-left: 9px; padding-right: 6px; margin-bottom: 4px;" />
+                <ui:SliderInt label="CrossSectionSegments" high-value="64" name="CrossSectionSegmentsField" binding-path="crossSectionSegments" low-value="3" style="padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-bottom: 4px; min-height: 20px;" />
             </ui:GroupBox>
             <ui:GroupBox name="MeshPreview" class="settings-group" style="flex-grow: 1; flex-shrink: 1; justify-content: space-around; flex-basis: auto; height: auto; min-height: 130px; max-height: none;">
                 <ui:Label text="Mesh Preview" class="group-header" />

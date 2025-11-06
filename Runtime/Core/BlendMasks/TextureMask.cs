@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     纹理采样遮罩：直接采样灰度纹理，用于外部控制路肩纹理与道路轮廓。
@@ -13,7 +13,7 @@ namespace __temp.MrPathV2.Runtime.Core.BlendMasks
         public Texture2D grayscale;
 
         [Tooltip("当纹理缺失时的默认值（0..1）")]
-        [Range(0f,1f)] public float fallback = 1f;
+        [Range(0f, 1f)] public float fallback = 1f;
 
         [Tooltip("是否使用双线性采样（false=点采样）")]
         public bool bilinear = true;

@@ -1,13 +1,13 @@
 using System.IO;
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Settings;
-using __temp.MrPathV2.Runtime.Strategies;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Settings;
+using MrPathV2.Runtime.Strategies;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     //  将策略管理功能（创建、同步）直接集成到此资产的编辑器中。
 

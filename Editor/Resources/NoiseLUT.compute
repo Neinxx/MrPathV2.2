@@ -2,22 +2,25 @@
 #pragma kernel BuildNoiseLUT
 
 RWTexture2D<float4> _Result; // single channel packed in .r, replicated to rgba
-int _Size;   // texture size (width == height)
-int _Period; // tile period in lattice units (e.g., 64)
+int                 _Size; // texture size (width == height)
+int                 _Period; // tile period in lattice units (e.g., 64)
 
 // CPU-parity Hash: identical to C# GenerateCpuLut
 // Returns [0,1) using 24-bit mask division by 16777216.0
 float HashInt2To01(uint ix, uint iy)
 {
-    uint x = (uint)ix;
-    uint y = (uint)iy;
-    uint h = x * 374761393u + y * 668265263u;
-    h ^= h >> 17; h *= 0xed5ad4bbu;
-    h ^= h >> 11; h *= 0xac4c1b51u;
-    h ^= h >> 15; h *= 0x31848babu;
-    h ^= h >> 14;
-    uint m = h & 0x00FFFFFFu;
-    return (float)m / 16777216.0;
+	uint x = ix;
+	uint y = iy;
+	uint h = x * 374761393u + y * 668265263u;
+	h ^= h >> 17;
+	h *= 0xed5ad4bbu;
+	h ^= h >> 11;
+	h *= 0xac4c1b51u;
+	h ^= h >> 15;
+	h *= 0x31848babu;
+	h ^= h >> 14;
+	uint m = h & 0x00FFFFFFu;
+	return (float)m / 16777216.0;
 }
 
 float Fade(float t) { return t * t * (3.0 - 2.0 * t); }
@@ -25,38 +28,38 @@ float Fade(float t) { return t * t * (3.0 - 2.0 * t); }
 // Tileable value noise (periodic on _Period), bit-for-bit analogous to CPU
 float ValueNoiseTile(float2 p)
 {
-    uint2 i0 = (uint2)floor(p);
-    float2 f = frac(p);
-    uint2 i1 = i0 + uint2(1, 0);
-    uint2 i2 = i0 + uint2(0, 1);
-    uint2 i3 = i0 + uint2(1, 1);
-    uint2 modv = uint2(_Period, _Period);
-    // positive modulo wrap
-    i0 = (i0 % modv + modv) % modv;
-    i1 = (i1 % modv + modv) % modv;
-    i2 = (i2 % modv + modv) % modv;
-    i3 = (i3 % modv + modv) % modv;
+	uint2  i0 = (uint2)floor(p);
+	float2 f = frac(p);
+	uint2  i1 = i0 + uint2(1, 0);
+	uint2  i2 = i0 + uint2(0, 1);
+	uint2  i3 = i0 + uint2(1, 1);
+	uint2  modv = uint2(_Period, _Period);
+	// positive modulo wrap
+	i0 = (i0 % modv + modv) % modv;
+	i1 = (i1 % modv + modv) % modv;
+	i2 = (i2 % modv + modv) % modv;
+	i3 = (i3 % modv + modv) % modv;
 
-    float v00 = HashInt2To01(i0.x, i0.y);
-    float v10 = HashInt2To01(i1.x, i1.y);
-    float v01 = HashInt2To01(i2.x, i2.y);
-    float v11 = HashInt2To01(i3.x, i3.y);
-    float ux = Fade(f.x);
-    float uy = Fade(f.y);
-    float a = lerp(v00, v10, ux);
-    float b = lerp(v01, v11, ux);
-    return lerp(a, b, uy);
+	float v00 = HashInt2To01(i0.x, i0.y);
+	float v10 = HashInt2To01(i1.x, i1.y);
+	float v01 = HashInt2To01(i2.x, i2.y);
+	float v11 = HashInt2To01(i3.x, i3.y);
+	float ux = Fade(f.x);
+	float uy = Fade(f.y);
+	float a = lerp(v00, v10, ux);
+	float b = lerp(v01, v11, ux);
+	return lerp(a, b, uy);
 }
 
 // Thread group size
 [numthreads(8,8,1)]
-void BuildNoiseLUT (uint3 id : SV_DispatchThreadID)
+void BuildNoiseLUT(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= (uint)_Size || id.y >= (uint)_Size) return;
-    float2 uv01 = (float2(id.xy) + 0.5) / max(1, _Size);
-    float period = max(2, _Period);
-    float2 p = uv01 * period;
+	if(id.x >= (uint)_Size || id.y >= (uint)_Size) return;
+	float2 uv01 = (float2(id.xy) + 0.5) / max(1, _Size);
+	float  period = max(2, _Period);
+	float2 p = uv01 * period;
 
-    float n = ValueNoiseTile(p);
-    _Result[int2(id.xy)] = float4(n, n, n, 1.0);
+	float n = ValueNoiseTile(p);
+	_Result[int2(id.xy)] = float4(n, n, n, 1.0);
 }

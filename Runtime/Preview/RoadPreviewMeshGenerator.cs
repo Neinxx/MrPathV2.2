@@ -1,14 +1,15 @@
 using System;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Jobs;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
     ///     负责生成道路预览网格数据的纯 Job 调度器，仅负责数据计算，不涉及 Mesh 对象或渲染。
@@ -26,12 +27,12 @@ namespace __temp.MrPathV2.Runtime.Preview
         }
 
         private JobHandle _combinedHandle;
+        private bool _disposed;
 
         // NativeCollectionManager 已弃用。当前类中的数据由 UnifiedMemory 与 NativeArrayExtensions 自动管理。
         // 保留占位以防后续需要显式资源管理器。
         // private readonly JobResourceManager _resourceMgr = new JobResourceManager();
         private JobData? _jobData;
-        private bool _disposed;
 
         public GenerationState State { get; private set; } = GenerationState.Idle;
 
@@ -227,7 +228,7 @@ namespace __temp.MrPathV2.Runtime.Preview
                     if (recipeSo)
                     {
                         // 在预览侧直接构建 RecipeData，使用实际道路宽度与路径长度，避免对旧 API 的依赖
-                        float pathLength = 0f;
+                        var pathLength = 0f;
                         for (var i = 1; i < worldSpine.VertexCount; i++)
                         {
                             pathLength += Vector3.Distance(worldSpine.Points[i - 1], worldSpine.Points[i]);
@@ -238,13 +239,13 @@ namespace __temp.MrPathV2.Runtime.Preview
                         // 临时 Profile 仅为 RecipeData 提供 recipe 引用
                         var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
                         tmpProfile.roadRecipe = recipeSo;
-                        var threshold = (profile != null && profile.opaquePreview) ? 0.2f : 0f;
+                        var threshold = profile != null && profile.opaquePreview ? 0.2f : 0f;
                         Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator, threshold);
 #if UNITY_EDITOR
                         if (Application.isPlaying)
-                            UnityEngine.Object.Destroy(tmpProfile);
+                            Object.Destroy(tmpProfile);
                         else
-                            UnityEngine.Object.DestroyImmediate(tmpProfile);
+                            Object.DestroyImmediate(tmpProfile);
 #else
                         UnityEngine.Object.Destroy(tmpProfile);
 #endif
@@ -252,7 +253,7 @@ namespace __temp.MrPathV2.Runtime.Preview
                     else
                     {
                         // 无 recipe 时，构建空配方，保证预览流程不断
-                        float pathLength = 0f;
+                        var pathLength = 0f;
                         for (var i = 1; i < worldSpine.VertexCount; i++)
                         {
                             pathLength += Vector3.Distance(worldSpine.Points[i - 1], worldSpine.Points[i]);
@@ -261,18 +262,18 @@ namespace __temp.MrPathV2.Runtime.Preview
                         var tmpRecipe = ScriptableObject.CreateInstance<StylizedRoadRecipe>();
                         var tmpProfile = ScriptableObject.CreateInstance<PathProfile>();
                         tmpProfile.roadRecipe = tmpRecipe;
-                        var threshold2 = (profile != null && profile.opaquePreview) ? 0.2f : 0f;
+                        var threshold2 = profile != null && profile.opaquePreview ? 0.2f : 0f;
                         Recipe = new RecipeData(tmpProfile, null, worldWidth, pathLength > 0f ? pathLength : 100f, allocator, threshold2);
 #if UNITY_EDITOR
                         if (Application.isPlaying)
                         {
-                            UnityEngine.Object.Destroy(tmpProfile);
-                            UnityEngine.Object.Destroy(tmpRecipe);
+                            Object.Destroy(tmpProfile);
+                            Object.Destroy(tmpRecipe);
                         }
                         else
                         {
-                            UnityEngine.Object.DestroyImmediate(tmpProfile);
-                            UnityEngine.Object.DestroyImmediate(tmpRecipe);
+                            Object.DestroyImmediate(tmpProfile);
+                            Object.DestroyImmediate(tmpRecipe);
                         }
 #else
                         UnityEngine.Object.Destroy(tmpProfile);

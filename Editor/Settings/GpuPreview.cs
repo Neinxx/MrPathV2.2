@@ -1,17 +1,17 @@
+using System.Collections.Generic;
+using MrPathV2.Editor.Preview;
 using UnityEditor;
 using UnityEngine;
-using MrPathV2.Editor.Preview;
 
-
-namespace __temp.MrPathV2.Editor.Settings
+namespace MrPathV2.Editor.Settings
 {
     /// <summary>
-    /// 项目设置：GPU 预览开关
-    /// - 单一职责：仅负责开关的读取/写入与UI展示
-    /// - 提前返回：在GUI中避免不必要的状态更新
-    /// - 使用Unity API：SettingsProvider、EditorPrefs
+    ///     项目设置：GPU 预览开关
+    ///     - 单一职责：仅负责开关的读取/写入与UI展示
+    ///     - 提前返回：在GUI中避免不必要的状态更新
+    ///     - 使用Unity API：SettingsProvider、EditorPrefs
     /// </summary>
-    internal static class GpuPreviewSettings
+    static class GpuPreviewSettings
     {
         private const string PrefKey = "MrPath_EnableGpuPreview";
 
@@ -23,13 +23,16 @@ namespace __temp.MrPathV2.Editor.Settings
             {
                 label = "GPU Preview",
                 guiHandler = DrawGUI,
-                keywords = new System.Collections.Generic.HashSet<string>(new[] { "GPU", "Preview", "MrPath" })
+                keywords = new HashSet<string>(new[]
+                {
+                    "GPU", "Preview", "MrPath"
+                })
             };
             return provider;
         }
 
         /// <summary>
-        /// 绘制设置面板GUI
+        ///     绘制设置面板GUI
         /// </summary>
         private static void DrawGUI(string searchContext)
         {
@@ -50,33 +53,30 @@ namespace __temp.MrPathV2.Editor.Settings
     }
 
     /// <summary>
-    /// 编辑器启动时同步 GPU 预览开关
+    ///     编辑器启动时同步 GPU 预览开关
     /// </summary>
     [InitializeOnLoad]
-    internal static class GpuPreviewBootstrap
+    static class GpuPreviewBootstrap
     {
+
+        // 将键名集中到一个地方，避免魔法字符串散落
+        private const string GpuPreviewSettingsPrefKey = "MrPath_EnableGpuPreview";
         static GpuPreviewBootstrap()
         {
             // 读取持久化开关并应用
             var enabled = EditorPrefs.GetBool(GpuPreviewSettingsPrefKey, false);
             PreviewMaterialManager.EnableGpuPreview = enabled;
         }
-
-        // 将键名集中到一个地方，避免魔法字符串散落
-        private const string GpuPreviewSettingsPrefKey = "MrPath_EnableGpuPreview";
     }
-}
 
 
-namespace MrPathV2.Editor.Settings
-{
-    // 初始化时同步 EditorPrefs 到运行时开关
+// 初始化时同步 EditorPrefs 到运行时开关
     [InitializeOnLoad]
-    public static class GpuPreviewSettings
+    public static class GpuPreview
     {
         private const string PrefKey = "MrPath_EnableGpuPreview";
 
-        static GpuPreviewSettings()
+        static GpuPreview()
         {
             var enabled = EditorPrefs.GetBool(PrefKey, false);
             PreviewMaterialManager.EnableGpuPreview = enabled;

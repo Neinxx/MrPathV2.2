@@ -3,9 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using __temp.MrPathV2.Editor.Operations;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Editor;
+using MrPathV2.Editor.Operations;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -13,7 +14,7 @@ using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
-namespace __temp.MrPathV2.Editor.Settings
+namespace MrPathV2.Editor.Settings
 {
     class MrPathSettingsProvider : SettingsProvider
     {
@@ -260,7 +261,10 @@ namespace __temp.MrPathV2.Editor.Settings
             var advProp = _settings.FindProperty("advancedSettings");
             var advObj = advProp?.objectReferenceValue as MrPathAdvancedSettings;
 
-            var section = new Foldout { text = "GPU 调试面板" };
+            var section = new Foldout
+            {
+                text = "GPU 调试面板"
+            };
             section.value = false; // 默认折叠
 
             if (advObj != null)

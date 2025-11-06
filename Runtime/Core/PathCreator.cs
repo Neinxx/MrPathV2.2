@@ -1,17 +1,15 @@
 using System;
-using __temp.MrPathV2.Runtime.Components;
-using __temp.MrPathV2.Runtime.Settings;
+using MrPathV2.Runtime.Components;
+using MrPathV2.Runtime.Settings;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
-
     ///     - 它持有"数据容器"(PathData)。
     ///     - 它引用"配置文件"(PathProfile)来了解用户的意图。
     ///     - 它通过"注册中心"(PathStrategyRegistry)来获取正确的"法则"(PathStrategy)。
     ///     - 它将数据和法则结合，完成所有路径操作。
-
     /// </summary>
     [DisallowMultipleComponent]
     public class PathCreator : MonoBehaviour

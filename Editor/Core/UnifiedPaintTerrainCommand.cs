@@ -1,23 +1,23 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using MrPathV2.Runtime.Core;
 using UnityEngine;
-using __temp.MrPathV2.Runtime.Core;
 
-namespace __temp.MrPathV2.Editor.Core
+namespace MrPathV2.Editor.Core
 {
     /// <summary>
-    /// 统一地形绘制命令 - 使用CPU数据源，自动选择最佳绘制器
-    /// 遵循Unity最佳实践：命令模式、异步执行、资源管理
+    ///     统一地形绘制命令 - 使用CPU数据源，自动选择最佳绘制器
+    ///     遵循Unity最佳实践：命令模式、异步执行、资源管理
     /// </summary>
     public class UnifiedPaintTerrainCommand : IDisposable
     {
-        private readonly PathCreator _pathCreator;
         private readonly bool _isPreview;
+        private readonly PathCreator _pathCreator;
         private readonly PainterType _preferredPainterType;
+        private bool _disposed;
 
         private IUnifiedTerrainPainter _painter;
-        private bool _disposed = false;
 
         #region Construction
 
@@ -38,7 +38,7 @@ namespace __temp.MrPathV2.Editor.Core
         #region Public API
 
         /// <summary>
-        /// 异步执行地形绘制
+        ///     异步执行地形绘制
         /// </summary>
         public async Task<TerrainPaintResult> ExecuteAsync(CancellationToken cancellationToken = default)
         {
@@ -74,7 +74,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// 同步执行地形绘制
+        ///     同步执行地形绘制
         /// </summary>
         public TerrainPaintResult Execute()
         {
@@ -174,7 +174,7 @@ namespace __temp.MrPathV2.Editor.Core
 
             // 如果没有找到包含位置的地形，返回最近的地形
             UnityEngine.Terrain nearestTerrain = null;
-            float nearestDistance = float.MaxValue;
+            var nearestDistance = float.MaxValue;
 
             foreach (var terrain in terrains)
             {
@@ -257,36 +257,32 @@ namespace __temp.MrPathV2.Editor.Core
         #region Static Factory Methods
 
         /// <summary>
-        /// 创建道路绘制命令
+        ///     创建道路绘制命令
         /// </summary>
         public static UnifiedPaintTerrainCommand CreateRoadPaintCommand(
             PathCreator pathCreator,
             bool isPreview = false,
             PainterType preferredPainterType = PainterType.GPU)
-        {
-            return new UnifiedPaintTerrainCommand(pathCreator, isPreview, preferredPainterType);
-        }
+            => new UnifiedPaintTerrainCommand(pathCreator, isPreview, preferredPainterType);
 
         /// <summary>
-        /// 创建预览绘制命令
+        ///     创建预览绘制命令
         /// </summary>
         public static UnifiedPaintTerrainCommand CreatePreviewCommand(
             PathCreator pathCreator,
             PainterType preferredPainterType = PainterType.GPU)
-        {
-            return new UnifiedPaintTerrainCommand(pathCreator, true, preferredPainterType);
-        }
+            => new UnifiedPaintTerrainCommand(pathCreator, true, preferredPainterType);
 
         #endregion
     }
 
     /// <summary>
-    /// 地形绘制命令构建器 - 提供流畅的API
+    ///     地形绘制命令构建器 - 提供流畅的API
     /// </summary>
     public class UnifiedPaintCommandBuilder
     {
+        private bool _isPreview;
         private PathCreator _pathCreator;
-        private bool _isPreview = false;
         private PainterType _preferredPainterType = PainterType.GPU;
 
         public UnifiedPaintCommandBuilder ForPathCreator(PathCreator pathCreator)
@@ -307,13 +303,10 @@ namespace __temp.MrPathV2.Editor.Core
             return this;
         }
 
-        public UnifiedPaintTerrainCommand Build()
-        {
-            return new UnifiedPaintTerrainCommand(_pathCreator, _isPreview, _preferredPainterType);
-        }
+        public UnifiedPaintTerrainCommand Build() => new UnifiedPaintTerrainCommand(_pathCreator, _isPreview, _preferredPainterType);
 
         /// <summary>
-        /// 构建并立即执行命令
+        ///     构建并立即执行命令
         /// </summary>
         public TerrainPaintResult Execute()
         {
@@ -322,7 +315,7 @@ namespace __temp.MrPathV2.Editor.Core
         }
 
         /// <summary>
-        /// 构建并立即异步执行命令
+        ///     构建并立即异步执行命令
         /// </summary>
         public async Task<TerrainPaintResult> ExecuteAsync(CancellationToken cancellationToken = default)
         {

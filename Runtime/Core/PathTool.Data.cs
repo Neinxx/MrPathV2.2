@@ -1,4 +1,4 @@
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
 
     #region 枚举定义
@@ -21,7 +21,6 @@ namespace __temp.MrPathV2.Runtime.Core
     }
 
     #endregion
-
 
 
 }

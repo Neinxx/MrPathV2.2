@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Settings
+namespace MrPathV2.Editor.Settings
 {
     /// <summary>
     ///     MrPath 工具所有配置资产的根引用和导航中心。

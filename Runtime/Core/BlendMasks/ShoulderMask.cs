@@ -1,7 +1,7 @@
 using UnityEngine;
 // for GpuMaskParamsData
 
-namespace __temp.MrPathV2.Runtime.Core.BlendMasks
+namespace MrPathV2.Runtime.Core.BlendMasks
 {
     /// <summary>
     ///     路肩遮罩：永远出现在道路两侧的遮罩类型

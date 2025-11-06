@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     /// <summary>
     ///     清理受路径影响的地形中未使用的 Splat 图层。
@@ -26,7 +26,7 @@ namespace __temp.MrPathV2.Editor.Terrain
         {
             var totalRemovedLayers = ProcessAllTerrains(terrains, token);
             ShowCompletionMessage(totalRemovedLayers);
-            
+
             return Task.CompletedTask;
         }
 
@@ -36,15 +36,15 @@ namespace __temp.MrPathV2.Editor.Terrain
         private int ProcessAllTerrains(List<UnityEngine.Terrain> terrains, CancellationToken token)
         {
             var totalRemovedLayers = 0;
-            
+
             foreach (var terrain in terrains)
             {
                 token.ThrowIfCancellationRequested();
-                
+
                 var removedCount = ProcessSingleTerrain(terrain);
                 totalRemovedLayers += removedCount;
             }
-            
+
             return totalRemovedLayers;
         }
 
@@ -64,10 +64,10 @@ namespace __temp.MrPathV2.Editor.Terrain
             var resolution = terrainData.alphamapResolution;
             var oldAlphaMaps = terrainData.GetAlphamaps(0, 0, resolution, resolution);
             var oldTerrainLayers = terrainData.terrainLayers;
-            
+
             // 查找需要保留的图层索引
             var keptIndices = FindUsedLayerIndices(oldAlphaMaps, resolution, terrainData.alphamapLayers);
-            
+
             // 提前返回：没有需要移除的图层
             var removedCount = terrainData.alphamapLayers - keptIndices.Count;
             if (removedCount <= 0)
@@ -77,22 +77,19 @@ namespace __temp.MrPathV2.Editor.Terrain
 
             // 重建地形数据
             RebuildTerrainData(terrainData, oldTerrainLayers, oldAlphaMaps, keptIndices, resolution);
-            
+
             // 记录日志
             LogTerrainCleanup(terrain.name, removedCount);
-            
+
             return removedCount;
         }
 
         /// <summary>
         ///     检查地形数据是否有效
         /// </summary>
-        private static bool IsTerrainDataValid(TerrainData terrainData)
-        {
-            return terrainData != null && 
-                   terrainData.alphamapLayers > 0 && 
-                   terrainData.terrainLayers != null;
-        }
+        private static bool IsTerrainDataValid(TerrainData terrainData) => terrainData != null &&
+                                                                           terrainData.alphamapLayers > 0 &&
+                                                                           terrainData.terrainLayers != null;
 
         /// <summary>
         ///     查找被使用的图层索引
@@ -128,7 +125,7 @@ namespace __temp.MrPathV2.Editor.Terrain
                     }
                 }
             }
-            
+
             return false;
         }
 
@@ -136,18 +133,18 @@ namespace __temp.MrPathV2.Editor.Terrain
         ///     重建地形数据
         /// </summary>
         private static void RebuildTerrainData(
-            TerrainData terrainData, 
-            TerrainLayer[] oldTerrainLayers, 
-            float[,,] oldAlphaMaps, 
-            List<int> keptIndices, 
+            TerrainData terrainData,
+            TerrainLayer[] oldTerrainLayers,
+            float[,,] oldAlphaMaps,
+            List<int> keptIndices,
             int resolution)
         {
             // 重建地形图层
             var newTerrainLayers = CreateNewTerrainLayers(oldTerrainLayers, keptIndices);
-            
+
             // 重建Alpha贴图
             var newAlphaMaps = CreateNewAlphaMaps(oldAlphaMaps, keptIndices, resolution);
-            
+
             // 应用新数据
             terrainData.terrainLayers = newTerrainLayers;
             terrainData.SetAlphamaps(0, 0, newAlphaMaps);
@@ -160,12 +157,12 @@ namespace __temp.MrPathV2.Editor.Terrain
         private static TerrainLayer[] CreateNewTerrainLayers(TerrainLayer[] oldTerrainLayers, List<int> keptIndices)
         {
             var newTerrainLayers = new TerrainLayer[keptIndices.Count];
-            
+
             for (var i = 0; i < keptIndices.Count; i++)
             {
                 newTerrainLayers[i] = oldTerrainLayers[keptIndices[i]];
             }
-            
+
             return newTerrainLayers;
         }
 
@@ -175,7 +172,7 @@ namespace __temp.MrPathV2.Editor.Terrain
         private static float[,,] CreateNewAlphaMaps(float[,,] oldAlphaMaps, List<int> keptIndices, int resolution)
         {
             var newAlphaMaps = new float[resolution, resolution, keptIndices.Count];
-            
+
             for (var y = 0; y < resolution; y++)
             {
                 for (var x = 0; x < resolution; x++)
@@ -186,7 +183,7 @@ namespace __temp.MrPathV2.Editor.Terrain
                     }
                 }
             }
-            
+
             return newAlphaMaps;
         }
 

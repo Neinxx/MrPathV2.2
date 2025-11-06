@@ -2,25 +2,42 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Editor.Terrain;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Jobs;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Jobs;
+using Debug = UnityEngine.Debug;
 
-namespace __temp.MrPathV2.Editor.Core
+namespace MrPathV2.Editor.Core
 {
     /// <summary>
-    /// 统一CPU地形绘制器 - 使用CPU数据源的标准实现
-    /// 遵循Unity最佳实践：Job System、Burst编译、内存安全
+    ///     统一CPU地形绘制器 - 使用CPU数据源的标准实现
+    ///     遵循Unity最佳实践：Job System、Burst编译、内存安全
     /// </summary>
     public class UnifiedCpuTerrainPainter : IUnifiedTerrainPainter
     {
+
+        private bool _disposed;
         public bool IsSupported => true; // CPU绘制器总是支持
         public PainterType Type => PainterType.CPU;
 
-        private bool _disposed = false;
+        #region Validation
+
+        private static void ValidateInputs(UnityEngine.Terrain terrain, PathData pathData, PathProfile pathProfile)
+        {
+            if (terrain == null)
+                throw new ArgumentNullException(nameof(terrain));
+            if (pathData == null)
+                throw new ArgumentNullException(nameof(pathData));
+            if (pathProfile == null)
+                throw new ArgumentNullException(nameof(pathProfile));
+            if (pathProfile.roadRecipe == null)
+                throw new ArgumentException("PathProfile.roadRecipe 不能为空", nameof(pathProfile));
+        }
+
+        #endregion
 
         #region Public API
 
@@ -60,7 +77,7 @@ namespace __temp.MrPathV2.Editor.Core
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"[UnifiedCpuTerrainPainter] 异步绘制失败: {ex.Message}");
+                Debug.LogError($"[UnifiedCpuTerrainPainter] 异步绘制失败: {ex.Message}");
                 return TerrainPaintResult.CreateFailure(ex.Message, PainterType.CPU);
             }
             finally
@@ -98,7 +115,7 @@ namespace __temp.MrPathV2.Editor.Core
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"[UnifiedCpuTerrainPainter] 同步绘制失败: {ex.Message}");
+                Debug.LogError($"[UnifiedCpuTerrainPainter] 同步绘制失败: {ex.Message}");
                 return TerrainPaintResult.CreateFailure(ex.Message, PainterType.CPU);
             }
             finally
@@ -147,7 +164,7 @@ namespace __temp.MrPathV2.Editor.Core
 
             // 如果没有找到包含位置的地形，返回最近的地形
             UnityEngine.Terrain nearestTerrain = null;
-            float nearestDistance = float.MaxValue;
+            var nearestDistance = float.MaxValue;
 
             foreach (var terrain in terrains)
             {
@@ -240,10 +257,7 @@ namespace __temp.MrPathV2.Editor.Core
             return new PathJobsUtility.SpineData(spine, Allocator.TempJob);
         }
 
-        private PathJobsUtility.ProfileData CreateProfileData(PathProfile pathProfile)
-        {
-            return new PathJobsUtility.ProfileData(pathProfile, Allocator.TempJob);
-        }
+        private PathJobsUtility.ProfileData CreateProfileData(PathProfile pathProfile) => new PathJobsUtility.ProfileData(pathProfile, Allocator.TempJob);
 
         private RecipeData CreateRecipeData(PathProfile pathProfile, UnityEngine.Terrain terrain)
         {
@@ -256,7 +270,7 @@ namespace __temp.MrPathV2.Editor.Core
             var layerMap = LayerResolver.ResolveEnsurePresentSmart(terrain, pathProfile);
 
             // 创建CPU配方数据（阈值与预览一致：opaquePreview=0.2，否则0）
-            var threshold = (pathProfile != null && pathProfile.opaquePreview) ? 0.2f : 0f;
+            var threshold = pathProfile != null && pathProfile.opaquePreview ? 0.2f : 0f;
             return new RecipeData(pathProfile, layerMap, 0f, 0f, Allocator.TempJob, threshold);
         }
 
@@ -285,15 +299,15 @@ namespace __temp.MrPathV2.Editor.Core
             var timestamps = new float[knotCount];
 
             // 简易法线与切线估算（基于相邻点差分），时间戳使用索引
-            for (int i = 0; i < knotCount; i++)
+            for (var i = 0; i < knotCount; i++)
             {
                 var knot = pathData.GetKnot(i);
                 points[i] = knot.Position;
                 timestamps[i] = i;
 
-                Vector3 prev = i > 0 ? pathData.GetKnot(i - 1).Position : knot.Position;
-                Vector3 next = i < knotCount - 1 ? pathData.GetKnot(i + 1).Position : knot.Position;
-                var tangent = (next - prev);
+                var prev = i > 0 ? pathData.GetKnot(i - 1).Position : knot.Position;
+                var next = i < knotCount - 1 ? pathData.GetKnot(i + 1).Position : knot.Position;
+                var tangent = next - prev;
                 tangents[i] = tangent.sqrMagnitude > 0f ? tangent.normalized : Vector3.forward;
                 normals[i] = Vector3.up;
             }
@@ -312,16 +326,16 @@ namespace __temp.MrPathV2.Editor.Core
             var pathBounds = CalculatePathBounds(pathData, pathProfile.roadWidth);
 
             // 转换为地形纹理坐标
-            var minX = Mathf.FloorToInt(((pathBounds.min.x - terrainPos.x) / terrainSize.x) * resolution);
-            var minY = Mathf.FloorToInt(((pathBounds.min.z - terrainPos.z) / terrainSize.z) * resolution);
-            var maxX = Mathf.CeilToInt(((pathBounds.max.x - terrainPos.x) / terrainSize.x) * resolution);
-            var maxY = Mathf.CeilToInt(((pathBounds.max.z - terrainPos.z) / terrainSize.z) * resolution);
+            var minX = Mathf.FloorToInt((pathBounds.min.x - terrainPos.x) / terrainSize.x * resolution);
+            var minY = Mathf.FloorToInt((pathBounds.min.z - terrainPos.z) / terrainSize.z * resolution);
+            var maxX = Mathf.CeilToInt((pathBounds.max.x - terrainPos.x) / terrainSize.x * resolution);
+            var maxY = Mathf.CeilToInt((pathBounds.max.z - terrainPos.z) / terrainSize.z * resolution);
 
-            // 限制在地形范围内
-            minX = Mathf.Clamp(minX, 0, resolution - 1);
-            minY = Mathf.Clamp(minY, 0, resolution - 1);
-            maxX = Mathf.Clamp(maxX, 0, resolution - 1);
-            maxY = Mathf.Clamp(maxY, 0, resolution - 1);
+            // 采用半开区间语义：[min, max)，max 允许等于 resolution
+            minX = Mathf.Clamp(minX, 0, resolution);
+            minY = Mathf.Clamp(minY, 0, resolution);
+            maxX = Mathf.Clamp(maxX, 0, resolution);
+            maxY = Mathf.Clamp(maxY, 0, resolution);
 
             return new CoverageArea
             {
@@ -339,7 +353,7 @@ namespace __temp.MrPathV2.Editor.Core
             var min = firstKnot.Position;
             var max = firstKnot.Position;
 
-            for (int i = 1; i < pathData.KnotCount; i++)
+            for (var i = 1; i < pathData.KnotCount; i++)
             {
                 var knot = pathData.GetKnot(i);
                 min = Vector3.Min(min, knot.Position);
@@ -352,7 +366,7 @@ namespace __temp.MrPathV2.Editor.Core
 
             return new Bounds(
                 (min + max) * 0.5f,
-                (max - min) + expansion * 2f
+                max - min + expansion * 2f
             );
         }
 
@@ -417,22 +431,6 @@ namespace __temp.MrPathV2.Editor.Core
         {
             public Vector2Int Min;
             public Vector2Int Max;
-        }
-
-        #endregion
-
-        #region Validation
-
-        private static void ValidateInputs(UnityEngine.Terrain terrain, PathData pathData, PathProfile pathProfile)
-        {
-            if (terrain == null)
-                throw new ArgumentNullException(nameof(terrain));
-            if (pathData == null)
-                throw new ArgumentNullException(nameof(pathData));
-            if (pathProfile == null)
-                throw new ArgumentNullException(nameof(pathProfile));
-            if (pathProfile.roadRecipe == null)
-                throw new ArgumentException("PathProfile.roadRecipe 不能为空", nameof(pathProfile));
         }
 
         #endregion

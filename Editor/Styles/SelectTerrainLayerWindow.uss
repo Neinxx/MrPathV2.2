@@ -4,10 +4,10 @@
     border-top-width: 1px;
     border-left-width: 1px;
     border-right-width: 1px;
-    border-bottom-color: rgb(64,64,64);
-    border-top-color: rgb(64,64,64);
-    border-left-color: rgb(64,64,64);
-    border-right-color: rgb(64,64,64);
+    border-bottom-color: rgb(64, 64, 64);
+    border-top-color: rgb(64, 64, 64);
+    border-left-color: rgb(64, 64, 64);
+    border-right-color: rgb(64, 64, 64);
     /* 平滑过渡：0.2s */
     transition-property: border-bottom-color, border-top-color, border-left-color, border-right-color, border-bottom-width, border-top-width, border-left-width, border-right-width;
     transition-duration: 0.2s;
@@ -16,10 +16,10 @@
 
 /* 悬停：仅改变边框颜色，避免覆盖 selected 的 2px 宽度 */
 .tile-icon:hover {
-    border-bottom-color: rgb(90,153,255);
-    border-top-color: rgb(90,153,255);
-    border-left-color: rgb(90,153,255);
-    border-right-color: rgb(90,153,255);
+    border-bottom-color: rgb(90, 153, 255);
+    border-top-color: rgb(90, 153, 255);
+    border-left-color: rgb(90, 153, 255);
+    border-right-color: rgb(90, 153, 255);
 }
 
 .selected .tile-icon {
@@ -28,8 +28,8 @@
     border-top-width: 2px;
     border-left-width: 2px;
     border-right-width: 2px;
-    border-bottom-color: rgb(255,160,0);
-    border-top-color: rgb(255,160,0);
-    border-left-color: rgb(255,160,0);
-    border-right-color: rgb(255,160,0);
+    border-bottom-color: rgb(255, 160, 0);
+    border-top-color: rgb(255, 160, 0);
+    border-left-color: rgb(255, 160, 0);
+    border-right-color: rgb(255, 160, 0);
 }

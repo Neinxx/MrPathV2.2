@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
-using __temp.MrPathV2.Editor.GPU.Core;
-using __temp.MrPathV2.Editor.GPU.Pipeline.Stages;
+using MrPathV2.Editor.GPU.Core;
+using MrPathV2.Editor.GPU.Pipeline.Stages;
 
-namespace __temp.MrPathV2.Editor.GPU.Pipeline
+namespace MrPathV2.Editor.GPU.Pipeline
 {
     /// <summary>
     /// 地形纹理绘制管线编排器：清晰分阶段、明确输入输出、职责单一。

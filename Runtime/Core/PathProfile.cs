@@ -1,20 +1,21 @@
 using System;
-using __temp.MrPathV2.Runtime.Components;
+using MrPathV2.Runtime.Components;
 using UnityEngine;
-using UnityEngine.Serialization;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     [CreateAssetMenu(fileName = "NewPathProfile", menuName = "MrPath/Path Profile")]
     public class PathProfile : ScriptableObject
     {
 
-        private const int MinSegments = 3;
-        private const int MaxSegments = 64;
+        private const int MinCrossSectionSegments = 3;
+        private const int MaxCrossSectionSegments = 64;
+        private const int MinLongitudinalSegments = 1;
+        private const int MaxLongitudinalSegments = 300;
         [Header("核心设置")]
-        public CurveType curveType = CurveType.Bezier;
-        [FormerlySerializedAs("generationPrecision")]
-        [Range(2, 100)] public int longitudinalSegments = 32;
+        public CurveType curveType = CurveType.CatmullRom;
+        [Tooltip("预览网格在长度上的分段数")]
+        [Range(MinLongitudinalSegments, MaxLongitudinalSegments)] public int longitudinalSegments = 32;
         [Tooltip("道路的总宽度")]
         public float roadWidth = 5f;
 
@@ -36,7 +37,7 @@ namespace __temp.MrPathV2.Runtime.Core
         [Header("网格生成")]
         public bool forceHorizontal = true;
         [Tooltip("预览网格在宽度上的分段数")]
-        [Range(3, 64)] public int crossSectionSegments = 16;
+        [Range(MinCrossSectionSegments, MaxCrossSectionSegments)] public int crossSectionSegments = 16;
 
         [Header("渲染预览")]
         [Tooltip("是否在场景中显示预览网格")]
@@ -57,7 +58,6 @@ namespace __temp.MrPathV2.Runtime.Core
         private StylizedRoadRecipe _subscribedRecipe;
 
 
-
         private void OnEnable()
         {
             SubscribeToRecipe();
@@ -73,8 +73,8 @@ namespace __temp.MrPathV2.Runtime.Core
         private void OnValidate()
         {
             // 保证生成参数与曲线端点处于安全范围
-            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MinSegments, MaxSegments);
-            longitudinalSegments = Mathf.Clamp(longitudinalSegments, 2, 100);
+            crossSectionSegments = Mathf.Clamp(crossSectionSegments, MinCrossSectionSegments, MaxCrossSectionSegments);
+            longitudinalSegments = Mathf.Clamp(longitudinalSegments, MinLongitudinalSegments, MaxLongitudinalSegments);
             roadWidth = Mathf.Max(0.01f, roadWidth);
             falloffWidth = Mathf.Max(0f, falloffWidth);
 
@@ -98,7 +98,7 @@ namespace __temp.MrPathV2.Runtime.Core
 
             // 直接使用roadRecipe
             if (!roadRecipe) return;
-            
+
             _subscribedRecipe = roadRecipe;
             _subscribedRecipe.RecipeChanged += OnRecipeChanged;
         }
@@ -123,63 +123,85 @@ namespace __temp.MrPathV2.Runtime.Core
             if (curve == null) return;
 
             var keys = curve.keys;
-            var keyCount = keys.Length;
-            if (keyCount == 0)
+            if (keys.Length == 0)
             {
                 // 空曲线的容错：只添加一个关键帧以避免 NRE；数值沿用传入值
                 curve.AddKey(new Keyframe(time, value));
                 return;
             }
 
-            // 判断该时间应匹配曲线的开头还是结尾（本方法仅用于端点保障）
-            var firstIdx = 0;
-            var lastIdx = keyCount - 1;
-
-            // 如果已存在精确的端点，直接返回（避免重复操作）
+            // 如果已存在精确的端点，直接清理重复端点并返回（避免重复操作）
             var existingIdx = Array.FindIndex(keys, k => Mathf.Approximately(k.time, time));
             if (existingIdx >= 0)
             {
-                // 可能存在重复端点：清理除第一个匹配外的其它重复
-                for (var i = keyCount - 1; i >= 0; i--)
-                {
-                    if (i == existingIdx) continue;
-                    if (Mathf.Approximately(curve.keys[i].time, time))
-                    {
-                        curve.RemoveKey(i);
-                    }
-                }
+                RemoveDuplicateKeys(curve, time, existingIdx);
                 return;
             }
 
-            // 将最靠近目标时间的端点移动到指定时间；保留其原有数值
-            // 这里假定 EnsureKey 被用于极值时间（如 -1/1 或 0/1），因此使用首尾端点
-            var targetIsStart = time <= (keys[firstIdx].time + keys[lastIdx].time) * 0.5f;
+            // 根据时间判断是起始点还是结束点
+            MoveNearestKeyToPoint(curve, time);
+        }
+
+        private static void RemoveDuplicateKeys(AnimationCurve curve, float time, int excludeIndex)
+        {
+            // 清理除指定索引外的其它重复端点
+            for (var i = curve.keys.Length - 1; i >= 0; i--)
+            {
+                if (i == excludeIndex) continue;
+                if (Mathf.Approximately(curve.keys[i].time, time))
+                {
+                    curve.RemoveKey(i);
+                }
+            }
+        }
+
+        private static void MoveNearestKeyToPoint(AnimationCurve curve, float targetTime)
+        {
+            var keys = curve.keys;
+            const int firstIdx = 0;
+            var lastIdx = keys.Length - 1;
+            
+            // 判断目标时间更靠近起点还是终点
+            var targetIsStart = targetTime <= (keys[firstIdx].time + keys[lastIdx].time) * 0.5f;
+            
             if (targetIsStart)
             {
-                var k = curve.keys[firstIdx];
-                k.time = time; // 保持 value 不变
-                curve.MoveKey(firstIdx, k);
-                // 移动后可能出现重复端点，进行清理（保留新的首端点）
-                for (var i = curve.keys.Length - 1; i >= 1; i--)
-                {
-                    if (Mathf.Approximately(curve.keys[i].time, time))
-                        curve.RemoveKey(i);
-                }
+                // 移动第一个关键帧到目标时间
+                var key = curve.keys[firstIdx];
+                key.time = targetTime;
+                curve.MoveKey(firstIdx, key);
+                
+                // 清理可能产生的重复关键帧（保留新的首端点）
+                RemoveDuplicateKeysAfterFirst(curve, targetTime);
             }
             else
             {
-                // 重新取最后索引以防排序
-                lastIdx = curve.keys.Length - 1;
-                var k = curve.keys[lastIdx];
-                k.time = time; // 保持 value 不变
-                curve.MoveKey(lastIdx, k);
-                // 移动后可能出现重复端点，进行清理（保留新的末端点）
-                lastIdx = curve.keys.Length - 1;
-                for (var i = lastIdx - 1; i >= 0; i--)
-                {
-                    if (Mathf.Approximately(curve.keys[i].time, time))
-                        curve.RemoveKey(i);
-                }
+                // 移动最后一个关键帧到目标时间
+                var key = curve.keys[lastIdx];
+                key.time = targetTime;
+                curve.MoveKey(lastIdx, key);
+                
+                // 清理可能产生的重复关键帧（保留新的末端点）
+                RemoveDuplicateKeysBeforeLast(curve, targetTime);
+            }
+        }
+
+        private static void RemoveDuplicateKeysAfterFirst(AnimationCurve curve, float time)
+        {
+            for (var i = curve.keys.Length - 1; i >= 1; i--)
+            {
+                if (Mathf.Approximately(curve.keys[i].time, time))
+                    curve.RemoveKey(i);
+            }
+        }
+
+        private static void RemoveDuplicateKeysBeforeLast(AnimationCurve curve, float time)
+        {
+            var lastIndex = curve.keys.Length - 1;
+            for (var i = lastIndex - 1; i >= 0; i--)
+            {
+                if (Mathf.Approximately(curve.keys[i].time, time))
+                    curve.RemoveKey(i);
             }
         }
     }

@@ -2,7 +2,10 @@ Shader "MrPathV2/RoadMaskRender"
 {
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "Queue" = "Geometry" }
+        Tags
+        {
+            "RenderType" = "Opaque" "Queue" = "Geometry"
+        }
         Pass
         {
             ZTest Always
@@ -21,13 +24,11 @@ Shader "MrPathV2/RoadMaskRender"
             int2   _CoverageMin;
             int2   _CoverageMax;
 
-            struct VSIn
-            {
+            struct VSIn {
                 float3 pos : POSITION;
             };
 
-            struct VSOut
-            {
+            struct VSOut {
                 float4 pos : SV_Position;
             };
 
@@ -56,7 +57,6 @@ Shader "MrPathV2/RoadMaskRender"
                 // 白色写入，作为遮罩
                 return float4(1, 1, 1, 1);
             }
-
             ENDHLSL
         }
     }

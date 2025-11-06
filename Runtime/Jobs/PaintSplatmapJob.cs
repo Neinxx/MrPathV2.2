@@ -1,5 +1,3 @@
-
-
 using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
@@ -7,7 +5,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     两阶段地形绘制的第二阶段：读取缓存信息并执行混合。
@@ -91,45 +89,52 @@ namespace __temp.MrPathV2.Runtime.Jobs
             }
 
             // 若未涂绘任何图层，直接返回以避免不必要的标准化开销
-            if (!anyLayerPainted) return;
+            if (!anyLayerPainted)
+            {
+                HandleUnpaintedLayers(baseAlphaIndex, anyLayerPainted, firstValidSplatIndex);
+                return;
+            }
 
             // 标准化alpha权重，保持总和为 1
             NormalizeAlphaWeights(baseAlphaIndex, firstValidSplatIndex);
         }
 
         /// <summary>
-        /// 计算是否应当对该像素进行涂绘：总权重未达到门槛则视为未涂绘
+        ///     计算是否应当对该像素进行涂绘：总权重未达到门槛则视为未涂绘
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ShouldPaintPixel(float normalizedDist, float pathProgress, out int firstValidSplatIndex)
         {
             firstValidSplatIndex = -1;
-            float totalMask = 0f;
-            // 改为从上到下（索引高到低）遍历，以获取最上层有效索引
+            var totalMask = 0f;
+            // 从上到下（索引高到低）遍历，且当 OpaquePainting 开启时采用 alpha clip 门控
             for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
             {
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
                 if (!ValidateSplatIndex(splatIndex)) continue;
-                if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
 
                 var maskValue = GetMaskValue(layerIndex, normalizedDist, pathProgress);
-                if (maskValue > SmallWeightCutoff)
-                    totalMask += maskValue;
+                if (OpaquePainting && maskValue < AlphaClipThreshold)
+                {
+                    continue; // 门控：低于裁剪阈值即视为不参与本次绘制
+                }
+
+                if (maskValue <= SmallWeightCutoff) continue;
+
+                totalMask += maskValue;
+                if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
             }
-            return totalMask > PaintGateThreshold;
+            return totalMask > PaintGateThreshold && firstValidSplatIndex != -1;
         }
 
         /// <summary>
-        /// 验证alpha索引范围是否有效
+        ///     验证alpha索引范围是否有效
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool ValidateAlphaIndexRange(int baseAlphaIndex)
-        {
-            return baseAlphaIndex >= 0 && baseAlphaIndex + AlphamapLayerCount <= Alphamaps.Length;
-        }
+        private bool ValidateAlphaIndexRange(int baseAlphaIndex) => baseAlphaIndex >= 0 && baseAlphaIndex + AlphamapLayerCount <= Alphamaps.Length;
 
         /// <summary>
-        /// 应用图层混合
+        ///     应用图层混合
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ApplyLayerBlending(int baseAlphaIndex, float normalizedDist, float pathProgress, int firstValidSplatIndex)
@@ -139,7 +144,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
             // 统一有序覆盖（与 GPU/预览一致），区别：当 OpaquePainting 开启时对 mask 进行 alpha clip 门控
 
             // 预先累计“其他层”的原始总和（非配方层与配方层的旧值）
-            float originalOthersSum = 0f;
+            var originalOthersSum = 0f;
             for (var i = 0; i < AlphamapLayerCount; i++)
             {
                 if (!IsRecipeSplatIndex(i))
@@ -148,7 +153,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
 
             // 第一步：计算配方层总贡献（不写回），用于缩放其他层
             var remaining = 1f;
-            float sumRecipe = 0f;
+            var sumRecipe = 0f;
             for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
             {
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
@@ -160,7 +165,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
                     continue; // clip 门控
                 }
 
-                var strength = (Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length)
+                var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length
                     ? math.saturate(Recipe.Opacities[layerIndex])
                     : 1f;
                 var selfAlpha = math.saturate(maskAlpha * strength);
@@ -182,11 +187,9 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 {
                     for (var i = 0; i < AlphamapLayerCount; i++)
                     {
-                        if (!IsRecipeSplatIndex(i))
-                        {
-                            var idx = baseAlphaIndex + i;
-                            Alphamaps[idx] *= scale;
-                        }
+                        if (IsRecipeSplatIndex(i)) continue;
+                        var idx = baseAlphaIndex + i;
+                        Alphamaps[idx] *= scale;
                     }
                 }
             }
@@ -201,11 +204,11 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
                 if (OpaquePainting && maskAlpha < AlphaClipThreshold)
                 {
-                    Alphamaps[baseAlphaIndex + splatIndex] = 0f;
+                    // Alphamaps[baseAlphaIndex + splatIndex] = 0f;
                     continue;
                 }
 
-                var strength = (Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length)
+                var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length
                     ? math.saturate(Recipe.Opacities[layerIndex])
                     : 1f;
                 var selfAlpha = math.saturate(maskAlpha * strength);
@@ -218,7 +221,8 @@ namespace __temp.MrPathV2.Runtime.Jobs
                 }
                 else
                 {
-                    Alphamaps[baseAlphaIndex + splatIndex] = 0f;
+                    // 保留原始权重，不做清零以避免把已有底图层抹成 0 导致黑边
+                    // no-op
                 }
 
                 if (remaining <= Epsilon) break;
@@ -228,16 +232,13 @@ namespace __temp.MrPathV2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 验证splat索引是否有效
+        ///     验证splat索引是否有效
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool ValidateSplatIndex(int splatIndex)
-        {
-            return splatIndex >= 0 && splatIndex < AlphamapLayerCount;
-        }
+        private bool ValidateSplatIndex(int splatIndex) => splatIndex >= 0 && splatIndex < AlphamapLayerCount;
 
         /// <summary>
-        /// 在道路覆盖区清除非配方图层的权重
+        ///     在道路覆盖区清除非配方图层的权重
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ZeroOutNonRecipeLayers(int baseAlphaIndex)
@@ -262,7 +263,7 @@ namespace __temp.MrPathV2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 获取遮罩值
+        ///     获取遮罩值
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetMaskValue(int layerIndex, float normalizedDist, float pathProgress)
@@ -274,22 +275,19 @@ namespace __temp.MrPathV2.Runtime.Jobs
                     Recipe.MaskAtlas, Recipe.AtlasWidth, Recipe.PathSamples,
                     layerIndex, normalizedDist, pathProgress);
             }
-            else if (Recipe.Strips.IsCreated)
+            if (Recipe.Strips.IsCreated)
             {
                 // 仅返回遮罩值（不含不透明度），在混合处再乘以 Recipe.Opacities
                 return TerrainJobsUtility.EvaluateStrip(
                     Recipe.Strips, Recipe.StripSlices[layerIndex],
                     Recipe.StripResolution, normalizedDist);
             }
-            else
-            {
-                // 无遮罩数据：返回 1（全通），最终在混合处乘以 Recipe.Opacities
-                return 1f;
-            }
+            // 无遮罩数据：返回 1（全通），最终在混合处乘以 Recipe.Opacities
+            return 1f;
         }
 
         /// <summary>
-        /// 应用混合到指定图层
+        ///     应用混合到指定图层
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ApplyBlendingToLayer(int baseAlphaIndex, int splatIndex, float maskValue, int layerIndex)
@@ -305,12 +303,35 @@ namespace __temp.MrPathV2.Runtime.Jobs
         }
 
         /// <summary>
-        /// 未绘制任何图层时保持原权重不变
+        ///     未绘制任何图层时保持原权重不变
         /// </summary>
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void HandleUnpaintedLayers(int baseAlphaIndex, bool anyLayerPainted, int firstValidSplatIndex)
         {
-            // 保持空实现：不强制写 1，避免清空原地形纹理
+            const float NormalizationThreshold = 1e-5f;
+            var total = 0f;
+            var maxVal = -1f;
+            var maxIdx = -1;
+
+            for (var i = 0; i < AlphamapLayerCount; i++)
+            {
+                var v = Alphamaps[baseAlphaIndex + i];
+                total += v;
+                if (!(v > maxVal)) continue;
+                maxVal = v;
+                maxIdx = i;
+            }
+
+            if (!(total < NormalizationThreshold)) return;
+            {
+                // 若全为0，回退到本次计算得到的首个有效配方层；再不行则回退到0号图层
+                if (maxIdx < 0) maxIdx = ValidateSplatIndex(firstValidSplatIndex) ? firstValidSplatIndex : 0;
+                for (var i = 0; i < AlphamapLayerCount; i++)
+                {
+                    Alphamaps[baseAlphaIndex + i] = i == maxIdx ? 1f : 0f;
+                }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

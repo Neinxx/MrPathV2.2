@@ -1,31 +1,31 @@
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Preview;
 using UnityEngine;
 
 namespace MrPathV2.Editor.Preview
 {
     /// <summary>
-    /// Handles generation and management of mask atlas textures for preview materials.
-    /// This class is responsible for creating textures that store per-layer mask weights.
+    ///     Handles generation and management of mask atlas textures for preview materials.
+    ///     This class is responsible for creating textures that store per-layer mask weights.
     /// </summary>
     public class PreviewMaskAtlasGenerator
     {
         private readonly Material m_Material;
-        private readonly PathProfile m_Profile;
         private readonly float m_PathLength;
-        
+        private readonly PathProfile m_Profile;
+
         public PreviewMaskAtlasGenerator(Material material, PathProfile profile, float pathLength)
         {
             m_Material = material ?? throw new ArgumentNullException(nameof(material));
             m_Profile = profile ?? throw new ArgumentNullException(nameof(profile));
             m_PathLength = pathLength;
         }
-        
+
         /// <summary>
-        /// Generates or updates the mask atlas texture that stores per-layer mask weights.
-        /// This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
+        ///     Generates or updates the mask atlas texture that stores per-layer mask weights.
+        ///     This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
         /// </summary>
         /// <param name="existingAtlas">Existing atlas texture to update, if any</param>
         /// <returns>Generated or updated mask atlas texture</returns>
@@ -35,7 +35,7 @@ namespace MrPathV2.Editor.Preview
 
             var recipe = m_Profile.roadRecipe;
             var layers = recipe?.GetLayers();
-            
+
             // Early return if no layers
             if (layers == null || layers.Count == 0)
             {
@@ -45,7 +45,7 @@ namespace MrPathV2.Editor.Preview
 
             // Collect layer information
             var layerInfos = CollectLayerInfos(layers);
-            
+
             // If no valid layers, handle appropriately
             if (layerInfos.Count == 0)
             {
@@ -55,15 +55,15 @@ namespace MrPathV2.Editor.Preview
 
             // Build the mask atlas
             var maskAtlas = BuildAtlasFromLayerInfos(existingAtlas, layerInfos);
-            
+
             // Apply the mask atlas to the material
             ApplyMaskAtlasToMaterial(maskAtlas);
-            
+
             return maskAtlas;
         }
-        
+
         /// <summary>
-        /// Collects information about all enabled layers
+        ///     Collects information about all enabled layers
         /// </summary>
         /// <param name="layers">List of road layers</param>
         /// <returns>List of preview layer information</returns>
@@ -76,19 +76,19 @@ namespace MrPathV2.Editor.Preview
             foreach (var roadLayer in layers)
             {
                 if (roadLayer is not { enabled: true }) continue;
-                
+
                 var layerInfo = CreateLayerInfo(roadLayer, worldWidth, recipe);
                 if (layerInfo != null)
                 {
                     layerInfos.Add(layerInfo.Value);
                 }
             }
-            
+
             return layerInfos;
         }
-        
+
         /// <summary>
-        /// Creates preview layer information for a single road layer
+        ///     Creates preview layer information for a single road layer
         /// </summary>
         /// <param name="roadLayer">The road layer</param>
         /// <param name="worldWidth">World width of the road</param>
@@ -97,15 +97,15 @@ namespace MrPathV2.Editor.Preview
         private PreviewPipelineUtility.PreviewLayerInfo? CreateLayerInfo(RoadLayer roadLayer, float worldWidth, StylizedRoadRecipe recipe)
         {
             var tLayer = roadLayer.contentLayer;
-            Texture2D tex = TryGetTextureFromLayer(tLayer);
-            
+            var tex = TryGetTextureFromLayer(tLayer);
+
             // Skip layers without textures
             if (tex == null) return null;
 
             var tiling = PreviewPipelineUtility.CalcLayerTiling(worldWidth, tLayer);
             var tint = GetTerrainLayerTint(tLayer);
             var opacity = Mathf.Clamp01(roadLayer.opacity * recipe.masterOpacity);
-            
+
             return new PreviewPipelineUtility.PreviewLayerInfo(
                 tex,
                 tiling,
@@ -115,9 +115,9 @@ namespace MrPathV2.Editor.Preview
                 roadLayer.blendMode,
                 roadLayer.layerMask);
         }
-        
+
         /// <summary>
-        /// Safely tries to get a texture from a terrain layer
+        ///     Safely tries to get a texture from a terrain layer
         /// </summary>
         /// <param name="tLayer">The terrain layer</param>
         /// <returns>The texture, or null if not available</returns>
@@ -136,9 +136,9 @@ namespace MrPathV2.Editor.Preview
             }
             return null;
         }
-        
+
         /// <summary>
-        /// Builds the mask atlas from layer information
+        ///     Builds the mask atlas from layer information
         /// </summary>
         /// <param name="existingAtlas">Existing atlas texture to update, if any</param>
         /// <param name="layerInfos">List of layer information</param>
@@ -150,7 +150,7 @@ namespace MrPathV2.Editor.Preview
             var effectivePathLength = m_PathLength > 0f ? m_PathLength : 100f;
 
             // 从材质读取阈值，驱动 Atlas 构建期的阈值塑形
-            float maskThreshold = 0f;
+            var maskThreshold = 0f;
             if (m_Material != null && m_Material.HasProperty(PreviewShaderContracts.Properties.MaskThreshold))
             {
                 maskThreshold = m_Material.GetFloat(PreviewShaderContracts.Properties.MaskThreshold);
@@ -158,9 +158,9 @@ namespace MrPathV2.Editor.Preview
 
             return PreviewPipelineUtility.BuildMaskAtlas(existingAtlas, layerInfos, worldWidth, effectivePathLength, 256, maskThreshold);
         }
-        
+
         /// <summary>
-        /// Applies the mask atlas to the material
+        ///     Applies the mask atlas to the material
         /// </summary>
         /// <param name="maskAtlas">The mask atlas texture</param>
         private void ApplyMaskAtlasToMaterial(Texture2D maskAtlas)
@@ -175,7 +175,7 @@ namespace MrPathV2.Editor.Preview
             // Stylized shader expects layer index uniform (always 0 for single-layer preview)
             m_Material.SetFloat(PreviewShaderContracts.Properties.LayerIndex, 0f);
         }
-        
+
         private void HandleNoLayersCase()
         {
             if (!m_Material.HasProperty(PreviewShaderContracts.Properties.MaskAtlas)) return;
@@ -183,9 +183,9 @@ namespace MrPathV2.Editor.Preview
             m_Material.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.whiteTexture);
             m_Material.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, 1f);
         }
-        
+
         /// <summary>
-        /// Parse Tint color from TerrainLayer (URP's DiffuseRemapMax)
+        ///     Parse Tint color from TerrainLayer (URP's DiffuseRemapMax)
         /// </summary>
         /// <param name="layer">Terrain layer</param>
         /// <returns>Tint color</returns>

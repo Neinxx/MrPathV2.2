@@ -1,13 +1,13 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Stores
+namespace MrPathV2.Editor.Stores
 {
-    [CreateAssetMenu(fileName = "TerrainLayerPickerStore", menuName = "MrPath/Editor/TerrainLayerPickerStore")] 
+    [CreateAssetMenu(fileName = "TerrainLayerPickerStore", menuName = "MrPath/Editor/TerrainLayerPickerStore")]
     public class TerrainLayerPickerStore : ScriptableObject
     {
         private const int MaxRecent = 30;
@@ -104,9 +104,9 @@ namespace __temp.MrPathV2.Editor.Stores
                 if (string.IsNullOrEmpty(scriptPath)) return "Assets/MrPathV2";
                 scriptPath = scriptPath.Replace('\\', '/');
                 var parts = scriptPath.Split('/');
-                for (int i = 0; i < parts.Length; i++)
+                for (var i = 0; i < parts.Length; i++)
                 {
-                    if (string.Equals(parts[i], "MrPathV2", System.StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(parts[i], "MrPathV2", StringComparison.OrdinalIgnoreCase))
                     {
                         return string.Join("/", parts.Take(i + 1));
                     }
@@ -122,10 +122,13 @@ namespace __temp.MrPathV2.Editor.Stores
         {
             if (string.IsNullOrEmpty(unityFolderPath)) return;
             unityFolderPath = unityFolderPath.Replace('\\', '/');
-            var parts = unityFolderPath.Split(new[] {'/'}, System.StringSplitOptions.RemoveEmptyEntries);
+            var parts = unityFolderPath.Split(new[]
+            {
+                '/'
+            }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0) return;
             var current = parts[0];
-            for (int i = 1; i < parts.Length; i++)
+            for (var i = 1; i < parts.Length; i++)
             {
                 var next = parts[i];
                 var candidate = $"{current}/{next}";

@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 // 保留以兼容可能的 Task 用法（若不需要可后续移除）
 
-namespace __temp.MrPathV2.Runtime.Settings
+namespace MrPathV2.Runtime.Settings
 {
     /// <summary>
     ///     路径策略注册中心：负责管理CurveType与PathStrategy的映射关系
@@ -24,6 +24,13 @@ namespace __temp.MrPathV2.Runtime.Settings
         [Header("策略映射配置")]
         [Tooltip("曲线类型与策略的映射列表")]
         [SerializeField] private List<StrategyEntry> strategyEntries = new List<StrategyEntry>();
+
+        /// <summary>
+        ///     获取指定曲线类型的策略
+        /// </summary>
+        /// <returns>对应的路径策略，若未找到则返回null</returns>
+        // 添加一个字段用于跟踪已警告过的曲线类型，避免重复输出相同警告
+        private readonly HashSet<CurveType> _loggedMissingStrategies = new HashSet<CurveType>();
 
         // 缓存策略映射，提高查询性能
         private Dictionary<CurveType, PathStrategy> _strategyCache;
@@ -77,7 +84,7 @@ namespace __temp.MrPathV2.Runtime.Settings
             {
                 // 尝试通过Resources加载实例
                 m_Instance = LoadFromResources();
-                
+
                 // 如果Resources加载失败，尝试在编辑器中查找
                 if (!m_Instance)
                 {
@@ -88,18 +95,15 @@ namespace __temp.MrPathV2.Runtime.Settings
                 HandleLoadResult();
             }, "PathStrategyRegistry.InitializeInstance");
         }
-        
+
         /// <summary>
-        /// 从Resources目录加载PathStrategyRegistry实例
+        ///     从Resources目录加载PathStrategyRegistry实例
         /// </summary>
         /// <returns>加载的实例，如果失败则返回null</returns>
-        private static PathStrategyRegistry LoadFromResources()
-        {
-            return Resources.Load<PathStrategyRegistry>("PathStrategyRegistry");
-        }
-        
+        private static PathStrategyRegistry LoadFromResources() => Resources.Load<PathStrategyRegistry>("PathStrategyRegistry");
+
         /// <summary>
-        /// 在编辑器中查找PathStrategyRegistry实例
+        ///     在编辑器中查找PathStrategyRegistry实例
         /// </summary>
         /// <returns>找到的实例，如果失败或不在编辑器中则返回null</returns>
         private static PathStrategyRegistry FindInEditor()
@@ -117,9 +121,9 @@ namespace __temp.MrPathV2.Runtime.Settings
         #endif
             return null;
         }
-        
+
         /// <summary>
-        /// 处理加载结果
+        ///     处理加载结果
         /// </summary>
         private static void HandleLoadResult()
         {
@@ -142,7 +146,7 @@ namespace __temp.MrPathV2.Runtime.Settings
             ErrorHandler.SafeExecute(() =>
             {
                 _strategyCache = new Dictionary<CurveType, PathStrategy>();
-                
+
                 // 提前返回：如果策略条目为空，初始化空列表并返回
                 if (strategyEntries == null)
                 {
@@ -162,7 +166,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         }
 
         /// <summary>
-        /// 初始化空的策略条目列表
+        ///     初始化空的策略条目列表
         /// </summary>
         private void InitializeEmptyStrategyEntries()
         {
@@ -171,26 +175,26 @@ namespace __temp.MrPathV2.Runtime.Settings
         }
 
         /// <summary>
-        /// 处理策略条目列表
+        ///     处理策略条目列表
         /// </summary>
         private void ProcessStrategyEntries()
         {
             var duplicateTypes = new HashSet<CurveType>();
             var processedTypes = new HashSet<CurveType>();
-        
+
             foreach (var entry in strategyEntries)
             {
                 // 跳过无效条目
                 if (!ValidateEntry(entry, processedTypes, duplicateTypes))
                     continue;
-        
+
                 // 处理有效条目
                 ProcessValidEntry(entry, processedTypes);
             }
         }
 
         /// <summary>
-        /// 验证条目是否有效
+        ///     验证条目是否有效
         /// </summary>
         /// <param name="entry">策略条目</param>
         /// <param name="processedTypes">已处理的类型集合</param>
@@ -204,7 +208,7 @@ namespace __temp.MrPathV2.Runtime.Settings
                 ErrorHandler.LogWarning($"Invalid strategy entry for curve type '{entry.type}' - strategy is null.", "PathStrategyRegistry");
                 return false;
             }
-        
+
             // 检查是否已处理过该类型
             if (processedTypes.Contains(entry.type))
             {
@@ -212,43 +216,36 @@ namespace __temp.MrPathV2.Runtime.Settings
                 ErrorHandler.LogWarning($"Duplicate strategy entry found for curve type '{entry.type}'. Only the first valid entry will be used.", "PathStrategyRegistry");
                 return false;
             }
-        
+
             return true;
         }
 
         /// <summary>
-        /// 处理有效的策略条目
+        ///     处理有效的策略条目
         /// </summary>
         /// <param name="entry">策略条目</param>
         /// <param name="processedTypes">已处理的类型集合</param>
         private void ProcessValidEntry(StrategyEntry entry, HashSet<CurveType> processedTypes)
         {
             ErrorHandler.SafeExecute(() =>
-            {
-                EnsureDefaultStyle(entry.strategy);
-                _strategyCache[entry.type] = entry.strategy;
-                processedTypes.Add(entry.type);
-            }, $"PathStrategyRegistry.InitializeCache.ProcessEntry({entry.type})");
+                {
+                    EnsureDefaultStyle(entry.strategy);
+                    _strategyCache[entry.type] = entry.strategy;
+                    processedTypes.Add(entry.type);
+                }, $"PathStrategyRegistry.InitializeCache.ProcessEntry({entry.type})");
         }
 
         /// <summary>
-        /// 记录初始化结果
+        ///     记录初始化结果
         /// </summary>
         private void LogInitializationResult()
         {
             //ErrorHandler.LogInfo($"Cache initialized with {_strategyCache.Count} strategies.", "PathStrategyRegistry");
-            if(_strategyCache.Count == 0)
+            if (_strategyCache.Count == 0)
             {
                 ErrorHandler.LogWarning("No valid strategy entries found. Check the strategyEntries list in the inspector.", "PathStrategyRegistry");
             }
         }
-
-        /// <summary>
-        ///     获取指定曲线类型的策略
-        /// </summary>
-        /// <returns>对应的路径策略，若未找到则返回null</returns>
-        // 添加一个字段用于跟踪已警告过的曲线类型，避免重复输出相同警告
-        private readonly HashSet<CurveType> _loggedMissingStrategies = new HashSet<CurveType>();
 
         public PathStrategy GetStrategy(CurveType type)
         {
@@ -280,7 +277,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         }
 
         /// <summary>
-        /// 尝试从缓存中获取策略
+        ///     尝试从缓存中获取策略
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <param name="strategy">获取到的策略</param>
@@ -288,7 +285,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         private bool TryGetCachedStrategy(CurveType type, out PathStrategy strategy)
         {
             strategy = null;
-            
+
             if (_strategyCache != null &&
                 _strategyCache.TryGetValue(type, out strategy) &&
                 strategy)
@@ -300,7 +297,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         }
 
         /// <summary>
-        /// 确保缓存已初始化
+        ///     确保缓存已初始化
         /// </summary>
         /// <returns>缓存是否初始化成功</returns>
         private bool EnsureCacheInitialized()
@@ -322,7 +319,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         }
 
         /// <summary>
-        /// 尝试从缓存中获取策略
+        ///     尝试从缓存中获取策略
         /// </summary>
         /// <param name="type">曲线类型</param>
         /// <param name="strategy">获取到的策略</param>
@@ -330,7 +327,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         private bool TryGetStrategyFromCache(CurveType type, out PathStrategy strategy)
         {
             strategy = null;
-            
+
             // 再次检查缓存（初始化后可能已有值）
             if (_strategyCache.TryGetValue(type, out strategy))
             {
@@ -345,7 +342,7 @@ namespace __temp.MrPathV2.Runtime.Settings
         }
 
         /// <summary>
-        /// 记录缺失的策略
+        ///     记录缺失的策略
         /// </summary>
         /// <param name="type">曲线类型</param>
         private void LogMissingStrategy(CurveType type)

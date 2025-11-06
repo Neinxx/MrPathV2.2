@@ -1,15 +1,16 @@
 using System;
 using System.Collections.Generic;
+using MrPathV2.Runtime.Core;
 using Unity.Collections;
 using Unity.Mathematics;
-using UnityEngine;
 using UnityEditor;
-using __temp.MrPathV2.Runtime.Core;
+using UnityEngine;
+using Object = UnityEngine.Object;
 
-namespace __temp.MrPathV2.Editor.Core
+namespace MrPathV2.Editor.Core
 {
     /// <summary>
-    /// 统一架构验证器 - 验证统一架构的功能和性能
+    ///     统一架构验证器 - 验证统一架构的功能和性能
     /// </summary>
     public static class UnifiedArchitectureValidator
     {
@@ -53,7 +54,7 @@ namespace __temp.MrPathV2.Editor.Core
                 var pathProfile = CreateTestPathProfile();
 
                 // 测试GPU数据转换
-                var gpuRenderData = UnifiedDataAdapter.CreateGpuRenderData(pathData, pathProfile, Allocator.TempJob);
+                var gpuRenderData = UnifiedDataAdapter.CreateGpuRenderData(pathData, pathProfile);
 
                 if (!gpuRenderData.IsCreated)
                 {
@@ -104,7 +105,7 @@ namespace __temp.MrPathV2.Editor.Core
 
                 // 修复：从PathData提取路径点并转换为NativeArray<float3>
                 var pathPointsArray = new NativeArray<float3>(pathData.KnotCount, Allocator.Temp);
-                for (int i = 0; i < pathData.KnotCount; i++)
+                for (var i = 0; i < pathData.KnotCount; i++)
                 {
                     pathPointsArray[i] = pathData.GetPosition(i);
                 }
@@ -173,7 +174,7 @@ namespace __temp.MrPathV2.Editor.Core
                 pathCreator.pathData = pathData;
                 pathCreator.profile = pathProfile;
 
-                var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator, false, PainterType.GPU);
+                var command = UnifiedPaintTerrainCommand.CreateRoadPaintCommand(pathCreator);
 
                 if (command != null)
                     result.AddSuccess("命令构建成功");
@@ -190,7 +191,7 @@ namespace __temp.MrPathV2.Editor.Core
                     result.AddError($"命令执行失败: {commandResult.ErrorMessage}");
 
                 // 清理资源
-                UnityEngine.Object.DestroyImmediate(pathCreatorObject);
+                Object.DestroyImmediate(pathCreatorObject);
                 CleanupTestTerrain(terrain);
             }
             catch (Exception ex)
@@ -303,7 +304,7 @@ namespace __temp.MrPathV2.Editor.Core
                 var cpuPainter = new UnifiedCpuTerrainPainter();
                 var cpuTimes = new List<float>();
 
-                for (int i = 0; i < iterations; i++)
+                for (var i = 0; i < iterations; i++)
                 {
                     var cpuResult = cpuPainter.Paint(pathCreator, true);
                     if (cpuResult.IsSuccess)
@@ -322,7 +323,7 @@ namespace __temp.MrPathV2.Editor.Core
                     var gpuPainter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
                     var gpuTimes = new List<float>();
 
-                    for (int i = 0; i < iterations; i++)
+                    for (var i = 0; i < iterations; i++)
                     {
                         var gpuResult = gpuPainter.Paint(pathCreator, true);
                         if (gpuResult.IsSuccess)
@@ -407,7 +408,7 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (terrain != null && terrain.gameObject != null)
             {
-                UnityEngine.Object.DestroyImmediate(terrain.gameObject);
+                Object.DestroyImmediate(terrain.gameObject);
             }
         }
 
@@ -415,9 +416,9 @@ namespace __temp.MrPathV2.Editor.Core
         {
             Debug.Log("=== 统一架构验证结果 ===");
 
-            int totalTests = 0;
-            int passedTests = 0;
-            int failedTests = 0;
+            var totalTests = 0;
+            var passedTests = 0;
+            var failedTests = 0;
 
             foreach (var result in results)
             {
@@ -444,7 +445,7 @@ namespace __temp.MrPathV2.Editor.Core
                 }
             }
 
-            Debug.Log($"\n=== 总结 ===");
+            Debug.Log("\n=== 总结 ===");
             Debug.Log($"总测试数: {totalTests}");
             Debug.Log($"通过: {passedTests}");
             Debug.Log($"失败: {failedTests}");
@@ -466,14 +467,14 @@ namespace __temp.MrPathV2.Editor.Core
 
         private class ValidationResult
         {
-            public string TestName { get; }
-            public List<ValidationMessage> Messages { get; }
 
             public ValidationResult(string testName)
             {
                 TestName = testName;
                 Messages = new List<ValidationMessage>();
             }
+            public string TestName { get; }
+            public List<ValidationMessage> Messages { get; }
 
             public void AddSuccess(string message) => Messages.Add(new ValidationMessage(MessageType.Success, message));
             public void AddError(string message) => Messages.Add(new ValidationMessage(MessageType.Error, message));
@@ -482,14 +483,14 @@ namespace __temp.MrPathV2.Editor.Core
 
         private class ValidationMessage
         {
-            public MessageType Type { get; }
-            public string Text { get; }
 
             public ValidationMessage(MessageType type, string text)
             {
                 Type = type;
                 Text = text;
             }
+            public MessageType Type { get; }
+            public string Text { get; }
         }
 
         private enum MessageType
@@ -509,9 +510,11 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (list.Count == 0) return 0f;
 
-            float sum = 0f;
+            var sum = 0f;
             foreach (var value in list)
+            {
                 sum += value;
+            }
 
             return sum / list.Count;
         }

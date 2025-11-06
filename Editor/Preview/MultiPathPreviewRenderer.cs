@@ -2,25 +2,24 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
-using __temp.MrPathV2.Runtime.Providers;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Providers;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace MrPathV2.Editor.Preview
 {
     /// <summary>
-    /// Global multi-path preview renderer.
-    /// Renders preview meshes for all PathCreator instances concurrently in SceneView.
-    /// Each PathCreator uses its own PathProfile and materials.
+    ///     Global multi-path preview renderer.
+    ///     Renders preview meshes for all PathCreator instances concurrently in SceneView.
+    ///     Each PathCreator uses its own PathProfile and materials.
     /// </summary>
     [InitializeOnLoad]
     public static class MultiPathPreviewRenderer
     {
-        // 控制全局多路径预览是否启用，避免与单对象编辑器预览重复绘制
-        private static bool IsEnabled => true;
 
 
         // 当前正在编辑（拖拽句柄）的对象 ID；拖拽中由编辑器设置
@@ -33,13 +32,6 @@ namespace MrPathV2.Editor.Preview
         private static List<PathCreator> s_MCachedCreators = new List<PathCreator>();
         private static bool s_MCreatorsDirty = true;
 
-        private struct TransformSnapshot
-        {
-            public Vector3 Position;
-            public Quaternion Rotation;
-            public Vector3 Scale;
-        }
-
         static MultiPathPreviewRenderer()
         {
             EditorApplication.delayCall += EnsureInitialized;
@@ -50,6 +42,9 @@ namespace MrPathV2.Editor.Preview
                 s_MCreatorsDirty = true;
             };
         }
+
+        // 控制全局多路径预览是否启用，避免与单对象编辑器预览重复绘制
+        private static bool IsEnabled => true;
 
         private static void EnsureInitialized()
         {
@@ -89,7 +84,7 @@ namespace MrPathV2.Editor.Preview
             if (Managers.TryGetValue(id, out var mgr) && mgr != null) return mgr;
             var generator = new DefaultPreviewGenerator();
             var matMgr = new PreviewMaterialManager();
-            mgr = new PathPreviewManager(generator, matMgr, s_MTemplate, alpha: 1f);
+            mgr = new PathPreviewManager(generator, matMgr, s_MTemplate, 1f);
             Managers[id] = mgr;
             return mgr;
         }
@@ -115,18 +110,18 @@ namespace MrPathV2.Editor.Preview
 
         private static void OnPlayModeChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingEditMode || state == PlayModeStateChange.EnteredPlayMode)
+            if (state is PlayModeStateChange.ExitingEditMode or PlayModeStateChange.EnteredPlayMode)
             {
                 CleanupAll();
             }
         }
 
-        private static IEnumerable<PathCreator> GetCreators()
+        public static IEnumerable<PathCreator> GetCreators()
         {
             if (!s_MCreatorsDirty && s_MCachedCreators != null) return s_MCachedCreators ?? Array.Empty<PathCreator>().ToList();
             try
             {
-                s_MCachedCreators = new List<PathCreator>(UnityEngine.Object.FindObjectsOfType<PathCreator>());
+                s_MCachedCreators = new List<PathCreator>(Object.FindObjectsOfType<PathCreator>());
             }
             catch
             { /* ignore */
@@ -199,11 +194,9 @@ namespace MrPathV2.Editor.Preview
             return true;
         }
 
-        private static bool ShouldSkipCreatorRendering()
-        {
+        private static bool ShouldSkipCreatorRendering() =>
             // 不再在编辑或变换期间跳过渲染，始终保持可见
-            return false;
-        }
+            false;
 
         private static void DisableManagerForEditing(PathPreviewManager mgr)
         {
@@ -298,6 +291,13 @@ namespace MrPathV2.Editor.Preview
             LastTransforms.Clear();
             s_MCachedCreators?.Clear();
             s_MCreatorsDirty = true;
+        }
+
+        private struct TransformSnapshot
+        {
+            public Vector3 Position;
+            public Quaternion Rotation;
+            public Vector3 Scale;
         }
     }
 }

@@ -1,46 +1,49 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using __temp.MrPathV2.Editor.Inspectors;
-using __temp.MrPathV2.Editor.Operations;
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Editor.Terrain;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Settings;
+using MrPathV2.Editor.Inspectors;
+using MrPathV2.Editor.Operations;
+using MrPathV2.Editor.Preview;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Settings;
 using UnityEditor;
 using UnityEditor.Overlays;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace __temp.MrPathV2.Editor.Overlays
+namespace MrPathV2.Editor.Overlays
 {
     /// <summary>
-    /// Provides an overlay for terrain operations in the Scene view.
-    /// This overlay allows users to execute predefined terrain operations on selected PathCreator objects.
+    ///     Provides an overlay for terrain operations in the Scene view.
+    ///     This overlay allows users to execute predefined terrain operations on selected PathCreator objects.
     /// </summary>
     [Overlay(typeof(SceneView), "MrPathV2.TerrainOperations", "MrPathV2Operations")]
     public class TerrainOperationsOverlay : Overlay
     {
         private const string ElCpuOrGpu = "CpuOrGpu";
         private const string ElOperationsContainer = "operationsContainer";
+        private const string ElPreviewMeshTarget = "previewMeshTarget";
 
         private static readonly string[] BackendChoices =
         {
-            "CPU", "GPU","Auto"
+            "CPU", "GPU", "Auto"
         };
 
         /// <summary>
-        /// Stores all operation buttons for batch state management
+        ///     Stores all operation buttons for batch state management
         /// </summary>
         private readonly List<Button> _operationButtons = new List<Button>();
-        
+
         private DropdownField _backendDropdown;
         private VisualElement _content;
         private PathEditorContext _ctx;
-        
+        private Toggle _previewMeshTarget;
+
         /// <summary>
-        /// Indicates whether an operation is currently executing
+        ///     Indicates whether an operation is currently executing
         /// </summary>
         private bool _isExecutingOperation;
         private MrPathProjectSettings _projectSettings;
@@ -48,7 +51,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         private MrPathTerrainOperations _terrainOpsConfig;
 
         /// <summary>
-        /// Creates the panel content for the overlay
+        ///     Creates the panel content for the overlay
         /// </summary>
         /// <returns>The root visual element of the overlay</returns>
         public override VisualElement CreatePanelContent()
@@ -64,44 +67,48 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Initializes project settings and terrain operations configuration
+        ///     Initializes project settings and terrain operations configuration
         /// </summary>
         private void InitializeSettings()
         {
             _projectSettings = MrPathProjectSettings.GetOrCreateSettings();
             _terrainOpsConfig = _projectSettings.terrainOperations;
+           //
         }
 
         /// <summary>
-        /// Loads the UXML content for the overlay
+        ///     Loads the UXML content for the overlay
         /// </summary>
         private void LoadUxmlContent()
         {
             _root = UIResourceLoader.LoadAndClone<TerrainOperationsOverlay>();
-            if (_root == null)
-            {
-                // Fallback if UXML is not found
-                _root = new VisualElement();
-                _root.Add(new Label("TerrainOperationsOverlay.uxml is not found"));
-            }
+            if (_root != null) return;
+            // Fallback if UXML is not found
+            _root = new VisualElement();
+            _root.Add(new Label("TerrainOperationsOverlay.uxml is not found"));
         }
 
         /// <summary>
-        /// Initializes UI elements from the UXML
+        ///     Initializes UI elements from the UXML
         /// </summary>
         private void InitializeUiElements()
         {
             _backendDropdown = _root.Q<DropdownField>(ElCpuOrGpu);
             _content = _root.Q<VisualElement>(ElOperationsContainer);
+            _previewMeshTarget = _root.Q<Toggle>(ElPreviewMeshTarget);
 
             if (_backendDropdown != null)
             {
                 InitializeBackendDropdown();
             }
+            if (_previewMeshTarget != null)
+            {
+                InitializePreviewMeshTarget();
+            }
         }
 
         /// <summary>
-        /// Sets up event handlers for the overlay
+        ///     Sets up event handlers for the overlay
         /// </summary>
         private void SetupEventHandlers()
         {
@@ -110,7 +117,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Initializes the backend dropdown with choices and current value
+        ///     Initializes the backend dropdown with choices and current value
         /// </summary>
         private void InitializeBackendDropdown()
         {
@@ -118,7 +125,7 @@ namespace __temp.MrPathV2.Editor.Overlays
 
             var backend = _projectSettings?.advancedSettings?.paintingBackend ??
                           PaintTerrainCommand.PaintingBackend.CPUCompute;
-            
+
             _backendDropdown.index = backend switch
             {
                 PaintTerrainCommand.PaintingBackend.GPUCompute => 1,
@@ -129,9 +136,48 @@ namespace __temp.MrPathV2.Editor.Overlays
             _backendDropdown.UnregisterValueChangedCallback(OnBackendChanged);
             _backendDropdown.RegisterValueChangedCallback(OnBackendChanged);
         }
+        private void InitializePreviewMeshTarget()
+        {
+            _previewMeshTarget.value = GetCurrentPreviewMeshState();
+            _previewMeshTarget.UnregisterCallback<ChangeEvent<bool>>(OnPreviewMeshToggled);
+            _previewMeshTarget.RegisterCallback<ChangeEvent<bool>>(OnPreviewMeshToggled);
 
+        }
+
+        private static void OnPreviewMeshToggled(ChangeEvent<bool> evt)
+        {
+
+            var previewMesh = evt.newValue;
+            var creators = MultiPathPreviewRenderer.GetCreators();
+            IEnumerable<PathCreator> pathCreators = creators as PathCreator[] ?? creators.ToArray();
+
+            // 检查是否有路径创建者
+            if (!pathCreators.Any()) return;
+
+            // 检查状态是否已经一致
+            if (pathCreators.All(pc => pc.profile.showPreviewMesh == previewMesh)) return;
+
+            // 为每个对象记录撤销操作并更新属性
+            foreach (var pathCreator in pathCreators)
+            {
+                Undo.RecordObject(pathCreator.profile, "Change Preview Mesh");
+                pathCreator.profile.showPreviewMesh = previewMesh;
+                EditorUtility.SetDirty(pathCreator.profile);
+            }
+        }
+        private static bool GetCurrentPreviewMeshState()
+        {
+            var creators = MultiPathPreviewRenderer.GetCreators();
+            IEnumerable<PathCreator> pathCreators = creators as PathCreator[] ?? creators.ToArray();
+
+            // 如果没有路径创建者，默认返回false
+            if (!pathCreators.Any()) return false;
+
+            // 只要有一个开启，就返回true
+            return pathCreators.Any(pc => pc.profile.showPreviewMesh);
+        }
         /// <summary>
-        /// Handles backend dropdown value changes
+        ///     Handles backend dropdown value changes
         /// </summary>
         /// <param name="evt">Change event with new value</param>
         private void OnBackendChanged(ChangeEvent<string> evt)
@@ -152,7 +198,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Refreshes the UI content based on current configuration
+        ///     Refreshes the UI content based on current configuration
         /// </summary>
         private void RefreshContent()
         {
@@ -164,7 +210,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Clears the content container and operation buttons list
+        ///     Clears the content container and operation buttons list
         /// </summary>
         private void ClearContent()
         {
@@ -173,7 +219,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Displays content based on terrain operations configuration
+        ///     Displays content based on terrain operations configuration
         /// </summary>
         private void DisplayContent()
         {
@@ -197,7 +243,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Creates and adds operation buttons for each terrain operation
+        ///     Creates and adds operation buttons for each terrain operation
         /// </summary>
         /// <param name="operations">Array of terrain operations</param>
         private void CreateAndAddOperationButtons(PathTerrainOperation[] operations)
@@ -217,7 +263,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Creates a button that redirects to the project settings
+        ///     Creates a button that redirects to the project settings
         /// </summary>
         /// <returns>Configuration redirect button</returns>
         private static Button CreateConfigRedirectButton()
@@ -231,7 +277,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Creates a toolbar button for a terrain operation
+        ///     Creates a toolbar button for a terrain operation
         /// </summary>
         /// <param name="operation">Terrain operation to create button for</param>
         /// <returns>Toolbar button for the operation</returns>
@@ -255,14 +301,14 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Applies operation-specific styles to a button
+        ///     Applies operation-specific styles to a button
         /// </summary>
         /// <param name="button">Button to apply styles to</param>
         /// <param name="operation">Terrain operation with style information</param>
         private static void ApplyOperationStyles(Button button, PathTerrainOperation operation)
         {
             if (operation.icon == null) return;
-            
+
             button.style.backgroundImage = operation.icon;
 
             var color = operation.buttonColor != default ? operation.buttonColor : Color.white;
@@ -270,7 +316,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Handles selection changes in the editor
+        ///     Handles selection changes in the editor
         /// </summary>
         private void OnSelectionChanged()
         {
@@ -278,7 +324,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Updates the overlay visibility based on the current selection
+        ///     Updates the overlay visibility based on the current selection
         /// </summary>
         private void UpdateVisibility()
         {
@@ -300,7 +346,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Shows the overlay for a specific PathCreator
+        ///     Shows the overlay for a specific PathCreator
         /// </summary>
         /// <param name="pathCreator">PathCreator to show overlay for</param>
         private void ShowOverlay(PathCreator pathCreator)
@@ -315,7 +361,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Hides the overlay and disposes of the context
+        ///     Hides the overlay and disposes of the context
         /// </summary>
         private void HideOverlay()
         {
@@ -325,43 +371,50 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Executes a terrain operation
+        ///     Executes a terrain operation
         /// </summary>
         /// <param name="operation">Operation to execute</param>
         /// <param name="clickedButton">Button that triggered the operation</param>
         private async void ExecuteOperation(PathTerrainOperation operation, Button clickedButton)
         {
-            if (!CanExecuteOperation(operation))
-            {
-                return;
-            }
-
             try
             {
-                SetUIStateExecuting(clickedButton);
-
-                var command = operation.CreateCommand(_ctx.Target, _ctx.HeightProvider);
-                if (command == null) return;
-
-                if (TryGetPreviewBoundsXZ(out var previewBounds))
+                if (!CanExecuteOperation(operation))
                 {
-                    command.SetPreviewBoundsXZ(previewBounds);
+                    return;
                 }
 
-                await _ctx.TerrainHandler.ExecuteAsync(command, null);
+                try
+                {
+                    SetUIStateExecuting(clickedButton);
+
+                    var command = operation.CreateCommand(_ctx.Target, _ctx.HeightProvider);
+                    if (command == null) return;
+
+                    if (TryGetPreviewBoundsXZ(out var previewBounds))
+                    {
+                        command.SetPreviewBoundsXZ(previewBounds);
+                    }
+
+                    await _ctx.TerrainHandler.ExecuteAsync(command, null);
+                }
+                catch (Exception e)
+                {
+                    ErrorHandler.LogException(e);
+                }
+                finally
+                {
+                    RestoreUIState(clickedButton);
+                }
             }
             catch (Exception e)
             {
-                ErrorHandler.LogException(e);
-            }
-            finally
-            {
-                RestoreUIState(clickedButton);
+                Debug.LogError(e);
             }
         }
 
         /// <summary>
-        /// Checks if an operation can be executed
+        ///     Checks if an operation can be executed
         /// </summary>
         /// <param name="operation">Operation to check</param>
         /// <returns>True if the operation can be executed</returns>
@@ -375,15 +428,15 @@ namespace __temp.MrPathV2.Editor.Overlays
 
             // Validate path strategy
             var profile = _ctx.Target.profile;
-            if (profile && PathStrategyRegistry.Instance.GetStrategy(profile.curveType) != null) 
+            if (profile && PathStrategyRegistry.Instance.GetStrategy(profile.curveType) != null)
                 return true;
-                
+
             ShowConfigError();
             return false;
         }
 
         /// <summary>
-        /// Sets the UI to executing state
+        ///     Sets the UI to executing state
         /// </summary>
         /// <param name="clickedButton">Button that triggered the execution</param>
         private void SetUIStateExecuting(Button clickedButton)
@@ -394,7 +447,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Restores the UI state after execution
+        ///     Restores the UI state after execution
         /// </summary>
         /// <param name="clickedButton">Button that triggered the execution</param>
         private void RestoreUIState(Button clickedButton)
@@ -410,7 +463,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Tries to get the XZ bounds of the preview mesh
+        ///     Tries to get the XZ bounds of the preview mesh
         /// </summary>
         /// <param name="bounds">Output bounds vector (min.x, min.z, max.x, max.z)</param>
         /// <returns>True if bounds were successfully retrieved</returns>
@@ -418,26 +471,26 @@ namespace __temp.MrPathV2.Editor.Overlays
         {
             bounds = Vector4.zero;
 
-            if (_ctx.PreviewGenerator == null) 
+            if (_ctx.PreviewGenerator == null)
                 return false;
 
             var previewMesh = _ctx.PreviewGenerator.PreviewMesh;
-            if (previewMesh == null) 
+            if (previewMesh == null)
                 return false;
 
             var meshBounds = previewMesh.bounds;
 
             // Validate bounds
-            if (!(meshBounds.size.x > 0) || !(meshBounds.size.z > 0)) 
+            if (!(meshBounds.size.x > 0) || !(meshBounds.size.z > 0))
                 return false;
-                
+
             // Store XZ plane min and max values
             bounds = new Vector4(meshBounds.min.x, meshBounds.min.z, meshBounds.max.x, meshBounds.max.z);
             return true;
         }
 
         /// <summary>
-        /// Shows a configuration error dialog
+        ///     Shows a configuration error dialog
         /// </summary>
         private static void ShowConfigError()
         {
@@ -449,7 +502,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Sets the enabled state of all operation buttons
+        ///     Sets the enabled state of all operation buttons
         /// </summary>
         /// <param name="enabled">Whether buttons should be enabled</param>
         private void SetOperationButtonsEnabled(bool enabled)
@@ -467,7 +520,7 @@ namespace __temp.MrPathV2.Editor.Overlays
         }
 
         /// <summary>
-        /// Called when the overlay is disabled
+        ///     Called when the overlay is disabled
         /// </summary>
         public void OnDisable()
         {

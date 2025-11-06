@@ -1,10 +1,10 @@
 using System;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Jobs.Extensions
+namespace MrPathV2.Runtime.Jobs.Extensions
 {
     /// <summary>
-    /// 通用的 IDisposable 安全释放扩展，统一 try/catch 并在 Editor/Dev 环境下做轻量日志。
+    ///     通用的 IDisposable 安全释放扩展，统一 try/catch 并在 Editor/Dev 环境下做轻量日志。
     /// </summary>
     public static class DisposableExtensions
     {
@@ -22,7 +22,9 @@ namespace __temp.MrPathV2.Runtime.Jobs.Extensions
                 {
                     Debug.LogWarning($"释放 {disposable.GetType().Name} 时发生异常(可能已释放): {ex.Message}");
                 }
-                catch { /* ignore logging errors */ }
+                catch
+                { /* ignore logging errors */
+                }
 #endif
             }
         }

@@ -1,21 +1,21 @@
 #if UNITY_EDITOR
-using __temp.MrPathV2.Editor.Settings;
-using __temp.MrPathV2.Runtime.Core;
+using MrPathV2.Editor.Settings;
+using MrPathV2.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Editor.Inspectors
+namespace MrPathV2.Editor.Inspectors
 {
     /// <summary>
-    /// MrPath_ProjectSettings 的自定义 Inspector
-    /// 提供只读显示和快速访问 Settings 面板的功能
+    ///     MrPath_ProjectSettings 的自定义 Inspector
+    ///     提供只读显示和快速访问 Settings 面板的功能
     /// </summary>
     [CustomEditor(typeof(MrPathProjectSettings))]
     public class MrPathProjectSettingsEditor : UnityEditor.Editor
     {
-        private GUIStyle _readOnlyStyle;
         private GUIStyle _buttonStyle;
         private bool _initialized;
+        private GUIStyle _readOnlyStyle;
 
         private void InitializeStyles()
         {
@@ -46,7 +46,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             // 标题和说明
             EditorGUILayout.Space(10);
-            
+
             using (new EditorGUILayout.VerticalScope(_readOnlyStyle))
             {
                 var titleStyle = new GUIStyle(EditorStyles.boldLabel)
@@ -54,17 +54,17 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     fontSize = 16,
                     alignment = TextAnchor.MiddleCenter
                 };
-                
+
                 EditorGUILayout.LabelField("🛠️ MrPath 项目设置", titleStyle);
                 EditorGUILayout.Space(5);
-                
+
                 var infoStyle = new GUIStyle(EditorStyles.wordWrappedLabel)
                 {
                     fontSize = 11,
                     fontStyle = FontStyle.Italic,
                     alignment = TextAnchor.MiddleCenter
                 };
-                
+
                 EditorGUILayout.LabelField("此资产为只读模式，请使用下方按钮打开完整的设置面板进行配置", infoStyle);
             }
 
@@ -74,16 +74,16 @@ namespace __temp.MrPathV2.Editor.Inspectors
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.FlexibleSpace();
-                
+
                 var buttonContent = new GUIContent("🔧 打开 MrPath 设置面板", "打开项目设置中的 MrPath 配置面板");
-                
+
                 // Use EditorGUILayout.Button instead of GUILayout.Button for better compatibility
                 if (GUILayout.Button(buttonContent, _buttonStyle, GUILayout.Width(250)))
                 {
                     // Delay the action to avoid GUI conflicts
                     EditorApplication.delayCall += OpenMrPathSettings;
                 }
-                
+
                 GUILayout.FlexibleSpace();
             }
 
@@ -97,7 +97,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
                 // 显示主要配置信息（只读）
                 GUI.enabled = false;
-                
+
                 EditorGUILayout.ObjectField("创建默认值", settings.creationDefaults, typeof(MrPathCreationDefaults), false);
                 EditorGUILayout.ObjectField("外观默认值", settings.appearanceDefaults, typeof(MrPathAppearanceDefaults), false);
                 EditorGUILayout.ObjectField("地形操作", settings.terrainOperations, typeof(MrPathTerrainOperations), false);
@@ -105,7 +105,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
                 EditorGUILayout.ObjectField("默认道路配方", settings.stylizedRoadRecipe, typeof(StylizedRoadRecipe), false);
 
                 EditorGUILayout.Space(5);
-                
+
                 // 显示集合统计信息
                 EditorGUILayout.LabelField("📊 资产统计", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField($"路径配置文件: {settings.profiles?.Count ?? 0} 个");
@@ -125,13 +125,13 @@ namespace __temp.MrPathV2.Editor.Inspectors
                     fontSize = 10,
                     fontStyle = FontStyle.Italic
                 };
-                
+
                 EditorGUILayout.LabelField("💡 提示: 要修改这些设置，请点击上方按钮打开完整的设置面板，或通过菜单 Edit → Project Settings → MrPath 访问。", tipStyle);
             }
         }
 
         /// <summary>
-        /// 打开 MrPath 设置面板
+        ///     打开 MrPath 设置面板
         /// </summary>
         private static void OpenMrPathSettings()
         {
@@ -140,7 +140,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         }
 
         /// <summary>
-        /// 在菜单中添加快速访问选项
+        ///     在菜单中添加快速访问选项
         /// </summary>
         [MenuItem("MrPath/打开设置面板", priority = 0)]
         public static void OpenMrPathSettingsFromMenu()

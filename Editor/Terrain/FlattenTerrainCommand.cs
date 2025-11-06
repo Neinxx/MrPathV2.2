@@ -1,19 +1,19 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Interfaces;
-using __temp.MrPathV2.Runtime.Jobs;
-using __temp.MrPathV2.Runtime.Jobs.Extensions;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Jobs;
+using MrPathV2.Runtime.Jobs.Extensions;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEditor;
-using NativeArrayExtensions = __temp.MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
+using NativeArrayExtensions = MrPathV2.Runtime.Jobs.Extensions.NativeArrayExtensions;
 
 // 新增：使用 CreateTracked 扩展
 
-namespace __temp.MrPathV2.Editor.Terrain
+namespace MrPathV2.Editor.Terrain
 {
     public class FlattenTerrainCommand : TerrainCommandBase
     {
@@ -104,13 +104,17 @@ namespace __temp.MrPathV2.Editor.Terrain
         {
             for (var y = 0; y < r; y++)
             for (var x = 0; x < r; x++)
+            {
                 d[y * r + x] = s[y, x];
+            }
         }
         private static void Copy1DTo2D(NativeArray<float> s, float[,] d, int r)
         {
             for (var y = 0; y < r; y++)
             for (var x = 0; x < r; x++)
+            {
                 d[y, x] = s[y * r + x];
+            }
         }
     }
 }

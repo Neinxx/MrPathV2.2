@@ -1,9 +1,9 @@
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Preview
+namespace MrPathV2.Runtime.Preview
 {
     /// <summary>
-    /// 统一管理预览相关着色器属性的契约（名称与ID）。
+    ///     统一管理预览相关着色器属性的契约（名称与ID）。
     /// </summary>
     public static class PreviewShaderContracts
     {

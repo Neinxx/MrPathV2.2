@@ -2,7 +2,7 @@
 using Unity.Collections;
 using UnityEngine.Scripting;
 
-namespace __temp.MrPathV2.Runtime.Jobs
+namespace MrPathV2.Runtime.Jobs
 {
     /// <summary>
     ///     Configures Unity's NativeLeakDetection system to provide full stack traces for leaked Native Collections.

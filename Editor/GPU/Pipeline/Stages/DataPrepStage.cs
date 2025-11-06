@@ -1,8 +1,8 @@
 using System;
 using UnityEngine;
-using __temp.MrPathV2.Editor.GPU.Core;
+using MrPathV2.Editor.GPU.Core;
 
-namespace __temp.MrPathV2.Editor.GPU.Pipeline.Stages
+namespace MrPathV2.Editor.GPU.Pipeline.Stages
 {
     /// <summary>
     /// 数据准备阶段（类似顶点处理）：

@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace __temp.MrPathV2.Runtime.Core
+namespace MrPathV2.Runtime.Core
 {
     /// <summary>
     ///     异步操作管理器：提供统一  的异步操作管理、取消令牌支持和资源清理
@@ -13,15 +13,15 @@ namespace __temp.MrPathV2.Runtime.Core
     {
         private const int DefaultTimeoutSeconds = 30;
         private readonly Dictionary<string, CancellationTokenSource> _activeTasks;
+
+        // 全局取消令牌源
+        private readonly CancellationTokenSource _globalCancellationSource;
         private readonly object _lock = new object();
 
         // 操作超时设置
         private readonly Dictionary<string, TimeSpan> _operationTimeouts;
         private readonly Dictionary<string, TaskCompletionSource<bool>> _taskCompletions;
         private bool _disposed;
-
-        // 全局取消令牌源
-        private readonly CancellationTokenSource _globalCancellationSource;
 
         public AsyncOperationManager()
         {
