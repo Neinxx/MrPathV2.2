@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+using __temp.MrPathV2.Editor; // UIResourceLoader
 
 namespace __temp.MrPathV2.Editor.UI
 {
@@ -14,7 +15,7 @@ namespace __temp.MrPathV2.Editor.UI
         private const string ADD_BUTTON_NAME = "addLayerButton";
         private const string X_BUTTON_NAME = "XButton";
 
-        private ReorderableContainer m_Container;
+        private ReorderableContainerV2 m_Container;
         private VisualTreeAsset roadLayerUI;
         private List<ReorderableItem> m_Items = new List<ReorderableItem>();
 
@@ -39,6 +40,13 @@ namespace __temp.MrPathV2.Editor.UI
             // 实例化主UI
             VisualElement labelFromUXML = visualTree.Instantiate();
             root.Add(labelFromUXML);
+
+            // 显式附加 Reorderable 样式，确保 V2 的类名样式生效
+            var reorderUss = UIResourceLoader.LoadUssByName("ReorderableStyles");
+            if (reorderUss != null && !root.styleSheets.Contains(reorderUss))
+            {
+                root.styleSheets.Add(reorderUss);
+            }
 
             // 加载子UI资源
             roadLayerUI = LoadUxmlAsset<VisualTreeAsset>(ROAD_LAYER_UXML_PATH);
@@ -73,7 +81,7 @@ namespace __temp.MrPathV2.Editor.UI
         /// </summary>
         private void InitializeContainer(VisualElement parent)
         {
-            m_Container = new ReorderableContainer();
+            m_Container = new ReorderableContainerV2();
             m_Container.style.flexGrow = 1;
             m_Container.style.flexShrink = 1;
         
@@ -148,7 +156,7 @@ namespace __temp.MrPathV2.Editor.UI
         /// <summary>
         /// 加载UXML资源的通用方法
         /// </summary>
-        private T LoadUxmlAsset<T>(string path) where T : UnityEngine.Object
+        private T LoadUxmlAsset<T>(string path) where T : Object
         {
             var asset = AssetDatabase.LoadAssetAtPath<T>(path);
             if (asset == null)

@@ -28,7 +28,8 @@ namespace __temp.MrPathV2.Editor.UI
 
         private void OnPointerDown(PointerDownEvent evt)
         {
-            if (evt.button != 0 || parent is not ReorderableContainer)
+            // 仅左键，且父级是可重排容器（V2）
+            if (evt.button != 0 || parent is not ReorderableContainerV2)
             {
                 return;
             }

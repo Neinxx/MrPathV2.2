@@ -12,6 +12,7 @@ namespace __temp.MrPathV2.Runtime.Preview
             public static readonly int LayerCount = Shader.PropertyToID("_LayerCount");
             public static readonly int PreviewAlpha = Shader.PropertyToID("_PreviewAlpha");
             public static readonly int OpaquePreview = Shader.PropertyToID("_OpaquePreview");
+            public static readonly int PreviewBounds = Shader.PropertyToID("_PreviewBounds");
             public static readonly int MaskAtlas = Shader.PropertyToID("_MaskAtlas");
             public static readonly int AtlasInvHeight = Shader.PropertyToID("_AtlasInvHeight");
             public static readonly int LayerTex = Shader.PropertyToID("_LayerTex");

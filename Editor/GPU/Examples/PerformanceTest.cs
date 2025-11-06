@@ -132,10 +132,10 @@ namespace __temp.MrPathV2.Editor.Examples
                 {
                     // 使用统一管线，不再直接访问GpuTerrainPainterV2
                     UnityEngine.Debug.Log("缓存已清除");
-                    System.GC.Collect();
-                    System.GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     UnityEngine.Debug.LogError($"清除缓存失败: {ex.Message}");
                 }
@@ -143,8 +143,8 @@ namespace __temp.MrPathV2.Editor.Examples
 
             if (GUILayout.Button("强制GC"))
             {
-                System.GC.Collect();
-                System.GC.WaitForPendingFinalizers();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
                 UnityEngine.Debug.Log("垃圾回收完成");
             }
             EditorGUILayout.EndHorizontal();
@@ -243,7 +243,7 @@ namespace __temp.MrPathV2.Editor.Examples
                 else
                 {
                     UnityEngine.Debug.LogWarning("PathCreator没有配置文件，将使用默认配置");
-                    var profile = ScriptableObject.CreateInstance<PathProfile>();
+                    var profile = CreateInstance<PathProfile>();
                     profile.roadWidth = _roadWidth;
                     _testPathCreator.profile = profile;
                 }
@@ -296,7 +296,7 @@ namespace __temp.MrPathV2.Editor.Examples
 
                 UnityEngine.Debug.Log("统一管线性能测试完成");
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 UnityEngine.Debug.LogError($"性能测试失败: {ex.Message}");
                 EditorUtility.DisplayDialog("测试失败", $"性能测试失败: {ex.Message}", "确定");
@@ -310,8 +310,8 @@ namespace __temp.MrPathV2.Editor.Examples
                 Repaint();
 
                 // 确保资源被释放
-                System.GC.Collect();
-                System.GC.WaitForPendingFinalizers();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
             }
         }
 
@@ -379,7 +379,7 @@ namespace __temp.MrPathV2.Editor.Examples
 - GPU: {SystemInfo.graphicsDeviceName}
 - 显存: {SystemInfo.graphicsMemorySize} MB
 
-测试时间: {System.DateTime.Now:yyyy-MM-dd HH:mm:ss}
+测试时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ";
 
             UnityEngine.Debug.Log(_lastTestReport);
@@ -495,7 +495,7 @@ namespace __temp.MrPathV2.Editor.Examples
             try
             {
                 // 创建统一绘制命令（预览）
-                var command = __temp.MrPathV2.Editor.Core.UnifiedPaintTerrainCommand.CreatePreviewCommand(_testPathCreator, painterType);
+                var command = UnifiedPaintTerrainCommand.CreatePreviewCommand(_testPathCreator, painterType);
                 if (command == null)
                 {
                     EditorUtility.DisplayDialog("路径绘制命令测试", "绘制命令创建失败", "确定");
@@ -503,7 +503,7 @@ namespace __temp.MrPathV2.Editor.Examples
                 }
 
                 // 执行命令
-                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var sw = Stopwatch.StartNew();
                 var result = command.ExecuteAsync().Result;
                 sw.Stop();
 

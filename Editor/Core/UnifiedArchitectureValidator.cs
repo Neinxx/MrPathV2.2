@@ -16,7 +16,7 @@ namespace __temp.MrPathV2.Editor.Core
         [MenuItem("Tools/MrPathV2/Validate Unified Architecture")]
         public static void ValidateArchitecture()
         {
-            UnityEngine.Debug.Log("开始验证统一架构...");
+            Debug.Log("开始验证统一架构...");
 
             var results = new List<ValidationResult>();
 
@@ -413,7 +413,7 @@ namespace __temp.MrPathV2.Editor.Core
 
         private static void PrintValidationResults(List<ValidationResult> results)
         {
-            UnityEngine.Debug.Log("=== 统一架构验证结果 ===");
+            Debug.Log("=== 统一架构验证结果 ===");
 
             int totalTests = 0;
             int passedTests = 0;
@@ -421,7 +421,7 @@ namespace __temp.MrPathV2.Editor.Core
 
             foreach (var result in results)
             {
-                UnityEngine.Debug.Log($"\n[{result.TestName}]");
+                Debug.Log($"\n[{result.TestName}]");
 
                 foreach (var message in result.Messages)
                 {
@@ -430,33 +430,33 @@ namespace __temp.MrPathV2.Editor.Core
                     switch (message.Type)
                     {
                         case MessageType.Success:
-                            UnityEngine.Debug.Log($"  ✅ {message.Text}");
+                            Debug.Log($"  ✅ {message.Text}");
                             passedTests++;
                             break;
                         case MessageType.Error:
-                            UnityEngine.Debug.LogError($"  ❌ {message.Text}");
+                            Debug.LogError($"  ❌ {message.Text}");
                             failedTests++;
                             break;
                         case MessageType.Info:
-                            UnityEngine.Debug.Log($"  ℹ️ {message.Text}");
+                            Debug.Log($"  ℹ️ {message.Text}");
                             break;
                     }
                 }
             }
 
-            UnityEngine.Debug.Log($"\n=== 总结 ===");
-            UnityEngine.Debug.Log($"总测试数: {totalTests}");
-            UnityEngine.Debug.Log($"通过: {passedTests}");
-            UnityEngine.Debug.Log($"失败: {failedTests}");
-            UnityEngine.Debug.Log($"成功率: {(totalTests > 0 ? (float)passedTests / totalTests * 100 : 0):F1}%");
+            Debug.Log($"\n=== 总结 ===");
+            Debug.Log($"总测试数: {totalTests}");
+            Debug.Log($"通过: {passedTests}");
+            Debug.Log($"失败: {failedTests}");
+            Debug.Log($"成功率: {(totalTests > 0 ? (float)passedTests / totalTests * 100 : 0):F1}%");
 
             if (failedTests == 0)
             {
-                UnityEngine.Debug.Log("🎉 所有测试通过！统一架构验证成功！");
+                Debug.Log("🎉 所有测试通过！统一架构验证成功！");
             }
             else
             {
-                UnityEngine.Debug.LogWarning($"⚠️ 有 {failedTests} 个测试失败，请检查相关问题。");
+                Debug.LogWarning($"⚠️ 有 {failedTests} 个测试失败，请检查相关问题。");
             }
         }
 

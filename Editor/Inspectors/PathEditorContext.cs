@@ -20,7 +20,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         private EditorRefreshManager m_RefreshManager;
         private bool m_Disposed; // 防止重复释放
 
-        public PathEditorContext(Runtime.Core.PathCreator target)
+        public PathEditorContext(PathCreator target)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             m_RefreshManager = new EditorRefreshManager();
@@ -36,7 +36,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         public bool IsDraggingHandle { get; set; }
 
         // 公共属性
-        public Runtime.Core.PathCreator Target { get; }
+        public PathCreator Target { get; }
 
         public IHeightProvider HeightProvider { get; private set; }
 
@@ -80,7 +80,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         /// <summary>
         ///     兼容旧代码：保留带参数的重载，但内部已不再需要额外参数。
         /// </summary>
-        public void Initialize(Runtime.Core.PathCreator target)
+        public void Initialize(PathCreator target)
         { /* 参数已无实际用途，保留以兼容旧接口 */
         }
 

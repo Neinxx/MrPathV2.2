@@ -15,10 +15,10 @@ namespace __temp.MrPathV2.Editor.Inspectors
     /// </summary>
     public class PathCreatorSceneGUI
     {
-        private readonly Runtime.Core.PathCreator _targetCreator;
+        private readonly PathCreator _targetCreator;
         private readonly PathEditorContext _ctx;
 
-        public PathCreatorSceneGUI(Runtime.Core.PathCreator target, PathEditorContext context)
+        public PathCreatorSceneGUI(PathCreator target, PathEditorContext context)
         {
             _targetCreator = target;
             _ctx = context;

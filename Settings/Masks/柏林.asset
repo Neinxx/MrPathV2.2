@@ -10,20 +10,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
-  m_Name: "\u5927\u82B1\u732B\u67CF\u6797\u566A\u58F0"
+  m_Name: "\u67CF\u6797"
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 1.68, y: 0.55}
+  smooth: 0.1
+  tiling: {x: 2, y: 2}
   offset: {x: 0, y: 0}
-  overallScale: 1.01
+  overallScale: 1
   strength: 1
   seed: 0
-  noiseScale: {x: 0.04, y: 0.04}
+  noiseScale: {x: 1, y: 1}
   uniformScale: 1
-  rotationDeg: 107
-  octaves: 3
-  lacunarity: 2.1
-  gain: 0.474
+  rotationDeg: 0
+  octaves: 1
+  lacunarity: 2
+  gain: 0.5
   useAsymmetricEdges: 0
   edgeLow: 0.25
   edgeHigh: 0.75

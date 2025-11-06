@@ -1,5 +1,7 @@
+
 using __temp.MrPathV2.Runtime.Core;
 using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Preview;
 using UnityEngine;
 #if UNITY_EDITOR
 using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
@@ -17,7 +19,7 @@ namespace MrPathV2.Editor.Preview
         private int m_LastBoundSplatRtId = 0;
         private int m_LastBoundTerrainId = 0;
         private UnityEngine.Terrain m_TargetTerrain;
-        
+
         /// <summary>
         /// Sets the target terrain for GPU preview binding.
         /// </summary>
@@ -26,7 +28,7 @@ namespace MrPathV2.Editor.Preview
         {
             m_TargetTerrain = terrain;
         }
-        
+
         /// <summary>
         /// Attempts to bind GPU preview textures to the material.
         /// </summary>
@@ -59,14 +61,14 @@ namespace MrPathV2.Editor.Preview
 
             // Bind GPU-generated weight texture
             BindGpuPreviewTextures(material, rt);
-            
+
             // Push terrain parameters for shader to sample world coordinates
             PushTerrainParameters(material);
-            
+
             // Update binding cache
             UpdateBindingCache(rt);
         }
-        
+
         /// <summary>
         /// Determines if GPU preview should be used
         /// </summary>
@@ -77,21 +79,21 @@ namespace MrPathV2.Editor.Preview
         {
             return enableGpuPreview && m_TargetTerrain && recipe;
         }
-        
+
         /// <summary>
         /// Unbinds GPU preview textures and falls back to MaskAtlas
         /// </summary>
         /// <param name="material">Material to unbind textures from</param>
         private void UnbindGpuPreview(Material material)
         {
-            if (material.HasProperty(PreviewShaderContracts.Properties.UseSplatWeights)) 
+            if (material.HasProperty(PreviewShaderContracts.Properties.UseSplatWeights))
                 material.SetInt(PreviewShaderContracts.Properties.UseSplatWeights, 0);
-            if (material.HasProperty(PreviewShaderContracts.Properties.SplatWeights)) 
+            if (material.HasProperty(PreviewShaderContracts.Properties.SplatWeights))
                 material.SetTexture(PreviewShaderContracts.Properties.SplatWeights, null);
             m_LastBoundSplatRtId = 0;
             m_LastBoundTerrainId = 0;
         }
-        
+
         /// <summary>
         /// Checks if the render texture is already bound
         /// </summary>
@@ -103,7 +105,7 @@ namespace MrPathV2.Editor.Preview
             var terrainId = m_TargetTerrain.GetInstanceID();
             return rtId == m_LastBoundSplatRtId && terrainId == m_LastBoundTerrainId;
         }
-        
+
         /// <summary>
         /// Binds GPU preview textures to the material
         /// </summary>
@@ -111,12 +113,12 @@ namespace MrPathV2.Editor.Preview
         /// <param name="rt">Render texture to bind</param>
         private void BindGpuPreviewTextures(Material material, RenderTexture rt)
         {
-            if (material.HasProperty(PreviewShaderContracts.Properties.SplatWeights)) 
+            if (material.HasProperty(PreviewShaderContracts.Properties.SplatWeights))
                 material.SetTexture(PreviewShaderContracts.Properties.SplatWeights, rt);
-            if (material.HasProperty(PreviewShaderContracts.Properties.UseSplatWeights)) 
+            if (material.HasProperty(PreviewShaderContracts.Properties.UseSplatWeights))
                 material.SetInt(PreviewShaderContracts.Properties.UseSplatWeights, 1);
         }
-        
+
         /// <summary>
         /// Pushes terrain parameters for shader to sample world coordinates
         /// </summary>
@@ -126,10 +128,10 @@ namespace MrPathV2.Editor.Preview
             var td = m_TargetTerrain.terrainData;
             var pos = m_TargetTerrain.GetPosition();
             var size = td.size;
-            
-            if (material.HasProperty(PreviewShaderContracts.Properties.TerrainPosition)) 
+
+            if (material.HasProperty(PreviewShaderContracts.Properties.TerrainPosition))
                 material.SetVector(PreviewShaderContracts.Properties.TerrainPosition, new Vector4(pos.x, pos.z, 0f, 0f));
-            if (material.HasProperty(PreviewShaderContracts.Properties.TerrainSize)) 
+            if (material.HasProperty(PreviewShaderContracts.Properties.TerrainSize))
                 material.SetVector(PreviewShaderContracts.Properties.TerrainSize, new Vector4(size.x, size.z, 0f, 0f));
             if (material.HasProperty(PreviewShaderContracts.Properties.AlphamapResolution))
             {
@@ -137,7 +139,7 @@ namespace MrPathV2.Editor.Preview
                 material.SetVector(PreviewShaderContracts.Properties.AlphamapResolution, new Vector4(res, res, 0f, 0f));
             }
         }
-        
+
         /// <summary>
         /// Updates the binding cache with the current render texture and terrain IDs
         /// </summary>

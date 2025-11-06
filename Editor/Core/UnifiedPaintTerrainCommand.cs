@@ -62,13 +62,13 @@ namespace __temp.MrPathV2.Editor.Core
             }
             catch (OperationCanceledException)
             {
-                UnityEngine.Debug.Log("[UnifiedPaintTerrainCommand] 绘制操作被取消");
+                Debug.Log("[UnifiedPaintTerrainCommand] 绘制操作被取消");
                 return TerrainPaintResult.CreateFailure("操作被取消", _painter?.Type ?? PainterType.GPU);
             }
             catch (Exception ex)
             {
                 var errorMessage = $"地形绘制失败: {ex.Message}";
-                UnityEngine.Debug.LogError($"[UnifiedPaintTerrainCommand] {errorMessage}");
+                Debug.LogError($"[UnifiedPaintTerrainCommand] {errorMessage}");
                 return TerrainPaintResult.CreateFailure(errorMessage, _painter?.Type ?? PainterType.GPU);
             }
         }
@@ -99,7 +99,7 @@ namespace __temp.MrPathV2.Editor.Core
             catch (Exception ex)
             {
                 var errorMessage = $"地形绘制失败: {ex.Message}";
-                UnityEngine.Debug.LogError($"[UnifiedPaintTerrainCommand] {errorMessage}");
+                Debug.LogError($"[UnifiedPaintTerrainCommand] {errorMessage}");
                 return TerrainPaintResult.CreateFailure(errorMessage, _painter?.Type ?? PainterType.GPU);
             }
         }
@@ -130,7 +130,7 @@ namespace __temp.MrPathV2.Editor.Core
                 var terrain = FindNearestTerrain(_pathCreator.transform.position);
                 if (terrain == null)
                 {
-                    UnityEngine.Debug.LogError("[UnifiedPaintTerrainCommand] 无法找到附近的地形");
+                    Debug.LogError("[UnifiedPaintTerrainCommand] 无法找到附近的地形");
                     return null;
                 }
 
@@ -142,7 +142,7 @@ namespace __temp.MrPathV2.Editor.Core
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"[UnifiedPaintTerrainCommand] 创建绘制器失败: {ex.Message}");
+                Debug.LogError($"[UnifiedPaintTerrainCommand] 创建绘制器失败: {ex.Message}");
                 return null;
             }
         }
@@ -244,11 +244,11 @@ namespace __temp.MrPathV2.Editor.Core
         {
             if (result.IsSuccess)
             {
-                UnityEngine.Debug.Log($"[UnifiedPaintTerrainCommand] 绘制成功 - 使用 {result.GetType()} 绘制器，耗时 {result.ExecutionTimeMs:F2}ms");
+                Debug.Log($"[UnifiedPaintTerrainCommand] 绘制成功 - 使用 {result.GetType()} 绘制器，耗时 {result.ExecutionTimeMs:F2}ms");
             }
             else
             {
-                UnityEngine.Debug.LogWarning($"[UnifiedPaintTerrainCommand] 绘制失败 - {result.ErrorMessage}");
+                Debug.LogWarning($"[UnifiedPaintTerrainCommand] 绘制失败 - {result.ErrorMessage}");
             }
         }
 

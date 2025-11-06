@@ -1,29 +1,14 @@
 .reorderable-item {
-    transition-property: all;
-    transition-duration: 30ms;
-    transition-timing-function: ease-in-out;
-    
+    transition-property: transform, opacity, margin-top, margin-bottom;
+    transition-duration: 80ms; /* 加快项目过渡，响应更快 */
+    transition-timing-function: ease-out;
 }
 
-.dragging {
-    transition-property: top, left, transform, opacity, border;
-    transition-duration: 30ms;
-    transition-timing-function: ease-out;
-    opacity: 1;
-    flex: 999;
-    /* 添加蓝色外边框 */
-    border-color: rgba(78, 101, 149, 0.26);
-    border-width: 2px;
-    
-    /* 可选：添加一点内边距避免内容被边框挤压 */
-    padding: 2px;
-    /* 可选：添加边框圆角增强视觉效果 */
-    border-radius: 4px;
-}
+/* 删除通用 .dragging 规则，避免在容器上误用导致布局突变与闪烁 */
 .placeholder-spacing-element {
-    transition-property: height; 
-    transition-duration: 10ms; /* 让它与列表项移动速度匹配 */
-    transition-timing-function: ease-in-out; 
+    transition-property: height;
+    transition-duration: 60ms; /* 加快让位动画速度 */
+    transition-timing-function: ease-out;
 }
 
 /* ================= Clear Button Visibility ================= */
@@ -35,10 +20,12 @@
 
 .clear-btn-visible {
     opacity: var(--clear-btn-visible-opacity);
+    visibility: visible;
 }
 
 .clear-btn-hidden {
     opacity: var(--clear-btn-hidden-opacity);
+    visibility: hidden;
 }
 
 /* 可选：为显隐加入轻微过渡，让状态切换更丝滑 */
@@ -57,11 +44,16 @@
     transition-duration: 0ms;
 }
 
+/* 保留幽灵项的飞入动画（覆盖上面的禁用规则） */
+.dragging-active .drag-ghost {
+    transition-duration: 80ms;
+}
+
 /* 占位蓝线在拖拽时轻微半透明，贴近原生体验 */
 #placeholder-container .placeholder-line {
     opacity: 0.5;
     transition-property: opacity;
-    transition-duration: 60ms;
+    transition-duration: 100ms;
     transition-timing-function: ease-out;
 }
 .dragging-active #placeholder-container .placeholder-line {
@@ -71,7 +63,58 @@
 /* 插入后行淡入效果（由代码设置初始 opacity=0 触发） */
 .reordered-fade-in {
     transition-property: opacity, transform;
-    transition-duration: 120ms;
+    transition-duration: 80ms; /* 提升插入后淡入速度 */
     transition-timing-function: ease-out;
     opacity: 1;
+}
+
+/* 槽位为空时的声明式隐藏（双保险）：无论代码是否加类，仍然视觉隐藏 */
+.slot-empty .clear-button {
+    opacity: 0;
+    pointer-events: none;
+}
+.placeholder-spacing-element {
+    transition-property: height;
+    transition-duration: 60ms; /* 加快让位动画速度 */
+    transition-timing-function: ease-out;
+}
+
+/* Reorderable 通用容器 */
+.reorderable-container {
+    flex-direction: column;
+}
+
+/* 幽灵项：在拖拽时使用，避免 code 设置过多样式 */
+.drag-ghost {
+    position: absolute;
+    opacity: 0.85;
+}
+
+/* 占位蓝线与间距 */
+.placeholder-line {
+    height: 2px; /* 减小蓝线厚度，避免视觉占位过大 */
+    background-color: #1A80E5; /* 统一蓝色 */
+    margin-left: 2px;
+    margin-right: 2px;
+}
+.placeholder-line-top {
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+}
+.placeholder-line-bottom {
+    /* 已改为单蓝线 + 间隙，底部蓝线不再使用 */
+    display: none;
+}
+
+/* 已设置：占位间距高度 90ms 过渡，动画更丝滑 */
+.placeholder-spacing-element {
+    transition: height 60ms ease-out; /* 加快过渡速度，降低视觉滞后 */
+}
+
+/* 拖拽期间在容器上加 dragging 类，关闭占位高度过渡与项的过渡，进一步降低闪烁 */
+.reorderable-container.dragging-active .placeholder-spacing-element {
+    transition: height 0ms ease-out;
+}
+.reorderable-container.dragging-active .reorderable-item {
+    transition-duration: 0ms;
 }

@@ -648,7 +648,7 @@ namespace __temp.MrPathV2.Editor.GPU
         public UnityEngine.Terrain Terrain { get; set; }
         public bool IsPreview { get; set; }
 
-        public UnityEngine.Vector3[] SpinePoints { get; set; }
+        public Vector3[] SpinePoints { get; set; }
         public float Width { get; set; }
         public float FalloffDistance { get; set; }
 

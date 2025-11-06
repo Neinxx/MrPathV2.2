@@ -285,7 +285,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
             if (!recipe) return;
 
-            UnityEditor.Editor.CreateCachedEditor(
+            CreateCachedEditor(
                 recipe,
                 typeof(StylizedRoadRecipeEditor),
                 ref _recipeEditor

@@ -1,4 +1,4 @@
-// 文件: __temp.MrPathV2._2.Runtime.Jobs.PaintSplatmapJob.cs
+
 
 using System.Runtime.CompilerServices;
 using Unity.Burst;
@@ -45,8 +45,8 @@ namespace __temp.MrPathV2.Runtime.Jobs
         private const float NormalizationThreshold = 1e-5f;
         // 与 GPU 预览保持一致的小权重截断阈值，避免边缘产生微小残留导致的黑边
         private const float SmallWeightCutoff = 4e-4f;
-       // 总权重门槛：当所有配方层权重之和小于该值时，视为未涂绘
-       private const float PaintGateThreshold = 1e-3f;
+        // 总权重门槛：当所有配方层权重之和小于该值时，视为未涂绘
+        private const float PaintGateThreshold = 1e-3f;
 
         #endregion
 
@@ -97,27 +97,27 @@ namespace __temp.MrPathV2.Runtime.Jobs
             NormalizeAlphaWeights(baseAlphaIndex, firstValidSplatIndex);
         }
 
-       /// <summary>
-       /// 计算是否应当对该像素进行涂绘：总权重未达到门槛则视为未涂绘
-       /// </summary>
-       [MethodImpl(MethodImplOptions.AggressiveInlining)]
-       private bool ShouldPaintPixel(float normalizedDist, float pathProgress, out int firstValidSplatIndex)
-       {
-           firstValidSplatIndex = -1;
-           float totalMask = 0f;
-           // 改为从上到下（索引高到低）遍历，以获取最上层有效索引
-           for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
-           {
-               var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
-               if (!ValidateSplatIndex(splatIndex)) continue;
-               if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
-   
-               var maskValue = GetMaskValue(layerIndex, normalizedDist, pathProgress);
-               if (maskValue > SmallWeightCutoff)
-                   totalMask += maskValue;
-           }
-           return totalMask > PaintGateThreshold;
-       }
+        /// <summary>
+        /// 计算是否应当对该像素进行涂绘：总权重未达到门槛则视为未涂绘
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool ShouldPaintPixel(float normalizedDist, float pathProgress, out int firstValidSplatIndex)
+        {
+            firstValidSplatIndex = -1;
+            float totalMask = 0f;
+            // 改为从上到下（索引高到低）遍历，以获取最上层有效索引
+            for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
+            {
+                var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
+                if (!ValidateSplatIndex(splatIndex)) continue;
+                if (firstValidSplatIndex == -1) firstValidSplatIndex = splatIndex;
+
+                var maskValue = GetMaskValue(layerIndex, normalizedDist, pathProgress);
+                if (maskValue > SmallWeightCutoff)
+                    totalMask += maskValue;
+            }
+            return totalMask > PaintGateThreshold;
+        }
 
         /// <summary>
         /// 验证alpha索引范围是否有效

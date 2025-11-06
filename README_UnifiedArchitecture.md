@@ -144,7 +144,7 @@ var result = await painter.PaintAsync(pathCreator, isPreview: false);
 ## 文件结构
 
 ```
-Assets/__temp/MrPathV2/
+Assets/MrPathV2/
 ├── Runtime/Core/
 │   ├── PathData.cs              # 核心路径数据
 │   ├── PathProfile.cs           # 路径配置文件

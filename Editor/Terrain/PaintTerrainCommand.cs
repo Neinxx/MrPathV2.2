@@ -31,7 +31,7 @@ namespace __temp.MrPathV2.Editor.Terrain
             Auto = 2
         }
 
-        public PaintTerrainCommand(PathCreator creator, __temp.MrPathV2.Runtime.Interfaces.IHeightProvider heightProvider)
+        public PaintTerrainCommand(PathCreator creator, Runtime.Interfaces.IHeightProvider heightProvider)
             : base(creator, heightProvider) { }
 
         public override string GetCommandName() => "绘制纹理 (Paint Terrain)";

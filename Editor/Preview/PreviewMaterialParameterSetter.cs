@@ -51,13 +51,7 @@ namespace MrPathV2.Editor.Preview
                 _mMaterial.SetInt(PreviewShaderContracts.Properties.ZTest, _mProfile.enableDepthTest ? 4 : 8);
             _mMaterial.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
 
-            // Uniform AcrossScale and MeshRepeat default mapping
-            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.AcrossScale)) 
-                _mMaterial.SetFloat(PreviewShaderContracts.Properties.AcrossScale, 1f);
-            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
-                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, 1f);
-            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
-                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, 1f);
+            // 注意：不在此处重置 AcrossScale/MeshRepeat，避免覆盖外部提供的正确重复系数
         }
         
         /// <summary>
@@ -337,13 +331,7 @@ namespace MrPathV2.Editor.Preview
             if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MaskThreshold)) 
                 _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThresholdStylized);
 
-            // Uniform AcrossScale and MeshRepeat default mapping
-            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.AcrossScale)) 
-                _mMaterial.SetFloat(PreviewShaderContracts.Properties.AcrossScale, 1f);
-            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
-                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, 1f);
-            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
-                _mMaterial.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, 1f);
+            // 注意：不在此处重置 AcrossScale/MeshRepeat，避免覆盖外部提供的正确重复系数
         }
         
         /// <summary>

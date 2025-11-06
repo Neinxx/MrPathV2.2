@@ -8,7 +8,7 @@
 #define MASK_TYPE_NOISE 2
 #define MASK_TYPE_GRADIENT 3
 
-// --- GPU Structs (must match C# memory layout exactly) ---
+// --- GPU Structs (must match C# memory  layout exactly) ---
 struct GpuShoulderMaskParams {
 	float  ShoulderWidthRatio;
 	float  ShoulderStrength;

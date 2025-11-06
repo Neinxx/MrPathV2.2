@@ -91,7 +91,7 @@ namespace MrPathV2.Editor.Preview
             {
                 UpdateSpineAndMesh(creator, heightProvider);
                 FinalizeMesh();
-                SetupMaterialParameters();
+                SetupMaterialParameters(creator);
                 UpdateTerrainTarget(creator);
                 RunGpuPreviewIfNeeded(creator);
                 UpdateMaterials(creator);
@@ -198,7 +198,7 @@ namespace MrPathV2.Editor.Preview
         /// <summary>
         /// Sets up material parameters
         /// </summary>
-        private void SetupMaterialParameters()
+        private void SetupMaterialParameters(PathCreator creator)
         {
             try
             {
@@ -208,6 +208,27 @@ namespace MrPathV2.Editor.Preview
 
                 // 统一UV语义：网格UV已归一化到0..1，材质重复设为1
                 _mMatMgr.SetMeshRepeats(1f, 1f);
+
+                // 推送统一 ROI：与 GPU 计算一致的 PathBounds（按脊线包围盒 + roadWidth 扩展）
+                if (LatestSpine.HasValue && creator?.profile != null)
+                {
+                    var pts = LatestSpine.Value.Points;
+                    if (pts != null && pts.Length > 0)
+                    {
+                        var bounds = new Bounds(pts[0], Vector3.zero);
+                        for (int i = 1; i < pts.Length; i++) bounds.Encapsulate(pts[i]);
+                        bounds.Expand(creator.profile.roadWidth); // 与 GpuTerrainPainterV2.CalculatePathBounds 保持一致
+                        var boundsXZ = new Vector4(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z);
+                        _mMatMgr.SetPreviewBounds(boundsXZ);
+                    }
+                }
+                else if (_mMesh)
+                {
+                    // 兜底：仍然使用网格包围盒，保证预览在脊线未就绪时也能工作
+                    var b = _mBounds;
+                    var boundsXZ = new Vector4(b.min.x, b.min.z, b.max.x, b.max.z);
+                    _mMatMgr.SetPreviewBounds(boundsXZ);
+                }
             }
             catch (Exception ex)
             {

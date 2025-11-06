@@ -266,7 +266,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
                 if (layer.Mask != null)
                 {
-                    var dto = new global::GpuMaskParamsData();
+                    var dto = new GpuMaskParamsData();
                     layer.Mask.FillGpuParams(ref dto);
                     maskParams = ConvertToGpuMaskParams(dto);
                 }
@@ -306,7 +306,7 @@ namespace __temp.MrPathV2.Editor.GPU
         }
 
         // 将运行时 DTO（全字段）转换为本管线 compute 所用的紧凑 GPU 结构
-        private static GpuMaskParams ConvertToGpuMaskParams(global::GpuMaskParamsData src)
+        private static GpuMaskParams ConvertToGpuMaskParams(GpuMaskParamsData src)
         {
             var result = new GpuMaskParams
             {

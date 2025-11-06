@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
-using __temp.MrPathV2.Editor.Terrain;
-using __temp.MrPathV2.Runtime.Core;
-using __temp.MrPathV2.Runtime.Preview;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using BlendMode = __temp.MrPathV2.Runtime.Core.BlendMode;
 using Object = UnityEngine.Object;
+using __temp.MrPathV2.Runtime.Core;
+using __temp.MrPathV2.Runtime.Preview;
+using __temp.MrPathV2.Editor.Terrain;
+
+
+
 #if UNITY_EDITOR
 using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
 #endif
@@ -97,7 +101,7 @@ namespace MrPathV2.Editor.Preview
                     }
                 }
             }
-            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerSplatIndicesArr)) 
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerSplatIndicesArr))
                 Current.SetFloatArray(PreviewShaderContracts.Properties.LayerSplatIndicesArr, splatIndicesArr);
 #endif
 
@@ -170,11 +174,11 @@ namespace MrPathV2.Editor.Preview
                 Debug.LogWarning("[PreviewMaterialManager] Texture2DArray not available or missing textures, fallback to per-layer binding.");
                 m_ArrayFallbackWarned = true;
             }
-            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray)) 
+            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray))
                 Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
-            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures)) 
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
                 Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
-                
+
             var maxLayersToBind = Mathf.Min(maxLayers, layerCount);
             for (var i = 0; i < maxLayersToBind; i++)
             {
@@ -222,17 +226,29 @@ namespace MrPathV2.Editor.Preview
         public void SetMeshRepeats(float across, float along)
         {
             if (!Current) return;
-            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross)) 
+            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross))
                 Current.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, Mathf.Max(1e-4f, across));
-            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong)) 
+            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong))
                 Current.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, Mathf.Max(1e-4f, along));
+        }
+
+        /// <summary>
+        /// 绑定预览 ROI 边界到材质（世界坐标 XZ）。
+        /// </summary>
+        public void SetPreviewBounds(Vector4 boundsXZ)
+        {
+            if (!Current) return;
+            if (Current.HasProperty(PreviewShaderContracts.Properties.PreviewBounds))
+            {
+                Current.SetVector(PreviewShaderContracts.Properties.PreviewBounds, boundsXZ);
+            }
         }
 
         // Restore Update method (removed by previous edit), keep material refresh and GPU binding logic
         public void Update(PathProfile profile, Material template, float previewAlpha)
         {
             if (m_Disposed) return;
-            
+
             if (profile == null || template == null)
             {
                 Clear();
@@ -265,6 +281,11 @@ namespace MrPathV2.Editor.Preview
             var layerCount = PushLayerParams(profile);
             // Push common preview parameters (opacity, threshold, depth, etc.)
             PushCommonPreviewParams(profile, layerCount, alpha);
+            // 为多层预览同样绑定透明的上一帧结果，避免默认 blackTexture 的 Alpha=1 造成二次绘制黑块
+            if (Current.HasProperty(PreviewShaderContracts.Properties.PrevResultTex))
+            {
+                Current.SetTexture(PreviewShaderContracts.Properties.PrevResultTex, EnsureTransparentPrevTex());
+            }
             // Prepare mask texture (MaskAtlas or GPU weights)
 #if UNITY_EDITOR
             // If GPU weights are available, skip MaskAtlas construction (early return)
@@ -295,7 +316,7 @@ namespace MrPathV2.Editor.Preview
         private void SetupMaskTextures(PathProfile profile)
         {
             if (Current == null) return;
-            
+
             var maskAtlasGenerator = new PreviewMaskAtlasGenerator(Current, profile, m_PathLength);
             m_MaskAtlas = maskAtlasGenerator.GenerateMaskAtlas(m_MaskAtlas);
         }
@@ -306,7 +327,7 @@ namespace MrPathV2.Editor.Preview
 
             var layersList = profile.roadRecipe?.GetLayers();
             var layer = layersList != null && layersList.Count > 0 ? layersList[0]?.contentLayer : null;
-            
+
             var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
             parameterSetter.SetStylizedParameters(layer);
 
@@ -331,11 +352,11 @@ namespace MrPathV2.Editor.Preview
             Stylized,
             Unknown
         }
-        
+
         // New: GPU preview related properties
 #if UNITY_EDITOR
         private UnityEngine.Terrain m_TargetTerrain;
-        
+
         /// <summary>
         ///     Global switch: whether to enable GPU real-time preview.
         ///     Can be replaced with ProjectSettings / ScriptableObject configuration later.
@@ -495,14 +516,14 @@ namespace MrPathV2.Editor.Preview
                 return hash;
             }
         }
-        
+
         public void Dispose()
         {
             if (m_Disposed) return;
             Clear();
             m_Disposed = true;
         }
-        
+
         private void Clear()
         {
             ReleaseMaterial();
@@ -585,7 +606,7 @@ namespace MrPathV2.Editor.Preview
         private void TryBindGpuPreview(PathProfile profile)
         {
             if (!Current) return;
-            
+
             var gpuBinder = new PreviewGpuBinder();
             gpuBinder.SetTargetTerrain(m_TargetTerrain);
             gpuBinder.TryBindGpuPreview(Current, EnableGpuPreview, profile.roadRecipe);

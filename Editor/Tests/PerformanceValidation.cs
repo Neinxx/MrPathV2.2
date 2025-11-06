@@ -72,7 +72,7 @@ namespace __temp.MrPathV2.Editor.Tests
             
             // 创建测试PathCreator
             var testGO = new GameObject("TestPathCreator");
-            var pathCreator = testGO.AddComponent<MrPathV2.Runtime.Core.PathCreator>();
+            var pathCreator = testGO.AddComponent<PathCreator>();
             
             var profile = ScriptableObject.CreateInstance<PathProfile>();
             profile.name = "TestProfile";
@@ -113,7 +113,7 @@ namespace __temp.MrPathV2.Editor.Tests
             
             // 创建测试PathCreator
             var testGO = new GameObject("TestPathCreator");
-            var pathCreator = testGO.AddComponent<MrPathV2.Runtime.Core.PathCreator>();
+            var pathCreator = testGO.AddComponent<PathCreator>();
             
             var profile = ScriptableObject.CreateInstance<PathProfile>();
             profile.name = "TestProfile";

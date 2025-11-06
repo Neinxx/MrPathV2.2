@@ -16,7 +16,7 @@ namespace __temp.MrPathV2.Editor.GPU
         private readonly GpuResourceManager _resourceManager;
         private readonly GpuDataStreamer _dataStreamer;
         private readonly GpuComputeDispatcher _computeDispatcher;
-        private __temp.MrPathV2.Editor.GPU.Pipeline.TerrainPaintPipeline _pipeline;
+        private Pipeline.TerrainPaintPipeline _pipeline;
         private readonly GpuRenderCache _renderCache;
         #endregion
 
@@ -32,8 +32,8 @@ namespace __temp.MrPathV2.Editor.GPU
             _dataStreamer = new GpuDataStreamer(_resourceManager);
             _computeDispatcher = new GpuComputeDispatcher(_resourceManager);
             _renderCache = new GpuRenderCache(_resourceManager);
-            _pipeline = new __temp.MrPathV2.Editor.GPU.Pipeline.TerrainPaintPipeline(_dataStreamer, _computeDispatcher);
-            
+            _pipeline = new Pipeline.TerrainPaintPipeline(_dataStreamer, _computeDispatcher);
+
             Initialize();
         }
 
@@ -47,9 +47,9 @@ namespace __temp.MrPathV2.Editor.GPU
                 _dataStreamer.Initialize();
                 _computeDispatcher.Initialize();
                 _renderCache.Initialize();
-                
+
                 _isInitialized = true;
-                
+
                 // 注册清理回调
                 EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
                 AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
@@ -92,7 +92,7 @@ namespace __temp.MrPathV2.Editor.GPU
                 {
                     throw new InvalidOperationException(pipelineError);
                 }
-                
+
                 // 4. 创建结果（包含 ROI 与层数以便高效写回）
                 var result = new GpuRenderResult
                 {
@@ -107,7 +107,7 @@ namespace __temp.MrPathV2.Editor.GPU
 
                 // 5. 缓存结果
                 _renderCache.CacheResult(cacheKey, result);
-                
+
                 return result;
             }
             catch (Exception ex)
@@ -154,7 +154,7 @@ namespace __temp.MrPathV2.Editor.GPU
             var terrainId = terrain.GetInstanceID();
             var pathHash = pathData.GetHashCode();
             var recipeHash = recipe.GetHashCode();
-            
+
             return $"{terrainId}_{pathHash}_{recipeHash}";
         }
         #endregion
@@ -164,7 +164,7 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             if (_isDisposed)
                 throw new ObjectDisposedException(nameof(GpuTerrainRenderer));
-            
+
             if (!_isInitialized)
                 throw new InvalidOperationException("GpuTerrainRenderer 未初始化");
         }
@@ -173,10 +173,10 @@ namespace __temp.MrPathV2.Editor.GPU
         {
             if (terrain == null)
                 throw new ArgumentNullException(nameof(terrain));
-            
+
             if (pathData == null)
                 throw new ArgumentNullException(nameof(pathData));
-            
+
             if (recipe == null)
                 throw new ArgumentNullException(nameof(recipe));
 
@@ -188,7 +188,7 @@ namespace __temp.MrPathV2.Editor.GPU
         #region Event Handlers
         private void OnPlayModeStateChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingEditMode || 
+            if (state == PlayModeStateChange.ExitingEditMode ||
                 state == PlayModeStateChange.ExitingPlayMode)
             {
                 ClearCache();
@@ -245,12 +245,12 @@ namespace __temp.MrPathV2.Editor.GPU
         public Vector4 CoverageArea { get; set; }
         public int AlphamapLayerCount { get; set; }
         public Vector2Int Resolution { get; set; }
-        
+
         /// <summary>
         /// 渲染是否成功
         /// </summary>
         public bool Success { get; set; } = true;
-        
+
         /// <summary>
         /// 错误消息（如果渲染失败）
         /// </summary>
@@ -346,7 +346,7 @@ namespace __temp.MrPathV2.Editor.GPU
         }
 
         // 新增：可携带与该图层关联的遮罩对象（可为空）
-        public LayerConfig(int layerIndex, float strength, BlendMode blendMode, __temp.MrPathV2.Runtime.Core.BlendMasks.BlendMaskBase mask)
+        public LayerConfig(int layerIndex, float strength, BlendMode blendMode, Runtime.Core.BlendMasks.BlendMaskBase mask)
         {
             LayerIndex = layerIndex;
             Strength = strength;
@@ -357,7 +357,7 @@ namespace __temp.MrPathV2.Editor.GPU
         public int LayerIndex { get; }
         public float Strength { get; }
         public BlendMode BlendMode { get; }
-        public __temp.MrPathV2.Runtime.Core.BlendMasks.BlendMaskBase Mask { get; }
+        public Runtime.Core.BlendMasks.BlendMaskBase Mask { get; }
 
         public override int GetHashCode()
         {

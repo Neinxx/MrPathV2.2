@@ -8,7 +8,7 @@ namespace __temp.MrPathV2.Editor.Tests
     /// </summary>
     public class UIFlickerTest : EditorWindow
     {
-        private MrPathV2.Runtime.Core.PathCreator[] _testPathCreators;
+        private Runtime.Core.PathCreator[] _testPathCreators;
         private int _currentTestIndex = 0;
         private bool _isTestRunning = false;
         private int _selectionCount = 0;
@@ -27,7 +27,7 @@ namespace __temp.MrPathV2.Editor.Tests
 
             if (_testPathCreators == null)
             {
-                _testPathCreators = FindObjectsOfType<MrPathV2.Runtime.Core.PathCreator>();
+                _testPathCreators = FindObjectsOfType<Runtime.Core.PathCreator>();
             }
 
             EditorGUILayout.LabelField($"找到 {_testPathCreators?.Length ?? 0} 个PathCreator对象");
@@ -37,7 +37,7 @@ namespace __temp.MrPathV2.Editor.Tests
                 EditorGUILayout.HelpBox("场景中没有找到PathCreator对象。请先创建一些PathCreator对象进行测试。", MessageType.Warning);
                 if (GUILayout.Button("刷新搜索"))
                 {
-                    _testPathCreators = FindObjectsOfType<MrPathV2.Runtime.Core.PathCreator>();
+                    _testPathCreators = FindObjectsOfType<Runtime.Core.PathCreator>();
                 }
                 return;
             }
@@ -111,8 +111,8 @@ namespace __temp.MrPathV2.Editor.Tests
             _isTestRunning = false;
             EditorApplication.update -= UpdateFlickerTest;
             Selection.activeGameObject = null;
-            
-            UnityEngine.Debug.Log($"[UIFlickerTest] 测试完成，共进行了 {_selectionCount} 次选择操作");
+
+            Debug.Log($"[UIFlickerTest] 测试完成，共进行了 {_selectionCount} 次选择操作");
         }
 
         private void UpdateFlickerTest()
@@ -136,7 +136,7 @@ namespace __temp.MrPathV2.Editor.Tests
                 if (pathCreator != null)
                 {
                     Selection.activeGameObject = pathCreator.gameObject;
-                    UnityEngine.Debug.Log($"[UIFlickerTest] 选中: {pathCreator.name}");
+                    Debug.Log($"[UIFlickerTest] 选中: {pathCreator.name}");
                 }
 
                 _currentTestIndex = (_currentTestIndex + 1) % _testPathCreators.Length;

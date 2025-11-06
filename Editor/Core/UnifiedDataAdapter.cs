@@ -289,21 +289,21 @@ namespace __temp.MrPathV2.Editor.Core
             return 0;
         }
 
-        private static BlendMode ConvertBlendMode(__temp.MrPathV2.Runtime.Core.BlendMode cpuBlendMode)
+        private static BlendMode ConvertBlendMode(Runtime.Core.BlendMode cpuBlendMode)
         {
             // 将 Runtime.Core.BlendMode 映射到 GPU 适配器的 BlendMode（统一来源：Recipe）
             switch (cpuBlendMode)
             {
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Normal:
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Lerp:
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Screen:
+                case Runtime.Core.BlendMode.Normal:
+                case Runtime.Core.BlendMode.Lerp:
+                case Runtime.Core.BlendMode.Screen:
                     return BlendMode.Normal; // 默认置换/覆盖
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Multiply:
+                case Runtime.Core.BlendMode.Multiply:
                     return BlendMode.Multiply;
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Add:
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Additive:
+                case Runtime.Core.BlendMode.Add:
+                case Runtime.Core.BlendMode.Additive:
                     return BlendMode.Additive;
-                case __temp.MrPathV2.Runtime.Core.BlendMode.Overlay:
+                case Runtime.Core.BlendMode.Overlay:
                     return BlendMode.Overlay;
                 default:
                     return BlendMode.Normal;

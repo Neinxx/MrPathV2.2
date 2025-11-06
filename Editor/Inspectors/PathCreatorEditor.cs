@@ -12,7 +12,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
     {
         #region 字段
 
-        private Runtime.Core.PathCreator _targetCreator;
+        private PathCreator _targetCreator;
 
         // --- 序列化属性缓存 ---
         private SerializedProperty _profileProperty;
@@ -27,7 +27,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
         // --- Profile 事件订阅跟踪 ---
         private PathProfile _lastSubscribedProfile;
 
-        public PathCreatorEditor(Runtime.Core.PathCreator targetCreator)
+        public PathCreatorEditor(PathCreator targetCreator)
         {
             _targetCreator = targetCreator;
         }
@@ -38,7 +38,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
 
         private void OnEnable()
         {
-            _targetCreator = target as Runtime.Core.PathCreator;
+            _targetCreator = target as PathCreator;
             if (!_targetCreator) return;
 
             // 缓存 SerializedProperty
@@ -69,7 +69,7 @@ namespace __temp.MrPathV2.Editor.Inspectors
             {
                 try
                 {
-                    var _ = __temp.MrPathV2.Editor.GPU.GpuTerrainPainterV2.Instance;
+                    var _ = GPU.GpuTerrainPainterV2.Instance;
                 }
                 catch (Exception e)
                 {

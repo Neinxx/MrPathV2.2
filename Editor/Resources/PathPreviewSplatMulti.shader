@@ -10,6 +10,8 @@ Shader "MrPath/PathPreviewSplatMulti"
         _PreviewAlpha("Preview Alpha", Range(0, 1)) = 1.0
         _MaskStrength("Mask Strength", Range(0, 4)) = 1
         [Toggle] _OpaquePreview ("Opaque Preview", Float) = 0
+        // 新增：预览 ROI 边界（世界坐标 XZ）。按顺序：minX, minZ, maxX, maxZ
+        _PreviewBounds ("Preview Bounds XZ", Vector) = (0, 0, 0, 0)
 
         [Header(Control Textures)]
         // NOTE : These control textures are NOT used by the fixed shader logic,
@@ -195,7 +197,9 @@ Shader "MrPath/PathPreviewSplatMulti"
                 float  _LayerSplatIndices[16];
                 float  _UseSplatWeights;
                 // 新增：是否使用图层贴图数组采样
-               float  _UseLayerTexArray;
+                float  _UseLayerTexArray;
+                // 新增：ROI 边界（世界坐标 XZ 平面）
+                float4 _PreviewBounds;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -212,32 +216,36 @@ Shader "MrPath/PathPreviewSplatMulti"
             // Removed legacy per-layer switch sampler; using array-based sampler below.
             half4 SampleLayerTexture(int layerIndex, float2 uv)
             {
+                // 统一本地变量以避免 FXC 报“潜在未初始化”警告
+                half4 result = half4(1, 1, 1, 1);
                 // 优先使用 Texture2DArray 采样，提升一致性与效率
                 if (_UseLayerTexArray > 0.5)
                 {
-                    return SAMPLE_TEXTURE2D_ARRAY_LOD(_LayerTextures, sampler_LinearRepeat, uv, layerIndex, 0);
+                    result = SAMPLE_TEXTURE2D_ARRAY_LOD(_LayerTextures, sampler_LinearRepeat, uv, layerIndex, 0);
+                    return result;
                 }
                 // 回退到逐层纹理属性采样（用于编辑器无法构建数组或尺寸/格式不一致的情况）
                 switch(layerIndex)
                 {
-                case 0:  return SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0);
-               case 1:  return SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0);
-                case 2:  return SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0);
-                case 3:  return SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0);
-                case 4:  return SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0);
-                case 5:  return SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0);
-                case 6:  return SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0);
-                case 7:  return SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0);
-                case 8:  return SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0);
-                case 9:  return SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0);
-                case 10: return SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0);
-                case 11: return SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0);
-                case 12: return SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0);
-                case 13: return SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0);
-                case 14: return SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0);
-                case 15: return SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0);
-                default: return half4(1, 1, 1, 1);
+                case 0:  result = SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 1:  result = SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 2:  result = SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 3:  result = SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 4:  result = SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 5:  result = SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 6:  result = SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 7:  result = SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 8:  result = SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 9:  result = SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 10: result = SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 11: result = SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 12: result = SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 13: result = SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 14: result = SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0); break;
+                case 15: result = SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0); break;
+                default: /* keep default white */ break;
                 }
+                return result;
             }
 
             float2 GetLayerTiling(int layerIndex)
@@ -290,34 +298,25 @@ Shader "MrPath/PathPreviewSplatMulti"
             // - 最终透明度由各层(归一化权重 × 图层不透明度)累加得到，再乘以 _PreviewAlpha；启用 _OpaquePreview 时强制 1。
             float SampleWeightForLayer(float2 worldUV, float across, float progress, int layerIndex)
             {
+                float weight = 0.0;
                 // 优先使用 GPU 权重
                 if(_UseSplatWeights > 0.5)
                 {
                     int splatIndex = (int)round(_LayerSplatIndices[layerIndex]);
                     if(splatIndex >= 0)
                     {
-                        // (我们顺便也修复一下上次的整数除法和梯度警告)
                         uint   slice = (uint)splatIndex / 4u;
                         uint   channel = (uint)splatIndex % 4u;
                         float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
-
-                        // 使用 _LOD 避免梯度警告
                         half4 rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
-
-                        if(channel == 0) return rgba.r;
-                        else if(channel == 1) return rgba.g;
-                        else if(channel == 2) return rgba.b;
-                        else return rgba.a;
+                        weight = (channel == 0) ? rgba.r : (channel == 1) ? rgba.g : (channel == 2) ? rgba.b : rgba.a;
+                        return weight;
                     }
-                    else
-                    {
-                        // !! 这是修复 uninitialized variable 错误的关键 !!
-                        return 0.0;
-                    }
+                    // splatIndex 无效时保持 0
+                    return weight;
                 }
-
                 // 回退到 2D MaskAtlas
-                return SampleMaskAtlas2D(
+                weight = SampleMaskAtlas2D(
                     _MaskAtlas,
                     sampler_LinearClamp,
                     across,
@@ -325,10 +324,20 @@ Shader "MrPath/PathPreviewSplatMulti"
                     layerIndex,
                     _PathSamples,
                     _AtlasInvHeight) * _MaskStrength;
+                return weight;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
+                // ROI 早退：严格与预览网格边界对齐，减少无效片元计算
+                // _PreviewBounds = (minX, minZ, maxX, maxZ)
+                float2 wuv = input.worldUV;
+                if (wuv.x < _PreviewBounds.x || wuv.x > _PreviewBounds.z ||
+                    wuv.y < _PreviewBounds.y || wuv.y > _PreviewBounds.w)
+                {
+                    return half4(0, 0, 0, 0);
+                }
+
                 // 拉伸到道路宽度：Across 不再重复，直接使用 0..1
                 float acrossPos01 = saturate(input.uv.x);
                 // 修复：去除居中对称的 abs 映射，改为左->右 0..1
