@@ -323,7 +323,7 @@ namespace MrPathV2.Editor.Core
             var resolution = terrainData.alphamapResolution;
 
             // 计算路径边界
-            var pathBounds = CalculatePathBounds(pathData, pathProfile.roadWidth);
+            var pathBounds = CalculatePathBounds(pathData, pathProfile.roadWidth, pathProfile.falloffWidth);
 
             // 转换为地形纹理坐标
             var minX = Mathf.FloorToInt((pathBounds.min.x - terrainPos.x) / terrainSize.x * resolution);
@@ -344,7 +344,7 @@ namespace MrPathV2.Editor.Core
             };
         }
 
-        private Bounds CalculatePathBounds(PathData pathData, float pathWidth)
+        private Bounds CalculatePathBounds(PathData pathData, float pathWidth, float falloffWidth)
         {
             if (pathData.KnotCount == 0)
                 return new Bounds();
@@ -360,8 +360,8 @@ namespace MrPathV2.Editor.Core
                 max = Vector3.Max(max, knot.Position);
             }
 
-            // 扩展边界以包含路径宽度
-            var halfWidth = pathWidth * 0.5f;
+            // 扩展边界以包含路径主体与过渡区域
+            var halfWidth = pathWidth * 0.5f + math.max(0f, falloffWidth);
             var expansion = new Vector3(halfWidth, 0, halfWidth);
 
             return new Bounds(

@@ -269,6 +269,12 @@ Shader "MrPath/PathPreviewSplatMulti"
                 return max(_LayerTilings[layerIndex].xy, float2(0.0001, 0.0001));
             }
 
+            // 新增：每层贴图偏移，来自 _LayerTilings[layerIndex].zw（与编辑器推送保持一致）
+            float2 GetLayerOffset(int layerIndex)
+            {
+                return _LayerTilings[layerIndex].zw;
+            }
+
             float GetLayerOpacity(int layerIndex)
             {
                 return _LayerOpacities[layerIndex];
@@ -396,7 +402,9 @@ Shader "MrPath/PathPreviewSplatMulti"
                     if(weight < 0.0004) continue;
 
                     float2 layerTiling = GetLayerTiling(j);
-                    float2 layerUV = input.worldUV * layerTiling;
+                    float2 layerOffset = GetLayerOffset(j);
+                    // 应用偏移：与风格化 Shader 的 _LayerTiling.xy + _LayerTiling.zw 一致
+                    float2 layerUV = input.worldUV * layerTiling + layerOffset;
                     half4  layerColor = SampleLayerTexture(j, layerUV);
                     layerColor *= GetLayerTint(j);
                     layerColor.a *= weight;

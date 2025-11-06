@@ -359,9 +359,14 @@ namespace MrPathV2.Editor.GPU
 
             try
             {
-                var pathData = new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width));
+                var falloff = math.max(0f, width * 0.5f);
+                var pathData = new PathData(
+                    spinePoints: spinePoints,
+                    pathWidth: width,
+                    pathLength: CalculatePathLength(spinePoints),
+                    pathBounds: CalculatePathBounds(spinePoints, width, falloff));
 
-                var recipe = new PathRecipe(layers: layers, falloffDistance: width * 0.5f, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
+                var recipe = new PathRecipe(layers: layers, falloffDistance: falloff, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
 
                 var result = _renderer.RenderPath(terrain, pathData, recipe, isPreview);
 
@@ -389,9 +394,14 @@ namespace MrPathV2.Editor.GPU
 
             try
             {
-                var pathData = new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width));
+                var falloff = math.max(0f, width * 0.5f);
+                var pathData = new PathData(
+                    spinePoints: spinePoints,
+                    pathWidth: width,
+                    pathLength: CalculatePathLength(spinePoints),
+                    pathBounds: CalculatePathBounds(spinePoints, width, falloff));
 
-                var recipe = new PathRecipe(layers: layers, falloffDistance: width * 0.5f, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
+                var recipe = new PathRecipe(layers: layers, falloffDistance: falloff, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
 
                 // 在主线程执行渲染与应用，避免后台线程访问 Unity API
                 var result = _renderer.RenderPath(terrain, pathData, recipe, isPreview);
@@ -446,7 +456,12 @@ namespace MrPathV2.Editor.GPU
             var spinePoints = ExtractSpinePoints(metadata);
             var width = ExtractPathWidth(metadata);
 
-            return new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width));
+            var falloff = ExtractFalloffDistance(metadata);
+            return new PathData(
+                spinePoints: spinePoints,
+                pathWidth: width,
+                pathLength: CalculatePathLength(spinePoints),
+                pathBounds: CalculatePathBounds(spinePoints, width, falloff));
         }
 
         private PathRecipe ConvertToPathRecipe(TerrainPaintMetadata metadata)
@@ -528,20 +543,27 @@ namespace MrPathV2.Editor.GPU
             return totalLength;
         }
 
-        private static Bounds CalculatePathBounds(Vector3[] spinePoints, float width)
+        private static Bounds CalculatePathBounds(Vector3[] spinePoints, float width, float falloff)
         {
             if (spinePoints == null || spinePoints.Length == 0)
                 return new Bounds();
 
-            var bounds = new Bounds(spinePoints[0], Vector3.zero);
+            // 计算脊线点的包围盒
+            var min = spinePoints[0];
+            var max = spinePoints[0];
             foreach (var point in spinePoints)
             {
-                bounds.Encapsulate(point);
+                min = Vector3.Min(min, point);
+                max = Vector3.Max(max, point);
             }
 
-            // 鎵╁睍杈圭晫浠ュ寘鍚?矾寰勫?搴?
-            bounds.Expand(width);
-            return bounds;
+            // 扩展边界以包含道路主体与过渡区域
+            var halfWidthWithFalloff = width * 0.5f + math.max(0f, falloff);
+            var expansion = new Vector3(halfWidthWithFalloff, 0f, halfWidthWithFalloff);
+
+            var center = (min + max) * 0.5f;
+            var size = max - min + expansion * 2f; // XZ方向增加 roadWidth + 2*falloff
+            return new Bounds(center, size);
         }
 
         // CPU 绔?贩鍚堟灇涓惧埌 GPU 鏋氫妇鐨勫畨鍏ㄦ槧灏?
