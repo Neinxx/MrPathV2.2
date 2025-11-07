@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
   m_Name: "\u67CF\u6797"
   m_EditorClassIdentifier: 
-  smooth: 0.462
+  smooth: 0.529
   tiling: {x: 2, y: 0.47}
   offset: {x: 0, y: 0}
   overallScale: 1

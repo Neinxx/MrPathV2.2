@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   curveType: 1
   longitudinalSegments: 197
-  roadWidth: 2.79
+  roadWidth: 2.73
   crossSection:
     serializedVersion: 2
     m_Curve:

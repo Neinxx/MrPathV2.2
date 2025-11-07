@@ -701,7 +701,7 @@ MonoBehaviour:
   pathData:
     positions:
     - {x: 0, y: 0, z: 0}
-    - {x: -7.190111, y: 0, z: 11.389297}
+    - {x: -22.749659, y: 0, z: -21.361652}
     tangentsIn:
     - {x: 0, y: 0, z: 0}
     - {x: 0, y: 0, z: 0}
@@ -716,7 +716,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1449116508}
   m_LocalRotation: {x: -0, y: 0.019164559, z: -0, w: 0.99981636}
-  m_LocalPosition: {x: 17.439976, y: 0, z: -1.0801411}
+  m_LocalPosition: {x: 82.18128, y: 0, z: 8.535856}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -756,11 +756,20 @@ MonoBehaviour:
   pathData:
     positions:
     - {x: 0, y: 0, z: 0}
-    - {x: -11.344739, y: 0, z: -3.9386559}
+    - {x: 3.2007537, y: 4.1892147, z: 15.872101}
+    - {x: 8.965735, y: 10.007681, z: 38.319496}
+    - {x: 6.031043, y: 13.896355, z: 51.251774}
+    - {x: -2.0861306, y: 16.155855, z: 56.810562}
     tangentsIn:
     - {x: 0, y: 0, z: 0}
     - {x: 0, y: 0, z: 0}
+    - {x: 0, y: 0, z: 0}
+    - {x: 0, y: 0, z: 0}
+    - {x: 0, y: 0, z: 0}
     tangentsOut:
+    - {x: 0, y: 0, z: 0}
+    - {x: 0, y: 0, z: 0}
+    - {x: 0, y: 0, z: 0}
     - {x: 0, y: 0, z: 0}
     - {x: 0, y: 0, z: 0}
 --- !u!4 &1698603972
@@ -770,11 +779,11 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1698603970}
-  m_LocalRotation: {x: -0, y: -0.5784876, z: -0, w: 0.8156912}
-  m_LocalPosition: {x: 10.53, y: 0, z: 24.33}
+  m_LocalRotation: {x: 0.13707376, y: 0.019115755, z: 0.038926948, w: 0.9896111}
+  m_LocalPosition: {x: 59.715916, y: -0.0000000029394869, z: -16.527546}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 7
-  m_LocalEulerAnglesHint: {x: 0, y: -70.688, z: 0}
+  m_LocalEulerAnglesHint: {x: 15.653, y: 2.887, z: 4.902}

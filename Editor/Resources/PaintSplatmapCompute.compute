@@ -28,7 +28,7 @@ StructuredBuffer<float2>       road_contour;
 
 // Textures - 淇敼涓篺loat4鏍煎紡浠ュ吋瀹笹LES3
 RWTexture2DArray<float4> splat_weights; // 浣跨敤float4鏇夸唬unorm float4
-Texture2D<float>         road_mask;
+Texture2D                road_mask;
 
 // Uniforms
 uint   layer_count;
@@ -227,12 +227,12 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 
 	// 閬僵闂ㄦ帶锛氶粯璁ゅ厑璁哥粯鍒讹紱浠呭綋鍚敤鏃堕噰鏍?road_mask 骞惰繘琛岄棬鎺?
 	float maskGate = 1.0;
-	if(use_road_mask == 1)
-	{
-		float mask_sample = road_mask.Load(uint3(pixel_coord, 0));
-		maskGate = (mask_sample > mask_threshold) ? 1.0 : 0.0;
-		if(maskGate <= 0.0) return;
-	}
+    if(use_road_mask == 1)
+    {
+        float mask_sample = road_mask.Load(uint3(pixel_coord, 0)).r;
+        maskGate = (mask_sample > mask_threshold) ? 1.0 : 0.0;
+        if(maskGate <= 0.0) return;
+    }
 
 	// 浣跨敤 signed_distance 璁＄畻杈圭紭鍥犲瓙锛氫腑蹇?1锛岃秴鍑洪亾璺?杈圭紭瀹藉害=0
 	float edgeFactor = saturate(1.0 - max(0.0, abs(signed_distance) - halfRoad) / max(edge_width_world, 1e-6));

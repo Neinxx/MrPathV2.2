@@ -84,6 +84,7 @@ Shader "MrPath/PathPreviewSplatMulti"
         _MeshRepeatAcross ("Mesh Repeat Across", Float) = 1
         _MeshRepeatAlong ("Mesh Repeat Along", Float) = 1
         [HideInInspector] _UseLayerTexArray ("Use Layer Tex Array", Float) = 0
+        [HideInInspector] _UseLayerParamsArray ("Use Layer Params Array", Float) = 0
         [NoScaleOffset][HideInInspector] _LayerTextures ("Layer Textures", 2DArray) = "" {}
     }
 
@@ -190,6 +191,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                 float4 _LayerTilings[16];
                 float  _LayerOpacities[16];
                 float  _LayerBlendModes[16];
+                float4 _LayerColors[16];
                 // 新增：GPU 权重采样所需的地形与映射参数
                 float2 _TerrainPosition;
                 float2 _TerrainSize;
@@ -198,6 +200,8 @@ Shader "MrPath/PathPreviewSplatMulti"
                 float  _UseSplatWeights;
                 // 新增：是否使用图层贴图数组采样
                 float _UseLayerTexArray;
+                // 新增：是否使用图层参数数组（颜色等）
+                float _UseLayerParamsArray;
                 // 新增：ROI 边界（世界坐标 XZ 平面）
                 float4 _PreviewBounds;
             CBUFFER_END
@@ -288,6 +292,12 @@ Shader "MrPath/PathPreviewSplatMulti"
             // 每层颜色（Tint）采样，匹配材质属性 _LayerN_Color
             half4 GetLayerTint(int layerIndex)
             {
+                // 优先使用数组：由编辑器统一推送，保证数据一致性
+                if(_UseLayerParamsArray > 0.5)
+                {
+                    return _LayerColors[layerIndex];
+                }
+                // 兼容旧材质：回退到逐层属性的 switch 实现
                 switch(layerIndex)
                 {
                 case 0: return _Layer0_Color;
@@ -353,7 +363,7 @@ Shader "MrPath/PathPreviewSplatMulti"
                     across,
                     progress,
                     layerIndex,
-                    _PathSamples,
+                    max(_PathSamples, 1.0), // 最小值钳制，避免除法与行索引为零
                     _AtlasInvHeight) * _MaskStrength;
                 // CPU 路径的阈值塑形已在 Atlas 构建阶段完成，这里只保持缩放并返回
                 return weight;
@@ -373,7 +383,8 @@ Shader "MrPath/PathPreviewSplatMulti"
                 // 拉伸到道路宽度：Across 不再重复，直接使用 0..1
                 float acrossPos01 = saturate(input.uv.x);
                 // 修复：去除居中对称的 abs 映射，改为左->右 0..1
-                float across = saturate(acrossPos01 * _AcrossScale);
+                // 防御性处理：避免 AcrossScale 为 0 导致 across 全黑
+                float across = saturate(acrossPos01 * max(_AcrossScale, 0.0001));
                 // 沿路径方向仍允许重复控制
                 float pathProgress = saturate(input.uv.y / max(_MeshRepeatAlong, 0.0001));
 
@@ -381,11 +392,18 @@ Shader "MrPath/PathPreviewSplatMulti"
                 half4 finalColor = half4(0, 0, 0, 0);
 
                 int   maxLayers = min(_LayerCount, 16);
+                // 提前返回：无层可绘制时立即透明退出
+                if(maxLayers <= 0)
+                {
+                    return finalColor;
+                }
                 float compositeAlpha = 0.0; // 汇总各层归一化权重 * 不透明度
 
                 // 统一路径：采样所有层权重并归一化，不区分来源（GPU 或 MaskAtlas）
                 float weights[16];
                 float total = 0.0;
+                // 动态循环：避免编译期固定展开到 16 次
+                [loop]
                 for(int i = 0; i < maxLayers; i++)
                 {
                     float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
@@ -393,12 +411,20 @@ Shader "MrPath/PathPreviewSplatMulti"
                     total += w;
                 }
 
+                // 提前返回：所有层权重总和为 0，则无需进入混合循环
+                if(total <= 0.0001)
+                {
+                    return finalColor; // 半透明预览场景返回完全透明
+                }
+
                 float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
 
                 // 使用不同循环变量名以避免 D3D FXC 在同一作用域内报重名冲突
+                [loop]
                 for(int j = 0; j < maxLayers; j++)
                 {
                     float weight = (invTotal > 0.0) ? saturate(weights[j] * invTotal) : 0.0;
+                    // 跳过极小权重，减少纹理采样与混合成本
                     if(weight < 0.0004) continue;
 
                     float2 layerTiling = GetLayerTiling(j);
@@ -417,9 +443,17 @@ Shader "MrPath/PathPreviewSplatMulti"
                     compositeAlpha += weight * layerOpacity;
                 }
 
-                // 透明度与滑块结合：按合成权重驱动显示强度，避免因颜色暗导致过度透明
-                finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(compositeAlpha) * saturate(_PreviewAlpha);
-                //  finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(finalColor.a) * saturate(_PreviewAlpha);
+                // 透明度与滑块结合：按合成权重驱动显示强度
+                // Opaque 预览：使用 clip 实现硬阈值裁剪，与地形绘制一致
+                if (_OpaquePreview > 0.5)
+                {
+                    clip(compositeAlpha - _MaskThreshold);
+                    finalColor.a = 1.0;
+                }
+                else
+                {
+                    finalColor.a = saturate(compositeAlpha) * saturate(_PreviewAlpha);
+                }
                 return finalColor;
             }
             ENDHLSL

@@ -77,23 +77,29 @@ namespace MrPathV2.Editor.Preview
                     Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
                 if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
                     Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+                // 关键修复：同时关闭参数数组路径，避免 shader 继续读取旧的数组参数导致色彩/混合异常
+                if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerParamsArray))
+                    Current.SetFloat(PreviewShaderContracts.Properties.UseLayerParamsArray, 0f);
                 return 0;
             }
 
+            // 构建有效图层的紧凑列表：保持数组参数、纹理数组与 GPU 索引一致
+            var activeLayers = BuildActiveLayers(layers, maxLayers);
+
 #if UNITY_EDITOR
             // Push splat index array required for GPU preview
-            var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, layerCount) : Mathf.Min(4, layerCount);
+            var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, processedLayerCount) : Mathf.Min(4, processedLayerCount);
             var splatIndicesArr = new float[maxLayers];
             for (var i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
             if (EnableGpuPreview && m_TargetTerrain && recipe)
             {
                 var map = LayerResolver.ResolveEnsurePresent(m_TargetTerrain, recipe);
-                if (map != null && layers != null)
+                if (map != null && activeLayers != null)
                 {
-                    var safeCount = Mathf.Min(layerCountForIndices, layers.Count);
+                    var safeCount = Mathf.Min(layerCountForIndices, activeLayers.Count);
                     for (var i = 0; i < safeCount; i++)
                     {
-                        var tl = layers[i]?.contentLayer;
+                        var tl = activeLayers[i]?.contentLayer;
                         if (tl && map.TryGetValue(tl, out var idx)) splatIndicesArr[i] = idx;
                     }
                 }
@@ -107,43 +113,25 @@ namespace MrPathV2.Editor.Preview
             var sliceCount = 0;
             int width = -1, height = -1;
             var textureHashBuilder = new StringBuilder();
-
-            for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
+            var maxActiveToUse = Mathf.Min(maxLayers, activeLayers.Count);
+            for (var i = 0; i < maxActiveToUse; i++)
             {
-                TerrainLayer tl = null;
-                if (layers != null && i < layers.Count)
-                {
-                    var rl = layers[i];
-                    if (rl != null && rl.enabled)
-                    {
-                        tl = rl.contentLayer;
-                    }
-                }
-
-                // Try to collect array textures
+                var tl = activeLayers[i]?.contentLayer;
                 var tex = tl && tl.diffuseTexture ? tl.diffuseTexture : null;
-                if (tex)
+                if (!tex) continue; // 理论上不会发生，因为已过滤
+
+                texList.Add(tex);
+                sliceCount++;
+                if (width < 0)
                 {
-                    texList.Add(tex);
-                    sliceCount++;
-                    if (width < 0)
-                    {
-                        width = tex.width;
-                        height = tex.height;
-                    }
-                    // Add texture hash to cache key
-                    textureHashBuilder.Append(tex.GetInstanceID()).Append(",");
+                    width = tex.width;
+                    height = tex.height;
                 }
-                else
-                {
-                    // If any layer is missing a texture, abandon the array approach (use the old per-layer push)
-                    sliceCount = -1;
-                    textureHashBuilder.Append("null,");
-                }
+                textureHashBuilder.Append(tex.GetInstanceID()).Append(",");
             }
 
-            // Prefer array path: as long as all layers have textures (sizes can be inconsistent, GPU Blit automatically scales to the first texture size)
-            var canUseArray = sliceCount > 0;
+            // 强制优先数组路径：只要有至少一层，即可构建数组（尺寸差异由管理器统一）
+            var canUseArray = texList.Count > 0;
 
             // 复用单例管理器，避免每帧构造导致缓存丢失
             var textureHashes = textureHashBuilder.ToString();
@@ -153,12 +141,12 @@ namespace MrPathV2.Editor.Preview
                 var success = m_TexArrayMgr.TryCreateAndBindTextureArray(Current, texList, width, height, textureHashes);
                 if (!success)
                 {
-                    HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
+                    HandleFallbackTextureBindingActive(maxLayers, activeLayers, profile, parameterSetter);
                 }
             }
             else
             {
-                HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
+                HandleFallbackTextureBindingActive(maxLayers, activeLayers, profile, parameterSetter);
             }
 
             return processedLayerCount;
@@ -175,6 +163,9 @@ namespace MrPathV2.Editor.Preview
                 Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
             if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
                 Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+            // 关键修复：回退到逐层绑定时关闭参数数组路径，确保 shader 使用逐层属性（_Layer{i}_Color 等）
+            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerParamsArray))
+                Current.SetFloat(PreviewShaderContracts.Properties.UseLayerParamsArray, 0f);
 
             var maxLayersToBind = Mathf.Min(maxLayers, layerCount);
             for (var i = 0; i < maxLayersToBind; i++)
@@ -190,6 +181,56 @@ namespace MrPathV2.Editor.Preview
                 }
                 parameterSetter.SetLayerParameters(i, tl);
             }
+        }
+
+        // 使用“有效图层”列表进行回退绑定，确保绑定顺序与数组路径一致
+        private void HandleFallbackTextureBindingActive(int maxLayers, IReadOnlyList<RoadLayer> activeLayers, PathProfile profile, PreviewMaterialParameterSetter parameterSetter)
+        {
+            if (!m_ArrayFallbackWarned)
+            {
+                Debug.LogWarning("[PreviewMaterialManager] Texture2DArray not available, fallback to per-layer binding using compact active layer list.");
+                m_ArrayFallbackWarned = true;
+            }
+            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray))
+                Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
+                Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+            // 关键修复：启用有效图层列表的逐层回退时，同步关闭参数数组路径
+            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerParamsArray))
+                Current.SetFloat(PreviewShaderContracts.Properties.UseLayerParamsArray, 0f);
+
+            var maxLayersToBind = Mathf.Min(maxLayers, activeLayers?.Count ?? 0);
+            for (var i = 0; i < maxLayersToBind; i++)
+            {
+                var tl = activeLayers[i]?.contentLayer;
+                parameterSetter.SetLayerParameters(i, tl);
+            }
+        }
+
+        // 构建有效图层紧凑列表（启用且拥有有效 Diffuse 纹理）
+        private static List<RoadLayer> BuildActiveLayers(IReadOnlyList<RoadLayer> layers, int maxLayers)
+        {
+            var result = new List<RoadLayer>(Mathf.Clamp(maxLayers, 0, 16));
+            if (layers == null || layers.Count == 0) return result;
+
+            for (var i = 0; i < layers.Count && result.Count < maxLayers; i++)
+            {
+                var rl = layers[i];
+                if (rl == null || !rl.enabled) continue;
+                var tl = rl.contentLayer;
+                try
+                {
+                    if (tl && tl.diffuseTexture != null)
+                    {
+                        result.Add(rl);
+                    }
+                }
+                catch
+                {
+                    // 忽略无效纹理或异常
+                }
+            }
+            return result;
         }
 
         public List<Material> GetRenderMaterials()

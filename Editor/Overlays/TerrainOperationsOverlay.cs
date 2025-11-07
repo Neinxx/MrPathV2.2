@@ -64,6 +64,8 @@ namespace MrPathV2.Editor.Overlays
             UpdateVisibility();
 
             return _root;
+
+
         }
 
         /// <summary>
@@ -73,7 +75,7 @@ namespace MrPathV2.Editor.Overlays
         {
             _projectSettings = MrPathProjectSettings.GetOrCreateSettings();
             _terrainOpsConfig = _projectSettings.terrainOperations;
-           //
+            //
         }
 
         /// <summary>
@@ -86,6 +88,7 @@ namespace MrPathV2.Editor.Overlays
             // Fallback if UXML is not found
             _root = new VisualElement();
             _root.Add(new Label("TerrainOperationsOverlay.uxml is not found"));
+
         }
 
         /// <summary>

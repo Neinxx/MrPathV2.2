@@ -118,6 +118,7 @@ namespace MrPathV2.Editor.GPU
                 else
                 {
                     Debug.LogError("[GpuComputeDispatcher] 未找到 paint_terrain 内核");
+
                 }
             }
             else
@@ -233,6 +234,11 @@ namespace MrPathV2.Editor.GPU
             if (dataPacket.RoadMask != null)
             {
                 shader.SetTexture(kernel, ShaderProperties.RoadMask, dataPacket.RoadMask);
+            }
+            else
+            {
+                // 兜底绑定：避免 Unity 对未设置的 Texture2D 属性在 Dispatch 时抛出错误
+                shader.SetTexture(kernel, ShaderProperties.RoadMask, Texture2D.blackTexture);
             }
             // 可选：SDF 路面距离场（目前未使用）
             // if (roadSDFTexture != null) shader.SetTexture(kernel, ShaderProperties.RoadSDF, roadSDFTexture);

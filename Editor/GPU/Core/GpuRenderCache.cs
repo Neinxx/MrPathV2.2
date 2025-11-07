@@ -26,6 +26,7 @@ namespace MrPathV2.Editor.GPU
             public long MemorySize;
             public bool IsValid;
 
+
             public TimeSpan Age => DateTime.UtcNow - CreatedTime;
             public TimeSpan TimeSinceLastAccess => DateTime.UtcNow - LastAccessTime;
 

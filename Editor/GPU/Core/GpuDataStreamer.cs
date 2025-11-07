@@ -169,11 +169,14 @@ namespace MrPathV2.Editor.GPU
                 // 4. 准备或获取AlphaMap纹理
                 packet.AlphaMapTexture = PrepareAlphaMapTexture(terrain);
 
-                // 5. 生成道路遮罩纹理
-                packet.RoadMask = GenerateRoadMask(terrain, pathData, recipe);
-
-                // 6. 计算GPU参数
+                // 5. 计算GPU参数（在生成RoadMask前计算，因为需要CoverageArea）
                 packet.ComputeParams = CalculateComputeParams(terrain, pathData, recipe);
+
+                // 6. 加载MaskAtlas compute shader（假设从Resources加载）
+                ComputeShader maskCompute = Resources.Load<ComputeShader>("MaskAtlas");
+
+                // 7. 生成道路遮罩纹理（使用GPU版本，传递buffer）
+                packet.RoadMask = GenerateRoadMask(packet.ComputeParams, maskCompute, packet.SpineBuffer, packet.ContourBuffer);
 
                 packet.IsValid = true;
                 return packet;
@@ -616,9 +619,7 @@ namespace MrPathV2.Editor.GPU
             var tempProfile = CreateTempPathProfile(recipe, pathData);
 
             // 生成道路轮廓
-            NativeArray<float2> roadContour;
-            float4 bounds;
-            RoadContourGenerator.GenerateContour(pathSpine, tempProfile, out roadContour, out bounds, Allocator.Temp);
+            RoadContourGenerator.GenerateContour(pathSpine, tempProfile, out NativeArray<float2> roadContour, out _, Allocator.Temp);
 
             try
             {
@@ -655,6 +656,74 @@ namespace MrPathV2.Editor.GPU
                 if (roadContour.IsCreated)
                     roadContour.Dispose();
             }
+        }
+
+
+
+
+
+        #endregion
+
+        #region Validation
+
+
+
+        #endregion
+
+
+
+
+
+
+
+        // 在GpuDataStreamer类中添加新方法（单一职责：仅负责RoadMask生成）
+        private Texture2D GenerateRoadMask(GpuComputeParams computeParams, ComputeShader maskCompute, ComputeBuffer spineBuffer, ComputeBuffer contourBuffer)
+        {
+            // 提前返回：如果无contour数据，直接返回空mask
+            if (computeParams.ContourPointCount <= 0) return null;
+
+            // 计算RoadMask分辨率（基于CoverageArea，确保精确ROI）
+            int width = (int)computeParams.CoverageArea.z - (int)computeParams.CoverageArea.x;
+            int height = (int)computeParams.CoverageArea.w - (int)computeParams.CoverageArea.y;
+            if (width <= 0 || height <= 0) return null; // 提前返回：无效分辨率
+
+            Texture2D roadMask = new Texture2D(width, height, TextureFormat.R8, false);
+            roadMask.filterMode = FilterMode.Point; // 现代风格：点采样以提升性能
+
+            // 设置ComputeShader参数（使用Unity API替换自定义实现）
+            int kernel = maskCompute.FindKernel("BuildRoadMask"); // 假设扩展MaskAtlas.compute添加此内核
+            if (kernel < 0)
+            {
+                Debug.LogError("BuildRoadMask kernel not found");
+                UnityEngine.Object.DestroyImmediate(roadMask);
+                return null;
+            }
+
+            maskCompute.SetTexture(kernel, "_RoadMask", roadMask);
+            maskCompute.SetBuffer(kernel, "_SpineBuffer", spineBuffer);
+            maskCompute.SetBuffer(kernel, "_ContourBuffer", contourBuffer);
+            maskCompute.SetInts("_Resolution", width, height);
+            maskCompute.SetVector("_TerrainPosition", computeParams.TerrainPosition);
+            maskCompute.SetFloat("_PathWidth", computeParams.PathWidth);
+            maskCompute.SetVector("_CoverageArea", computeParams.CoverageArea);
+
+            // Dispatch优化：线程组基于分辨率动态计算，提升效率
+            int threadGroupsX = Mathf.CeilToInt(width / 8f);
+            int threadGroupsY = Mathf.CeilToInt(height / 8f);
+            maskCompute.Dispatch(kernel, threadGroupsX, threadGroupsY, 1);
+
+            return roadMask;
+        }
+
+        // 在CalculateComputeParams或相关方法中调用并绑定（应用提前返回）
+        void UpdateRoadMaskAndBind(UnityEngine.Terrain terrain, Material shaderMaterial, GpuComputeParams computeParams, ComputeShader maskCompute, PathData pathData, PathRecipe recipe)
+        {
+            Texture2D roadMask = GenerateRoadMask(terrain, pathData, recipe);
+            if (roadMask == null) return; // 提前返回：无mask时跳过绑定
+
+            // 绑定到shader（移除硬编码参数，确保一致性）
+            shaderMaterial.SetTexture("_RoadMask", roadMask);
+            shaderMaterial.SetVector("_RoadMaskBounds", new Vector4(computeParams.CoverageArea.x, computeParams.CoverageArea.y, computeParams.CoverageArea.x, computeParams.CoverageArea.y));
         }
 
         /// <summary>
@@ -735,7 +804,7 @@ namespace MrPathV2.Editor.GPU
 
             return inside;
         }
-        #endregion
+
 
         #region Validation
         private void ValidateState()

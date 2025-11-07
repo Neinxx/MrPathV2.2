@@ -15,6 +15,8 @@ namespace MrPathV2.Editor.Preview
     {
         private readonly Material _mMaterial;
         private readonly PathProfile _mProfile;
+        // 颜色数组属性ID缓存，供数组路径推送使用
+        private static readonly int s_LayerColorsArr = Shader.PropertyToID("_LayerColors");
 
         public PreviewMaterialParameterSetter(Material material, PathProfile profile)
         {
@@ -35,7 +37,8 @@ namespace MrPathV2.Editor.Preview
             var master = recipe?.masterOpacity ?? 1f;
 
             // Layer count and opacity logic
-            _mMaterial.SetInt(PreviewShaderContracts.Properties.LayerCount, Mathf.Max(1, layerCount));
+            // 与实际可渲染图层保持一致：允许为 0，以便 Shader 透明早退
+            _mMaterial.SetInt(PreviewShaderContracts.Properties.LayerCount, Mathf.Max(0, layerCount));
             var isOpaque = _mProfile.opaquePreview;
             _mMaterial.SetFloat(PreviewShaderContracts.Properties.PreviewAlpha, isOpaque ? 1f : Mathf.Clamp01(alpha));
             _mMaterial.SetFloat(PreviewShaderContracts.Properties.OpaquePreview, isOpaque ? 1f : 0f);
@@ -52,6 +55,11 @@ namespace MrPathV2.Editor.Preview
             _mMaterial.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
 
             // 注意：不在此处重置 AcrossScale/MeshRepeat，避免覆盖外部提供的正确重复系数
+            // 提前返回一致性修复：当无图层可渲染时，关闭参数数组路径，避免 shader 读取到旧的数组参数
+            if (layerCount <= 0 && _mMaterial.HasProperty(PreviewShaderContracts.Properties.UseLayerParamsArray))
+            {
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.UseLayerParamsArray, 0f);
+            }
         }
 
         /// <summary>
@@ -63,22 +71,52 @@ namespace MrPathV2.Editor.Preview
         public int SetLayerParametersAsArrays(int maxLayers, IReadOnlyList<RoadLayer> layers)
         {
             if (_mMaterial == null) return 0;
+            // 压缩为有效图层列表（启用且拥有有效 Diffuse 纹理），保证数组索引与纹理数组一致
+            var activeLayers = BuildActiveLayers(layers, maxLayers);
+            var processedCount = activeLayers.Count;
 
-            var layerCount = GetEffectiveLayerCount(layers);
+            if (processedCount <= 0)
+            {
+                // 提前返回：无可用图层
+                return 0;
+            }
+
             var tilingsArr = new Vector4[maxLayers];
             var opacitiesArr = new float[maxLayers];
             var blendModesArr = new float[maxLayers];
+            var colorsArr = new Vector4[maxLayers];
 
-            // Process each layer
-            for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
+            // 逐一推送有效图层参数到紧凑索引
+            var maxToProcess = Mathf.Min(maxLayers, processedCount);
+            for (var i = 0; i < maxToProcess; i++)
             {
-                ProcessLayerAtIndex(i, layers, tilingsArr, opacitiesArr, blendModesArr);
+                var rl = activeLayers[i];
+                TerrainLayer tl = rl?.contentLayer;
+
+                // Tiling/Offset：统一使用 LayerTilingUtility，避免不同实现造成数组/单层路径不一致
+                var tiling = tl && tl.diffuseTexture ? LayerTilingUtility.CalcLayerTiling(_mProfile.roadWidth, tl) : Vector2.one;
+                var offset = tl ? tl.tileOffset : Vector2.zero;
+                tilingsArr[i] = new Vector4(tiling.x, tiling.y, offset.x, offset.y);
+
+                // Opacity/Blend
+                var master = _mProfile.roadRecipe?.masterOpacity ?? 1f;
+                var layerOpacity = rl?.opacity ?? 1f;
+                var blendMode = rl?.blendMode ?? BlendMode.Normal;
+                opacitiesArr[i] = Mathf.Clamp01(layerOpacity * master);
+                blendModesArr[i] = (float)blendMode;
+
+                // 颜色数组（Tint）：与 shader 的 _LayerColors 对应
+                var tintColor = GetTerrainLayerTint(tl);
+                colorsArr[i] = new Vector4(tintColor.r, tintColor.g, tintColor.b, tintColor.a);
+
+                // 兼容：仍写入 _Layer{i}_Color 以支持非数组回退路径的属性读取
+                _mMaterial.SetColor($"_Layer{i}_Color", tintColor);
             }
 
-            // Apply the arrays to the material
-            ApplyLayerArraysToMaterial(tilingsArr, opacitiesArr, blendModesArr);
+            // 应用数组到材质
+            ApplyLayerArraysToMaterial(tilingsArr, opacitiesArr, blendModesArr, colorsArr);
 
-            return layerCount;
+            return processedCount;
         }
 
         /// <summary>
@@ -88,8 +126,27 @@ namespace MrPathV2.Editor.Preview
         /// <returns>Effective layer count</returns>
         private static int GetEffectiveLayerCount(IReadOnlyList<RoadLayer> layers)
         {
-            var layerCount = layers?.Count ?? 0;
-            return layerCount == 0 ? 1 : layerCount; // At least one layer
+            if (layers == null || layers.Count == 0) return 0;
+
+            var count = 0;
+            for (var i = 0; i < layers.Count; i++)
+            {
+                var rl = layers[i];
+                if (rl == null || !rl.enabled) continue;
+                var tl = rl.contentLayer;
+                try
+                {
+                    if (tl && tl.diffuseTexture != null)
+                    {
+                        count++;
+                    }
+                }
+                catch
+                {
+                    // 忽略异常并视为无效图层
+                }
+            }
+            return count;
         }
 
         /// <summary>
@@ -105,7 +162,8 @@ namespace MrPathV2.Editor.Preview
             var (tl, layerOpacity, blendMode) = GetLayerDataAtIndex(index, layers);
 
             // Tiling
-            var tiling = tl && tl.diffuseTexture ? PreviewPipelineUtility.CalcLayerTiling(_mProfile.roadWidth, tl) : Vector2.one;
+            // 统一改为使用 LayerTilingUtility，保证与单层路径一致
+            var tiling = tl && tl.diffuseTexture ? LayerTilingUtility.CalcLayerTiling(_mProfile.roadWidth, tl) : Vector2.one;
             var offset = tl ? tl.tileOffset : Vector2.zero;
             // 将偏移写入 zw，便于 shader 使用 float4(tiling.xy, offset.xy)
             tilingsArr[index] = new Vector4(tiling.x, tiling.y, offset.x, offset.y);
@@ -151,12 +209,17 @@ namespace MrPathV2.Editor.Preview
         /// <param name="tilingsArr">Tilings array</param>
         /// <param name="opacitiesArr">Opacities array</param>
         /// <param name="blendModesArr">Blend modes array</param>
-        private void ApplyLayerArraysToMaterial(Vector4[] tilingsArr, float[] opacitiesArr, float[] blendModesArr)
+        private void ApplyLayerArraysToMaterial(Vector4[] tilingsArr, float[] opacitiesArr, float[] blendModesArr, Vector4[] colorsArr)
         {
             // Push array properties (for shader sampling)
             _mMaterial.SetVectorArray(PreviewShaderContracts.Properties.LayerTilingsArr, tilingsArr);
             _mMaterial.SetFloatArray(PreviewShaderContracts.Properties.LayerOpacitiesArr, opacitiesArr);
             _mMaterial.SetFloatArray(PreviewShaderContracts.Properties.LayerBlendModesArr, blendModesArr);
+            // 新增：推送颜色数组，避免启用数组路径时颜色为黑
+            _mMaterial.SetVectorArray(PreviewShaderContracts.Properties.LayerColorsArr, colorsArr);
+            // 显式打开参数数组采样路径
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.UseLayerParamsArray))
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.UseLayerParamsArray, 1f);
         }
 
         /// <summary>
@@ -167,6 +230,12 @@ namespace MrPathV2.Editor.Preview
         public void SetLayerParameters(int index, TerrainLayer layer)
         {
             if (_mMaterial == null) return;
+
+            // 回退路径修复：逐层绑定时明确关闭 _UseLayerParamsArray，确保 shader 使用逐层属性（_Layer{i}_Color 等）而非数组
+            if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.UseLayerParamsArray))
+            {
+                _mMaterial.SetFloat(PreviewShaderContracts.Properties.UseLayerParamsArray, 0f);
+            }
 
             try
             {
@@ -292,6 +361,34 @@ namespace MrPathV2.Editor.Preview
             if (Mathf.Approximately(sz.x, 0f)) sz.x = 1f;
             if (Mathf.Approximately(sz.y, 0f)) sz.y = 1f;
             return LayerTilingUtility.CalcLayerTiling(_mProfile.roadWidth, layer);
+        }
+
+        /// <summary>
+        /// 构建有效图层（启用且具有有效 Diffuse 纹理）的紧凑列表，保证数组路径的索引与纹理数组一致。
+        /// </summary>
+        private static List<RoadLayer> BuildActiveLayers(IReadOnlyList<RoadLayer> layers, int maxLayers)
+        {
+            var result = new List<RoadLayer>(Mathf.Clamp(maxLayers, 0, 16));
+            if (layers == null || layers.Count == 0) return result;
+
+            for (var i = 0; i < layers.Count && result.Count < maxLayers; i++)
+            {
+                var rl = layers[i];
+                if (rl == null || !rl.enabled) continue;
+                var tl = rl.contentLayer;
+                try
+                {
+                    if (tl && tl.diffuseTexture != null)
+                    {
+                        result.Add(rl);
+                    }
+                }
+                catch
+                {
+                    // 忽略异常导致的无效图层
+                }
+            }
+            return result;
         }
 
         /// <summary>

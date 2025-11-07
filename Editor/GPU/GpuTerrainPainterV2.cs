@@ -128,7 +128,7 @@ namespace MrPathV2.Editor.GPU
             LayerConfig[] layers;
             if (!recipeData.IsCreated || recipeData.Length <= 0)
             {
-                layers = new LayerConfig[] { new LayerConfig(layerIndex: 0, strength: 1.0f, blendMode: BlendMode.Replace) };
+                layers = new LayerConfig[] { new(layerIndex: 0, strength: 1.0f, blendMode: BlendMode.Replace) };
             }
             else
             {
@@ -251,7 +251,7 @@ namespace MrPathV2.Editor.GPU
             try
             {
                 // 构建 GPU 渲染所需的数据结构
-                var pathData = ConvertRuntimePathData(runtimePathData, profile.roadWidth);
+                var pathData = ConvertRuntimePathData(runtimePathData, profile.roadWidth, profile.falloffWidth);
                 var recipe = ConvertProfileToRecipe(profile, terrain);
 
                 var renderResult = _renderer.RenderPath(terrain, pathData, recipe, isPreview);
@@ -277,7 +277,7 @@ namespace MrPathV2.Editor.GPU
             }
         }
 
-        private PathData ConvertRuntimePathData(Runtime.Core.PathData src, float width)
+        private PathData ConvertRuntimePathData(Runtime.Core.PathData src, float width, float falloff)
         {
             var knotCount = src?.KnotCount ?? 0;
             if (knotCount < 2)
@@ -292,7 +292,7 @@ namespace MrPathV2.Editor.GPU
             }
 
             var length = CalculatePathLength(points);
-            var bounds = CalculatePathBounds(points, width);
+            var bounds = CalculatePathBounds(points, width, falloff);
             return new PathData(points, width, length, bounds);
         }
 

@@ -23,6 +23,8 @@ namespace MrPathV2.Runtime.Preview
             public static readonly int LayerTilingsArr = Shader.PropertyToID("_LayerTilings");
             public static readonly int LayerOpacitiesArr = Shader.PropertyToID("_LayerOpacities");
             public static readonly int LayerBlendModesArr = Shader.PropertyToID("_LayerBlendModes");
+            // 新增：每层颜色数组契约，与 PathPreviewSplatMulti.shader 的 _LayerColors[16] 对齐
+            public static readonly int LayerColorsArr = Shader.PropertyToID("_LayerColors");
             public static readonly int PathSamples = Shader.PropertyToID("_PathSamples");
             public static readonly int LayerIndex = Shader.PropertyToID("_LayerIndex");
             public static readonly int MaskStrength = Shader.PropertyToID("_MaskStrength");
@@ -33,6 +35,7 @@ namespace MrPathV2.Runtime.Preview
             public static readonly int AcrossScale = Shader.PropertyToID("_AcrossScale");
             public static readonly int LayerTextures = Shader.PropertyToID("_LayerTextures");
             public static readonly int UseLayerTexArray = Shader.PropertyToID("_UseLayerTexArray");
+            public static readonly int UseLayerParamsArray = Shader.PropertyToID("_UseLayerParamsArray");
             public static readonly int SplatWeights = Shader.PropertyToID("_SplatWeights");
             public static readonly int UseSplatWeights = Shader.PropertyToID("_UseSplatWeights");
             public static readonly int TerrainPosition = Shader.PropertyToID("_TerrainPosition");
