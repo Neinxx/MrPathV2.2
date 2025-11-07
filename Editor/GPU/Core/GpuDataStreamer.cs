@@ -477,33 +477,14 @@ namespace MrPathV2.Editor.GPU
             var rt = result.RenderTexture;
 
             // 计算 ROI（像素坐标）
-            // 约定：CoverageArea 的 maxX/maxY 为“排他型”上界（exclusive），因此宽高 = max - min，无需 +1。
-            // 这与 Compute 调度中的 ROI 定义保持一致，避免读回越界。
             var cov = result.CoverageArea;
             int minX = Mathf.Clamp(Mathf.RoundToInt(cov.x), 0, terrainData.alphamapWidth);
             int minY = Mathf.Clamp(Mathf.RoundToInt(cov.y), 0, terrainData.alphamapHeight);
             int maxX = Mathf.Clamp(Mathf.RoundToInt(cov.z), 0, terrainData.alphamapWidth);
             int maxY = Mathf.Clamp(Mathf.RoundToInt(cov.w), 0, terrainData.alphamapHeight);
-
-            // 使用“排他型”上界计算 ROI 尺寸
-            int roiWidth = Mathf.Max(0, maxX - minX);
-            int roiHeight = Mathf.Max(0, maxY - minY);
-
-            // 提前返回：ROI 无有效面积时直接退出（保持提前返回原则，避免无意义操作）
-            if (roiWidth <= 0 || roiHeight <= 0)
-            {
-                return;
-            }
-
-            // 进一步使用渲染纹理尺寸进行防御性裁剪，避免 GPU 读回越界
-            // 注意：rt.width/height 通常等于 alphamapResolution，但仍使用 rt 实际尺寸更稳妥
-            roiWidth = Mathf.Clamp(roiWidth, 0, rt.width - minX);
-            roiHeight = Mathf.Clamp(roiHeight, 0, rt.height - minY);
-
-            if (roiWidth <= 0 || roiHeight <= 0 || minX >= rt.width || minY >= rt.height)
-            {
-                return;
-            }
+            // 注意：coverageMax 通常为“包含型”边界，和 CPU 路径保持一致需 +1
+            int roiWidth = Mathf.Max(1, maxX - minX + 1);
+            int roiHeight = Mathf.Max(1, maxY - minY + 1);
 
             // 准备 ROI alphamaps
             var roiMaps = terrainData.GetAlphamaps(minX, minY, roiWidth, roiHeight);
@@ -522,10 +503,6 @@ namespace MrPathV2.Editor.GPU
             for (int slice = 0; slice < sliceCount; slice++)
             {
                 int capturedSlice = slice;
-                if (capturedSlice < 0 || capturedSlice >= rt.volumeDepth)
-                {
-                    continue; // 防御：越界 slice 不读回
-                }
                 UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0,
                     minX, roiWidth,
                     minY, roiHeight,
@@ -603,20 +580,14 @@ namespace MrPathV2.Editor.GPU
             int minY = Mathf.Clamp(Mathf.RoundToInt(coverage.y), 0, alphaMapResolution);
             int maxX = Mathf.Clamp(Mathf.RoundToInt(coverage.z), 0, alphaMapResolution);
             int maxY = Mathf.Clamp(Mathf.RoundToInt(coverage.w), 0, alphaMapResolution);
-            // 使用“排他型”上界计算 ROI 尺寸，避免边界越界
-            int roiWidth = Mathf.Max(0, maxX - minX);
-            int roiHeight = Mathf.Max(0, maxY - minY);
-            if (roiWidth <= 0 || roiHeight <= 0)
-            {
-                // ROI 无面积，无需生成遮罩
-                return maskTexture;
-            }
+            int roiWidth = Mathf.Max(1, maxX - minX + 1);
+            int roiHeight = Mathf.Max(1, maxY - minY + 1);
 
             // 从 PathData 创建简化的 PathSpine
             var pathSpine = CreateSimplifiedPathSpine(pathData);
 
             // 创建临时的 PathProfile 来使用 RoadContourGenerator
-            var tempProfile = CreateTempPathProfile(recipe, pathData);
+            var tempProfile = CreateTempPathProfile(recipe);
 
             // 生成道路轮廓
             RoadContourGenerator.GenerateContour(pathSpine, tempProfile, out NativeArray<float2> roadContour, out _, Allocator.Temp);
@@ -627,11 +598,9 @@ namespace MrPathV2.Editor.GPU
                 for (int y = 0; y < roiHeight; y++)
                 {
                     int texY = minY + y;
-                    if (texY < 0 || texY >= alphaMapResolution) continue;
                     for (int x = 0; x < roiWidth; x++)
                     {
                         int texX = minX + x;
-                        if (texX < 0 || texX >= alphaMapResolution) continue;
                         // 将纹理坐标转换为世界坐标
                         float worldX = terrainPos.x + (texX / (float)alphaMapResolution) * terrainSize.x;
                         float worldZ = terrainPos.z + (texY / (float)alphaMapResolution) * terrainSize.z;
@@ -767,14 +736,14 @@ namespace MrPathV2.Editor.GPU
         /// <summary>
         /// 创建临时的 PathProfile 用于轮廓生成
         /// </summary>
-        private PathProfile CreateTempPathProfile(PathRecipe recipe, PathData pathData)
+        private PathProfile CreateTempPathProfile(PathRecipe recipe)
         {
             var tempProfile = ScriptableObject.CreateInstance<PathProfile>();
 
-            // 从 PathData 与 Recipe 中提取真实宽度信息
-            // roadWidth 来自路径数据；falloffWidth 来自配方的过渡距离
-            tempProfile.roadWidth = pathData.PathWidth;
-            tempProfile.falloffWidth = recipe.FalloffDistance;
+            // 从 recipe 中提取道路宽度信息
+            // 使用 FalloffDistance * 2 作为道路宽度的估算
+            tempProfile.roadWidth = recipe.FalloffDistance * 2f;
+            tempProfile.falloffWidth = recipe.FalloffDistance * 0.5f;
 
             return tempProfile;
         }

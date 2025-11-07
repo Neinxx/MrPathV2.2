@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
   m_Name: perlin2
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 1, y: 1}
+  smooth: 0.752
+  tiling: {x: 0.94, y: 0}
   offset: {x: 0.03, y: 0}
-  overallScale: 1
-  strength: 1
+  overallScale: 0.74
+  strength: 0.76
   seed: 0
-  noiseScale: {x: 0.05, y: 0.05}
+  noiseScale: {x: 0.15, y: 0.15}
   uniformScale: 1
   rotationDeg: 8
   octaves: 1
