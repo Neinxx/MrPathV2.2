@@ -352,14 +352,14 @@ namespace MrPathV2.Editor.GPU
         /// <summary>
         /// 快速绘制路径到地形
         /// </summary>
-        public bool PaintPath(UnityEngine.Terrain terrain, Vector3[] spinePoints, float width,
+        public bool PaintPath(UnityEngine.Terrain terrain, Vector3[] spinePoints, float width, float fallWidth,
             LayerConfig[] layers, bool isPreview = false)
         {
             ValidateState();
 
             try
             {
-                var pathData = new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width));
+                var pathData = new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width, fallWidth));
 
                 var recipe = new PathRecipe(layers: layers, falloffDistance: width * 0.5f, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
 
@@ -382,14 +382,14 @@ namespace MrPathV2.Editor.GPU
         /// <summary>
         /// 异步绘制路径到地形
         /// </summary>
-        public async Task<GpuRenderResult> PaintPathAsync(UnityEngine.Terrain terrain, Vector3[] spinePoints, float width,
+        public async Task<GpuRenderResult> PaintPathAsync(UnityEngine.Terrain terrain, Vector3[] spinePoints, float width, float fallWidth,
             LayerConfig[] layers, bool isPreview = false)
         {
             ValidateState();
 
             try
             {
-                var pathData = new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width));
+                var pathData = new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width, fallWidth));
 
                 var recipe = new PathRecipe(layers: layers, falloffDistance: width * 0.5f, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
 
@@ -445,8 +445,9 @@ namespace MrPathV2.Editor.GPU
             // 浠庢棫鐨勫厓鏁版嵁缁撴瀯杞?崲涓烘柊鐨凱athData
             var spinePoints = ExtractSpinePoints(metadata);
             var width = ExtractPathWidth(metadata);
+            var falloffDistance = ExtractFalloffDistance(metadata);
 
-            return new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width));
+            return new PathData(spinePoints: spinePoints, pathWidth: width, pathLength: CalculatePathLength(spinePoints), pathBounds: CalculatePathBounds(spinePoints, width, falloffDistance));
         }
 
         private PathRecipe ConvertToPathRecipe(TerrainPaintMetadata metadata)
@@ -484,6 +485,18 @@ namespace MrPathV2.Editor.GPU
 
             Debug.LogWarning("[GpuTerrainPainterV2] 鍏冩暟鎹?腑娌℃湁鏈夋晥鐨勮矾寰勫?搴︼紝浣跨敤榛樿?鍊?.0f");
             return 5.0f; // 榛樿?鍊?
+        }
+
+        private static float CalculatePathFallWidth(TerrainPaintMetadata metadata)
+        {
+            // 浠庡厓鏁版嵁涓?彁鍙栬矾寰勫?搴?
+            if (metadata != null && metadata.FalloffDistance > 0)
+            {
+                return metadata.FalloffDistance;
+            }
+
+            Debug.LogWarning("[GpuTerrainPainterV2] 鍏冩暟鎹?腑娌℃湁鏈夋晥鐨勮矾寰勫?搴︼紝浣跨敤榛樿?鍊?.0f");
+            return 0.0f; // 榛樿?鍊?
         }
 
         private static LayerConfig[] ExtractLayerConfigs(TerrainPaintMetadata metadata)
@@ -528,7 +541,7 @@ namespace MrPathV2.Editor.GPU
             return totalLength;
         }
 
-        private static Bounds CalculatePathBounds(Vector3[] spinePoints, float width)
+        private static Bounds CalculatePathBounds(Vector3[] spinePoints, float width, float falloff)
         {
             if (spinePoints == null || spinePoints.Length == 0)
                 return new Bounds();
