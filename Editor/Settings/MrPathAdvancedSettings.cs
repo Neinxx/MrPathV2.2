@@ -13,6 +13,34 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
     /// </summary>
     public class MrPathAdvancedSettings : ScriptableObject
     {
+        // --- 预览线（GPU）设置 ---
+        [Header("预览线 (GPU Preview Lines)")]
+        [Tooltip("屏幕空间边缘抗锯齿宽度（像素）。用于预览线条边缘的平滑处理。")]
+        [Range(0.5f, 8f)]
+        public float previewAAWidthPixels = 2.0f;
+
+        [Tooltip("屏幕空间端点融合宽度（像素）。未连接的端点将按此宽度做透明过渡。")]
+        [Range(0.5f, 16f)]
+        public float previewCapAAWidthPixels = 4.0f;
+
+        [Tooltip("默认虚线段长度（像素）。当样式未显式提供 dashSize 时使用。")]
+        [Range(1f, 64f)]
+        public float previewDefaultDashPixels = 8.0f;
+
+        public enum PreviewCapType
+        {
+            None = 0,
+            Linear = 1
+            // Round = 2 // 如需圆形端帽可后续扩展
+        }
+
+        [Tooltip("预览线端帽类型：None=无融合；Linear=线性融合（默认）")]
+        public PreviewCapType previewCapType = PreviewCapType.Linear;
+
+        [Tooltip("端帽融合宽度缩放系数。>1 更柔和，<1 更硬。")]
+        [Range(0.25f, 4f)]
+        public float previewSeamScale = 1.0f;
+
         [Header("策略设置 (Strategy Settings)")]
         // [Tooltip("【已弃用/仅参考】默认路径策略不再由此处控制，请在 PathStrategyRegistry 中配置。")]
         // public PathStrategy defaultStrategy; // 保留旧字段并标记，避免数据丢失

@@ -214,16 +214,24 @@ namespace MrPathV2.Editor.Inspectors
             RequestSceneViewRefresh(forceImmediate);
         }
 
-        public PathEditorHandles.HandleDrawContext CreateHandleContext() => new PathEditorHandles.HandleDrawContext
+        public PathEditorHandles.HandleDrawContext CreateHandleContext()
         {
-            Creator = Target,
-            HeightProvider = HeightProvider,
-            LatestSpine = null, // 不再依赖本地预览管理器
-            IsDragging = IsDraggingHandle,
-            HoveredPointIndex = HoveredPointIdx,
-            HoveredSegmentIndex = HoveredSegmentIdx,
-            LineRenderer = null // 不再依赖本地预览管理器
-        };
+            // 统一注入共享的预览线渲染器，并启用 GPU 模式
+            var mgr = MultiPathPreviewRenderer.GetManagerForCreator(Target);
+            var lr = mgr != null ? mgr.GetSharedLineRenderer() : null;
+            lr?.SetUseGpu(true);
+
+            return new PathEditorHandles.HandleDrawContext
+            {
+                Creator = Target,
+                HeightProvider = HeightProvider,
+                LatestSpine = null, // 不再依赖本地预览管理器
+                IsDragging = IsDraggingHandle,
+                HoveredPointIndex = HoveredPointIdx,
+                HoveredSegmentIndex = HoveredSegmentIdx,
+                LineRenderer = lr // 注入共享实例
+            };
+        }
 
         public void UpdateHoverState(PathEditorHandles.HandleDrawContext context)
         {

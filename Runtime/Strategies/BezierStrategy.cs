@@ -150,44 +150,50 @@ namespace MrPathV2.Runtime.Strategies
         private void DrawCurve(ref PathEditorHandles.HandleDrawContext context)
         {
             var creator = context.Creator;
-            for (var i = 0; i < creator.NumSegments; i++)
-            {
-                Handles.color = i == context.HoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor;
-                var knot1 = creator.pathData.GetKnot(i);
-                var knot2 = creator.pathData.GetKnot(i + 1);
-                var pStart = creator.transform.TransformPoint(knot1.Position);
-                var pEnd = creator.transform.TransformPoint(knot2.Position);
-                var ctrl1 = creator.transform.TransformPoint(knot1.GlobalTangentOut);
-                var ctrl2 = creator.transform.TransformPoint(knot2.GlobalTangentIn);
-                Handles.DrawBezier(pStart, pEnd, ctrl1, ctrl2, Handles.color, null, drawingStyle.curveThickness);
-            }
+            var lineRenderer = context.LineRenderer;
+            // 依赖注入：若未提供共享渲染器则提前返回，避免临时实例
+            if (lineRenderer == null) return;
+                lineRenderer.Clear(PreviewLineRenderer.LineType.PathCurve);
+                lineRenderer.SetCamera(SceneView.currentDrawingSceneView.camera);
+
+                // 与Catmull-Rom一致的动态分辨率策略
+                var resolution = Mathf.Clamp(Mathf.RoundToInt(creator.NumSegments * 16f), 8, 128);
+
+                for (var i = 0; i < creator.NumSegments; i++)
+                {
+                    var curveStyle = new PreviewLineRenderer.LineStyle
+                    {
+                        color = i == context.HoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor,
+                        thickness = drawingStyle.curveThickness,
+                        antiAliased = true
+                    };
+
+                    GetBezierControlPointsWorld(creator, i, out var pStart, out var pEnd, out var ctrl1, out var ctrl2);
+                    lineRenderer.AddBezierCurve(pStart, pEnd, ctrl1, ctrl2, PreviewLineRenderer.LineType.PathCurve, resolution, curveStyle);
+                }
+
+                lineRenderer.Render();
+        }
+
+        private static void GetBezierControlPointsWorld(PathCreator creator, int segmentIndex, out Vector3 pStart, out Vector3 pEnd, out Vector3 ctrl1, out Vector3 ctrl2)
+        {
+            var knot1 = creator.pathData.GetKnot(segmentIndex);
+            var knot2 = creator.pathData.GetKnot(segmentIndex + 1);
+            pStart = creator.transform.TransformPoint(knot1.Position);
+            pEnd = creator.transform.TransformPoint(knot2.Position);
+            ctrl1 = creator.transform.TransformPoint(knot1.GlobalTangentOut);
+            ctrl2 = creator.transform.TransformPoint(knot2.GlobalTangentIn);
         }
 
         private void DrawControlLines(ref PathEditorHandles.HandleDrawContext context)
         {
             var creator = context.Creator;
-            PreviewLineRenderer lineRenderer;
-            bool shouldDispose;
-
-            if (context.LineRenderer != null)
-            {
-                lineRenderer = context.LineRenderer;
-                shouldDispose = false;
-            }
-            else
-            {
-                lineRenderer = new PreviewLineRenderer();
-                shouldDispose = true;
-            }
+            var lineRenderer = context.LineRenderer;
+            if (lineRenderer == null) return; // 依赖注入：未提供则不绘制
 
             // 清除上一帧遗留的控制线，避免重复累积导致卡顿
-            if (!shouldDispose)
-            {
-                lineRenderer.Clear(PreviewLineRenderer.LineType.ControlLine);
-            }
+            lineRenderer.Clear(PreviewLineRenderer.LineType.ControlLine);
 
-            try
-            {
                 // 设置控制线样式
                 var controlLineStyle = new PreviewLineRenderer.LineStyle
                 {
@@ -218,15 +224,6 @@ namespace MrPathV2.Runtime.Strategies
 
                 // 渲染所有线条
                 lineRenderer.Render();
-            }
-            finally
-            {
-                // 如果是临时创建的lineRenderer，需要释放资源
-                if (shouldDispose)
-                {
-                    lineRenderer.Dispose();
-                }
-            }
         }
 #if UNITY_EDITOR
         private void DrawPointHandles(ref PathEditorHandles.HandleDrawContext context, Camera camera)

@@ -89,6 +89,14 @@ namespace MrPathV2.Editor.Preview
             return mgr;
         }
 
+        // 公开：根据 PathCreator 获取其对应的预览管理器
+        public static PathPreviewManager GetManagerForCreator(PathCreator creator)
+        {
+            if (!creator) return null;
+            if (!s_MInitialized) EnsureInitialized();
+            return EnsureManager(creator.GetInstanceID());
+        }
+
         // 供编辑器调用：在全局渲染模式下标记指定 PathCreator 的预览为脏
         public static void MarkCreatorDirty(PathCreator creator, bool spine = true, bool mesh = true, bool materials = true)
         {

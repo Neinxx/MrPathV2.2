@@ -263,7 +263,7 @@ namespace MrPathV2.Editor.Settings
 
             var section = new Foldout
             {
-                text = "GPU 调试面板"
+                text = "GPU 调试与预览线设置"
             };
             section.value = false; // 默认折叠
 
@@ -274,6 +274,22 @@ namespace MrPathV2.Editor.Settings
                 section.Add(new PropertyField(advSO.FindProperty("gpuMaskThreshold"), "遮罩门槛 [0-1]"));
                 section.Add(new PropertyField(advSO.FindProperty("gpuOverrideEdgeWidth"), "覆盖过渡宽度"));
                 section.Add(new PropertyField(advSO.FindProperty("gpuEdgeWidthWorld"), "过渡宽度(米)"));
+
+                // 预览线设置
+                section.Add(new Label("预览线 (GPU) 参数")
+                {
+                    style =
+                    {
+                        unityFontStyleAndWeight = FontStyle.Bold,
+                        marginTop = 4,
+                        marginBottom = 2
+                    }
+                });
+                section.Add(new PropertyField(advSO.FindProperty("previewAAWidthPixels"), "边缘AA宽度(像素)"));
+                section.Add(new PropertyField(advSO.FindProperty("previewCapAAWidthPixels"), "端帽融合宽度(像素)"));
+                section.Add(new PropertyField(advSO.FindProperty("previewDefaultDashPixels"), "默认虚线长度(像素)"));
+                section.Add(new PropertyField(advSO.FindProperty("previewCapType"), "端帽类型"));
+                section.Add(new PropertyField(advSO.FindProperty("previewSeamScale"), "端帽宽度缩放"));
                 section.Bind(advSO);
             }
             else

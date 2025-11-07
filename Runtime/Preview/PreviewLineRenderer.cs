@@ -4,9 +4,13 @@ using System.Linq;
 using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Memory;
 using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
+// 仅在编辑器下使用 Handles 与 Editor API
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace MrPathV2.Runtime.Preview
 {
@@ -29,6 +33,9 @@ namespace MrPathV2.Runtime.Preview
             {
                 batch?.Clear();
             }
+
+            // 确保释放GPU相关资源，避免ComputeBuffer/材质泄漏
+            ReleaseGpuResources();
         }
 
         #endregion
@@ -90,6 +97,16 @@ namespace MrPathV2.Runtime.Preview
         private readonly Dictionary<LineType, List<LineSegment>> _batchedLines;
         private bool _isDirty = true;
 
+        // GPU 渲染相关
+        private bool _useGpu = false;
+        private Material _gpuMat;
+        private ComputeBuffer _segmentBuffer;
+        private Mesh _unitQuad;
+        private static readonly int _SegmentsId = Shader.PropertyToID("_Segments");
+        private Bounds _gpuDrawBounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
+        // 默认虚线长度（像素），作为样式未设置时的兜底值
+        private float _defaultDashPixels = 1.0f;
+
         #endregion
 
         #region 构造函数和初始化
@@ -103,6 +120,7 @@ namespace MrPathV2.Runtime.Preview
 
             InitializeDefaultStyles();
             InitializeBatchedLists();
+            InitializeGpuResources();
         }
 
         private void InitializeDefaultStyles()
@@ -169,6 +187,14 @@ namespace MrPathV2.Runtime.Preview
                     _frustumPlanes = GeometryUtility.CalculateFrustumPlanes(camera);
                 }
             }
+        }
+
+        /// <summary>
+        ///     启用或禁用GPU绘制模式（失败自动回退到Handles）
+        /// </summary>
+        public void SetUseGpu(bool enabled)
+        {
+            _useGpu = enabled && _gpuMat != null && _unitQuad != null;
         }
 
         /// <summary>
@@ -247,6 +273,7 @@ namespace MrPathV2.Runtime.Preview
                 batch.Clear();
             }
             _isDirty = true;
+            // 不在此处释放GPU缓冲，避免每帧重复分配；按需在渲染时扩容
         }
 
         /// <summary>
@@ -277,7 +304,14 @@ namespace MrPathV2.Runtime.Preview
             // 按优先级和类型渲染
             foreach (LineType type in Enum.GetValues(typeof(LineType)))
             {
-                RenderBatch(type);
+                if (_useGpu)
+                {
+                    RenderBatchGpu(type);
+                }
+                else
+                {
+                    RenderBatch(type);
+                }
             }
 #endif
         }
@@ -288,6 +322,29 @@ namespace MrPathV2.Runtime.Preview
         public void SetDefaultStyle(LineType type, LineStyle style)
         {
             _defaultStyles[type] = style;
+        }
+
+        /// <summary>
+        ///     通过依赖注入方式设置默认样式提供器。
+        ///     提供器按 <see cref="LineType"/> 返回对应的 <see cref="LineStyle"/>。
+        ///     若提供器为 null 则提前返回，保持现有默认样式。
+        /// </summary>
+        public void UseStyleProvider(Func<LineType, LineStyle> provider)
+        {
+            if (provider == null) return; // 提前返回：空提供器不生效
+
+            foreach (LineType type in Enum.GetValues(typeof(LineType)))
+            {
+                try
+                {
+                    var style = provider(type);
+                    _defaultStyles[type] = style;
+                }
+                catch
+                {
+                    // 防御性：单个类型获取失败不影响其他类型；保留旧值
+                }
+            }
         }
 
         /// <summary>
@@ -357,6 +414,65 @@ namespace MrPathV2.Runtime.Preview
 #endif
         }
 
+        private struct SegmentData
+        {
+            public Vector3 start;
+            public Vector3 end;
+            public Color color;
+            public float thickness;
+            public float dashSize;
+            public uint flags; // bit0: dashed, bit1: aa(保留), bit2: 起点连接, bit3: 终点连接
+        }
+
+        private void RenderBatchGpu(LineType type)
+        {
+#if UNITY_EDITOR
+            if (_gpuMat == null || _unitQuad == null)
+            {
+                // GPU资源不可用时回退
+                RenderBatch(type);
+                return;
+            }
+
+            var batch = _batchedLines[type];
+            if (batch.Count == 0) return;
+
+            EnsureSegmentBufferSize(batch.Count);
+
+            var segments = new SegmentData[batch.Count];
+            for (var i = 0; i < batch.Count; i++)
+            {
+                var line = batch[i];
+                uint flags = 0u;
+                if (line.Style.dashed) flags |= 1u;
+                if (line.Style.antiAliased) flags |= 2u; // 保留位
+
+                // 邻接段接缝标记：起点/终点连接
+                const float eps = 1e-4f;
+                var startJoined = i > 0 && Vector3.Distance(batch[i - 1].End, line.Start) < eps;
+                var endJoined = i < batch.Count - 1 && Vector3.Distance(line.End, batch[i + 1].Start) < eps;
+                if (startJoined) flags |= 4u;
+                if (endJoined) flags |= 8u;
+
+                segments[i] = new SegmentData
+                {
+                    start = line.Start,
+                    end = line.End,
+                    color = line.Style.color,
+                    thickness = Mathf.Max(0.0001f, line.Style.thickness), // 像素单位
+                    dashSize = Mathf.Max(0.0001f, line.Style.dashSize > 0 ? line.Style.dashSize : _defaultDashPixels),   // 像素单位（支持全局默认）
+                    flags = flags
+                };
+            }
+
+            _segmentBuffer.SetData(segments);
+            _gpuMat.SetBuffer(_SegmentsId, _segmentBuffer);
+
+            // 使用较大的包围盒以避免被剔除；实际剔除通过CPU侧ShouldRenderLine处理
+            Graphics.DrawMeshInstancedProcedural(_unitQuad, 0, _gpuMat, _gpuDrawBounds, batch.Count);
+#endif
+        }
+
         private void RenderSingleLine(LineSegment line)
         {
 #if UNITY_EDITOR
@@ -387,15 +503,44 @@ namespace MrPathV2.Runtime.Preview
 
         private Vector3[] GenerateBezierPoints(Vector3 start, Vector3 end, Vector3 control1, Vector3 control2, int resolution)
         {
-            var points = new Vector3[resolution + 1];
-
-            for (var i = 0; i <= resolution; i++)
+            // 提前返回：分辨率校验
+            if (resolution <= 0)
             {
-                var t = (float)i / resolution;
-                points[i] = CalculateBezierPoint(start, control1, control2, end, t);
+                return new[] { start, end };
             }
 
-            return points;
+            NativeArray<float3> nativePoints = default;
+            try
+            {
+                // 使用Job并行生成Bezier点（resolution+1个点）
+                nativePoints = new NativeArray<float3>(resolution + 1, Allocator.TempJob);
+
+                var job = new MrPathV2.Runtime.Jobs.PreviewLineJobs.GenerateBezierPointsJob
+                {
+                    P0 = new float3(start.x, start.y, start.z),
+                    P1 = new float3(control1.x, control1.y, control1.z),
+                    P2 = new float3(control2.x, control2.y, control2.z),
+                    P3 = new float3(end.x, end.y, end.z),
+                    Resolution = resolution,
+                    Points = nativePoints
+                };
+
+                var handle = job.Schedule(nativePoints.Length, 64);
+                handle.Complete();
+
+                // 转换为 Vector3
+                var points = new Vector3[nativePoints.Length];
+                for (var i = 0; i < nativePoints.Length; i++)
+                {
+                    var p = nativePoints[i];
+                    points[i] = new Vector3(p.x, p.y, p.z);
+                }
+                return points;
+            }
+            finally
+            {
+                if (nativePoints.IsCreated) nativePoints.Dispose();
+            }
         }
 
         private Vector3 CalculateBezierPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
@@ -411,24 +556,54 @@ namespace MrPathV2.Runtime.Preview
 
         private Vector3[] GenerateCatmullRomPoints(Vector3[] controlPoints, int resolution)
         {
-            var points = new List<Vector3>();
-
-            for (var i = 0; i < controlPoints.Length - 3; i++)
+            // 提前返回：输入与分辨率校验
+            if (controlPoints == null || controlPoints.Length < 4 || resolution <= 0)
             {
-                for (var j = 0; j < resolution; j++)
-                {
-                    var t = (float)j / resolution;
-                    var point = CalculateCatmullRomPoint(
-                        controlPoints[i], controlPoints[i + 1],
-                        controlPoints[i + 2], controlPoints[i + 3], t);
-                    points.Add(point);
-                }
+                return Array.Empty<Vector3>();
             }
 
-            // 添加最后一个点
-            points.Add(controlPoints[^2]);
+            var segments = controlPoints.Length - 3;
+            var totalPoints = segments * resolution; // 不包含各段终点
 
-            return points.ToArray();
+            NativeArray<float3> nativeCp = default;
+            NativeArray<float3> nativePoints = default;
+            try
+            {
+                // 准备Native数据
+                nativeCp = new NativeArray<float3>(controlPoints.Length, Allocator.TempJob);
+                for (var i = 0; i < controlPoints.Length; i++)
+                {
+                    var cp = controlPoints[i];
+                    nativeCp[i] = new float3(cp.x, cp.y, cp.z);
+                }
+
+                nativePoints = new NativeArray<float3>(totalPoints, Allocator.TempJob);
+
+                var job = new MrPathV2.Runtime.Jobs.PreviewLineJobs.GenerateCatmullRomPointsJob
+                {
+                    ControlPoints = nativeCp,
+                    Resolution = resolution,
+                    Points = nativePoints
+                };
+
+                var handle = job.Schedule(nativePoints.Length, 64);
+                handle.Complete();
+
+                // 转换结果并按原语义补最后一个点（controlPoints[^2]）
+                var result = new List<Vector3>(nativePoints.Length + 1);
+                for (var i = 0; i < nativePoints.Length; i++)
+                {
+                    var p = nativePoints[i];
+                    result.Add(new Vector3(p.x, p.y, p.z));
+                }
+                result.Add(controlPoints[^2]);
+                return result.ToArray();
+            }
+            finally
+            {
+                if (nativePoints.IsCreated) nativePoints.Dispose();
+                if (nativeCp.IsCreated) nativeCp.Dispose();
+            }
         }
 
         private static Vector3 CalculateCatmullRomPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
@@ -479,6 +654,116 @@ namespace MrPathV2.Runtime.Preview
             return (_lineSegments.Count, rendered);
         }
 
+        #endregion
+
+        #region GPU 初始化与资源管理
+        private void InitializeGpuResources()
+        {
+#if UNITY_EDITOR
+            try
+            {
+                var shader = Shader.Find("Hidden/MrPath/GpuLine");
+                if (shader != null)
+                {
+                    _gpuMat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+                    // 默认 AA/端帽融合参数（屏幕空间像素）
+                    _gpuMat.SetFloat("_AAWidthPx", 2.0f);
+                    _gpuMat.SetFloat("_CapAAWidthPx", 4.0f);
+                    _gpuMat.SetFloat("_SeamScale", 1.0f);
+                    _gpuMat.SetInt("_CapType", 1); // Linear
+
+                }
+                _unitQuad = BuildUnitQuad();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[PreviewLineRenderer] GPU初始化失败，回退到Handles: {ex.Message}");
+                _gpuMat = null;
+                _unitQuad = null;
+            }
+#endif
+        }
+
+        /// <summary>
+        ///     应用来自编辑器侧的预览参数配置（依赖注入）。
+        ///     仅更新材质常量与默认虚线长度，不创建或销毁资源。
+        /// </summary>
+        public void ApplyPreviewConfig(PreviewLineConfig cfg)
+        {
+            // 提前返回：空或无效配置不生效
+            if (!cfg.IsValid) return;
+
+            _defaultDashPixels = Mathf.Max(1f, cfg.DefaultDashPixels);
+
+#if UNITY_EDITOR
+            if (_gpuMat)
+            {
+                _gpuMat.SetFloat("_AAWidthPx", Mathf.Max(0.5f, cfg.AAWidthPx));
+                _gpuMat.SetFloat("_CapAAWidthPx", Mathf.Max(0.5f, cfg.CapAAWidthPx));
+                _gpuMat.SetFloat("_SeamScale", Mathf.Max(0.25f, cfg.SeamScale));
+                _gpuMat.SetInt("_CapType", Mathf.Clamp(cfg.CapType, 0, 2));
+            }
+#endif
+        }
+
+        private Mesh BuildUnitQuad()
+        {
+            var m = new Mesh { name = "MrPath_GpuLine_UnitQuad" };
+            var verts = new[]
+            {
+                new Vector3(0f, -0.5f, 0f),
+                new Vector3(1f, -0.5f, 0f),
+                new Vector3(0f,  0.5f, 0f),
+                new Vector3(1f,  0.5f, 0f)
+            };
+            var uvs = new[]
+            {
+                new Vector2(0f, -0.5f),
+                new Vector2(1f, -0.5f),
+                new Vector2(0f,  0.5f),
+                new Vector2(1f,  0.5f)
+            };
+            var tris = new[] { 0, 2, 1, 1, 2, 3 };
+            m.SetVertices(verts);
+            m.SetUVs(0, uvs);
+            m.SetTriangles(tris, 0);
+            m.RecalculateBounds();
+            m.hideFlags = HideFlags.HideAndDontSave;
+            return m;
+        }
+
+        private void EnsureSegmentBufferSize(int count)
+        {
+            // start(3) + end(3) + color(4) + thickness + dashSize + flags(uint)
+            var stride = sizeof(float) * (3 + 3 + 4 + 1 + 1) + sizeof(int);
+            if (_segmentBuffer == null || _segmentBuffer.count < count)
+            {
+                _segmentBuffer?.Dispose();
+                _segmentBuffer = new ComputeBuffer(Mathf.NextPowerOfTwo(count), stride);
+            }
+        }
+
+        public void ReleaseGpuResources()
+        {
+            try
+            {
+                _segmentBuffer?.Dispose();
+                _segmentBuffer = null;
+                if (_gpuMat != null)
+                {
+                    if (Application.isEditor) UnityEngine.Object.DestroyImmediate(_gpuMat);
+                    else UnityEngine.Object.Destroy(_gpuMat);
+                    _gpuMat = null;
+                }
+                if (_unitQuad != null)
+                {
+                    if (Application.isEditor) UnityEngine.Object.DestroyImmediate(_unitQuad);
+                    else UnityEngine.Object.Destroy(_unitQuad);
+                    _unitQuad = null;
+                }
+            }
+            catch { /* ignore */ }
+        }
         #endregion
     }
 }

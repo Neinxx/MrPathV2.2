@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: DefaultPathProfile
   m_EditorClassIdentifier: 
   curveType: 1
-  longitudinalSegments: 197
+  longitudinalSegments: 60
   roadWidth: 2.79
   crossSection:
     serializedVersion: 2

@@ -364,7 +364,7 @@ namespace MrPathV2.Editor.GPU
                     spinePoints: spinePoints,
                     pathWidth: width,
                     pathLength: CalculatePathLength(spinePoints),
-                    pathBounds: CalculatePathBounds(spinePoints, width, falloff));
+                    pathBounds: CalculatePathBounds(spinePoints, width));
 
                 var recipe = new PathRecipe(layers: layers, falloffDistance: falloff, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
 
@@ -399,7 +399,7 @@ namespace MrPathV2.Editor.GPU
                     spinePoints: spinePoints,
                     pathWidth: width,
                     pathLength: CalculatePathLength(spinePoints),
-                    pathBounds: CalculatePathBounds(spinePoints, width, falloff));
+                    pathBounds: CalculatePathBounds(spinePoints, width));
 
                 var recipe = new PathRecipe(layers: layers, falloffDistance: falloff, falloffCurve: AnimationCurve.EaseInOut(0, 1, 1, 0));
 
@@ -461,7 +461,7 @@ namespace MrPathV2.Editor.GPU
                 spinePoints: spinePoints,
                 pathWidth: width,
                 pathLength: CalculatePathLength(spinePoints),
-                pathBounds: CalculatePathBounds(spinePoints, width, falloff));
+                pathBounds: CalculatePathBounds(spinePoints, width));
         }
 
         private PathRecipe ConvertToPathRecipe(TerrainPaintMetadata metadata)
@@ -543,7 +543,7 @@ namespace MrPathV2.Editor.GPU
             return totalLength;
         }
 
-        private static Bounds CalculatePathBounds(Vector3[] spinePoints, float width, float falloff)
+        private static Bounds CalculatePathBounds(Vector3[] spinePoints, float width)
         {
             if (spinePoints == null || spinePoints.Length == 0)
                 return new Bounds();
@@ -558,11 +558,11 @@ namespace MrPathV2.Editor.GPU
             }
 
             // 扩展边界以包含道路主体与过渡区域
-            var halfWidthWithFalloff = width * 0.5f + math.max(0f, falloff);
-            var expansion = new Vector3(halfWidthWithFalloff, 0f, halfWidthWithFalloff);
+            // var halfWidthWithFalloff = width * 0.5f + math.max(0f, falloff);
+            // var expansion = new Vector3(halfWidthWithFalloff, 0f, halfWidthWithFalloff);
 
             var center = (min + max) * 0.5f;
-            var size = max - min + expansion * 2f; // XZ方向增加 roadWidth + 2*falloff
+            var size = max - min * 2f; // XZ方向增加 roadWidth + 2*falloff
             return new Bounds(center, size);
         }
 

@@ -7,6 +7,7 @@ using MrPathV2.Runtime.Interfaces;
 using MrPathV2.Runtime.Preview;
 using UnityEditor;
 using UnityEngine;
+using MrPathV2.Editor.Settings; // 读取项目高级设置
 // 统一地形绘制接口
 // 命名空间别名，减少全限定名噪音
 
@@ -51,6 +52,31 @@ namespace MrPathV2.Editor.Preview
 
             // Ensure materials list is always initialized
             _mMaterials ??= new List<Material>();
+
+            // 注入现代预览线风格（依赖注入，不直接耦合具体实现）
+            _mLine.UseStyleProvider(ModernPreviewLineStyles.Provider);
+
+            // 从项目高级设置读取预览线参数并注入到运行时渲染器
+            ApplyPreviewLineConfigFromAdvancedSettings();
+        }
+
+        /// <summary>
+        ///     从项目设置读取高级预览参数并应用到线渲染器（编辑器侧）。
+        /// </summary>
+        private void ApplyPreviewLineConfigFromAdvancedSettings()
+        {
+            var settings = MrPathProjectSettings.LoadExistingSettings();
+            var adv = settings ? settings.advancedSettings : null;
+            if (!adv) return; // 提前返回：未创建高级设置时使用默认值
+
+            var cfg = new PreviewLineConfig(
+                adv.previewAAWidthPixels,
+                adv.previewCapAAWidthPixels,
+                adv.previewSeamScale,
+                (int)adv.previewCapType,
+                adv.previewDefaultDashPixels
+            );
+            _mLine.ApplyPreviewConfig(cfg);
         }
 
         public PathSpine? LatestSpine { get; private set; }

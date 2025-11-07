@@ -100,16 +100,8 @@ namespace MrPathV2.Runtime.Strategies
         {
             var creator = context.Creator;
             var lineRenderer = context.LineRenderer;
-            var shouldDispose = false;
-
-            if (lineRenderer == null)
-            {
-                lineRenderer = new PreviewLineRenderer();
-                shouldDispose = true;
-            }
-
-            try
-            {
+            // 依赖注入：若未提供共享渲染器则提前返回，避免临时实例
+            if (lineRenderer == null) return;
                 lineRenderer.Clear(PreviewLineRenderer.LineType.PathCurve);
                 lineRenderer.SetCamera(SceneView.currentDrawingSceneView.camera);
 
@@ -130,14 +122,6 @@ namespace MrPathV2.Runtime.Strategies
                     lineRenderer.AddCatmullRomSpline(controlPoints, PreviewLineRenderer.LineType.PathCurve, resolution, curveStyle);
                 }
                 lineRenderer.Render();
-            }
-            finally
-            {
-                if (shouldDispose)
-                {
-                    lineRenderer.Dispose();
-                }
-            }
         }
 
         private void GetCatmullRomControlPoints(PathCreator creator, int segmentIndex, Vector3[] buffer)
