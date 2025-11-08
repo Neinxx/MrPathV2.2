@@ -88,6 +88,9 @@ namespace MrPathV2.Editor.Inspectors
         private void CleanupPreviewLines()
         {
             var context = _ctx.CreateHandleContext();
+            // Splines风格下使用即时绘制，不需要清理预览线，提前返回
+            if (context.UseSplinesStyle)
+                return;
             // 检查LineRenderer是否存在，不存在则直接返回
             if (context.LineRenderer == null)
                 return;

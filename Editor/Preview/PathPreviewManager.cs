@@ -250,7 +250,7 @@ namespace MrPathV2.Editor.Preview
                     {
                         var bounds = new Bounds(pts[0], Vector3.zero);
                         for (var i = 1; i < pts.Length; i++) bounds.Encapsulate(pts[i]);
-                        bounds.Expand(creator.profile.roadWidth); // 与 GpuTerrainPainterV2.CalculatePathBounds 保持一致
+                        bounds.Expand(creator.profile.roadWidth); // 与 V3 计算一致（按脊线包围盒 + roadWidth 扩展）
                         var boundsXZ = new Vector4(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z);
                         _mMatMgr.SetPreviewBounds(boundsXZ);
                         // 使用脊线派生包围盒作为渲染剔除的世界包围盒，避免仅用 Mesh.bounds 导致旧值或局部空间误差
@@ -428,42 +428,9 @@ namespace MrPathV2.Editor.Preview
         private void RunGpuPreviewIfNeeded(PathCreator creator)
         {
 #if UNITY_EDITOR
-            // —— 仅在发生变化时运行 GPU 预览 ——
-            var profileHashNow = CalcProfileHash(creator.profile);
-            var terrainIdNow = _mTargetTerrain ? _mTargetTerrain.GetInstanceID() : 0;
-            var spineHashNow = LatestSpine.HasValue ? CalcSpineHash(LatestSpine.Value) : 0;
-            var cacheHasRt = _mTargetTerrain && GpuPreviewCache.TryGet(_mTargetTerrain, out var cachedRt) && cachedRt;
-            var shouldRunGpu = PreviewMaterialManager.EnableGpuPreview && _mTargetTerrain && LatestSpine.HasValue && (
-                !cacheHasRt || terrainIdNow != _mLastGpuTerrainId || spineHashNow != _mLastSpineHash || profileHashNow != _mLastProfileHash);
-
-            // 在材质更新之前执行 GPU 预览，以便本帧材质能绑定到最新的权重 RT
-            if (shouldRunGpu)
-            {
-                try
-                {
-                    var pts = LatestSpine.Value.Points;
-                    if (pts == null || pts.Length < 2)
-                    {
-                        // 脊线无效，提前返回
-                        return;
-                    }
-
-                    // 使用统一绘制接口，保持预览缓存注册在绘制器内部进行
-                    var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU, _mTargetTerrain);
-                    var result = painter.Paint(creator, true);
-
-                    if (result.IsSuccess)
-                    {
-                        _mLastGpuTerrainId = terrainIdNow;
-                        _mLastSpineHash = spineHashNow;
-                        _mLastProfileHash = profileHashNow;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"[PathPreviewManager] GPU 预览执行失败: {ex.Message}");
-                }
-            }
+            // CPU-only 模式：遵循“提前返回”原则，直接退出以禁用 GPU 预览路径。
+            // 材质更新将自动走 CPU 贴图/参数推送逻辑（PreviewMaterialManager.SetupMaskTextures & PushCpuTerrainParameters）。
+            return;
 #endif
         }
 

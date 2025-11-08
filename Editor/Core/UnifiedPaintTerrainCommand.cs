@@ -24,7 +24,7 @@ namespace MrPathV2.Editor.Core
         public UnifiedPaintTerrainCommand(
             PathCreator pathCreator,
             bool isPreview = false,
-            PainterType preferredPainterType = PainterType.GPU)
+            PainterType preferredPainterType = PainterType.CPU)
         {
             _pathCreator = pathCreator ?? throw new ArgumentNullException(nameof(pathCreator));
             _isPreview = isPreview;
@@ -51,7 +51,7 @@ namespace MrPathV2.Editor.Core
                 _painter = CreateOptimalPainter();
                 if (_painter == null)
                 {
-                    return TerrainPaintResult.CreateFailure("无法创建合适的地形绘制器", PainterType.GPU);
+                    return TerrainPaintResult.CreateFailure("无法创建合适的地形绘制器", PainterType.CPU);
                 }
 
                 // 执行绘制
@@ -63,13 +63,13 @@ namespace MrPathV2.Editor.Core
             catch (OperationCanceledException)
             {
                 Debug.Log("[UnifiedPaintTerrainCommand] 绘制操作被取消");
-                return TerrainPaintResult.CreateFailure("操作被取消", _painter?.Type ?? PainterType.GPU);
+                return TerrainPaintResult.CreateFailure("操作被取消", _painter?.Type ?? PainterType.CPU);
             }
             catch (Exception ex)
             {
                 var errorMessage = $"地形绘制失败: {ex.Message}";
                 Debug.LogError($"[UnifiedPaintTerrainCommand] {errorMessage}");
-                return TerrainPaintResult.CreateFailure(errorMessage, _painter?.Type ?? PainterType.GPU);
+                return TerrainPaintResult.CreateFailure(errorMessage, _painter?.Type ?? PainterType.CPU);
             }
         }
 
@@ -87,7 +87,7 @@ namespace MrPathV2.Editor.Core
                 _painter = CreateOptimalPainter();
                 if (_painter == null)
                 {
-                    return TerrainPaintResult.CreateFailure("无法创建合适的地形绘制器", PainterType.GPU);
+                    return TerrainPaintResult.CreateFailure("无法创建合适的地形绘制器", PainterType.CPU);
                 }
 
                 // 执行绘制
@@ -100,7 +100,7 @@ namespace MrPathV2.Editor.Core
             {
                 var errorMessage = $"地形绘制失败: {ex.Message}";
                 Debug.LogError($"[UnifiedPaintTerrainCommand] {errorMessage}");
-                return TerrainPaintResult.CreateFailure(errorMessage, _painter?.Type ?? PainterType.GPU);
+                return TerrainPaintResult.CreateFailure(errorMessage, _painter?.Type ?? PainterType.CPU);
             }
         }
 
@@ -262,7 +262,7 @@ namespace MrPathV2.Editor.Core
         public static UnifiedPaintTerrainCommand CreateRoadPaintCommand(
             PathCreator pathCreator,
             bool isPreview = false,
-            PainterType preferredPainterType = PainterType.GPU)
+            PainterType preferredPainterType = PainterType.CPU)
             => new UnifiedPaintTerrainCommand(pathCreator, isPreview, preferredPainterType);
 
         /// <summary>
@@ -270,7 +270,7 @@ namespace MrPathV2.Editor.Core
         /// </summary>
         public static UnifiedPaintTerrainCommand CreatePreviewCommand(
             PathCreator pathCreator,
-            PainterType preferredPainterType = PainterType.GPU)
+            PainterType preferredPainterType = PainterType.CPU)
             => new UnifiedPaintTerrainCommand(pathCreator, true, preferredPainterType);
 
         #endregion
@@ -283,7 +283,7 @@ namespace MrPathV2.Editor.Core
     {
         private bool _isPreview;
         private PathCreator _pathCreator;
-        private PainterType _preferredPainterType = PainterType.GPU;
+        private PainterType _preferredPainterType = PainterType.CPU;
 
         public UnifiedPaintCommandBuilder ForPathCreator(PathCreator pathCreator)
         {

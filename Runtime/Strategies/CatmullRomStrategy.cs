@@ -77,8 +77,28 @@ namespace MrPathV2.Runtime.Strategies
 
         public override void DrawHandles(ref PathEditorHandles.HandleDrawContext context)
         {
+            // Splines风格：非重绘事件也要绘制句柄，重负载曲线绘制仅在Repaint执行
+#if UNITY_EDITOR
+            var evt = Event.current;
+            if (context.UseSplinesStyle && evt != null && evt.type != EventType.Repaint)
+            {
+                DrawPointHandles(ref context, SceneView.currentDrawingSceneView.camera);
+                return;
+            }
+#endif
+            // 统一相机设置与单次渲染，减少重复批次更新
+            var lineRenderer = context.LineRenderer;
+            if (lineRenderer != null)
+            {
+                lineRenderer.SetCamera(SceneView.currentDrawingSceneView.camera);
+            }
+
             DrawCurve(ref context);
             DrawPointHandles(ref context, SceneView.currentDrawingSceneView.camera);
+            if (lineRenderer != null && !context.UseSplinesStyle)
+            {
+                lineRenderer.Render();
+            }
         }
 
         public override void UpdatePointHover(ref PathEditorHandles.HandleDrawContext context)
@@ -101,27 +121,113 @@ namespace MrPathV2.Runtime.Strategies
             var creator = context.Creator;
             var lineRenderer = context.LineRenderer;
             // 依赖注入：若未提供共享渲染器则提前返回，避免临时实例
-            if (lineRenderer == null) return;
+            if (lineRenderer == null && !context.UseSplinesStyle) return;
+            if (!context.UseSplinesStyle)
+            {
                 lineRenderer.Clear(PreviewLineRenderer.LineType.PathCurve);
-                lineRenderer.SetCamera(SceneView.currentDrawingSceneView.camera);
+            }
 
-                // 曲线绘制分辨率不再依赖 Profile 参数，按段数动态估计
-                var resolution = Mathf.Clamp(Mathf.RoundToInt(creator.NumSegments * 16f), MinCurveResolution, MaxCurveResolution);
-                var controlPoints = new Vector3[4]; // Pre-allocate to avoid GC alloc in loop
+#if UNITY_EDITOR
+            // 相机移动时（且非拖拽句柄），Splines风格下跳过曲线绘制保证场景拖动流畅
+            if (context.UseSplinesStyle && !context.IsDragging && context.IsCameraMoving)
+            {
+                return;
+            }
+#endif
 
-                for (var i = 0; i < creator.NumSegments; i++)
+            var controlPoints = new Vector3[4]; // Pre-allocate to avoid GC alloc in loop
+
+            // 屏幕采样步长（像素）通过上下文依赖注入，移除 Runtime 对 Editor 的依赖
+            var pixelStep = context.PreviewMaxPixelStep > 0f
+                ? Mathf.Clamp(context.PreviewMaxPixelStep, 2f, 24f)
+                : 6f; // 兜底默认值
+            if (context.IsDragging)
+            {
+                pixelStep = Mathf.Max(pixelStep, 12f);
+            }
+
+            var minRes = context.IsDragging ? 4 : 8;
+            var maxRes = context.IsDragging ? 512 : 1024;
+
+            int startSeg = 0, endSeg = creator.NumSegments;
+            if (context.UseSplinesStyle && context.IsDragging && context.DrawActiveSegmentOnly && context.HoveredSegmentIndex >= 0)
+            {
+                startSeg = Mathf.Max(0, context.HoveredSegmentIndex - context.DragNeighborRange);
+                endSeg = Mathf.Min(creator.NumSegments, context.HoveredSegmentIndex + context.DragNeighborRange + 1);
+            }
+
+            for (var i = startSeg; i < endSeg; i++)
+            {
+                var color = i == context.HoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor;
+                var thickness = drawingStyle.curveThickness;
+
+                GetCatmullRomControlPoints(creator, i, controlPoints);
+                // 屏幕自适应采样：根据相机与像素步长估算每段分辨率，确保编辑平滑
+                
+#if UNITY_EDITOR
+                if (context.UseSplinesStyle)
+                {
+                    // 直接在 Editor 使用 AA 折线绘制，并复用共享缓存以减少采样与GC
+                    var cam = SceneView.currentDrawingSceneView != null ? SceneView.currentDrawingSceneView.camera : null;
+                    var lowQuality = context.IsDragging || (!context.IsDragging && context.IsCameraMoving);
+                    var pts = context.PolylineCache != null
+                        ? context.PolylineCache.GetCatmull(i, controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3], pixelStep, cam, lowQuality)
+                        : SampleCatmullRom(controlPoints, lowQuality ? 8 : 32);
+                    var oldColor = Handles.color;
+                    try
+                    {
+                        Handles.color = color;
+                        Handles.DrawAAPolyLine(thickness, pts);
+                    }
+                    finally
+                    {
+                        Handles.color = oldColor;
+                    }
+                }
+                else
+#endif
                 {
                     var curveStyle = new PreviewLineRenderer.LineStyle
                     {
-                        color = i == context.HoveredSegmentIndex ? drawingStyle.curveHoverColor : drawingStyle.curveColor,
-                        thickness = drawingStyle.curveThickness,
+                        color = color,
+                        thickness = thickness,
                         antiAliased = true
                     };
-
-                    GetCatmullRomControlPoints(creator, i, controlPoints);
-                    lineRenderer.AddCatmullRomSpline(controlPoints, PreviewLineRenderer.LineType.PathCurve, resolution, curveStyle);
+                    lineRenderer.AddCatmullRomSplineAdaptive(controlPoints, PreviewLineRenderer.LineType.PathCurve,
+                        maxPixelStep: pixelStep, customStyle: curveStyle, minResolution: minRes, maxResolution: maxRes);
                 }
-                lineRenderer.Render();
+            }
+        }
+
+        // 局部快速采样：避免调度Job与NativeArray分配，在拖拽预览下更顺滑
+        private static Vector3[] s_CatmullBuffer;
+        private static Vector3[] SampleCatmullRom(Vector3[] cps, int resolution)
+        {
+            var count = resolution + 1;
+            if (s_CatmullBuffer == null || s_CatmullBuffer.Length < count)
+                s_CatmullBuffer = new Vector3[count];
+            var p0 = cps[0];
+            var p1 = cps[1];
+            var p2 = cps[2];
+            var p3 = cps[3];
+            for (int i = 0; i <= resolution; i++)
+            {
+                var t = i / (float)resolution;
+                s_CatmullBuffer[i] = CalculateCatmullPoint(p0, p1, p2, p3, t);
+            }
+            return s_CatmullBuffer;
+        }
+
+        private static Vector3 CalculateCatmullPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+        {
+            var tt = t * t;
+            var ttt = tt * t;
+            return 0.5f * (
+                2f * p1 +
+                (-p0 + p2) * t +
+                (2f * p0 - 5f * p1 + 4f * p2 - p3) * tt +
+                (-p0 + 3f * p1 - 3f * p2 + p3) * ttt
+            );
         }
 
         private void GetCatmullRomControlPoints(PathCreator creator, int segmentIndex, Vector3[] buffer)
@@ -145,7 +251,14 @@ namespace MrPathV2.Runtime.Strategies
 
         private void DrawPointHandles(ref PathEditorHandles.HandleDrawContext context, Camera camera)
         {
-            for (var i = 0; i < context.Creator.NumPoints; i++)
+            int startKnot = 0, endKnot = context.Creator.NumPoints;
+            if (context.UseSplinesStyle && context.IsDragging && context.DrawActiveSegmentOnly && context.HoveredSegmentIndex >= 0)
+            {
+                startKnot = Mathf.Max(0, context.HoveredSegmentIndex);
+                endKnot = Mathf.Min(context.Creator.NumPoints, context.HoveredSegmentIndex + 2);
+            }
+
+            for (var i = startKnot; i < endKnot; i++)
             {
                 var localPos = context.Creator.pathData.GetPosition(i);
                 PathEditorHandles.DrawHandle(localPos, i, drawingStyle.knotStyle, ref context, camera);

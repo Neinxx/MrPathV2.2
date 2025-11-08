@@ -29,7 +29,8 @@ namespace MrPathV2.Editor.Overlays
 
         private static readonly string[] BackendChoices =
         {
-            "CPU", "GPU", "Auto"
+            // 精简：当前版本仅支持 CPU 与 Auto 两种后端
+            "CPU", "Auto"
         };
 
         /// <summary>
@@ -73,7 +74,7 @@ namespace MrPathV2.Editor.Overlays
         {
             _projectSettings = MrPathProjectSettings.GetOrCreateSettings();
             _terrainOpsConfig = _projectSettings.terrainOperations;
-           //
+            //
         }
 
         /// <summary>
@@ -128,8 +129,7 @@ namespace MrPathV2.Editor.Overlays
 
             _backendDropdown.index = backend switch
             {
-                PaintTerrainCommand.PaintingBackend.GPUCompute => 1,
-                PaintTerrainCommand.PaintingBackend.Auto => 2,
+                PaintTerrainCommand.PaintingBackend.Auto => 1,
                 _ => 0
             };
 
@@ -184,13 +184,14 @@ namespace MrPathV2.Editor.Overlays
         {
             var newBackend = evt.newValue switch
             {
-                "GPU" => PaintTerrainCommand.PaintingBackend.GPUCompute,
                 "CPU" => PaintTerrainCommand.PaintingBackend.CPUCompute,
                 _ => PaintTerrainCommand.PaintingBackend.Auto
             };
 
             var advanced = _projectSettings?.advancedSettings;
-            if (advanced == null || advanced.paintingBackend == newBackend) return;
+            if (advanced == null) return;
+
+            if (advanced.paintingBackend == newBackend) return;
 
             Undo.RecordObject(advanced, "Change Painting Backend");
             advanced.paintingBackend = newBackend;

@@ -57,8 +57,8 @@ namespace MrPathV2.Editor.Settings
             var scanButton = content.Q<Button>("scan-assets-button");
             scanButton?.RegisterCallback<ClickEvent>(_ => ScanAndFillAllAssets());
 
-            // GPU Debug Panel
-            SetupDebugPanel(content);
+            // 预览线参数面板（去除GPU调试项）
+            SetupPreviewLinePanel(content);
         }
 
         private void SetupSettingsLink(VisualElement root, string propertyName, string mLabel, Type assetType, Label titleLabel)
@@ -252,8 +252,8 @@ namespace MrPathV2.Editor.Settings
             }
         }
 
-        // --- GPU 调试面板嵌入 ---
-        private void SetupDebugPanel(VisualElement content)
+        // --- 预览线参数面板（CPU-only） ---
+        private void SetupPreviewLinePanel(VisualElement content)
         {
             var rootBox = content.Q<Box>("root");
             if (rootBox == null) return;
@@ -263,38 +263,24 @@ namespace MrPathV2.Editor.Settings
 
             var section = new Foldout
             {
-                text = "GPU 调试与预览线设置"
+                text = "预览线设置"
             };
             section.value = false; // 默认折叠
 
             if (advObj != null)
             {
                 var advSO = new SerializedObject(advObj);
-                section.Add(new PropertyField(advSO.FindProperty("gpuDebugMode"), "调试模式 (0=正常,1=MaskUV,2=边缘)"));
-                section.Add(new PropertyField(advSO.FindProperty("gpuMaskThreshold"), "遮罩门槛 [0-1]"));
-                section.Add(new PropertyField(advSO.FindProperty("gpuOverrideEdgeWidth"), "覆盖过渡宽度"));
-                section.Add(new PropertyField(advSO.FindProperty("gpuEdgeWidthWorld"), "过渡宽度(米)"));
-
-                // 预览线设置
-                section.Add(new Label("预览线 (GPU) 参数")
-                {
-                    style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        marginTop = 4,
-                        marginBottom = 2
-                    }
-                });
                 section.Add(new PropertyField(advSO.FindProperty("previewAAWidthPixels"), "边缘AA宽度(像素)"));
                 section.Add(new PropertyField(advSO.FindProperty("previewCapAAWidthPixels"), "端帽融合宽度(像素)"));
                 section.Add(new PropertyField(advSO.FindProperty("previewDefaultDashPixels"), "默认虚线长度(像素)"));
+                section.Add(new PropertyField(advSO.FindProperty("previewMaxPixelStep"), "屏幕采样步长(像素)"));
                 section.Add(new PropertyField(advSO.FindProperty("previewCapType"), "端帽类型"));
                 section.Add(new PropertyField(advSO.FindProperty("previewSeamScale"), "端帽宽度缩放"));
                 section.Bind(advSO);
             }
             else
             {
-                section.Add(new Label("未设置 '高级设置' 资产。请先在上方创建/关联后使用调试面板。"));
+                section.Add(new Label("未设置 '高级设置' 资产。请先在上方创建/关联后使用预览线设置。"));
             }
 
             rootBox.Add(section);

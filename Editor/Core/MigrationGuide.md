@@ -10,7 +10,7 @@
 ```
 CPU数据源 ←→ GPU数据源 (重复定义)
     ↓           ↓
-CpuTerrainPainter  GpuTerrainPainterV2
+CpuTerrainPainter  GpuTerrainPainterV3
     ↓           ↓
 PaintTerrainCommand (复杂的后端选择逻辑)
 ```
@@ -23,7 +23,7 @@ UnifiedDataAdapter (转换层)
     ↓
 IUnifiedTerrainPainter
     ↓
-UnifiedCpuTerrainPainter | GpuTerrainPainterV2
+UnifiedCpuTerrainPainter | GpuTerrainPainterV3
     ↓
 UnifiedPaintTerrainCommand (简洁的统一接口)
 ```
@@ -59,7 +59,7 @@ var gpuData = UnifiedDataAdapter.CreateGpuRenderData(pathData, pathProfile, Allo
 ```csharp
 // 不同的接口和调用方式
 ITerrainPainter cpuPainter = new CpuTerrainPainter();
-GpuTerrainPainterV2 gpuPainter = GpuTerrainPainterV2.Instance;
+GpuTerrainPainterV3 gpuPainter = GpuTerrainPainterV3.Instance;
 
 // 复杂的参数传递
 await cpuPainter.ExecuteAsync(terrain, spineData, profileData, recipeData, roadContour, bounds, coverageMin, coverageMax, token);
@@ -120,7 +120,7 @@ using __temp.MrPathV2.Runtime.Core;
 ITerrainPainter painter;
 if (useGpu)
 {
-    painter = GpuTerrainPainterV2.Instance;
+    painter = GpuTerrainPainterV3.Instance;
 }
 else
 {

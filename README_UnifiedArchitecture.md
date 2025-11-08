@@ -38,7 +38,7 @@
   - Burst编译优化
   - 多线程安全
   
-- **GpuTerrainPainterV2.cs**: GPU绘制器（统一接口实现）
+- **GpuTerrainPainterV3.cs**: GPU绘制器（统一接口实现）
   - 计算着色器支持
   - 内存带宽优化
   - 异步GPU操作
@@ -153,7 +153,7 @@ Assets/MrPathV2/
 │   ├── UnifiedDataAdapter.cs           # 数据适配器
 │   ├── IUnifiedTerrainPainter.cs       # 统一绘制接口
 │   ├── UnifiedCpuTerrainPainter.cs     # CPU绘制器
-│   ├── GpuTerrainPainterV2.cs          # GPU绘制器
+│   ├── GpuTerrainPainterV3.cs          # GPU绘制器
 │   ├── UnifiedPaintTerrainCommand.cs   # 统一命令
 │   ├── UnifiedArchitectureValidator.cs # 验证工具
 │   ├── UnifiedArchitectureTest.cs      # 测试套件

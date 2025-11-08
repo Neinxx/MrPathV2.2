@@ -1,7 +1,6 @@
 #if UNITY_EDITOR
 using System;
 using MrPathV2.Runtime.Core;
-using MrPathV2.Editor.GPU;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -79,19 +78,7 @@ namespace MrPathV2.Editor.Inspectors
 
             // 初始刷新延后至 Inspector 构建完成后由 UI 触发，避免与 UI 初始化竞争
 
-            // 预热 GPU 资源与计算着色器，避免首次拖动卡顿
-            // 使用 delayCall 避免阻塞 Inspector 初始化
-            EditorApplication.delayCall += () =>
-            {
-                try
-                {
-                    var _ = GpuTerrainPainterV2.Instance;
-                }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[PathCreatorEditor] GPU 预热失败: {e.Message}");
-                }
-            };
+            // CPU-only：移除GPU预热逻辑，避免不必要的初始化与依赖
         }
 
         private void OnDisable()

@@ -30,13 +30,13 @@ namespace MrPathV2.Editor.Core
             // 3. 验证CPU绘制器
             results.Add(ValidateCpuPainter());
 
-            // 4. 验证GPU绘制器
+            // 4. GPU绘制器（CPU-only模式：跳过验证）
             results.Add(ValidateGpuPainter());
 
             // 5. 验证统一命令
             results.Add(ValidateUnifiedCommand());
 
-            // 6. 性能基准测试
+            // 6. 性能基准测试（CPU-only模式：仅CPU）
             results.Add(PerformanceBenchmark());
 
             // 输出结果
@@ -121,19 +121,8 @@ namespace MrPathV2.Editor.Core
                 else
                     result.AddError("CPU绘制器创建失败");
 
-                // 测试GPU绘制器创建
-                var gpuPainter = UnifiedPainterFactory.CreatePainter(PainterType.GPU, terrain, pathBounds);
-                if (SystemInfo.supportsComputeShaders)
-                {
-                    if (gpuPainter != null && gpuPainter.Type == PainterType.GPU)
-                        result.AddSuccess("GPU绘制器创建成功");
-                    else
-                        result.AddError("GPU绘制器创建失败");
-                }
-                else
-                {
-                    result.AddInfo("当前系统不支持计算着色器，跳过GPU绘制器测试");
-                }
+                // CPU-only：跳过GPU绘制器创建测试
+                result.AddInfo("CPU-only模式，跳过GPU绘制器创建测试");
 
                 // 测试自动选择（基于首选GPU与路径覆盖估算）
                 var autoPainter = UnifiedPainterFactory.CreatePainter(PainterType.GPU, terrain, pathBounds);
@@ -144,7 +133,6 @@ namespace MrPathV2.Editor.Core
 
                 // 清理资源
                 cpuPainter?.Dispose();
-                gpuPainter?.Dispose();
                 autoPainter?.Dispose();
 
                 CleanupTestTerrain(terrain);
@@ -250,41 +238,8 @@ namespace MrPathV2.Editor.Core
         private static ValidationResult ValidateGpuPainter()
         {
             var result = new ValidationResult("GPU绘制器验证");
-
-            if (!SystemInfo.supportsComputeShaders)
-            {
-                result.AddInfo("当前系统不支持计算着色器，跳过GPU绘制器验证");
-                return result;
-            }
-
-            try
-            {
-                var terrain = CreateTestTerrain();
-                var pathCreatorObject = new GameObject("ValidatorPathCreator");
-                var pathCreator = pathCreatorObject.AddComponent<PathCreator>();
-
-                var painter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
-
-                if (!painter.IsSupported)
-                {
-                    result.AddError("GPU绘制器不支持");
-                    return result;
-                }
-
-                // 测试同步绘制
-                var syncResult = painter.Paint(pathCreator, true);
-                if (syncResult.IsSuccess)
-                    result.AddSuccess($"同步绘制成功 (耗时: {syncResult.ExecutionTimeMs:F2}ms)");
-                else
-                    result.AddError($"同步绘制失败: {syncResult.ErrorMessage}");
-
-                CleanupTestTerrain(terrain);
-            }
-            catch (Exception ex)
-            {
-                result.AddError($"GPU绘制器验证异常: {ex.Message}");
-            }
-
+            // CPU-only：统一禁用GPU验证，保持架构一致性
+            result.AddInfo("CPU-only模式，跳过GPU绘制器验证");
             return result;
         }
 
@@ -317,31 +272,8 @@ namespace MrPathV2.Editor.Core
                     result.AddSuccess($"CPU平均绘制时间: {avgCpuTime:F2}ms ({iterations}次测试)");
                 }
 
-                // GPU性能测试（如果支持）
-                if (SystemInfo.supportsComputeShaders)
-                {
-                    var gpuPainter = UnifiedPainterFactory.CreatePainter(PainterType.GPU);
-                    var gpuTimes = new List<float>();
-
-                    for (var i = 0; i < iterations; i++)
-                    {
-                        var gpuResult = gpuPainter.Paint(pathCreator, true);
-                        if (gpuResult.IsSuccess)
-                            gpuTimes.Add(gpuResult.ExecutionTimeMs);
-                    }
-
-                    if (gpuTimes.Count > 0)
-                    {
-                        var avgGpuTime = gpuTimes.Average();
-                        result.AddSuccess($"GPU平均绘制时间: {avgGpuTime:F2}ms ({iterations}次测试)");
-
-                        if (cpuTimes.Count > 0)
-                        {
-                            var speedup = cpuTimes.Average() / avgGpuTime;
-                            result.AddInfo($"GPU相对CPU加速比: {speedup:F2}x");
-                        }
-                    }
-                }
+                // CPU-only：跳过GPU性能测试
+                result.AddInfo("CPU-only模式，跳过GPU性能测试");
 
                 CleanupTestTerrain(terrain);
             }

@@ -124,6 +124,18 @@ namespace MrPathV2.Runtime.Core
             public int HoveredSegmentIndex;
             public float HoveredPathT;
             public PreviewLineRenderer LineRenderer; // 线条渲染器
+            // 屏幕采样步长(像素)：由编辑器设置注入，Runtime 不依赖 Editor。
+            public float PreviewMaxPixelStep;
+            // 是否采用 Unity Splines 风格的直接绘制（Editor Handles），避免自定义采样与批次开销。
+            public bool UseSplinesStyle;
+            // 拖拽期间仅绘制活动段（以及邻接段），显著降低绘制负载
+            public bool DrawActiveSegmentOnly;
+            // 邻接段范围（如1表示绘制左右相邻各1段）
+            public int DragNeighborRange;
+            // 场景相机是否正在移动（平移/旋转），用于降级绘制以保障流畅度
+            public bool IsCameraMoving;
+            // 分段折线缓存（Spline风格绘制用），减少采样与GC
+            public AdaptivePolylineCache PolylineCache;
         }
 
         #endregion
@@ -160,9 +172,8 @@ namespace MrPathV2.Runtime.Core
             context.HoveredSegmentIndex = -1;
             context.HoveredPathT = -1;
 
-            // 采用细分采样进行屏幕空间点距检测，以提升各种视角下的命中率
-            // 与 CatmullRomStrategy 中的绘制分辨率保持一致或略高，保证交互顺滑
-            const int resolution = 60;
+            // 动态细分采样：拖拽或相机移动时降低采样，减少CPU负载
+            var resolution = (context.IsDragging || context.IsCameraMoving) ? 12 : 40;
             const float pickThreshold = 12f; // 屏幕像素，值越大越容易选中
             var pickThresholdSqr = pickThreshold * pickThreshold;
 
@@ -170,7 +181,14 @@ namespace MrPathV2.Runtime.Core
             if (currentEvent == null) return;
             var mousePos = currentEvent.mousePosition;
 
-            for (var seg = 0; seg < creator.NumSegments; seg++)
+            int startSeg = 0, endSeg = creator.NumSegments;
+            if (context.DrawActiveSegmentOnly && context.HoveredSegmentIndex >= 0)
+            {
+                startSeg = Mathf.Max(0, context.HoveredSegmentIndex - context.DragNeighborRange);
+                endSeg = Mathf.Min(creator.NumSegments, context.HoveredSegmentIndex + context.DragNeighborRange + 1);
+            }
+
+            for (var seg = startSeg; seg < endSeg; seg++)
             {
                 for (var j = 0; j < resolution; j++)
                 {

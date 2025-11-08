@@ -105,7 +105,7 @@ namespace MrPathV2.Runtime.Preview
         private static readonly int _SegmentsId = Shader.PropertyToID("_Segments");
         private Bounds _gpuDrawBounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
         // 默认虚线长度（像素），作为样式未设置时的兜底值
-        private float _defaultDashPixels = 1.0f;
+        private float _defaultDashPixels = 10f;
 
         #endregion
 
@@ -194,7 +194,8 @@ namespace MrPathV2.Runtime.Preview
         /// </summary>
         public void SetUseGpu(bool enabled)
         {
-            _useGpu = enabled && _gpuMat != null && _unitQuad != null;
+            // 统一禁用GPU：无论输入如何，均保持CPU渲染
+            _useGpu = false;
         }
 
         /// <summary>
@@ -251,12 +252,63 @@ namespace MrPathV2.Runtime.Preview
         }
 
         /// <summary>
+        ///     添加贝塞尔曲线（屏幕自适应采样）。根据当前相机与像素步长估算分辨率。
+        /// </summary>
+        public void AddBezierCurveAdaptive(Vector3 start, Vector3 end, Vector3 control1, Vector3 control2,
+            LineType type, float maxPixelStep = 6f, LineStyle? customStyle = null, int priority = 0,
+            int minResolution = 8, int maxResolution = 2048)
+        {
+            // 提前返回：输入校验
+            if (maxPixelStep <= 0f)
+            {
+                AddBezierCurve(start, end, control1, control2, type, 32, customStyle, priority);
+                return;
+            }
+
+            // 如相机未设置，回退到固定分辨率，避免阻塞交互
+            var resolution = 32;
+            if (_currentCamera != null)
+            {
+                resolution = EstimateBezierResolution(start, end, control1, control2, _currentCamera, maxPixelStep, minResolution, maxResolution);
+            }
+
+            var points = GenerateBezierPoints(start, end, control1, control2, resolution);
+            AddPolyLine(points, type, customStyle, priority);
+        }
+
+        /// <summary>
         ///     添加Catmull-Rom样条曲线
         /// </summary>
         public void AddCatmullRomSpline(Vector3[] controlPoints, LineType type, int resolution = 16,
             LineStyle? customStyle = null, int priority = 0)
         {
             if (controlPoints == null || controlPoints.Length < 4) return;
+
+            var points = GenerateCatmullRomPoints(controlPoints, resolution);
+            AddPolyLine(points, type, customStyle, priority);
+        }
+
+        /// <summary>
+        ///     添加Catmull-Rom样条曲线（屏幕自适应采样）。根据当前相机与像素步长估算分辨率。
+        /// </summary>
+        public void AddCatmullRomSplineAdaptive(Vector3[] controlPoints, LineType type, float maxPixelStep = 6f,
+            LineStyle? customStyle = null, int priority = 0, int minResolution = 8, int maxResolution = 1024)
+        {
+            // 提前返回：输入与参数校验
+            if (controlPoints == null || controlPoints.Length < 4)
+                return;
+
+            if (maxPixelStep <= 0f)
+            {
+                AddCatmullRomSpline(controlPoints, type, 16, customStyle, priority);
+                return;
+            }
+
+            var resolution = 16;
+            if (_currentCamera != null)
+            {
+                resolution = EstimateCatmullResolution(controlPoints, _currentCamera, maxPixelStep, minResolution, maxResolution);
+            }
 
             var points = GenerateCatmullRomPoints(controlPoints, resolution);
             AddPolyLine(points, type, customStyle, priority);
@@ -405,11 +457,126 @@ namespace MrPathV2.Runtime.Preview
         {
 #if UNITY_EDITOR
             var batch = _batchedLines[type];
-            if (batch.Count == 0) return;
+            if (batch.Count == 0) return; // 提前返回
+
+            // 分组：提升批量绘制效率，减少颜色/宽度切换与API调用次数
+            var simpleGroups = new Dictionary<Color, List<LineSegment>>();                  // 普通线（非AA、非虚线）
+            var aaGroups = new Dictionary<(Color color, float thickness), List<LineSegment>>(); // 抗锯齿线（按颜色+厚度分组）
+            var dashedGroups = new Dictionary<(Color color, float dashSize), List<LineSegment>>(); // 虚线（按颜色+虚线长度分组）
 
             foreach (var line in batch)
             {
-                RenderSingleLine(line);
+                var style = line.Style;
+                if (style.dashed)
+                {
+                    var dash = Mathf.Max(1f, style.dashSize > 0 ? style.dashSize : _defaultDashPixels);
+                    var key = (style.color, dash);
+                    if (!dashedGroups.TryGetValue(key, out var list))
+                    {
+                        list = new List<LineSegment>(64);
+                        dashedGroups[key] = list;
+                    }
+                    list.Add(line);
+                    continue;
+                }
+
+                if (style.antiAliased)
+                {
+                    var key = (style.color, Mathf.Max(0.5f, style.thickness));
+                    if (!aaGroups.TryGetValue(key, out var list))
+                    {
+                        list = new List<LineSegment>(64);
+                        aaGroups[key] = list;
+                    }
+                    list.Add(line);
+                    continue;
+                }
+
+                // 普通线（DrawLines 可批量）
+                if (!simpleGroups.TryGetValue(style.color, out var slist))
+                {
+                    slist = new List<LineSegment>(128);
+                    simpleGroups[style.color] = slist;
+                }
+                slist.Add(line);
+            }
+
+            // 绘制普通线：一次性批量调用 Handles.DrawLines
+            foreach (var kv in simpleGroups)
+            {
+                var color = kv.Key;
+                var lines = kv.Value;
+                if (lines == null || lines.Count == 0) continue;
+
+                using (new Handles.DrawingScope(color))
+                {
+                    var points = new Vector3[lines.Count * 2];
+                    var idx = 0;
+                    for (var i = 0; i < lines.Count; i++)
+                    {
+                        points[idx++] = lines[i].Start;
+                        points[idx++] = lines[i].End;
+                    }
+                    Handles.DrawLines(points);
+                }
+            }
+
+            // 绘制抗锯齿线：按组构造连续折线，减少 DrawAAPolyLine 调用
+            const float eps = 1e-4f;
+            foreach (var kv in aaGroups)
+            {
+                var (color, width) = kv.Key;
+                var lines = kv.Value;
+                if (lines == null || lines.Count == 0) continue;
+
+                using (new Handles.DrawingScope(color))
+                {
+                    List<Vector3> poly = null;
+                    Vector3 lastEnd = default;
+                    var hasPoly = false;
+                    for (var i = 0; i < lines.Count; i++)
+                    {
+                        var seg = lines[i];
+                        if (!hasPoly)
+                        {
+                            poly = new List<Vector3>(8) { seg.Start, seg.End };
+                            lastEnd = seg.End;
+                            hasPoly = true;
+                            continue;
+                        }
+
+                        // 与上一段连续，则扩展为一条折线；否则先绘制，再开启新折线
+                        if (Vector3.Distance(lastEnd, seg.Start) < eps)
+                        {
+                            poly.Add(seg.End);
+                            lastEnd = seg.End;
+                        }
+                        else
+                        {
+                            if (poly.Count >= 2)
+                                Handles.DrawAAPolyLine(width, poly.ToArray());
+                            poly.Clear();
+                            poly.Add(seg.Start);
+                            poly.Add(seg.End);
+                            lastEnd = seg.End;
+                        }
+                    }
+                    if (hasPoly && poly != null && poly.Count >= 2)
+                        Handles.DrawAAPolyLine(width, poly.ToArray());
+                }
+            }
+
+            // 绘制虚线：按组设置颜色与虚线长度，逐段调用（API不支持批量）
+            foreach (var kv in dashedGroups)
+            {
+                var (color, dash) = kv.Key;
+                var lines = kv.Value;
+                if (lines == null || lines.Count == 0) continue;
+                using (new Handles.DrawingScope(color))
+                {
+                    for (var i = 0; i < lines.Count; i++)
+                        Handles.DrawDottedLine(lines[i].Start, lines[i].End, dash);
+                }
             }
 #endif
         }
@@ -554,6 +721,29 @@ namespace MrPathV2.Runtime.Preview
             return uuu * p0 + 3 * uu * t * p1 + 3 * u * tt * p2 + ttt * p3;
         }
 
+        /// <summary>
+        ///     估算屏幕分辨率（Bezier）：粗采样测量屏幕空间长度，按像素步长换算分辨率。
+        /// </summary>
+        private int EstimateBezierResolution(Vector3 p0, Vector3 p3, Vector3 c0, Vector3 c1, Camera cam,
+            float maxPixelStep, int minRes, int maxRes)
+        {
+            const int coarse = 64; // 粗采样点数（包含终点）
+            var last = p0;
+            var screenLen = 0f;
+            for (int i = 1; i <= coarse; i++)
+            {
+                var t = i / (float)coarse;
+                var cur = CalculateBezierPoint(p0, c0, c1, p3, t);
+                var a = cam.WorldToScreenPoint(last);
+                var b = cam.WorldToScreenPoint(cur);
+                screenLen += Vector2.Distance(new Vector2(a.x, a.y), new Vector2(b.x, b.y));
+                last = cur;
+            }
+
+            var samples = Mathf.Clamp(Mathf.CeilToInt(screenLen / Mathf.Max(1f, maxPixelStep)), minRes, maxRes);
+            return samples;
+        }
+
         private Vector3[] GenerateCatmullRomPoints(Vector3[] controlPoints, int resolution)
         {
             // 提前返回：输入与分辨率校验
@@ -619,6 +809,37 @@ namespace MrPathV2.Runtime.Preview
                 );
         }
 
+        /// <summary>
+        ///     估算屏幕分辨率（Catmull-Rom）：对每段做粗采样测量屏幕空间长度。
+        /// </summary>
+        private int EstimateCatmullResolution(Vector3[] cps, Camera cam, float maxPixelStep, int minRes, int maxRes)
+        {
+            // cps: 至少4个点，段数 = cps.Length - 3
+            const int coarsePerSegment = 16;
+            var totalScreenLen = 0f;
+            var segments = cps.Length - 3;
+            for (int seg = 0; seg < segments; seg++)
+            {
+                var p0 = cps[seg];
+                var p1 = cps[seg + 1];
+                var p2 = cps[seg + 2];
+                var p3 = cps[seg + 3];
+                var last = p1; // Catmull-Rom通常以p1为段起点
+                for (int i = 1; i <= coarsePerSegment; i++)
+                {
+                    var t = i / (float)coarsePerSegment;
+                    var cur = CalculateCatmullRomPoint(p0, p1, p2, p3, t);
+                    var a = cam.WorldToScreenPoint(last);
+                    var b = cam.WorldToScreenPoint(cur);
+                    totalScreenLen += Vector2.Distance(new Vector2(a.x, a.y), new Vector2(b.x, b.y));
+                    last = cur;
+                }
+            }
+
+            var samplesPerSegment = Mathf.CeilToInt(totalScreenLen / Mathf.Max(1f, maxPixelStep));
+            return Mathf.Clamp(samplesPerSegment, minRes, maxRes);
+        }
+
         #endregion
 
         #region 性能配置
@@ -660,27 +881,10 @@ namespace MrPathV2.Runtime.Preview
         private void InitializeGpuResources()
         {
 #if UNITY_EDITOR
-            try
-            {
-                var shader = Shader.Find("Hidden/MrPath/GpuLine");
-                if (shader != null)
-                {
-                    _gpuMat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-                    // 默认 AA/端帽融合参数（屏幕空间像素）
-                    _gpuMat.SetFloat("_AAWidthPx", 2.0f);
-                    _gpuMat.SetFloat("_CapAAWidthPx", 4.0f);
-                    _gpuMat.SetFloat("_SeamScale", 1.0f);
-                    _gpuMat.SetInt("_CapType", 1); // Linear
-
-                }
-                _unitQuad = BuildUnitQuad();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[PreviewLineRenderer] GPU初始化失败，回退到Handles: {ex.Message}");
-                _gpuMat = null;
-                _unitQuad = null;
-            }
+            // CPU-only 模式：不创建任何GPU资源，确保渲染路径简洁稳定
+            _gpuMat = null;
+            _unitQuad = null;
+            _segmentBuffer = null;
 #endif
         }
 

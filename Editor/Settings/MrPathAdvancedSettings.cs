@@ -41,6 +41,10 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         [Range(0.25f, 4f)]
         public float previewSeamScale = 1.0f;
 
+        [Tooltip("屏幕自适应采样的最大像素步长（越大采样点越少，性能更好；越小越平滑）。用于编辑器 CPU 预览曲线的自适应采样。")]
+        [Range(2f, 24f)]
+        public float previewMaxPixelStep = 6.0f;
+
         [Header("策略设置 (Strategy Settings)")]
         // [Tooltip("【已弃用/仅参考】默认路径策略不再由此处控制，请在 PathStrategyRegistry 中配置。")]
         // public PathStrategy defaultStrategy; // 保留旧字段并标记，避免数据丢失
@@ -55,10 +59,10 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         [Header("地形绘制 (Terrain Painting)")]
         [Tooltip("选择地形纹理绘制的后端：\n" +
                  "CPU_Job_TwoPass: 兼容性好，性能优于旧版 Job，但仍受 CPU 限制。\n" +
-                 "GPU_Compute: 速度最快，利用 GPU 加速，但需要 Compute Shader 支持且可能对显卡有要求。")]
+                 "GPU_Compute: 当前版本未开放。")]
         public PaintTerrainCommand.PaintingBackend paintingBackend = PaintTerrainCommand.PaintingBackend.CPUCompute; // 默认使用 CPU
 
-        [Tooltip("自动切换到 GPU 绘制的像素阈值。当绘制区域超过此像素数时，将自动选用 GPU 后端（如果支持）。设置为 0 可禁用自动切换。")]
+        [Tooltip("自动切换到 GPU 绘制的像素阈值。当前版本禁用GPU，仅用于占位或未来扩展。设置为 0 可禁用自动切换。")]
         [Min(0)]
         public int gpuAutoSwitchThreshold = 256 * 256; // 默认 256x256 像素
 
@@ -74,20 +78,27 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         public int basemapSafetyMarginPixels = 8;
 
         // --- GPU 调试 (Compute Shader) ---
-        [Header("GPU 调试 (Compute Shader)")]
-        [Tooltip("Compute 调试模式：0=正常；1=Mask UV；2=边缘衰减")]
-        [Range(0, 2)]
-        public int gpuDebugMode;
+        // GPU 调试项：当前版本禁用，隐藏以简化界面
+        [HideInInspector] public int gpuDebugMode;
+        [HideInInspector] public float gpuMaskThreshold = 0.5f;
+        [HideInInspector] public bool gpuOverrideEdgeWidth;
+        [HideInInspector] public float gpuEdgeWidthWorld = 1.0f;
 
-        [Tooltip("道路轮廓遮罩门槛，越高越严格，建议 0.5–0.95")]
-        [Range(0f, 1f)]
-        public float gpuMaskThreshold = 0.5f;
+        private void OnValidate()
+        {
+            // 提前返回：无需校验时直接返回
+            // 统一禁用 GPU 后端，防止误保存旧值
+            if (paintingBackend == PaintTerrainCommand.PaintingBackend.GPUCompute)
+            {
+                paintingBackend = PaintTerrainCommand.PaintingBackend.CPUCompute;
+                Debug.LogWarning("[MrPath] GPU绘制未开放，已自动切换到 CPU 后端。");
+            }
 
-        [Tooltip("是否用下列数值覆盖边缘过渡宽度（单位：米）")]
-        public bool gpuOverrideEdgeWidth;
-
-        [Tooltip("用于覆盖的边缘过渡宽度（米）")]
-        [Min(0.001f)]
-        public float gpuEdgeWidthWorld = 1.0f;
+            previewAAWidthPixels = Mathf.Clamp(previewAAWidthPixels, 0.5f, 8f);
+            previewCapAAWidthPixels = Mathf.Clamp(previewCapAAWidthPixels, 0.5f, 16f);
+            previewDefaultDashPixels = Mathf.Clamp(previewDefaultDashPixels, 1f, 64f);
+            previewSeamScale = Mathf.Clamp(previewSeamScale, 0.25f, 4f);
+            previewMaxPixelStep = Mathf.Clamp(previewMaxPixelStep, 2f, 24f);
+        }
     }
 }

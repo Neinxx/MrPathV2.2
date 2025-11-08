@@ -37,18 +37,12 @@ namespace MrPathV2.Editor.Settings
         private static void DrawGUI(string searchContext)
         {
             // 从 EditorPrefs 读取当前值
-            var current = EditorPrefs.GetBool(PrefKey, false);
-            var newValue = EditorGUILayout.ToggleLeft("启用 GPU 实时预览 (实验特性)", current);
-
-            // 提前返回：值未变化则不做任何操作
-            if (newValue == current)
-            {
-                return;
-            }
-
-            // 写入并同步到运行时静态开关
-            EditorPrefs.SetBool(PrefKey, newValue);
-            PreviewMaterialManager.EnableGpuPreview = newValue;
+            var current = false; // 强制关闭，保持UI与状态一致
+            EditorGUILayout.ToggleLeft("启用 GPU 实时预览 (未开放)", current);
+            EditorGUILayout.HelpBox("GPU预览未开放，当前版本仅支持CPU预览。", MessageType.Info);
+            // 清理偏好键（若存在旧值）
+            if (EditorPrefs.GetBool(PrefKey, false))
+                EditorPrefs.SetBool(PrefKey, false);
         }
     }
 
@@ -63,9 +57,9 @@ namespace MrPathV2.Editor.Settings
         private const string GpuPreviewSettingsPrefKey = "MrPath_EnableGpuPreview";
         static GpuPreviewBootstrap()
         {
-            // 读取持久化开关并应用
-            var enabled = EditorPrefs.GetBool(GpuPreviewSettingsPrefKey, false);
-            PreviewMaterialManager.EnableGpuPreview = enabled;
+            // GPU预览未开放：强制关闭并清理偏好
+            if (EditorPrefs.GetBool(GpuPreviewSettingsPrefKey, false))
+                EditorPrefs.SetBool(GpuPreviewSettingsPrefKey, false);
         }
     }
 
@@ -78,26 +72,10 @@ namespace MrPathV2.Editor.Settings
 
         static GpuPreview()
         {
-            var enabled = EditorPrefs.GetBool(PrefKey, false);
-            PreviewMaterialManager.EnableGpuPreview = enabled;
+            // 初始化时强制关闭
+            if (EditorPrefs.GetBool(PrefKey, false))
+                EditorPrefs.SetBool(PrefKey, false);
         }
-
-        [MenuItem("MrPath/Enable GPU Preview", priority = 2000)]
-        private static void ToggleGpuPreview()
-        {
-            var newValue = !PreviewMaterialManager.EnableGpuPreview;
-            PreviewMaterialManager.EnableGpuPreview = newValue;
-            EditorPrefs.SetBool(PrefKey, newValue);
-            var state = newValue ? "ON" : "OFF";
-            Debug.Log($"[GpuPreviewSettings] GPU Preview toggled: {state}");
-        }
-
-        [MenuItem("MrPath/Enable GPU Preview", validate = true)]
-        private static bool ToggleGpuPreviewValidate()
-        {
-            // 在菜单前显示勾选状态
-            Menu.SetChecked("MrPath/Enable GPU Preview", PreviewMaterialManager.EnableGpuPreview);
-            return true;
-        }
+        // 移除菜单项：避免误导操作。
     }
 }

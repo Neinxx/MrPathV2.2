@@ -1,6 +1,5 @@
 using System;
-using MrPathV2.Editor.GPU;
-using MrPathV2.Editor.GPU.Core;
+// CPU-only：移除GPU测试依赖
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -15,9 +14,8 @@ namespace MrPathV2.Editor.Tests
         [MenuItem("MrPath/Tests/Test Road Mask Generation")]
         public static void TestRoadMaskGeneration()
         {
-            Debug.Log("[RoadMaskTest] 开始测试道路遮罩生成...");
+            Debug.Log("[RoadMaskTest] 开始测试道路遮罩生成 (CPU-only)...");
 
-            // 查找场景中的地形
             var terrain = Object.FindObjectOfType<UnityEngine.Terrain>();
             if (terrain == null)
             {
@@ -29,28 +27,9 @@ namespace MrPathV2.Editor.Tests
             Debug.Log($"[RoadMaskTest] 地形尺寸: {terrain.terrainData.size}");
             Debug.Log($"[RoadMaskTest] AlphaMap分辨率: {terrain.terrainData.alphamapResolution}");
 
-            // 检查GPU组件是否可以正常初始化
-            try
-            {
-                var resourceManager = new GpuResourceManager();
-                resourceManager.Initialize();
-
-                var dataStreamer = new GpuDataStreamer(resourceManager);
-                dataStreamer.Initialize();
-
-                Debug.Log("[RoadMaskTest] GPU组件初始化成功");
-
-                // 清理资源
-                dataStreamer.Dispose();
-                resourceManager.Dispose();
-
-                Debug.Log("[RoadMaskTest] 测试完成 - 所有组件正常工作");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[RoadMaskTest] 测试失败: {ex.Message}");
-                Debug.LogError($"[RoadMaskTest] 堆栈跟踪: {ex.StackTrace}");
-            }
+            // CPU-only：只进行基础环境检查
+            Debug.Log("[RoadMaskTest] CPU-only 模式，跳过GPU组件初始化测试");
+            Debug.Log("[RoadMaskTest] 测试完成 - 基础检查通过");
         }
 
         [MenuItem("MrPath/Tests/Validate Shader Properties")]

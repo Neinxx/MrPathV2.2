@@ -25,6 +25,15 @@ struct layer_params {
 StructuredBuffer<layer_params> layer_params_buffer;
 StructuredBuffer<float3>       spine_data;
 StructuredBuffer<float2>       road_contour;
+// 可选：CPU 首 pass 提供的像素级道路信息（DI 注入）
+struct RoadPixelInfo {
+    float NormalizedDist; // 0..1 中心到边缘
+    float PathProgress;   // 0..1 起点到终点
+    uint  IsInside;       // 0/1 是否在道路轮廓内
+};
+StructuredBuffer<RoadPixelInfo> road_pixel_info;
+// 新增：每 slice 的配方通道掩码（bit0..bit3 映射到 RGBA），由 CPU 预计算
+StructuredBuffer<uint>         slice_recipe_mask;
 
 // Textures - 淇敼涓篺loat4鏍煎紡浠ュ吋瀹笹LES3
 RWTexture2DArray<float4> splat_weights; // 浣跨敤float4鏇夸唬unorm float4
@@ -49,6 +58,7 @@ float4 contour_bounds;
 float  mask_threshold;
 float  edge_width_world;
 uint   use_road_mask; // 褰撲负1鏃跺惎鐢?road_mask 闂ㄦ帶锛涗负0鏃朵笉閲囨牱閬僵锛屾寜ROI涓庤窛绂荤粯鍒?
+uint   use_road_pixel_info; // 1: 使用 road_pixel_info 缓冲提供的像素信息，0: 仅用几何计算
 
 // Helper function to calculate squared distance
 float distance_sq(float2 a, float2 b)
@@ -211,7 +221,7 @@ inline float ApplyMaskThreshold(float value, float threshold)
 [numthreads(8, 8, 1)]
 void paint_terrain(uint3 id : SV_DispatchThreadID)
 {
-	uint2 pixel_coord = uint2(id.xy) + alphamap_offset;
+    uint2 pixel_coord = uint2(id.xy) + alphamap_offset;
 
 	if(pixel_coord.x < 0 || pixel_coord.y < 0 || pixel_coord.x >= alphamap_resolution.x || pixel_coord.y >= alphamap_resolution.y) return;
 
@@ -219,11 +229,27 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 
 	float2 world_pos = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
 
-	float3 dps = calculate_distance_progress_signed(world_pos, spine_data, spine_point_count);
-	float  progress = dps.y;
-	float  signed_distance = dps.z;
+    float3 dps = calculate_distance_progress_signed(world_pos, spine_data, spine_point_count);
+    float  progress = dps.y;
+    float  signed_distance = dps.z;
 
-	float halfRoad = max(1e-6, road_width * 0.5);
+    // 可选：使用 CPU 首 pass 的像素信息做快速门控与进度修正（提前返回）
+    float edgeFactorPixLocal = 1.0;
+    if(use_road_pixel_info == 1)
+    {
+        uint roiW = max(1u, coverage_max.x - coverage_min.x);
+        uint2 roiCoord = pixel_coord - coverage_min;
+        uint index = roiCoord.y * roiW + roiCoord.x;
+        RoadPixelInfo info = road_pixel_info[index];
+        // 不在道路轮廓内：提前返回
+        if(info.IsInside == 0u) return;
+        // 进度以 CPU 结果为准，确保两阶段一致
+        progress = info.PathProgress;
+        // 将归一化距离转为中心=1 边缘=0 的权重，稍后与几何 edgeFactor 相乘
+        edgeFactorPixLocal = saturate(1.0 - info.NormalizedDist);
+    }
+
+    float halfRoad = max(1e-6, road_width * 0.5);
 
 	// 閬僵闂ㄦ帶锛氶粯璁ゅ厑璁哥粯鍒讹紱浠呭綋鍚敤鏃堕噰鏍?road_mask 骞惰繘琛岄棬鎺?
 	float maskGate = 1.0;
@@ -235,7 +261,9 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 	}
 
 	// 浣跨敤 signed_distance 璁＄畻杈圭紭鍥犲瓙锛氫腑蹇?1锛岃秴鍑洪亾璺?杈圭紭瀹藉害=0
-	float edgeFactor = saturate(1.0 - max(0.0, abs(signed_distance) - halfRoad) / max(edge_width_world, 1e-6));
+    float edgeFactor = saturate(1.0 - max(0.0, abs(signed_distance) - halfRoad) / max(edge_width_world, 1e-6));
+    // 若启用 road_pixel_info，则将像素级边缘因子并入（更精准的中心到边缘权重）
+    edgeFactor *= edgeFactorPixLocal;
 
 	if(debug_mode == 1)
 	{
@@ -259,16 +287,23 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 	}
 
 	// 姝ｅ父妯″紡锛氭湁搴忚鐩栵紙Ordered Over锛?
-	// 姝ラ1锛氱粺璁￠潪閰嶆柟灞傜殑鍘熷鎬诲拰锛堢敤浜庡悗缁寜鍓╀綑閲忕缉鏀撅級
+	// 姝ラ1锛氱粺璁￠潪閰嶆柟灞傜殑鍘熷鎬诲拰锛堢敤浜庡悗缁寜鍓╀綑閲忕缉鏀撅級（slice 向量化，减少逐层遍历）
 	float others_sum = 0.0;
-	[loop]
-	for(uint s = 0; s < alphamap_layer_count; s++)
-	{
-		if(!is_recipe_splat(s))
-		{
-			others_sum += read_splat_weight(pixel_coord, s);
-		}
-	}
+	uint  sliceCount = (alphamap_layer_count + 3u) / 4u;
+    [loop]
+    for(uint slice = 0u; slice < sliceCount; slice++)
+    {
+        // 提前返回：若该 slice 的 RGBA 全为配方通道，则无需统计非配方层和，直接跳过
+        uint rmask0 = slice_recipe_mask[slice];
+        if(rmask0 == 15u) continue;
+        float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+        uint rmask = rmask0;
+        float4 nonRecipeMask = float4((rmask & 1u) ? 0.0 : 1.0,
+                                      (rmask & 2u) ? 0.0 : 1.0,
+                                      (rmask & 4u) ? 0.0 : 1.0,
+                                      (rmask & 8u) ? 0.0 : 1.0);
+        others_sum += dot(v * nonRecipeMask, float4(1, 1, 1, 1));
+    }
 
 	// 姝ラ2锛氳绠楅厤鏂瑰眰鐨勬€昏础鐚紙鑷€忔槑+鎸夊墿浣欓噺鍒嗛厤锛屼笉鍐欏洖锛?
 	float remaining = 1.0;
@@ -282,8 +317,9 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 		uint         splat_idx = layer.terrain_layer_splat_index;
 		if(splat_idx >= alphamap_layer_count) continue;
 
-		float2 world_pos2 = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
-		float  mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
+        // 复用已计算的 world_pos，避免重复计算与带宽浪费
+        float2 world_pos2 = world_pos;
+        float  mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
 		float  mask_shaped = ApplyMaskThreshold(mask_value, mask_threshold);
 		float  self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate;
 		float  contribute = min(self_alpha, remaining);
@@ -295,20 +331,26 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 		if(remaining <= 1e-6) break;
 	}
 
-	// 姝ラ3锛氭寜鍓╀綑閲忕缉鏀鹃潪閰嶆柟灞傦紙淇濇寔鍏剁浉瀵规瘮渚嬶級锛屼娇 sum(others)=1-sum_recipe
+	// 姝ラ3锛氭寜鍓╀綑閲忕缉鏀鹃潪閰嶆柟灞傦紙淇濇寔鍏剁浉瀵规瘮渚嬶級锛屼娇 sum(others)=1-sum_recipe（slice 向量化写入）
 	float target_others = saturate(1.0 - sum_recipe);
 	float scale = (others_sum > 1e-6) ? target_others / others_sum : 0.0;
 	if(scale < 1.0 - 1e-6)
 	{
-		[loop]
-		for(uint s = 0; s < alphamap_layer_count; s++)
-		{
-			if(!is_recipe_splat(s))
-			{
-				float w = read_splat_weight(pixel_coord, s);
-				write_splat_weight(pixel_coord, s, w * scale);
-			}
-		}
+        [loop]
+        for(uint slice = 0u; slice < sliceCount; slice++)
+        {
+            // 提前返回：若该 slice 的 RGBA 全为配方通道，则无需对非配方层做缩放
+            uint rmask0 = slice_recipe_mask[slice];
+            if(rmask0 == 15u) continue;
+            float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+            uint rmask = rmask0;
+            float4 nonRecipeMask = float4((rmask & 1u) ? 0.0 : 1.0,
+                                          (rmask & 2u) ? 0.0 : 1.0,
+                                          (rmask & 4u) ? 0.0 : 1.0,
+                                          (rmask & 8u) ? 0.0 : 1.0);
+            float4 outV = v * (nonRecipeMask * scale + (1.0 - nonRecipeMask));
+            splat_weights[uint3(pixel_coord, slice)] = clamp_to_linear(outV);
+        }
 	}
 
 	// 姝ラ4锛氬啓鍏ラ厤鏂瑰眰鐨勮础鐚紙鍐嶆閬嶅巻浠ラ伩鍏嶅瓨涓存椂鏁扮粍锛?
@@ -321,14 +363,52 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 		uint         splat_idx = layer.terrain_layer_splat_index;
 		if(splat_idx >= alphamap_layer_count) continue;
 
-		float2 world_pos2 = terrain_position + float2(terrain_offset) * terrain_size + (float2(pixel_coord) + 0.5f) * terrain_size / alphamap_resolution;
+		// 复用已计算的 world_pos，避免重复计算与带宽浪费
+		float2 world_pos2 = world_pos;
 		float  mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
 		float  mask_shaped = ApplyMaskThreshold(mask_value, mask_threshold);
 		float  self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate;
 		float  contribute = min(self_alpha, remaining);
+
+		// 统一有序覆盖策略：直接写入该图层的贡献值
+		// 已在前一步对非配方层按剩余量缩放，确保 sum(others) = 1 - sum_recipe
+		// 此处不再依据 blend_mode 进行混合，避免模式差异导致总和失衡
 		write_splat_weight(pixel_coord, splat_idx, contribute);
 		remaining = max(0.0, remaining - contribute);
 		if(remaining <= 1e-6) break;
 	}
+
+    // Final step: 实测总和归一化，确保 sum==1（避免因混合增加导致失衡）
+    // 重新逐 slice 统计实际总和，而不是使用预估的 sum_recipe
+    float total_sum = 0.0;
+    [loop]
+    for(uint slice = 0u; slice < sliceCount; slice++)
+    {
+        float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+        total_sum += (v.r + v.g + v.b + v.a);
+    }
+
+    if(total_sum > 1e-5 && abs(total_sum - 1.0) > 1e-5)
+    {
+        float inv = 1.0 / total_sum;
+        [loop]
+        for(uint slice = 0u; slice < sliceCount; slice++)
+        {
+            float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+            splat_weights[uint3(pixel_coord, slice)] = clamp_to_linear(v * inv);
+        }
+    }
+    else if(total_sum <= 1e-5)
+    {
+        // Fallback when nothing painted: assign full weight to first valid recipe splat
+        uint fb = 0xFFFFFFFFu;
+        [loop]
+        for(uint i = 0u; i < layer_count; i++)
+        {
+            uint si = layer_params_buffer[i].terrain_layer_splat_index;
+            if(si < alphamap_layer_count) { fb = si; break; }
+        }
+        if(fb != 0xFFFFFFFFu) write_splat_weight(pixel_coord, fb, 1.0);
+    }
 }
 

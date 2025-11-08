@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MrPathV2.Editor.GPU;
 using MrPathV2.Editor.Settings;
 using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Interfaces;
@@ -209,14 +208,12 @@ namespace MrPathV2.Editor.Terrain
 
             bool UseGpu()
             {
-                if (!SystemInfo.supportsComputeShaders) return false;
-                if (backend == PaintingBackend.GPUCompute) return true;
-                if (backend == PaintingBackend.CPUCompute) return false;
-                // Auto：按覆盖像素与硬件能力
-                return pixelCount >= threshold;
+                // GPU绘制未开放：统一返回false，彻底禁用GPU路径
+                return false;
             }
 
-            return UseGpu() ? GpuTerrainPainterV2.Instance : new CPUJobTwoPass();
+            // 统一切换到 GPU 适配器（依赖注入友好），或使用 CPU 双通道实现
+            return new CPUJobTwoPass();
         }
 
         // 配方数据：根据地形图层映射，计算道路宽与近似长度

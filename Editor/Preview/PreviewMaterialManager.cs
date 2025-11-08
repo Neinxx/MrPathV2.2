@@ -9,9 +9,7 @@ using UnityEngine;
 using Object = UnityEngine.Object;
 
 
-#if UNITY_EDITOR
-using EditorGpuPreviewCache = MrPathV2.Editor.Terrain.GpuPreviewCache;
-#endif
+// CPU-only：移除 GPU 预览缓存别名与依赖
 
 namespace MrPathV2.Editor.Preview
 {
@@ -81,23 +79,10 @@ namespace MrPathV2.Editor.Preview
             }
 
 #if UNITY_EDITOR
-            // Push splat index array required for GPU preview
+            // CPU-only：保留索引数组接口，默认-1表示未绑定，避免GPU路径依赖
             var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, layerCount) : Mathf.Min(4, layerCount);
             var splatIndicesArr = new float[maxLayers];
             for (var i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
-            if (EnableGpuPreview && m_TargetTerrain && recipe)
-            {
-                var map = LayerResolver.ResolveEnsurePresent(m_TargetTerrain, recipe);
-                if (map != null && layers != null)
-                {
-                    var safeCount = Mathf.Min(layerCountForIndices, layers.Count);
-                    for (var i = 0; i < safeCount; i++)
-                    {
-                        var tl = layers[i]?.contentLayer;
-                        if (tl && map.TryGetValue(tl, out var idx)) splatIndicesArr[i] = idx;
-                    }
-                }
-            }
             if (Current.HasProperty(PreviewShaderContracts.Properties.LayerSplatIndicesArr))
                 Current.SetFloatArray(PreviewShaderContracts.Properties.LayerSplatIndicesArr, splatIndicesArr);
 #endif
@@ -263,10 +248,7 @@ namespace MrPathV2.Editor.Preview
                 RefreshMaterial(profile, previewAlpha);
             }
 
-#if UNITY_EDITOR
-            // Bind (or unbind) GPU real-time preview texture
-            TryBindGpuPreview(profile);
-#endif
+            // CPU-only：不进行GPU实时预览绑定
 
             m_Dirty = true;
         }
@@ -285,26 +267,9 @@ namespace MrPathV2.Editor.Preview
                 Current.SetTexture(PreviewShaderContracts.Properties.PrevResultTex, EnsureTransparentPrevTex());
             }
             // Prepare mask texture (MaskAtlas or GPU weights)
-#if UNITY_EDITOR
-            // If GPU weights are available, skip MaskAtlas construction (early return)
-            var gpuPreviewAvailable = EnableGpuPreview && m_TargetTerrain && EditorGpuPreviewCache.TryGet(m_TargetTerrain, out var rt) && rt;
-            if (!gpuPreviewAvailable)
-            {
-                SetupMaskTextures(profile);
-                // CPU 路径：推送 Terrain 参数，供 shader 进行世界坐标采样
-                PushCpuTerrainParameters();
-            }
-            else
-            {
-                // WYSIWYG: 即使使用 GPU 权重，也提供“白色”占位Atlas，避免任何地方将两者相乘导致变黑
-                if (Current.HasProperty(PreviewShaderContracts.Properties.MaskAtlas))
-                    Current.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, Texture2D.whiteTexture);
-                if (Current.HasProperty(PreviewShaderContracts.Properties.AtlasInvHeight))
-                    Current.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, 1f);
-            }
-#else
+            // CPU-only：始终使用 MaskAtlas 并推送Terrain参数
             SetupMaskTextures(profile);
-#endif
+            PushCpuTerrainParameters();
         }
 
         /// <summary>
@@ -356,10 +321,9 @@ namespace MrPathV2.Editor.Preview
         private UnityEngine.Terrain m_TargetTerrain;
 
         /// <summary>
-        ///     Global switch: whether to enable GPU real-time preview.
-        ///     Can be replaced with ProjectSettings / ScriptableObject configuration later.
+        ///     Global switch: GPU实时预览总开关（CPU-only，始终为false）。
         /// </summary>
-        public static bool EnableGpuPreview = false;
+        public static bool EnableGpuPreview => false;
 #endif
 
         #region Utilities
@@ -601,15 +565,6 @@ namespace MrPathV2.Editor.Preview
         }
 
 #if UNITY_EDITOR
-        private void TryBindGpuPreview(PathProfile profile)
-        {
-            if (!Current) return;
-
-            var gpuBinder = new PreviewGpuBinder();
-            gpuBinder.SetTargetTerrain(m_TargetTerrain);
-            gpuBinder.TryBindGpuPreview(Current, EnableGpuPreview, profile.roadRecipe);
-        }
-
         /// <summary>
         ///     在 CPU 预览路径推送 Terrain 参数，保持与 GPU 预览一致的世界坐标采样。
         /// </summary>
