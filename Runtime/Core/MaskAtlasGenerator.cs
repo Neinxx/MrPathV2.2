@@ -255,6 +255,7 @@ namespace MrPathV2.Runtime.Core
             gpuMask.ShoulderParams = new GpuShoulderMaskParams
             {
                 ShoulderWidthRatio = dto.ShoulderParams.ShoulderWidthRatio,
+                PositionRatio = dto.ShoulderParams.PositionRatio,
                 ShoulderStrength = dto.ShoulderParams.ShoulderStrength,
                 EdgeFalloff = dto.ShoulderParams.EdgeFalloff,
                 EnableLeftShoulder = dto.ShoulderParams.EnableLeftShoulder ? 1 : 0,
@@ -294,6 +295,7 @@ namespace MrPathV2.Runtime.Core
         private struct GpuShoulderMaskParams
         {
             public float ShoulderWidthRatio;
+            public float PositionRatio; // 新增：路肩中心相对边缘的位移比例 (0..1)
             public float ShoulderStrength;
             public float EdgeFalloff;
             public int EnableLeftShoulder;

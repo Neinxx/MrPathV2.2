@@ -20,10 +20,13 @@ MonoBehaviour:
   profiles:
   - {fileID: 11400000, guid: fea2b8e7566d1e04c9764eb5db6147dd, type: 2}
   - {fileID: 11400000, guid: 913914e227fb88241a33396e0d5a2e94, type: 2}
+  - {fileID: 11400000, guid: a78d4df5d6a6d5f4cbab0848a3b1e700, type: 2}
   roadRecipes:
   - {fileID: 11400000, guid: 747a0f774da3d8049b612213b4e96e88, type: 2}
   - {fileID: 11400000, guid: 3d555491e884c274596cbc784dd30b38, type: 2}
   masks:
+  - {fileID: 11400000, guid: a4eb89b5f9e979c46ae0de706ae961b5, type: 2}
   - {fileID: 11400000, guid: f957627f59367df4e99e66837fb5b932, type: 2}
   - {fileID: 11400000, guid: 436c755225356e94ba1f6ae1d2cc3f71, type: 2}
   - {fileID: 11400000, guid: fddb2ca48d1ab0641816c99397acc9a7, type: 2}
+  - {fileID: 11400000, guid: 30f194937902f514e8a0576e0dbf3cb9, type: 2}

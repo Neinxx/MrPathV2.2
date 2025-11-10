@@ -442,28 +442,50 @@ namespace MrPathV2.Editor.Preview
                                 hash = hash * 31 + noise.edgeLow.GetHashCode();
                                 hash = hash * 31 + noise.edgeHigh.GetHashCode();
                             }
-                            if (mask is PerlinNoiseMask pnoise)
-                            {
-                                hash = hash * 31 + pnoise.noiseScale.x.GetHashCode();
-                                hash = hash * 31 + pnoise.noiseScale.y.GetHashCode();
-                                hash = hash * 31 + pnoise.uniformScale.GetHashCode();
-                                hash = hash * 31 + pnoise.rotationDeg.GetHashCode();
-                                hash = hash * 31 + pnoise.octaves.GetHashCode();
-                                hash = hash * 31 + pnoise.lacunarity.GetHashCode();
-                                hash = hash * 31 + pnoise.gain.GetHashCode();
-                                hash = hash * 31 + pnoise.useAsymmetricEdges.GetHashCode();
-                                hash = hash * 31 + pnoise.edgeLow.GetHashCode();
-                                hash = hash * 31 + pnoise.edgeHigh.GetHashCode();
-                            }
-                            // Shoulder mask
-                            if (mask is ShoulderMask shoulder)
-                            {
-                                hash = hash * 31 + shoulder.shoulderWidthRatio.GetHashCode();
-                                hash = hash * 31 + shoulder.shoulderStrength.GetHashCode();
-                                hash = hash * 31 + shoulder.edgeFalloff.GetHashCode();
-                                hash = hash * 31 + shoulder.enableLeftShoulder.GetHashCode();
-                                hash = hash * 31 + shoulder.enableRightShoulder.GetHashCode();
-                            }
+                        if (mask is PerlinNoiseMask pnoise)
+                        {
+                            hash = hash * 31 + pnoise.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + pnoise.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + pnoise.uniformScale.GetHashCode();
+                            hash = hash * 31 + pnoise.rotationDeg.GetHashCode();
+                            hash = hash * 31 + pnoise.octaves.GetHashCode();
+                            hash = hash * 31 + pnoise.lacunarity.GetHashCode();
+                            hash = hash * 31 + pnoise.gain.GetHashCode();
+                            hash = hash * 31 + pnoise.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + pnoise.edgeLow.GetHashCode();
+                            hash = hash * 31 + pnoise.edgeHigh.GetHashCode();
+                        }
+                        // Shoulder Perlin Noise mask
+                        if (mask is ShoulderPerlinNoiseMask spn)
+                        {
+                            // Shoulder shape
+                            hash = hash * 31 + spn.shoulderWidthRatio.GetHashCode();
+                            hash = hash * 31 + spn.shoulderPositionRatio.GetHashCode();
+                            hash = hash * 31 + spn.shoulderStrength.GetHashCode();
+                            hash = hash * 31 + spn.edgeFalloff.GetHashCode();
+                            hash = hash * 31 + spn.enableLeftShoulder.GetHashCode();
+                            hash = hash * 31 + spn.enableRightShoulder.GetHashCode();
+                            // Noise params
+                            hash = hash * 31 + spn.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + spn.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + spn.uniformScale.GetHashCode();
+                            hash = hash * 31 + spn.rotationDeg.GetHashCode();
+                            hash = hash * 31 + spn.octaves.GetHashCode();
+                            hash = hash * 31 + spn.lacunarity.GetHashCode();
+                            hash = hash * 31 + spn.gain.GetHashCode();
+                            hash = hash * 31 + spn.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + spn.edgeLow.GetHashCode();
+                            hash = hash * 31 + spn.edgeHigh.GetHashCode();
+                        }
+                        // Shoulder mask
+                        if (mask is ShoulderMask shoulder)
+                        {
+                            hash = hash * 31 + shoulder.shoulderWidthRatio.GetHashCode();
+                            hash = hash * 31 + shoulder.shoulderStrength.GetHashCode();
+                            hash = hash * 31 + shoulder.edgeFalloff.GetHashCode();
+                            hash = hash * 31 + shoulder.enableLeftShoulder.GetHashCode();
+                            hash = hash * 31 + shoulder.enableRightShoulder.GetHashCode();
+                        }
                         }
                         catch
                         { /* Ignore exceptions to ensure hash process robustness */

@@ -19,8 +19,5 @@ MonoBehaviour:
   mode: 1
   entries:
   - enabled: 1
-    mask: {fileID: 0}
-    weight: 1
-  - enabled: 1
-    mask: {fileID: 11400000, guid: 436c755225356e94ba1f6ae1d2cc3f71, type: 2}
+    mask: {fileID: 11400000, guid: 30f194937902f514e8a0576e0dbf3cb9, type: 2}
     weight: 1

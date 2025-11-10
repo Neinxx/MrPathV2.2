@@ -12,10 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 878b8e169c7396b4088eb84af11f367f, type: 3}
   m_Name: MrPath_Advanced
   m_EditorClassIdentifier: 
-  bezierStrategy: {fileID: 11400000, guid: ef9ab77836e51104cb4cb3dbe8ccda13, type: 2}
-  catmullRomStrategy: {fileID: 11400000, guid: bd36c88b0765ed24aa6b868b64fc5642, type: 2}
+  previewAAWidthPixels: 2
+  previewCapAAWidthPixels: 4
+  previewDefaultDashPixels: 8
+  previewCapType: 1
+  previewSeamScale: 1
+  previewMaxPixelStep: 6
+  bezierStrategy: {fileID: 0}
+  catmullRomStrategy: {fileID: 0}
   paintingBackend: 0
-  gpuAutoSwitchThreshold: 0
+  gpuAutoSwitchThreshold: 65536
   enableMemoryTracking: 0
   rebuildBasemapInRealtimePreview: 0
   basemapSafetyMarginPixels: 8

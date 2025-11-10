@@ -135,6 +135,7 @@ namespace MrPathV2.Runtime.Core.BlendMasks
     public struct GpuShoulderMaskParamsData
     {
         public float ShoulderWidthRatio;
+        public float PositionRatio; // 新增：路肩中心相对边缘的位移比例 (0..1)
         public float ShoulderStrength;
         public float EdgeFalloff;
         public bool EnableLeftShoulder;

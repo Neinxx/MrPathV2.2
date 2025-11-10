@@ -9,21 +9,22 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
-  m_Name: "\u67CF\u6797"
+  m_Script: {fileID: 11500000, guid: 22706f6c1335a8f4588aa66f6c23f086, type: 3}
+  m_Name: filler text (2)
   m_EditorClassIdentifier: 
-  smooth: 0.692
-  tiling: {x: 2, y: 2.93}
+  smooth: 0.283
+  tiling: {x: 2, y: 3.05}
   offset: {x: 0, y: 0}
   overallScale: 1
   strength: 1
   seed: 0
-  noiseScale: {x: 0.13, y: 0.13}
+  noiseScale: {x: 1, y: 1}
   uniformScale: 1
-  rotationDeg: 0
-  octaves: 1
-  lacunarity: 2
-  gain: 0.5
+  rotationDeg: -11
+  octaves: 5
+  lacunarity: 3.5
+  gain: 0.47
   useAsymmetricEdges: 0
-  edgeLow: 0.25
-  edgeHigh: 0.75
+  edgeLow: 0.487
+  edgeHigh: 0.729
+  edgeBandWidthRatio: 0.25

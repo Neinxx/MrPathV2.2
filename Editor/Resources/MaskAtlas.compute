@@ -7,20 +7,22 @@
 #define MASK_TYPE_SHOULDER 1
 #define MASK_TYPE_NOISE 2
 #define MASK_TYPE_GRADIENT 3
+#define MASK_TYPE_SHOULDER_NOISE 4
 
 // --- GPU Structs (must match C# memory  layout exactly) ---
 struct GpuShoulderMaskParams {
-	float  ShoulderWidthRatio;
-	float  ShoulderStrength;
-	float  EdgeFalloff;
-	int    EnableLeftShoulder;
-	int    EnableRightShoulder;
-	float2 Tiling;
-	float2 Offset;
-	float  OverallScale;
-	float  Smooth;
-	float  Pad1;
-	float  Pad2;
+    float  ShoulderWidthRatio;
+    float  PositionRatio; // 0..1, 路肩中心相对边缘的位移比例
+    float  ShoulderStrength;
+    float  EdgeFalloff;
+    int    EnableLeftShoulder;
+    int    EnableRightShoulder;
+    float2 Tiling;
+    float2 Offset;
+    float  OverallScale;
+    float  Smooth;
+    float  Pad1;
+    float  Pad2;
 };
 
 struct GpuNoiseMaskParams {
@@ -78,6 +80,15 @@ float SampleNoiseLUT(float2 uv)
 	float  cx0 = lerp(c00, c10, f.x);
 	float  cx1 = lerp(c01, c11, f.x);
 	return lerp(cx0, cx1, f.y);
+}
+
+// Top-level helper: shoulder stripe weight with optional soft falloff
+inline float ShoulderStripeWeight(float distanceFromPath, float center, float stripeHalf, float falloffW)
+{
+    float d = abs(distanceFromPath - center);
+    if(falloffW <= 1e-6) return (d <= stripeHalf) ? 1.0 : 0.0;
+    float t = 1.0 - saturate((d - stripeHalf) / falloffW);
+    return saturate(t);
 }
 
 // --- Evaluate shoulder mask (distance-based, unified) ---
@@ -171,30 +182,66 @@ float EvaluateNoiseMask(GpuNoiseMaskParams p, float2 worldPos, float roadWidth, 
 	return saturate(smoothstep(edge0, edge1, valuePre));
 }
 
+// --- Evaluate shoulder-perlin combined mask: noise only within two shoulder stripes ---
+float EvaluateShoulderNoiseMask(
+    GpuShoulderMaskParams sp,
+    GpuNoiseMaskParams    np,
+    float2                worldPos,
+    float                 distanceFromPath,
+    float                 roadWidth,
+    float                 pathLen)
+{
+    // 1) Shoulder stripe shape in world space
+    float halfRoad = roadWidth * 0.5;
+    float inset    = saturate(sp.PositionRatio) * halfRoad;
+    float leftC    = -halfRoad + inset;
+    float rightC   =  halfRoad - inset;
+    float stripeHalf = max(1e-5, sp.ShoulderWidthRatio * roadWidth * 0.5);
+    float falloffW   = max(1e-5, sp.EdgeFalloff * roadWidth);
+
+    float wLeft  = (sp.EnableLeftShoulder != 0) ? ShoulderStripeWeight(distanceFromPath, leftC,  stripeHalf, falloffW)  : 0.0;
+    float wRight = (sp.EnableRightShoulder != 0) ? ShoulderStripeWeight(distanceFromPath, rightC, stripeHalf, falloffW) : 0.0;
+    float shoulderShape = max(wLeft, wRight) * sp.ShoulderStrength;
+
+    // 2) Perlin fBm noise via existing evaluator
+    float noiseVal = EvaluateNoiseMask(np, worldPos, roadWidth, pathLen);
+
+    // 3) Combine and smooth by shoulder params
+    float pre = saturate(shoulderShape * noiseVal) * sp.OverallScale;
+    if(sp.Smooth <= 1e-5)
+        return saturate(pre);
+    float edge0 = sp.Smooth * 0.5;
+    float edge1 = 1.0 - sp.Smooth * 0.5;
+    return saturate(smoothstep(edge0, edge1, pre));
+}
+
 // --- Evaluate gradient (progress parameter) ---
 float EvaluateGradientMask(float progress, float strength)
 {
-	return progress * strength;
+    return progress * strength;
 }
 
 // --- Main unified EvaluateMask ---
 float EvaluateMask(GpuMaskParams maskParams, float2 worldPos, float progress, float distanceFromPath, float roadWidth, float pathLen)
 {
 	float maskValue = 0.0;
-	switch(maskParams.maskType)
-	{
-	case MASK_TYPE_SHOULDER:
-		maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
-		break;
-	case MASK_TYPE_NOISE:
-		maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos, roadWidth, pathLen);
-		break;
-	case MASK_TYPE_GRADIENT:
-		maskValue = EvaluateGradientMask(progress, 1.0);
-		break;
-	default:
-		// 无遮罩（MASK_TYPE_NONE）视为“全通”，与CPU路径和Editor逻辑保持一致
-		maskValue = 1.0;
+    switch(maskParams.maskType)
+    {
+    case MASK_TYPE_SHOULDER:
+        maskValue = EvaluateShoulderMask(maskParams.shoulderParams, distanceFromPath, roadWidth);
+        break;
+    case MASK_TYPE_NOISE:
+        maskValue = EvaluateNoiseMask(maskParams.noiseParams, worldPos, roadWidth, pathLen);
+        break;
+    case MASK_TYPE_SHOULDER_NOISE:
+        maskValue = EvaluateShoulderNoiseMask(maskParams.shoulderParams, maskParams.noiseParams, worldPos, distanceFromPath, roadWidth, pathLen);
+        break;
+    case MASK_TYPE_GRADIENT:
+        maskValue = EvaluateGradientMask(progress, 1.0);
+        break;
+    default:
+        // 无遮罩（MASK_TYPE_NONE）视为“全通”，与CPU路径和Editor逻辑保持一致
+        maskValue = 1.0;
 		break;
 	}
 	return saturate(maskValue * maskParams.strength);
