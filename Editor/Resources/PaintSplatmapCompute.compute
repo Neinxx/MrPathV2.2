@@ -291,12 +291,12 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 	float others_sum = 0.0;
 	uint  sliceCount = (alphamap_layer_count + 3u) / 4u;
     [loop]
-    for(uint slice = 0u; slice < sliceCount; slice++)
+    for(uint sliceIdx = 0u; sliceIdx < sliceCount; sliceIdx++)
     {
         // 提前返回：若该 slice 的 RGBA 全为配方通道，则无需统计非配方层和，直接跳过
-        uint rmask0 = slice_recipe_mask[slice];
+        uint rmask0 = slice_recipe_mask[sliceIdx];
         if(rmask0 == 15u) continue;
-        float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+        float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, sliceIdx)]);
         uint rmask = rmask0;
         float4 nonRecipeMask = float4((rmask & 1u) ? 0.0 : 1.0,
                                       (rmask & 2u) ? 0.0 : 1.0,
@@ -337,19 +337,19 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 	if(scale < 1.0 - 1e-6)
 	{
         [loop]
-        for(uint slice = 0u; slice < sliceCount; slice++)
+        for(uint sliceIdx = 0u; sliceIdx < sliceCount; sliceIdx++)
         {
             // 提前返回：若该 slice 的 RGBA 全为配方通道，则无需对非配方层做缩放
-            uint rmask0 = slice_recipe_mask[slice];
+            uint rmask0 = slice_recipe_mask[sliceIdx];
             if(rmask0 == 15u) continue;
-            float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+            float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, sliceIdx)]);
             uint rmask = rmask0;
             float4 nonRecipeMask = float4((rmask & 1u) ? 0.0 : 1.0,
                                           (rmask & 2u) ? 0.0 : 1.0,
                                           (rmask & 4u) ? 0.0 : 1.0,
                                           (rmask & 8u) ? 0.0 : 1.0);
             float4 outV = v * (nonRecipeMask * scale + (1.0 - nonRecipeMask));
-            splat_weights[uint3(pixel_coord, slice)] = clamp_to_linear(outV);
+            splat_weights[uint3(pixel_coord, sliceIdx)] = clamp_to_linear(outV);
         }
 	}
 
@@ -382,9 +382,9 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     // 重新逐 slice 统计实际总和，而不是使用预估的 sum_recipe
     float total_sum = 0.0;
     [loop]
-    for(uint slice = 0u; slice < sliceCount; slice++)
+    for(uint sliceIdx = 0u; sliceIdx < sliceCount; sliceIdx++)
     {
-        float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+        float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, sliceIdx)]);
         total_sum += (v.r + v.g + v.b + v.a);
     }
 
@@ -392,10 +392,10 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
     {
         float inv = 1.0 / total_sum;
         [loop]
-        for(uint slice = 0u; slice < sliceCount; slice++)
+        for(uint sliceIdx = 0u; sliceIdx < sliceCount; sliceIdx++)
         {
-            float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
-            splat_weights[uint3(pixel_coord, slice)] = clamp_to_linear(v * inv);
+            float4 v = clamp_to_linear(splat_weights[uint3(pixel_coord, sliceIdx)]);
+            splat_weights[uint3(pixel_coord, sliceIdx)] = clamp_to_linear(v * inv);
         }
     }
     else if(total_sum <= 1e-5)

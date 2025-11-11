@@ -5,6 +5,7 @@ namespace MrPathV2.Runtime.Core.BlendMasks
     [CreateAssetMenu(menuName = "MrPath/Blend Masks/Gradient Mask")]
     public class GradientMask : BlendMaskBase
     {
+        public override bool SupportsGpu => false;
         public AnimationCurve gradient = AnimationCurve.Linear(-1, 1, 1, 1);
 
         public override float Evaluate(float horizontalPosition, float worldWidth, float pathLength) => Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);

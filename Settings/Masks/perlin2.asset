@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: perlin2
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 1, y: 1}
+  tiling: {x: 1.2, y: 1.27}
   offset: {x: 0.03, y: 0}
   overallScale: 1
   strength: 1
   seed: 0
-  noiseScale: {x: 0.05, y: 0.05}
+  noiseScale: {x: 0.03, y: 0.03}
   uniformScale: 1
   rotationDeg: 8
   octaves: 1

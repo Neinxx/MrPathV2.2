@@ -12,24 +12,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e917453ea2a135b4ba2f9ba9429c4c84, type: 3}
   m_Name: filler text (2) 1
   m_EditorClassIdentifier: 
-  smooth: 0.1
-  tiling: {x: 2, y: 2}
+  smooth: 1
+  tiling: {x: 0.34, y: 0.04}
   offset: {x: 0, y: 0}
   overallScale: 1
   strength: 1
   seed: 0
-  shoulderWidthRatio: 0.12
-  shoulderPositionRatio: 0.1
+  shoulderWidthRatio: 0.4
+  shoulderPositionRatio: 0.094
   shoulderStrength: 1
-  edgeFalloff: 0.05
+  edgeFalloff: 0.034
   enableLeftShoulder: 1
   enableRightShoulder: 1
-  noiseScale: {x: 1, y: 1}
+  noiseScale: {x: 0.62, y: 0.62}
   uniformScale: 1
-  rotationDeg: 0
-  octaves: 3
-  lacunarity: 2
-  gain: 0.5
+  rotationDeg: -25
+  octaves: 1
+  lacunarity: 1
+  gain: 0
   useAsymmetricEdges: 0
-  edgeLow: 0.25
-  edgeHigh: 0.75
+  edgeLow: 0.509
+  edgeHigh: 1
