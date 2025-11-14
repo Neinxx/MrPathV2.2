@@ -27,6 +27,7 @@ namespace MrPathV2.Runtime.Jobs
 
         [ReadOnly] public Vector2Int CoverageMin;
         [ReadOnly] public Vector2Int CoverageMax;
+        [ReadOnly] public NativeArray<byte> RecipeLayerFlags;
 
         #endregion
 
@@ -140,91 +141,84 @@ namespace MrPathV2.Runtime.Jobs
         private bool ApplyLayerBlending(int baseAlphaIndex, float normalizedDist, float pathProgress, int firstValidSplatIndex)
         {
             var anyLayerPainted = false;
+            var useFlags = RecipeLayerFlags.IsCreated && RecipeLayerFlags.Length == AlphamapLayerCount;
 
-            // 统一有序覆盖（与 GPU/预览一致），区别：当 OpaquePainting 开启时对 mask 进行 alpha clip 门控
-
-            // 预先累计“其他层”的原始总和（非配方层与配方层的旧值）
             var originalOthersSum = 0f;
-            for (var i = 0; i < AlphamapLayerCount; i++)
+            if (useFlags)
             {
-                if (!IsRecipeSplatIndex(i))
-                    originalOthersSum += Alphamaps[baseAlphaIndex + i];
+                for (var i = 0; i < AlphamapLayerCount; i++)
+                {
+                    var v = Alphamaps[baseAlphaIndex + i];
+                    originalOthersSum += RecipeLayerFlags[i] == 0 ? v : 0f;
+                }
+            }
+            else
+            {
+                for (var i = 0; i < AlphamapLayerCount; i++)
+                {
+                    var v = Alphamaps[baseAlphaIndex + i];
+                    originalOthersSum += IsRecipeSplatIndex(i) ? 0f : v;
+                }
             }
 
-            // 第一步：计算配方层总贡献（不写回），用于缩放其他层
             var remaining = 1f;
             var sumRecipe = 0f;
             for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
             {
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
                 if (!ValidateSplatIndex(splatIndex)) continue;
-
                 var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
-                if (OpaquePainting && maskAlpha < AlphaClipThreshold)
-                {
-                    continue; // clip 门控
-                }
-
-                var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length
-                    ? math.saturate(Recipe.Opacities[layerIndex])
-                    : 1f;
-                var selfAlpha = math.saturate(maskAlpha * strength);
+                var clipGate = OpaquePainting ? (maskAlpha >= AlphaClipThreshold ? 1f : 0f) : 1f;
+                var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length ? math.saturate(Recipe.Opacities[layerIndex]) : 1f;
+                var selfAlpha = math.saturate(maskAlpha * strength * clipGate);
                 var contribute = math.min(selfAlpha, remaining);
-                if (contribute > SmallWeightCutoff)
-                {
-                    sumRecipe += contribute;
-                    remaining = math.max(0f, remaining - contribute);
-                }
+                var valid = contribute > SmallWeightCutoff ? 1f : 0f;
+                sumRecipe += contribute * valid;
+                remaining = math.max(0f, remaining - contribute * valid);
                 if (remaining <= Epsilon) break;
             }
 
-            // 第二步：缩放非配方层，使其总和变为 (1 - sumRecipe)
-            if (originalOthersSum > SmallWeightCutoff)
+            var targetOthers = math.saturate(1f - sumRecipe);
+            var scale = originalOthersSum > SmallWeightCutoff ? targetOthers / originalOthersSum : 1f;
+            var applyScale = scale < 1f - Epsilon ? 1f : 0f;
+            if (useFlags)
             {
-                var targetOthers = math.saturate(1f - sumRecipe);
-                var scale = targetOthers / originalOthersSum;
-                if (scale < 1f - Epsilon)
+                for (var i = 0; i < AlphamapLayerCount; i++)
                 {
-                    for (var i = 0; i < AlphamapLayerCount; i++)
-                    {
-                        if (IsRecipeSplatIndex(i)) continue;
-                        var idx = baseAlphaIndex + i;
-                        Alphamaps[idx] *= scale;
-                    }
+                    var idx = baseAlphaIndex + i;
+                    var prev = Alphamaps[idx];
+                    var scaled = prev * scale;
+                    var isOther = RecipeLayerFlags[i] == 0 ? 1f : 0f;
+                    Alphamaps[idx] = applyScale * isOther > 0f ? scaled : prev;
+                }
+            }
+            else
+            {
+                for (var i = 0; i < AlphamapLayerCount; i++)
+                {
+                    var idx = baseAlphaIndex + i;
+                    var prev = Alphamaps[idx];
+                    var scaled = prev * scale;
+                    Alphamaps[idx] = (applyScale > 0f && !IsRecipeSplatIndex(i)) ? scaled : prev;
                 }
             }
 
-            // 第三步：写入配方层的贡献
             remaining = 1f;
             for (var layerIndex = Recipe.Length - 1; layerIndex >= 0; layerIndex--)
             {
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
                 if (!ValidateSplatIndex(splatIndex)) continue;
-
                 var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
-                if (OpaquePainting && maskAlpha < AlphaClipThreshold)
-                {
-                    // Alphamaps[baseAlphaIndex + splatIndex] = 0f;
-                    continue;
-                }
-
-                var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length
-                    ? math.saturate(Recipe.Opacities[layerIndex])
-                    : 1f;
-                var selfAlpha = math.saturate(maskAlpha * strength);
+                var clipGate = OpaquePainting ? (maskAlpha >= AlphaClipThreshold ? 1f : 0f) : 1f;
+                var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length ? math.saturate(Recipe.Opacities[layerIndex]) : 1f;
+                var selfAlpha = math.saturate(maskAlpha * strength * clipGate);
                 var contribute = math.min(selfAlpha, remaining);
-                if (contribute > SmallWeightCutoff)
-                {
-                    anyLayerPainted = true;
-                    Alphamaps[baseAlphaIndex + splatIndex] = contribute;
-                    remaining = math.max(0f, remaining - contribute);
-                }
-                else
-                {
-                    // 保留原始权重，不做清零以避免把已有底图层抹成 0 导致黑边
-                    // no-op
-                }
-
+                var idx = baseAlphaIndex + splatIndex;
+                var prev = Alphamaps[idx];
+                var write = contribute > SmallWeightCutoff ? contribute : prev;
+                if (write != prev) anyLayerPainted = true;
+                Alphamaps[idx] = write;
+                remaining = math.max(0f, remaining - (write == contribute ? contribute : 0f));
                 if (remaining <= Epsilon) break;
             }
 
@@ -243,11 +237,24 @@ namespace MrPathV2.Runtime.Jobs
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ZeroOutNonRecipeLayers(int baseAlphaIndex)
         {
-            for (var i = 0; i < AlphamapLayerCount; i++)
+            if (RecipeLayerFlags.IsCreated && RecipeLayerFlags.Length == AlphamapLayerCount)
             {
-                if (!IsRecipeSplatIndex(i))
+                for (var i = 0; i < AlphamapLayerCount; i++)
                 {
-                    Alphamaps[baseAlphaIndex + i] = 0f;
+                    if (RecipeLayerFlags[i] == 0)
+                    {
+                        Alphamaps[baseAlphaIndex + i] = 0f;
+                    }
+                }
+            }
+            else
+            {
+                for (var i = 0; i < AlphamapLayerCount; i++)
+                {
+                    if (!IsRecipeSplatIndex(i))
+                    {
+                        Alphamaps[baseAlphaIndex + i] = 0f;
+                    }
                 }
             }
         }

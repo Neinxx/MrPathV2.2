@@ -1,12 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance"
          engine="UnityEngine.UIElements" editor="UnityEditor.UIElements"
          noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
-    <Style src="project://database/Assets/__temp/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor"/>
-    <ui:VisualElement
-            style="padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; margin-left: 6px; margin-right: 6px; margin-top: 6px; margin-bottom: 6px; flex-grow: 0; height: 24px;">
-        <ui:TextField picking-mode="Ignore" value="filler text" text="filler text"
-                      style="flex-shrink: 1; flex-grow: 1;"/>
-    </ui:VisualElement>
+    
     <ui:VisualElement
             style="flex-direction: row; justify-content: flex-start; height: 20px; flex-grow: 0; margin-bottom: 0; margin-left: 10px; margin-right: 10px;">
         <ui:VisualElement

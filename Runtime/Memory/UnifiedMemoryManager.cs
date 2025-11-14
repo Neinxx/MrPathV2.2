@@ -6,6 +6,12 @@ using UnityEngine;
 
 namespace MrPathV2.Runtime.Memory
 {
+    public interface IUnifiedMemoryManager
+    {
+        MemoryOwner<NativeArray<T>> RentNativeArray<T>(int length, Allocator allocator, bool clear = false, string tag = null) where T : struct;
+        MemoryOwner<NativeList<T>> RentNativeList<T>(int capacity, Allocator allocator, string tag = null) where T : unmanaged;
+        void Dispose();
+    }
     /// <summary>
     ///     表示一个拥有并负责释放底层 NativeCollection 资源的对象。
     /// </summary>
@@ -25,7 +31,7 @@ namespace MrPathV2.Runtime.Memory
     ///     2. 通过池化减少频繁分配；Editor/Development 构建下启用详细统计。
     ///     3. 可扩展：后续支持 NativeQueue / NativeHashMap 等类型。
     /// </summary>
-    public sealed class UnifiedMemoryManager : IDisposable
+    public sealed class UnifiedMemoryManager : IDisposable, IUnifiedMemoryManager
     {
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

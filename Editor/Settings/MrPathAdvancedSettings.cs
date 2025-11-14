@@ -26,6 +26,7 @@ namespace MrPathV2.Editor.Settings // Or Editor.Settings
         [Tooltip("默认虚线段长度（像素）。当样式未显式提供 dashSize 时使用。")]
         [Range(1f, 64f)]
         public float previewDefaultDashPixels = 8.0f;
+        public bool previewFastDashedMode;
 
         public enum PreviewCapType
         {

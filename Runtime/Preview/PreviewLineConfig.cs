@@ -11,18 +11,20 @@ namespace MrPathV2.Runtime.Preview
         public float SeamScale { get; }
         public int CapType { get; } // 0=None, 1=Linear, 2=Reserved
         public float DefaultDashPixels { get; }
+        public bool FastDashed { get; }
 
         public bool IsValid => AAWidthPx > 0f && CapAAWidthPx > 0f && SeamScale > 0f && DefaultDashPixels > 0f;
 
-        public PreviewLineConfig(float aaWidthPx, float capAaWidthPx, float seamScale, int capType, float defaultDashPixels)
+        public PreviewLineConfig(float aaWidthPx, float capAaWidthPx, float seamScale, int capType, float defaultDashPixels, bool fastDashed)
         {
             AAWidthPx = aaWidthPx;
             CapAAWidthPx = capAaWidthPx;
             SeamScale = seamScale;
             CapType = capType;
             DefaultDashPixels = defaultDashPixels;
+            FastDashed = fastDashed;
         }
 
-        public static PreviewLineConfig Default => new PreviewLineConfig(2.0f, 4.0f, 1.0f, 1, 8.0f);
+        public static PreviewLineConfig Default => new PreviewLineConfig(2.0f, 4.0f, 1.0f, 1, 8.0f, false);
     }
 }

@@ -1,6 +1,8 @@
 using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 
 namespace MrPathV2.Runtime.Strategies
@@ -9,7 +11,7 @@ namespace MrPathV2.Runtime.Strategies
     ///     【最终圆满版 • 千变万化之法】
     /// </summary>
     [CreateAssetMenu(fileName = "BezierStrategy", menuName = "MrPath/Strategies/Bezier")]
-    public class BezierStrategy : PathStrategy
+    public partial class BezierStrategy : PathStrategy
     {
         [Header("法则参数")]
         [Tooltip("在添加新节点时，自动生成的切线长度与线段长度的比例。")]

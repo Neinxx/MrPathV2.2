@@ -1,52 +1,8 @@
-#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 
 namespace MrPathV2.Runtime.Components
 {
-    /// <summary>
-    ///     标记字段为必填项的特性，为空时会在Inspector中显示错误提示
-    /// </summary>
-    public class RequiredFieldAttribute : PropertyAttribute
-    {
-
-        /// <summary>
-        ///     标记字段为必填项
-        /// </summary>
-        public RequiredFieldAttribute() { }
-
-        /// <summary>
-        ///     标记字段为必填项并指定自定义错误消息
-        /// </summary>
-        /// <param name="errorMessage">为空时显示的错误消息</param>
-        public RequiredFieldAttribute(string errorMessage)
-        {
-            ErrorMessage = errorMessage;
-        }
-
-        /// <summary>
-        ///     标记字段为必填项并指定检查行为
-        /// </summary>
-        /// <param name="errorMessage">为空时显示的错误消息</param>
-        /// <param name="forceCheckInEditMode">是否在编辑模式下强制检查</param>
-        public RequiredFieldAttribute(string errorMessage, bool forceCheckInEditMode)
-        {
-            ErrorMessage = errorMessage;
-            ForceCheckInEditMode = forceCheckInEditMode;
-        }
-
-        /// <summary>
-        ///     自定义错误消息（留空则使用默认消息）
-        /// </summary>
-        public string ErrorMessage { get; set; }
-
-        /// <summary>
-        ///     是否在编辑模式下强制检查（即使对象未被选中）
-        /// </summary>
-        public bool ForceCheckInEditMode { get; set; }
-    }
-
-
     [CustomPropertyDrawer(typeof(RequiredFieldAttribute))]
     public class RequiredFieldDrawer : PropertyDrawer
     {
@@ -232,4 +188,3 @@ namespace MrPathV2.Runtime.Components
         // 移除了 DrawWarningIcon，因为它被 Unity 原生图标取代了
     }
 }
-#endif

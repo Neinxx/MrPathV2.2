@@ -112,6 +112,101 @@ namespace MrPathV2.Runtime.Core
             }
         }
 
+        /// <summary>
+        ///     建议的纵向采样数，根据路径长度自适应，默认每米约1~2行。
+        /// </summary>
+        public static int SuggestPathSamples(float pathLength, float metersPerSample = 0.75f, int min = 64, int max = 2048)
+        {
+            var mps = Mathf.Max(0.01f, metersPerSample);
+            var estimate = Mathf.CeilToInt(Mathf.Max(1f, pathLength) / mps);
+            return Mathf.Clamp(estimate, min, max);
+        }
+
+        /// <summary>
+        ///     重载：允许外部指定纵向采样数以避免沿路径分块。
+        /// </summary>
+        public static Texture2D BuildMaskAtlas(
+            Texture2D reuse,
+            IList<PreviewPipelineUtility.PreviewLayerInfo> layers,
+            float worldWidth,
+            float pathLength,
+            int baseResolution,
+            float maskThreshold,
+            int pathSamplesOverride)
+        {
+            // 复用原实现，但将内部的 pathSamples 替换为自适应/外部值
+            using (ProfilingMarkers.MaskAtlasGeneratorBuild.Auto())
+            {
+                if (layers == null || layers.Count == 0)
+                {
+                    if (reuse == null || reuse.width != 1 || reuse.height != 1 || reuse.format != TextureFormat.R8)
+                    {
+#if UNITY_EDITOR
+                        if (reuse != null) Object.DestroyImmediate(reuse);
+#else
+                        if (reuse != null) Object.Destroy(reuse);
+#endif
+                        reuse = new Texture2D(1, 1, TextureFormat.R8, false, true)
+                        {
+                            wrapMode = TextureWrapMode.Clamp
+                        };
+                    }
+                    reuse.SetPixel(0, 0, Color.white);
+                    reuse.Apply(false, false);
+                    return reuse;
+                }
+
+                var layerCount = layers.Count;
+                var width = Mathf.Clamp(baseResolution, 16, 2048);
+                var pathSamples = pathSamplesOverride > 0 ? Mathf.Clamp(pathSamplesOverride, 2, 4096) : DefaultPathSamples;
+                var height = layerCount * pathSamples;
+
+                var needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
+                if (needCreate)
+                {
+#if UNITY_EDITOR
+                    if (reuse != null) Object.DestroyImmediate(reuse);
+#else
+                    if (reuse != null) Object.Destroy(reuse);
+#endif
+                    reuse = new Texture2D(width, height, TextureFormat.R8, false, true)
+                    {
+                        wrapMode = TextureWrapMode.Clamp,
+                        filterMode = FilterMode.Bilinear,
+                        name = "MrPath_MaskAtlas"
+                    };
+                }
+
+                var allGpuSupported = true;
+                for (var i = 0; i < layers.Count; i++)
+                {
+                    var m = layers[i].Mask;
+                    if (m != null && !m.SupportsGpu)
+                    {
+                        allGpuSupported = false;
+                        break;
+                    }
+                }
+
+                var supportsCompute = SystemInfo.supportsComputeShaders;
+                var cs = supportsCompute && allGpuSupported ? Resources.Load<ComputeShader>("MaskAtlas") : null;
+                if (cs != null && cs.HasKernel("BuildAtlas"))
+                {
+                    try
+                    {
+                        return BuildAtlasGpu(cs, reuse, layers, worldWidth, pathLength, width, pathSamples, maskThreshold);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"[MaskAtlasGenerator] GPU build failed, falling back to CPU. {e.Message}");
+                    }
+                }
+
+                BuildAtlasCpu(reuse, layers, worldWidth, pathLength, width, pathSamples, maskThreshold);
+                return reuse;
+            }
+        }
+
         private static Texture2D BuildAtlasGpu(
             ComputeShader cs,
             Texture2D target,

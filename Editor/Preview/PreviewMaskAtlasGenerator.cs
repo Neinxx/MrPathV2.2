@@ -156,7 +156,26 @@ namespace MrPathV2.Editor.Preview
                 maskThreshold = m_Material.GetFloat(PreviewShaderContracts.Properties.MaskThreshold);
             }
 
-            return PreviewPipelineUtility.BuildMaskAtlas(existingAtlas, layerInfos, worldWidth, effectivePathLength, 256, maskThreshold);
+            // 自适应纵向采样数：根据路径长度建议取样，避免沿途分块
+            // 从 Profile 读取每米采样配置，遵循依赖注入
+            var metersPerSample = Mathf.Max(0.1f, m_Profile.maskMetersPerSample);
+            var pathSamples = MaskAtlasGenerator.SuggestPathSamples(effectivePathLength, metersPerSample, 64, 2048);
+
+            var atlas = MaskAtlasGenerator.BuildMaskAtlas(
+                existingAtlas,
+                layerInfos,
+                worldWidth,
+                effectivePathLength,
+                256,
+                maskThreshold,
+                pathSamples);
+
+            // 与材质同步 PathSamples 值，保证采样一致
+            if (m_Material && m_Material.HasProperty(PreviewShaderContracts.Properties.PathSamples))
+            {
+                m_Material.SetFloat(PreviewShaderContracts.Properties.PathSamples, pathSamples);
+            }
+            return atlas;
         }
 
         /// <summary>
@@ -171,7 +190,16 @@ namespace MrPathV2.Editor.Preview
             var safeAtlas = maskAtlas ? maskAtlas : Texture2D.whiteTexture;
             m_Material.SetTexture(PreviewShaderContracts.Properties.MaskAtlas, safeAtlas);
             m_Material.SetFloat(PreviewShaderContracts.Properties.AtlasInvHeight, safeAtlas && safeAtlas.height > 0 ? 1f / safeAtlas.height : 1f);
-            m_Material.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
+            // PathSamples 已在 BuildAtlasFromLayerInfos 中根据路径长度自适应设置
+            if (maskAtlas && m_Material.HasProperty(PreviewShaderContracts.Properties.PathSamples))
+            {
+                // 根据纹理高度反推每层行数：height = layerCount * pathSamples
+                var layerCount = m_Material.HasProperty(PreviewShaderContracts.Properties.LayerCount)
+                    ? Mathf.Max(1, m_Material.GetInt(PreviewShaderContracts.Properties.LayerCount))
+                    : 1;
+                var ps = Mathf.Max(1, maskAtlas.height / Mathf.Max(1, layerCount));
+                m_Material.SetFloat(PreviewShaderContracts.Properties.PathSamples, ps);
+            }
             // Stylized shader expects layer index uniform (always 0 for single-layer preview)
             m_Material.SetFloat(PreviewShaderContracts.Properties.LayerIndex, 0f);
         }

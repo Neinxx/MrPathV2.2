@@ -74,7 +74,8 @@ namespace MrPathV2.Editor.Preview
                 adv.previewCapAAWidthPixels,
                 adv.previewSeamScale,
                 (int)adv.previewCapType,
-                adv.previewDefaultDashPixels
+                adv.previewDefaultDashPixels,
+                adv.previewFastDashedMode
             );
             _mLine.ApplyPreviewConfig(cfg);
         }

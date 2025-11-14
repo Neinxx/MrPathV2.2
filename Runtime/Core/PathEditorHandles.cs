@@ -1,5 +1,6 @@
 // PathEditorHandles.cs
 
+#if UNITY_EDITOR
 using MrPathV2.Runtime.Interfaces;
 using MrPathV2.Runtime.Preview;
 using MrPathV2.Runtime.Settings;
@@ -8,23 +9,8 @@ using UnityEngine;
 
 namespace MrPathV2.Runtime.Core
 {
-    /// <summary>
-    ///     【最终定稿 • 天之纲领】
-    ///     路径编辑器句柄的“舞台监督”与“共享法器库”。
-    ///     它的形态已臻于化境，职责简化到了极致：
-    ///     1. 调度 (Dispatch): 作为编辑器工具的总入口，调用当前激活的“法则”进行自我绘制和交互。
-    ///     2. 共享 (Share): 提供高度可复用的绘制“神通”(如DrawHandle)，供所有法则统一调用，确保风格一致。
-    ///     3. 通用 (Universal): 处理不属于任何特定法则的通用逻辑（如插入点预览）。
-    ///     它本身不再包含任何关于颜色、尺寸、或特定曲线的绘制逻辑，达到了前所未有的纯净与优雅。
-    /// </summary>
     public static class PathEditorHandles
     {
-
-        #region 核心调度 (Core Dispatch)
-
-        /// <summary>
-        ///     绘制调度的总入口。
-        /// </summary>
         public static void Draw(ref HandleDrawContext context)
         {
             var creator = context.Creator;
@@ -36,25 +22,11 @@ namespace MrPathV2.Runtime.Core
             var strategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
             if (strategy == null) return;
 
-            // 步骤 1: 委托法则进行自我感知（悬停检测）
             UpdateHoverState(ref context, strategy);
-
-            // 步骤 2: 委托法则进行自我描绘（绘制曲线和Handle）
             strategy.DrawHandles(ref context);
-
-            // 步骤 3: 绘制通用的插入预览
             DrawInsertionPreviewHandle(ref context, camera, strategy.drawingStyle);
         }
 
-        #endregion
-
-
-        #region 共享神通 (Shared Techniques)
-
-        /// <summary>
-        ///     【共享神通】一个纯粹的绘制执行者。
-        ///     它不再关心颜色和尺寸来自哪里，只负责根据传入的Style来执行绘制和交互。
-        /// </summary>
         public static void DrawHandle(Vector3 localPos, int flatIndex, HandleStyle style, ref HandleDrawContext context, Camera camera)
         {
             var creator = context.Creator;
@@ -62,22 +34,14 @@ namespace MrPathV2.Runtime.Core
 
             var isHovered = flatIndex == context.HoveredPointIndex;
 
-            // --- 【【【 最终核心修正：斩断旧因果 】】】 ---
-
-            // 1. (错误代码) var hoverStyle = context.creator.profile.strategy.drawingStyle.hoverStyle;
-
-            // 2. (正确代码) 安全地从注册中心获取当前法则，并从中取得悬停样式
             var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
             if (!currentStrategy || currentStrategy.drawingStyle == null)
             {
-                // 如果获取不到法则或样式，绘制一个默认的红色错误提示Handle，防止后续代码报错
                 Handles.color = Color.red;
                 Handles.SphereHandleCap(0, worldPos, Quaternion.identity, HandleUtility.GetHandleSize(worldPos) * 0.1f, EventType.Repaint);
                 return;
             }
             var hoverStyle = currentStrategy.drawingStyle.hoverStyle;
-
-            // --- 【【【 修正结束 】】】 ---
 
             var finalStyle = isHovered ? hoverStyle : style;
             var size = isHovered ? finalStyle.size * 1.2f : finalStyle.size;
@@ -88,7 +52,6 @@ namespace MrPathV2.Runtime.Core
             Handles.color = finalStyle.borderColor;
             Handles.DrawWireDisc(worldPos, camera.transform.forward, handleSize * size, 2f);
 
-            // 交互逻辑不变
             Handles.color = Color.clear;
             EditorGUI.BeginChangeCheck();
             var newWorldPos = Handles.FreeMoveHandle(worldPos, Quaternion.identity, handleSize * size * 1.2f, Vector3.zero, Handles.RectangleHandleCap);
@@ -96,65 +59,41 @@ namespace MrPathV2.Runtime.Core
             {
                 Undo.RecordObject(creator, "Move Path Point");
 
-                // 编辑器在创建命令之前决定是否需要地形吸附
                 var finalPos = newWorldPos;
                 if (creator.profile && creator.profile.snapToTerrain && context.HeightProvider != null)
                 {
                     finalPos.y = context.HeightProvider.GetHeight(finalPos);
                 }
 
-                // 纯命令：仅记录最终位置数据
                 creator.ExecuteCommand(new MovePointCommand(flatIndex, finalPos));
             }
         }
 
-        #endregion
-        #region 公共结构 (Public Structs)
-
-        /// <summary>
-        ///     Handle绘制的上下文信息包，在各个绘制方法之间传递状态。
-        /// </summary>
         public struct HandleDrawContext
         {
             public PathCreator Creator;
             public IHeightProvider HeightProvider;
             public PathSpine? LatestSpine;
             public bool IsDragging;
-            public int HoveredPointIndex; // 扁平化索引
+            public int HoveredPointIndex;
             public int HoveredSegmentIndex;
             public float HoveredPathT;
-            public PreviewLineRenderer LineRenderer; // 线条渲染器
-            // 屏幕采样步长(像素)：由编辑器设置注入，Runtime 不依赖 Editor。
+            public PreviewLineRenderer LineRenderer;
             public float PreviewMaxPixelStep;
-            // 是否采用 Unity Splines 风格的直接绘制（Editor Handles），避免自定义采样与批次开销。
             public bool UseSplinesStyle;
-            // 拖拽期间仅绘制活动段（以及邻接段），显著降低绘制负载
             public bool DrawActiveSegmentOnly;
-            // 邻接段范围（如1表示绘制左右相邻各1段）
             public int DragNeighborRange;
-            // 场景相机是否正在移动（平移/旋转），用于降级绘制以保障流畅度
             public bool IsCameraMoving;
-            // 分段折线缓存（Spline风格绘制用），减少采样与GC
             public AdaptivePolylineCache PolylineCache;
         }
-
-        #endregion
-
-        #region 通用逻辑 (Universal Logic)
 
         private static void UpdateHoverState(ref HandleDrawContext context, PathStrategy strategy)
         {
             if (context.IsDragging) return;
-
-            // 先重置点悬停状态，防止上一帧遗留
             context.HoveredPointIndex = -1;
-
-            // 将“哪个点被悬停”的复杂判断，完全交给法则自己去处理
             strategy.UpdatePointHover(ref context);
-
             if (context.HoveredPointIndex == -1)
             {
-                // 如果没有点被悬停，才进行“线”的悬停检测
                 UpdatePathHover(ref context);
             }
             else
@@ -172,9 +111,8 @@ namespace MrPathV2.Runtime.Core
             context.HoveredSegmentIndex = -1;
             context.HoveredPathT = -1;
 
-            // 动态细分采样：拖拽或相机移动时降低采样，减少CPU负载
             var resolution = (context.IsDragging || context.IsCameraMoving) ? 12 : 40;
-            const float pickThreshold = 12f; // 屏幕像素，值越大越容易选中
+            const float pickThreshold = 12f;
             var pickThresholdSqr = pickThreshold * pickThreshold;
 
             var currentEvent = Event.current;
@@ -221,7 +159,6 @@ namespace MrPathV2.Runtime.Core
                 Handles.DrawWireDisc(previewPos, camera.transform.forward, handleSize * previewStyle.size, 1.5f);
             }
         }
-
-        #endregion
     }
 }
+#endif

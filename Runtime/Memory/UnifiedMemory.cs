@@ -8,6 +8,6 @@ namespace MrPathV2.Runtime.Memory
         /// <summary>
         ///     全局单例实例。
         /// </summary>
-        public static UnifiedMemoryManager Instance => UnifiedMemoryManager.Instance;
+        public static IUnifiedMemoryManager Instance => UnifiedMemoryManager.Instance;
     }
 }

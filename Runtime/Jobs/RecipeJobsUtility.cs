@@ -13,6 +13,26 @@ using Object = UnityEngine.Object;
 
 namespace MrPathV2.Runtime.Jobs
 {
+    public struct RecipeBuildOptions
+    {
+        public int AtlasWidth;
+        public int PathSamples;
+        public int StripResolution;
+
+        public static RecipeBuildOptions Default => new RecipeBuildOptions
+        {
+            AtlasWidth = 256,
+            PathSamples = 64,
+            StripResolution = 128
+        };
+
+        public void Normalize()
+        {
+            AtlasWidth = Mathf.Max(1, AtlasWidth);
+            PathSamples = Mathf.Max(1, PathSamples);
+            StripResolution = Mathf.Max(1, StripResolution);
+        }
+    }
     /// <summary>
     ///     将 StylizedRoadRecipe 的数据烘焙为 Job 友好的结构。
     ///     统一生成遮罩采样条（Strip），并记录 BlendMode 与不透明度，供预览与地形涂刷共享。
@@ -42,11 +62,11 @@ namespace MrPathV2.Runtime.Jobs
         public int Length { get; set; }
 
         public RecipeData(PathProfile pathProfile, Dictionary<TerrainLayer, int> terrainLayerMap,
-            float roadWorldWidth, float roadWorldLength, Allocator allocator, float maskThreshold = 0f) : this()
+            float roadWorldWidth, float roadWorldLength, Allocator allocator, float maskThreshold = 0f, RecipeBuildOptions? options = null) : this()
         {
             MaskThreshold = Mathf.Clamp01(maskThreshold);
             // 初始化基础数据结构
-            InitializeBaseData(pathProfile, allocator);
+            InitializeBaseData(pathProfile, allocator, options ?? RecipeBuildOptions.Default);
 
             // 初始化图层相关数据
             InitializeLayerData(pathProfile, terrainLayerMap, roadWorldWidth, roadWorldLength);
@@ -66,8 +86,9 @@ namespace MrPathV2.Runtime.Jobs
         /// <summary>
         ///     初始化基础数据结构
         /// </summary>
-        private void InitializeBaseData(PathProfile pathProfile, Allocator allocator)
+        private void InitializeBaseData(PathProfile pathProfile, Allocator allocator, RecipeBuildOptions buildOptions)
         {
+            buildOptions.Normalize();
             var roadLayers = pathProfile?.roadRecipe?.GetLayers()?.Where(l => l != null && l.enabled).ToArray() ?? Array.Empty<RoadLayer>();
             Length = roadLayers.Length;
             TerrainLayerIndices = NativeArrayExtensions.CreateTracked<int>(Length, allocator);
@@ -75,7 +96,7 @@ namespace MrPathV2.Runtime.Jobs
             Opacities = NativeArrayExtensions.CreateTracked<float>(Length, allocator);
 
             // 统一采样分辨率（足够平滑且计算开销低）
-            StripResolution = 128;
+            StripResolution = buildOptions.StripResolution;
             Strips = NativeArrayExtensions.CreateTracked<float>(math.max(1, StripResolution) * math.max(1, Length), allocator);
             StripSlices = NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
             GradientKeySlices = NativeArrayExtensions.CreateTracked<int2>(Length, allocator);
@@ -84,8 +105,8 @@ namespace MrPathV2.Runtime.Jobs
             MaskLut256 = NativeArrayExtensions.CreateTracked<float4>(1, allocator); // length 1, minimal
 
             // 设定 MaskAtlas 分辨率（与 Preview 保持一致，可后续参数化）
-            AtlasWidth = 256;
-            PathSamples = 64; // 纵向采样数，可后续做成可配置
+            AtlasWidth = buildOptions.AtlasWidth;
+            PathSamples = buildOptions.PathSamples;
             AtlasHeight = math.max(1, Length * PathSamples);
             MaskAtlas = NativeArrayExtensions.CreateTracked<float>(AtlasWidth * AtlasHeight, allocator);
         }
@@ -282,7 +303,7 @@ namespace MrPathV2.Runtime.Jobs
 
             // 与预览一致：当开启不透明预览时使用 0.2 的遮罩阈值，否则为 0
             var threshold = pathProfile != null && pathProfile.opaquePreview ? 0.2f : 0f;
-            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent, threshold);
+            return new RecipeData(pathProfile, map, width, length, Allocator.Persistent, threshold, RecipeBuildOptions.Default);
         }
 
         /// <summary>
@@ -302,7 +323,7 @@ namespace MrPathV2.Runtime.Jobs
             const float defaultWorldWidth = 5f; // 与 PathProfile 默认一致
             const float defaultPathLength = 100f; // 与预览遮罩采样默认一致
 
-            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator);
+            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator, 0f, RecipeBuildOptions.Default);
 
 #if UNITY_EDITOR
             if (Application.isPlaying)
@@ -327,7 +348,7 @@ namespace MrPathV2.Runtime.Jobs
             const float defaultWorldWidth = 5f;
             const float defaultPathLength = 100f;
 
-            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator);
+            var data = new RecipeData(tmpProfile, null, defaultWorldWidth, defaultPathLength, allocator, 0f, RecipeBuildOptions.Default);
 
 #if UNITY_EDITOR
             if (Application.isPlaying)

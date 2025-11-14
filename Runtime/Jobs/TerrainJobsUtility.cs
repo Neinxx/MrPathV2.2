@@ -463,34 +463,30 @@ namespace MrPathV2.Runtime.Jobs
 
         public static void NormalizeWeightsKeep(NativeArray<float> alphamaps, int baseIndex, int layerCount, int firstValidSplatIndex)
         {
-            var paintedCount = 0;
             var total = 0f;
+            var maxVal = -1f;
+            var maxIdx = -1;
             for (var i = 0; i < layerCount; i++)
             {
                 var v = alphamaps[baseIndex + i];
                 total += v;
-                if (v > 1e-4f) paintedCount++;
+                if (v > maxVal)
+                {
+                    maxVal = v;
+                    maxIdx = i;
+                }
             }
 
-            switch (paintedCount)
+            var normalize = total > 1e-5f ? 1f : 0f;
+            var invTotal = normalize > 0f ? 1f / total : 0f;
+            var keepIdx = firstValidSplatIndex >= 0 ? firstValidSplatIndex : (maxIdx >= 0 ? maxIdx : 0);
+
+            for (var i = 0; i < layerCount; i++)
             {
-                case > 1 when total > 1e-5f:
-                {
-                    var invTotal = 1f / total;
-                    for (var i = 0; i < layerCount; i++)
-                    {
-                        alphamaps[baseIndex + i] *= invTotal;
-                    }
-                    break;
-                }
-                case 0 when firstValidSplatIndex >= 0:
-                {
-                    for (var i = 0; i < layerCount; i++)
-                    {
-                        alphamaps[baseIndex + i] = i == firstValidSplatIndex ? 1f : 0f;
-                    }
-                    break;
-                }
+                var v = alphamaps[baseIndex + i];
+                var scaled = v * invTotal;
+                var kept = i == keepIdx ? 1f : 0f;
+                alphamaps[baseIndex + i] = normalize > 0f ? scaled : kept;
             }
         }
     }

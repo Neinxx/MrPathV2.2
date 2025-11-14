@@ -47,6 +47,10 @@ namespace MrPathV2.Runtime.Core
         [Tooltip("不透明预览：开启后预览为完全不透明，不与地形颜色混合。")]
         public bool opaquePreview;
 
+        [Header("遮罩采样")]
+        [Tooltip("沿路径方向的遮罩采样密度（每多少米采一行）。数值越小，沿途越平滑但Atlas越高。")]
+        [Min(0.1f)] public float maskMetersPerSample = 0.75f;
+
         [Header("Mask Settings")]
         [Tooltip("Tiling for the mask, controlling how the mask texture repeats.")]
         public Vector2 maskTiling = new Vector2(1f, 1f);

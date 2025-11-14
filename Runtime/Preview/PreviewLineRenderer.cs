@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Memory;
 using Unity.Collections;
@@ -106,6 +105,17 @@ namespace MrPathV2.Runtime.Preview
         private Bounds _gpuDrawBounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
         // 默认虚线长度（像素），作为样式未设置时的兜底值
         private float _defaultDashPixels = 10f;
+        private bool _fastDashed;
+        private float _collinearCosThreshold = 0.998f;
+        private int _maxPolylinePoints = 4096;
+
+        private readonly Dictionary<Color, List<LineSegment>> _simpleGroupsCache = new Dictionary<Color, List<LineSegment>>();
+        private readonly Dictionary<(Color color, float thickness), List<LineSegment>> _aaGroupsCache = new Dictionary<(Color color, float thickness), List<LineSegment>>();
+        private readonly Dictionary<(Color color, float dashSize), List<LineSegment>> _dashedGroupsCache = new Dictionary<(Color color, float dashSize), List<LineSegment>>();
+        private Vector3[] _pointsBuffer;
+        private Vector3[] _pointsExact;
+        private List<Vector3> _polyBuffer;
+        private Vector3[] _polyExact;
 
         #endregion
 
@@ -419,9 +429,10 @@ namespace MrPathV2.Runtime.Preview
                 }
 
                 // 按类型分组并排序
-                foreach (var line in _lineSegments.Where(ShouldRenderLine))
+                for (var i = 0; i < _lineSegments.Count; i++)
                 {
-                    _batchedLines[line.Type].Add(line);
+                    var line = _lineSegments[i];
+                    if (ShouldRenderLine(line)) _batchedLines[line.Type].Add(line);
                 }
 
                 // 按优先级排序每个批次
@@ -458,23 +469,22 @@ namespace MrPathV2.Runtime.Preview
 #if UNITY_EDITOR
             var batch = _batchedLines[type];
             if (batch.Count == 0) return; // 提前返回
+            foreach (var kv in _simpleGroupsCache) kv.Value.Clear();
+            foreach (var kv in _aaGroupsCache) kv.Value.Clear();
+            foreach (var kv in _dashedGroupsCache) kv.Value.Clear();
 
-            // 分组：提升批量绘制效率，减少颜色/宽度切换与API调用次数
-            var simpleGroups = new Dictionary<Color, List<LineSegment>>();                  // 普通线（非AA、非虚线）
-            var aaGroups = new Dictionary<(Color color, float thickness), List<LineSegment>>(); // 抗锯齿线（按颜色+厚度分组）
-            var dashedGroups = new Dictionary<(Color color, float dashSize), List<LineSegment>>(); // 虚线（按颜色+虚线长度分组）
-
-            foreach (var line in batch)
+            for (var idx = 0; idx < batch.Count; idx++)
             {
+                var line = batch[idx];
                 var style = line.Style;
                 if (style.dashed)
                 {
                     var dash = Mathf.Max(1f, style.dashSize > 0 ? style.dashSize : _defaultDashPixels);
                     var key = (style.color, dash);
-                    if (!dashedGroups.TryGetValue(key, out var list))
+                    if (!_dashedGroupsCache.TryGetValue(key, out var list))
                     {
                         list = new List<LineSegment>(64);
-                        dashedGroups[key] = list;
+                        _dashedGroupsCache[key] = list;
                     }
                     list.Add(line);
                     continue;
@@ -483,26 +493,26 @@ namespace MrPathV2.Runtime.Preview
                 if (style.antiAliased)
                 {
                     var key = (style.color, Mathf.Max(0.5f, style.thickness));
-                    if (!aaGroups.TryGetValue(key, out var list))
+                    if (!_aaGroupsCache.TryGetValue(key, out var list))
                     {
                         list = new List<LineSegment>(64);
-                        aaGroups[key] = list;
+                        _aaGroupsCache[key] = list;
                     }
                     list.Add(line);
                     continue;
                 }
 
                 // 普通线（DrawLines 可批量）
-                if (!simpleGroups.TryGetValue(style.color, out var slist))
+                if (!_simpleGroupsCache.TryGetValue(style.color, out var slist))
                 {
                     slist = new List<LineSegment>(128);
-                    simpleGroups[style.color] = slist;
+                    _simpleGroupsCache[style.color] = slist;
                 }
                 slist.Add(line);
             }
 
             // 绘制普通线：一次性批量调用 Handles.DrawLines
-            foreach (var kv in simpleGroups)
+            foreach (var kv in _simpleGroupsCache)
             {
                 var color = kv.Key;
                 var lines = kv.Value;
@@ -510,20 +520,25 @@ namespace MrPathV2.Runtime.Preview
 
                 using (new Handles.DrawingScope(color))
                 {
-                    var points = new Vector3[lines.Count * 2];
-                    var idx = 0;
+                    var needed = lines.Count * 2;
+                    if (_pointsBuffer == null || _pointsBuffer.Length < needed)
+                        _pointsBuffer = new Vector3[Mathf.NextPowerOfTwo(needed)];
+                    if (_pointsExact == null || _pointsExact.Length != needed)
+                        _pointsExact = new Vector3[needed];
+                    var pi = 0;
                     for (var i = 0; i < lines.Count; i++)
                     {
-                        points[idx++] = lines[i].Start;
-                        points[idx++] = lines[i].End;
+                        _pointsBuffer[pi++] = lines[i].Start;
+                        _pointsBuffer[pi++] = lines[i].End;
                     }
-                    Handles.DrawLines(points);
+                    Array.Copy(_pointsBuffer, 0, _pointsExact, 0, needed);
+                    Handles.DrawLines(_pointsExact);
                 }
             }
 
             // 绘制抗锯齿线：按组构造连续折线，减少 DrawAAPolyLine 调用
             const float eps = 1e-4f;
-            foreach (var kv in aaGroups)
+            foreach (var kv in _aaGroupsCache)
             {
                 var (color, width) = kv.Key;
                 var lines = kv.Value;
@@ -531,7 +546,8 @@ namespace MrPathV2.Runtime.Preview
 
                 using (new Handles.DrawingScope(color))
                 {
-                    List<Vector3> poly = null;
+                    _polyBuffer ??= new List<Vector3>(8);
+                    var poly = _polyBuffer;
                     Vector3 lastEnd = default;
                     var hasPoly = false;
                     for (var i = 0; i < lines.Count; i++)
@@ -539,7 +555,9 @@ namespace MrPathV2.Runtime.Preview
                         var seg = lines[i];
                         if (!hasPoly)
                         {
-                            poly = new List<Vector3>(8) { seg.Start, seg.End };
+                            poly.Clear();
+                            poly.Add(seg.Start);
+                            poly.Add(seg.End);
                             lastEnd = seg.End;
                             hasPoly = true;
                             continue;
@@ -554,7 +572,12 @@ namespace MrPathV2.Runtime.Preview
                         else
                         {
                             if (poly.Count >= 2)
-                                Handles.DrawAAPolyLine(width, poly.ToArray());
+                            {
+                                if (_polyExact == null || _polyExact.Length != poly.Count)
+                                    _polyExact = new Vector3[poly.Count];
+                                for (var k = 0; k < poly.Count; k++) _polyExact[k] = poly[k];
+                                Handles.DrawAAPolyLine(width, _polyExact);
+                            }
                             poly.Clear();
                             poly.Add(seg.Start);
                             poly.Add(seg.End);
@@ -562,20 +585,37 @@ namespace MrPathV2.Runtime.Preview
                         }
                     }
                     if (hasPoly && poly != null && poly.Count >= 2)
-                        Handles.DrawAAPolyLine(width, poly.ToArray());
+                    {
+                        if (_polyExact == null || _polyExact.Length != poly.Count)
+                            _polyExact = new Vector3[poly.Count];
+                        for (var k = 0; k < poly.Count; k++) _polyExact[k] = poly[k];
+                        Handles.DrawAAPolyLine(width, _polyExact);
+                    }
                 }
             }
 
             // 绘制虚线：按组设置颜色与虚线长度，逐段调用（API不支持批量）
-            foreach (var kv in dashedGroups)
+            foreach (var kv in _dashedGroupsCache)
             {
                 var (color, dash) = kv.Key;
                 var lines = kv.Value;
                 if (lines == null || lines.Count == 0) continue;
                 using (new Handles.DrawingScope(color))
                 {
-                    for (var i = 0; i < lines.Count; i++)
-                        Handles.DrawDottedLine(lines[i].Start, lines[i].End, dash);
+                    if (_fastDashed)
+                    {
+                        _polyBuffer ??= new List<Vector3>(lines.Count + 1);
+                        _polyBuffer.Clear();
+                        _polyBuffer.Add(lines[0].Start);
+                        for (var i = 0; i < lines.Count; i++) _polyBuffer.Add(lines[i].End);
+                        if (_polyExact == null || _polyExact.Length != _polyBuffer.Count) _polyExact = new Vector3[_polyBuffer.Count];
+                        for (var i = 0; i < _polyBuffer.Count; i++) _polyExact[i] = _polyBuffer[i];
+                        Handles.DrawAAPolyLine(1f, _polyExact);
+                    }
+                    else
+                    {
+                        for (var i = 0; i < lines.Count; i++) Handles.DrawDottedLine(lines[i].Start, lines[i].End, dash);
+                    }
                 }
             }
 #endif
@@ -898,6 +938,7 @@ namespace MrPathV2.Runtime.Preview
             if (!cfg.IsValid) return;
 
             _defaultDashPixels = Mathf.Max(1f, cfg.DefaultDashPixels);
+            _fastDashed = cfg.FastDashed;
 
 #if UNITY_EDITOR
             if (_gpuMat)

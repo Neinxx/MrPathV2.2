@@ -206,12 +206,6 @@ namespace MrPathV2.Editor.Terrain
             var backend = adv != null ? adv.paintingBackend : PaintingBackend.CPUCompute;
             var threshold = adv != null ? Mathf.Max(1, adv.gpuAutoSwitchThreshold) : 50000; // 默认阈值
 
-            bool UseGpu()
-            {
-                // GPU绘制未开放：统一返回false，彻底禁用GPU路径
-                return false;
-            }
-
             // 统一切换到 GPU 适配器（依赖注入友好），或使用 CPU 双通道实现
             return new CPUJobTwoPass();
         }

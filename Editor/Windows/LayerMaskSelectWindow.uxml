@@ -1,8 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements"
          xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements"
          noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
-    <Style src="project://database/Assets/__temp/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor"/>
-    <Style src="project://database/Assets/__temp/MrPathV2/Editor/Windows/LayerMaskSelectWindow.uss?fileID=7433441132597879392&amp;guid=e6684fcf5e7723c48b63f17b0df9d9c4&amp;type=3#LayerMaskSelectWindow"/>
+    
     <ui:GroupBox class="settings-group" style="flex-shrink: 1; flex-grow: 1; justify-content: space-between;">
         <uie:ToolbarPopupSearchField focusable="true" name="ToolbarSearchField"
                                      style="width: initial; flex-grow: 0; height: 17px; margin-left: 0; margin-right: 0; margin-bottom: 3px; opacity: 0.47;"/>
@@ -19,9 +18,9 @@
             <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]"
                               name="MaskDropDownField"
                               style="margin-right: 0; min-width: auto; max-width: none; width: 217px; flex-shrink: 1; flex-grow: 1;"/>
-            <ui:TextField picking-mode="Ignore" value="filler text" text="Maskname" name="MaskName"
-                          binding-path="MaskName"
-                          style="width: auto; min-height: auto; flex-shrink: 1; flex-grow: 1; margin-right: 3px; max-height: none; margin-top: 0; margin-bottom: 0; opacity: 0.56; justify-content: space-between; -unity-text-align: middle-center; -unity-font-style: bold-and-italic; color: rgb(210, 210, 210); margin-left: 1px;"/>
+            <ui:TextField picking-mode="Ignore" name="MaskName"
+                              binding-path="MaskName"
+                              style="width: auto; min-height: auto; flex-shrink: 1; flex-grow: 1; margin-right: 3px; max-height: none; margin-top: 0; margin-bottom: 0; opacity: 0.56; justify-content: space-between; -unity-text-align: middle-center; -unity-font-style: bold-and-italic; color: rgb(210, 210, 210); margin-left: 1px;"/>
             <ui:Button text="M" display-tooltip-when-elided="true" name="CreateMask" binding-path="CreateMask"
                        style="flex-shrink: 0; flex-grow: 0; min-height: 18px; width: 18px; margin-top: 0; margin-bottom: 0; max-height: 18px; white-space: normal; -unity-text-align: middle-center; opacity: 0.53; -unity-font-style: bold; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; font-size: 12px; color: rgb(164, 221, 154); background-color: rgb(47, 94, 52); border-top-left-radius: 55px; border-bottom-left-radius: 55px; border-top-right-radius: 55px; border-bottom-right-radius: 55px; height: 18px; margin-left: 0; margin-right: 0; min-width: 18px; max-width: 18px;"/>
         </ui:VisualElement>

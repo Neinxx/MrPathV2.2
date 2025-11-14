@@ -69,6 +69,7 @@ namespace MrPathV2.Editor.Terrain
 
             NativeArray<RoadPixelInfo> pixelInfoMap = default;
 
+            NativeArray<byte> recipeFlags = default;
             try
             {
                 // 第一阶段：定位道路像素与参数
@@ -89,6 +90,12 @@ namespace MrPathV2.Editor.Terrain
                 var handle1 = findJob.Schedule(totalPixelsInBounds, 128);
 
                 // 第二阶段：按配方混合到 alphamaps
+                recipeFlags = NativeArrayExtensions.CreateTracked<byte>(layers, Allocator.TempJob);
+                for (var i = 0; i < recipeData.Length; i++)
+                {
+                    var idx = recipeData.TerrainLayerIndices[i];
+                    if (idx >= 0 && idx < layers) recipeFlags[idx] = 1;
+                }
                 var paintJob = new PaintSplatmapJob
                 {
                     Recipe = recipeData,
@@ -100,7 +107,8 @@ namespace MrPathV2.Editor.Terrain
                     Alphamaps = alphamaps1D,
                     // 与预览保持一致：启用不透明绘制时进行 AlphaClip（阈值 0.2）
                     OpaquePainting = profileData.OpaquePreview,
-                    AlphaClipThreshold = profileData.OpaquePreview ? 0.2f : 0f
+                    AlphaClipThreshold = profileData.OpaquePreview ? 0.2f : 0f,
+                    RecipeLayerFlags = recipeFlags
                 };
                 var combined = paintJob.Schedule(totalPixelsInBounds, 128, handle1);
 
@@ -136,6 +144,7 @@ namespace MrPathV2.Editor.Terrain
                 // 安全释放 NativeArray
                 alphamaps1D.SafeDispose();
                 pixelInfoMap.SafeDispose();
+                recipeFlags.SafeDispose();
             }
         }
 

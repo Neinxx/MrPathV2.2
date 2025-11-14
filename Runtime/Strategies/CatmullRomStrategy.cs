@@ -1,6 +1,8 @@
 using MrPathV2.Runtime.Core;
 using MrPathV2.Runtime.Preview;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 
 namespace MrPathV2.Runtime.Strategies
@@ -9,7 +11,7 @@ namespace MrPathV2.Runtime.Strategies
     ///     Defines the mathematical and editor behavior for a Catmull-Rom spline path.
     /// </summary>
     [CreateAssetMenu(fileName = "CatmullRomStrategy", menuName = "MrPath/Strategies/Catmull-Rom")]
-    public class CatmullRomStrategy : PathStrategy
+    public partial class CatmullRomStrategy : PathStrategy
     {
         #region Math & Data Implementation
 

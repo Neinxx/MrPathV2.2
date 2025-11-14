@@ -93,7 +93,7 @@ namespace MrPathV2.Runtime.Core
             }
 
             var cts = CancellationTokenSource.CreateLinkedTokenSource(_globalCancellationSource.Token);
-            var tcs = new TaskCompletionSource<bool>();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             lock (_lock)
             {
@@ -111,9 +111,10 @@ namespace MrPathV2.Runtime.Core
                 }
 
                 cts.CancelAfter(operationTimeout);
-
-                // 执行操作
-                await operation(cts.Token);
+                using (cts.Token.Register(() => { try { tcs.TrySetResult(false); } catch { } }))
+                {
+                    await operation(cts.Token);
+                }
 
                 // 操作成功完成
                 tcs.SetResult(true);
@@ -169,7 +170,10 @@ namespace MrPathV2.Runtime.Core
                 {
                     kvp.Value.Cancel();
                 }
-
+                foreach (var kvp in _taskCompletions)
+                {
+                    try { kvp.Value.TrySetResult(false); } catch { }
+                }
                 //         Debug.Log($"[AsyncOperationManager] 已请求取消所有活动操作 ({_activeTasks.Count} 个)");
             }
         }
