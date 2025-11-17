@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 937364a6f82ac1c4c9fa8bfd9e3a43ee, type: 3}
   m_Name: perlin2
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 1.2, y: 1.27}
+  smooth: 0.332
+  tiling: {x: 5.86, y: 3.92}
   offset: {x: 0.03, y: 0}
   overallScale: 1
   strength: 1

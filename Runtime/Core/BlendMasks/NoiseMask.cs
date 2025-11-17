@@ -1,4 +1,5 @@
 using MrPathV2.Runtime.Core.Noise;
+using MrPathV2.Runtime.Core.NoiseRuntime;
 using UnityEngine;
 // for GpuMaskParamsData
 
@@ -39,10 +40,12 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         [Range(0f, 1f)] [Tooltip("上阈值（Edge2）。建议 > EdgeLow。")]
         public float edgeHigh = 0.75f;
 
+        private float _scaleX, _scaleY, _cos, _sin, _lac, _gain, _seedX, _seedY;
+        private int _oct;
+
         private void OnValidate()
         {
             if (uniformScale) noiseScale.y = noiseScale.x;
-            // 约束阈值范围并自动排序
             edgeLow = Mathf.Clamp01(edgeLow);
             edgeHigh = Mathf.Clamp01(edgeHigh);
             if (edgeHigh < edgeLow)
@@ -51,6 +54,27 @@ namespace MrPathV2.Runtime.Core.BlendMasks
                 edgeLow = edgeHigh;
                 edgeHigh = t;
             }
+            EnsurePrecomputed();
+            MaskChangeEvents.RaiseChanged(this);
+        }
+
+        private bool _ready;
+
+        private void EnsurePrecomputed()
+        {
+            _scaleX = noiseScale.x;
+            _scaleY = noiseScale.y;
+            var rad = rotationDeg * Mathf.Deg2Rad;
+            _cos = Mathf.Cos(rad);
+            _sin = Mathf.Sin(rad);
+            _oct = Mathf.Max(1, octaves);
+            _lac = Mathf.Max(1f, lacunarity);
+            _gain = Mathf.Clamp01(gain);
+            var sx = Mathf.Abs(Mathf.Sin(seed * 12.9898f) * 43758.5453f);
+            var sy = Mathf.Abs(Mathf.Sin(seed * 78.233f) * 12345.678f);
+            _seedX = sx - Mathf.Floor(sx);
+            _seedY = sy - Mathf.Floor(sy);
+            _ready = true;
         }
 
         /// <summary>
@@ -58,39 +82,22 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         /// </summary>
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
-            // 基于米制 tiling 的UV（主频率），再乘以 noiseScale（细调）并应用旋转
+            if (!_ready) EnsurePrecomputed();
             var u = TransformPosition(horizontalPosition, worldWidth, pathLength);
             var v = TransformPathPosition(pathProgress, pathLength);
-
-            var scale = uniformScale ? new Vector2(noiseScale.x, noiseScale.x) : noiseScale;
-            var uv = new Vector2(u * Mathf.Max(1e-5f, scale.x), v * Mathf.Max(1e-5f, scale.y));
-
-            var rad = rotationDeg * Mathf.Deg2Rad;
-            var cos = Mathf.Cos(rad);
-            var sin = Mathf.Sin(rad);
-            var ruv = new Vector2(uv.x * cos - uv.y * sin, uv.x * sin + uv.y * cos);
-
-            // 用 seed 产生确定性的偏移，保证随机但可复现
-            var sx = Mathf.Abs(Mathf.Sin(seed * 12.9898f) * 43758.5453f);
-            var sy = Mathf.Abs(Mathf.Sin(seed * 78.233f) * 12345.678f);
-            var seedOffset = new Vector2(sx - Mathf.Floor(sx), sy - Mathf.Floor(sy));
-            ruv += seedOffset;
-
-            // fBm 采样（Perlin 的多层叠加）：支持 Octaves / Lacunarity / Gain
-            var amplitude = 1f;
-            var frequency = 1f;
-            var sum = 0f;
-            var norm = 0f;
-            for (var i = 0; i < octaves; i++)
+            var p = new NoiseParamsDto
             {
-                var s = NoiseLutProvider.Sample01(ruv.x * frequency, ruv.y * frequency);
-                sum += s * amplitude;
-                norm += amplitude;
-                frequency *= Mathf.Max(1f, lacunarity);
-                amplitude *= Mathf.Clamp01(gain);
-            }
-            var noise = norm > 1e-5f ? sum / norm : 0f; // 归一化到 0..1
-
+                ScaleX = uniformScale ? _scaleX : noiseScale.x,
+                ScaleY = uniformScale ? _scaleX : _scaleY,
+                Cos = _cos,
+                Sin = _sin,
+                Octaves = _oct,
+                Lacunarity = _lac,
+                Gain = _gain,
+                SeedX = _seedX,
+                SeedY = _seedY
+            };
+            var noise = NoiseEvalUtils.EvaluateFbm01(p, u, v);
             var rawValue = noise * strength;
             return ApplyNoiseSmoothing(Mathf.Clamp01(rawValue));
         }
@@ -145,6 +152,10 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             dst.NoiseParams.UseAsymmetricEdges = useAsymmetricEdges;
             dst.NoiseParams.EdgeLow = edgeLow;
             dst.NoiseParams.EdgeHigh = edgeHigh;
+            dst.NoiseParams.Period = 0f;
+            dst.NoiseParams.Jitter = 0f;
+            dst.NoiseParams.Invert = 0;
+            dst.NoiseParams.Variant = 0;
         }
 
         private void OnNoiseScaleChanged()

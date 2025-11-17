@@ -232,6 +232,12 @@ namespace MrPathV2.Editor.Preview
         {
             if (m_Disposed) return;
 
+            if (!m_Subscribed)
+            {
+                MaskChangeEvents.Changed += OnMaskChanged;
+                m_Subscribed = true;
+            }
+
             if (profile == null || template == null)
             {
                 Clear();
@@ -239,18 +245,27 @@ namespace MrPathV2.Editor.Preview
             }
 
             var newHash = CalculateHash(profile, template, previewAlpha);
-            var needRefresh = newHash != m_LastHash || Current == null;
+            var needRefresh = newHash != m_LastHash || Current == null || m_ForceRefresh;
             m_LastHash = newHash;
 
             if (needRefresh)
             {
                 EnsureMaterial(template);
                 RefreshMaterial(profile, previewAlpha);
+                m_ForceRefresh = false;
             }
 
             // CPU-only：不进行GPU实时预览绑定
 
             m_Dirty = true;
+        }
+
+        private bool m_ForceRefresh;
+        private bool m_Subscribed;
+
+        private void OnMaskChanged(BlendMaskBase obj)
+        {
+            m_ForceRefresh = true;
         }
 
         private void ApplySplat(PathProfile profile, float alpha)
@@ -486,6 +501,51 @@ namespace MrPathV2.Editor.Preview
                             hash = hash * 31 + shoulder.enableLeftShoulder.GetHashCode();
                             hash = hash * 31 + shoulder.enableRightShoulder.GetHashCode();
                         }
+                        // EdgePerlinNoiseMask
+                        if (mask is EdgePerlinNoiseMask edge)
+                        {
+                            hash = hash * 31 + edge.edgeBandWidthRatio.GetHashCode();
+                            hash = hash * 31 + edge.edgeFalloff.GetHashCode();
+                            hash = hash * 31 + edge.enableLeftEdge.GetHashCode();
+                            hash = hash * 31 + edge.enableRightEdge.GetHashCode();
+                            hash = hash * 31 + edge.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + edge.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + edge.uniformScale.GetHashCode();
+                            hash = hash * 31 + edge.rotationDeg.GetHashCode();
+                            hash = hash * 31 + edge.octaves.GetHashCode();
+                            hash = hash * 31 + edge.lacunarity.GetHashCode();
+                            hash = hash * 31 + edge.gain.GetHashCode();
+                            hash = hash * 31 + edge.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + edge.edgeLow.GetHashCode();
+                            hash = hash * 31 + edge.edgeHigh.GetHashCode();
+                        }
+                        // StripeNoiseMask
+                        if (mask is StripeNoiseMask stripe)
+                        {
+                            hash = hash * 31 + stripe.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + stripe.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + stripe.uniformScale.GetHashCode();
+                            hash = hash * 31 + stripe.rotationDeg.GetHashCode();
+                            hash = hash * 31 + stripe.period.GetHashCode();
+                            hash = hash * 31 + stripe.jitter.GetHashCode();
+                            hash = hash * 31 + stripe.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + stripe.edgeLow.GetHashCode();
+                            hash = hash * 31 + stripe.edgeHigh.GetHashCode();
+                        }
+                        // WorleyNoiseMask
+                        if (mask is WorleyNoiseMask worley)
+                        {
+                            hash = hash * 31 + worley.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + worley.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + worley.uniformScale.GetHashCode();
+                            hash = hash * 31 + worley.rotationDeg.GetHashCode();
+                            hash = hash * 31 + worley.cellPeriod.GetHashCode();
+                            hash = hash * 31 + worley.jitter.GetHashCode();
+                            hash = hash * 31 + worley.invert.GetHashCode();
+                            hash = hash * 31 + worley.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + worley.edgeLow.GetHashCode();
+                            hash = hash * 31 + worley.edgeHigh.GetHashCode();
+                        }
                         }
                         catch
                         { /* Ignore exceptions to ensure hash process robustness */
@@ -505,6 +565,11 @@ namespace MrPathV2.Editor.Preview
         {
             if (m_Disposed) return;
             Clear();
+            if (m_Subscribed)
+            {
+                MaskChangeEvents.Changed -= OnMaskChanged;
+                m_Subscribed = false;
+            }
             m_Disposed = true;
         }
 

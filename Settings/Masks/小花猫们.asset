@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: "\u5C0F\u82B1\u732B\u4EEC"
   m_EditorClassIdentifier: 
   smooth: 0.551
-  tiling: {x: 2, y: 4.06}
+  tiling: {x: 2.31, y: 4.27}
   offset: {x: 0, y: -2.05}
   overallScale: 1
   mode: 1

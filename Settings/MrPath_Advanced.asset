@@ -15,6 +15,7 @@ MonoBehaviour:
   previewAAWidthPixels: 2
   previewCapAAWidthPixels: 4
   previewDefaultDashPixels: 8
+  previewFastDashedMode: 0
   previewCapType: 1
   previewSeamScale: 1
   previewMaxPixelStep: 6

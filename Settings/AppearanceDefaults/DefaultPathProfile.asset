@@ -72,5 +72,6 @@ MonoBehaviour:
   showPreviewMesh: 1
   enableDepthTest: 0
   opaquePreview: 0
+  maskMetersPerSample: 0.75
   maskTiling: {x: 4.34, y: 9.27}
-  roadRecipe: {fileID: 0}
+  roadRecipe: {fileID: 11400000, guid: 747a0f774da3d8049b612213b4e96e88, type: 2}

@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: "\u5927\u82B1\u732B\u67CF\u6797\u566A\u58F0"
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 1.68, y: 0.55}
+  tiling: {x: 5.3, y: -1.95}
   offset: {x: 0, y: 0}
-  overallScale: 1.01
+  overallScale: 1
   strength: 1
   seed: 0
   noiseScale: {x: 0.04, y: 0.04}
   uniformScale: 1
-  rotationDeg: 107
+  rotationDeg: 31
   octaves: 3
   lacunarity: 2.1
   gain: 0.474

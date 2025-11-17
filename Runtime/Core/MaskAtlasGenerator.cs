@@ -5,6 +5,10 @@ using MrPathV2.Runtime.Core.BlendMasks;
 using MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
 
 namespace MrPathV2.Runtime.Core
 {
@@ -300,34 +304,68 @@ namespace MrPathV2.Runtime.Core
         {
             var layerCount = layers.Count;
             var atlasHeight = layerCount * pathSamples;
-
-            // Init pixels
-            var pixels = new Color32[atlasWidth * atlasHeight];
-            for (var i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, 255);
-
-            for (var layerIndex = 0; layerIndex < layerCount; layerIndex++)
+            var workload = atlasWidth * atlasHeight;
+            var canParallel = workload >= 131072;
+            if (!canParallel)
             {
-                var layer = layers[layerIndex];
-                var mask = layer.Mask;
-
-                for (var py = 0; py < pathSamples; py++)
+                var data = new byte[atlasWidth * atlasHeight];
+                for (var i = 0; i < data.Length; i++) data[i] = 255;
+                for (var layerIndex = 0; layerIndex < layerCount; layerIndex++)
                 {
-                    var progress = (float)py / Mathf.Max(1, pathSamples - 1);
-                    for (var px = 0; px < atlasWidth; px++)
+                    var layer = layers[layerIndex];
+                    var mask = layer.Mask;
+                    for (var py = 0; py < pathSamples; py++)
                     {
-                        var across01 = (float)px / Mathf.Max(1, atlasWidth - 1);
-                        var across = across01 * 2.0f - 1.0f;
-                        var value = mask != null ? mask.Evaluate(across, progress, worldWidth, pathLength) : 1.0f;
-                        // 遮罩权重不再叠乘图层不透明度，保持与GPU路径一致（权重仅代表 mask）
-                        var shaped = maskThreshold <= 0f ? value : Mathf.Clamp01((value - maskThreshold) / Mathf.Max(1e-5f, 1f - maskThreshold));
-                        var finalValue = Mathf.Clamp01(shaped);
-                        var idx = py + layerIndex * pathSamples;
-                        pixels[px + idx * atlasWidth] = new Color32((byte)(finalValue * 255.0f), 0, 0, 255);
+                        var progress = (float)py / Mathf.Max(1, pathSamples - 1);
+                        for (var px = 0; px < atlasWidth; px++)
+                        {
+                            var across01 = (float)px / Mathf.Max(1, atlasWidth - 1);
+                            var across = across01 * 2.0f - 1.0f;
+                            var value = mask != null ? mask.Evaluate(across, progress, worldWidth, pathLength) : 1.0f;
+                            var shaped = maskThreshold <= 0f ? value : Mathf.Clamp01((value - maskThreshold) / Mathf.Max(1e-5f, 1f - maskThreshold));
+                            var finalValue = Mathf.Clamp01(shaped);
+                            var idx = py + layerIndex * pathSamples;
+                            data[px + idx * atlasWidth] = (byte)(finalValue * 255.0f);
+                        }
                     }
                 }
+                target.SetPixelData(data, 0);
+                target.Apply(false);
+                return;
             }
-            target.SetPixels32(pixels);
+            var maskParams = new GpuMaskParams[layerCount];
+            for (var i = 0; i < layerCount; i++) maskParams[i] = PackMaskParams(layers[i].Mask);
+            var lut = NoiseLutProvider.GetOrCreateLut();
+            var lutSize = lut ? lut.width : 0;
+            NativeArray<float> lutArr = default;
+            if (lutSize > 0)
+            {
+                var tmp = lut.GetPixels();
+                lutArr = new NativeArray<float>(lutSize * lutSize, Allocator.TempJob);
+                for (var i = 0; i < tmp.Length; i++) lutArr[i] = tmp[i].r;
+            }
+            var outR = new NativeArray<byte>(atlasWidth * atlasHeight, Allocator.TempJob);
+            var maskNative = new NativeArray<GpuMaskParams>(maskParams, Allocator.TempJob);
+            var job = new BuildMaskAtlasJob
+            {
+                outR = outR,
+                maskParams = maskNative,
+                noiseLut = lutArr,
+                noiseLutSize = lutSize,
+                atlasWidth = atlasWidth,
+                pathSamples = pathSamples,
+                worldWidth = worldWidth,
+                pathLength = pathLength,
+                maskThreshold = maskThreshold
+            };
+            var handle = job.Schedule(layerCount * pathSamples, 1);
+            handle.Complete();
+            var dataBytes = outR.ToArray();
+            target.SetPixelData(dataBytes, 0);
             target.Apply(false);
+            maskNative.Dispose();
+            outR.Dispose();
+            if (lutArr.IsCreated) lutArr.Dispose();
         }
 
         private static GpuMaskParams PackMaskParams(BlendMaskBase mask)
@@ -379,7 +417,10 @@ namespace MrPathV2.Runtime.Core
                 UseAsymmetricEdges = dto.NoiseParams.UseAsymmetricEdges ? 1 : 0,
                 EdgeLow = dto.NoiseParams.EdgeLow,
                 EdgeHigh = dto.NoiseParams.EdgeHigh,
-                Pad1 = 0f
+                Period = dto.NoiseParams.Period,
+                Jitter = dto.NoiseParams.Jitter,
+                Invert = dto.NoiseParams.Invert,
+                Variant = dto.NoiseParams.Variant
             };
 
             return gpuMask;
@@ -420,7 +461,10 @@ namespace MrPathV2.Runtime.Core
             public int UseAsymmetricEdges;
             public float EdgeLow;
             public float EdgeHigh;
-            public float Pad1;
+            public float Period;
+            public float Jitter;
+            public int Invert;
+            public int Variant;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -431,6 +475,201 @@ namespace MrPathV2.Runtime.Core
             public float Pad2, Pad3;
             public GpuNoiseMaskParams NoiseParams;
             public GpuShoulderMaskParams ShoulderParams;
+        }
+
+        [BurstCompile]
+        private struct BuildMaskAtlasJob : IJobParallelFor
+        {
+            [WriteOnly] public NativeArray<byte> outR;
+            [ReadOnly] public NativeArray<GpuMaskParams> maskParams;
+            [ReadOnly] public NativeArray<float> noiseLut;
+            [ReadOnly] public int noiseLutSize;
+            [ReadOnly] public int atlasWidth;
+            [ReadOnly] public int pathSamples;
+            [ReadOnly] public float worldWidth;
+            [ReadOnly] public float pathLength;
+            [ReadOnly] public float maskThreshold;
+
+            public void Execute(int index)
+            {
+                var layerIndex = index / pathSamples;
+                var py = index % pathSamples;
+                var progress = (float)py / math.max(1, pathSamples - 1);
+                var mp = maskParams[layerIndex];
+                for (var px = 0; px < atlasWidth; px++)
+                {
+                    var across01 = (float)px / math.max(1, atlasWidth - 1);
+                    var across = across01 * 2f - 1f;
+                    var value = EvaluateMask(mp, progress, across, worldWidth);
+                    var shaped = maskThreshold <= 0f ? value : math.saturate((value - maskThreshold) / math.max(1e-5f, 1f - maskThreshold));
+                    outR[px + index * atlasWidth] = (byte)(math.saturate(shaped) * 255f);
+                }
+            }
+
+            private float2 ComputeUV(float progress, float signedDistance, float roadWidth, float2 tiling, float2 offset)
+            {
+                var halfRoad = math.max(1e-4f, roadWidth * 0.5f);
+                var xNorm = math.clamp(signedDistance / halfRoad, -1f, 1f);
+                var u01 = 0.5f * (xNorm + 1f);
+                var repeatX = tiling.x;
+                var repeatY = tiling.y;
+                var denomX = math.abs(repeatX) < 1e-4f ? 1e-4f * (repeatX == 0f ? 1f : math.sign(repeatX)) : repeatX;
+                var denomY = math.abs(repeatY) < 1e-4f ? 1e-4f * (repeatY == 0f ? 1f : math.sign(repeatY)) : repeatY;
+                var u = u01 * denomX + offset.x;
+                var v = progress * denomY + offset.y;
+                return new float2(u, v);
+            }
+
+            private float SampleLut(float2 uv)
+            {
+                if (noiseLutSize <= 0) return 0.5f;
+                var st = math.frac(uv) * (float)noiseLutSize - 0.5f;
+                var i0x = (int)math.floor(st.x);
+                var i0y = (int)math.floor(st.y);
+                var fx = st.x - i0x;
+                var fy = st.y - i0y;
+                var size = noiseLutSize;
+                int Wrap(int a) { var w = a % size; return w < 0 ? w + size : w; }
+                var w0x = Wrap(i0x);
+                var w0y = Wrap(i0y);
+                var w1x = Wrap(i0x + 1);
+                var w1y = Wrap(i0y + 1);
+                var c00 = noiseLut[w0x + w0y * size];
+                var c10 = noiseLut[w1x + w0y * size];
+                var c01 = noiseLut[w0x + w1y * size];
+                var c11 = noiseLut[w1x + w1y * size];
+                var cx0 = math.lerp(c00, c10, fx);
+                var cx1 = math.lerp(c01, c11, fx);
+                return math.lerp(cx0, cx1, fy);
+            }
+
+            private float EvaluateNoise(float progress, float signedDistance, float roadWidth, GpuNoiseMaskParams p)
+            {
+                var uv = ComputeUV(progress, signedDistance, roadWidth, p.Tiling, p.Offset);
+                var m = new float2(uv.x * math.max(p.NoiseScale.x, 1e-6f), uv.y * math.max(p.NoiseScale.y, 1e-6f));
+                var s = math.sin(p.RotationRad);
+                var c = math.cos(p.RotationRad);
+                var mx = c * m.x - s * m.y;
+                var my = s * m.x + c * m.y;
+                mx += p.Seed * 17f;
+                my += p.Seed * 29f;
+                var n01 = 0f;
+                if (p.Variant == 0)
+                {
+                    var amplitude = 1f;
+                    var frequency = 1f;
+                    var sum = 0f;
+                    var norm = 0f;
+                    var oct = math.max(p.Octaves, 1);
+                    for (var i = 0; i < oct; i++)
+                    {
+                        var s01 = SampleLut(new float2(mx * frequency, my * frequency));
+                        sum += s01 * amplitude;
+                        norm += amplitude;
+                        frequency *= math.max(1f, p.Lacunarity);
+                        amplitude *= math.saturate(p.Gain);
+                    }
+                    n01 = norm > 1e-5f ? sum / norm : 0f;
+                }
+                else if (p.Variant == 1)
+                {
+                    var phase = mx * p.Period + SampleLut(new float2(mx, my)) * p.Jitter;
+                    n01 = 0.5f * (math.sin(phase) + 1f);
+                }
+                else if (p.Variant == 2)
+                {
+                    var px = mx * p.Period;
+                    var py = my * p.Period;
+                    var ix = (int)math.floor(px);
+                    var iy = (int)math.floor(py);
+                    var fx = px - ix;
+                    var fy = py - iy;
+                    var dmin = 1e9f;
+                    for (var dy = 0; dy <= 1; dy++)
+                    {
+                        for (var dx = 0; dx <= 1; dx++)
+                        {
+                            var cx = ix + dx;
+                            var cy = iy + dy;
+                            var h = SampleLut(new float2(cx * 0.071f, cy * 0.113f));
+                            var jx = math.frac(h * 1.618f);
+                            var jy = math.frac(h * 2.414f);
+                            jx = math.lerp(0.5f, jx, p.Jitter);
+                            jy = math.lerp(0.5f, jy, p.Jitter);
+                            var vx = dx + jx - fx;
+                            var vy = dy + jy - fy;
+                            var d = math.sqrt(vx * vx + vy * vy);
+                            if (d < dmin) dmin = d;
+                        }
+                    }
+                    n01 = math.saturate(dmin);
+                    if (p.Invert != 0) n01 = 1f - n01;
+                }
+                var pre = math.saturate(n01 * p.Strength) * p.OverallScale;
+                if (p.UseAsymmetricEdges != 0)
+                {
+                    var e0 = p.EdgeLow;
+                    var e1 = p.EdgeHigh;
+                    if (e0 > e1) { var t = e0; e0 = e1; e1 = t; }
+                    var t2 = math.saturate((pre - e0) / math.max(1e-6f, e1 - e0));
+                    return t2 * t2 * (3f - 2f * t2);
+                }
+                if (p.Smooth <= 1e-5f) return math.saturate(pre);
+                var edge0 = p.Smooth * 0.5f;
+                var edge1 = 1f - p.Smooth * 0.5f;
+                var tt = math.saturate((pre - edge0) / math.max(1e-6f, edge1 - edge0));
+                return tt * tt * (3f - 2f * tt);
+            }
+
+            private float ShoulderStripeWeight(float distanceFromPath, float center, float stripeHalf, float falloffW)
+            {
+                var d = math.abs(distanceFromPath - center);
+                if (falloffW <= 1e-6f) return d <= stripeHalf ? 1f : 0f;
+                var t = 1f - math.saturate((d - stripeHalf) / falloffW);
+                return math.saturate(t);
+            }
+
+            private float EvaluateShoulder(float signedDistance, float roadWidth, GpuShoulderMaskParams p)
+            {
+                var halfRoad = math.max(1e-5f, roadWidth * 0.5f);
+                var inset = math.saturate(p.PositionRatio) * halfRoad;
+                var leftC = -halfRoad + inset;
+                var rightC = halfRoad - inset;
+                var stripeHalf = math.max(1e-5f, p.ShoulderWidthRatio * roadWidth * 0.5f);
+                var falloffW = math.max(1e-5f, p.EdgeFalloff * roadWidth);
+                var wLeft = p.EnableLeftShoulder != 0 ? ShoulderStripeWeight(signedDistance, leftC, stripeHalf, falloffW) : 0f;
+                var wRight = p.EnableRightShoulder != 0 ? ShoulderStripeWeight(signedDistance, rightC, stripeHalf, falloffW) : 0f;
+                var shoulderShape = math.max(wLeft, wRight) * p.ShoulderStrength;
+                var pre = math.saturate(shoulderShape) * p.OverallScale;
+                if (p.Smooth <= 1e-5f) return math.saturate(pre);
+                var edge0 = p.Smooth * 0.5f;
+                var edge1 = 1f - p.Smooth * 0.5f;
+                var tt = math.saturate((pre - edge0) / math.max(1e-6f, edge1 - edge0));
+                return tt * tt * (3f - 2f * tt);
+            }
+
+            private float EvaluateShoulderNoise(GpuShoulderMaskParams sp, GpuNoiseMaskParams np, float progress, float signedDistance, float roadWidth)
+            {
+                var shoulderVal = EvaluateShoulder(signedDistance, roadWidth, sp);
+                var noiseVal = EvaluateNoise(progress, signedDistance, roadWidth, np);
+                var pre = math.saturate(shoulderVal * noiseVal);
+                if (sp.Smooth <= 1e-5f) return pre * sp.OverallScale;
+                var edge0 = sp.Smooth * 0.5f;
+                var edge1 = 1f - sp.Smooth * 0.5f;
+                var tt = math.saturate((pre - edge0) / math.max(1e-6f, edge1 - edge0));
+                var sm = tt * tt * (3f - 2f * tt);
+                return math.saturate(sm * sp.OverallScale);
+            }
+
+            private float EvaluateMask(GpuMaskParams mask, float progress, float signedDistance, float roadWidth)
+            {
+                if (mask.MaskType == 0) return 1f;
+                var m = 1f;
+                if (mask.MaskType == 1) m = EvaluateShoulder(signedDistance, roadWidth, mask.ShoulderParams);
+                else if (mask.MaskType == 2) m = EvaluateNoise(progress, signedDistance, roadWidth, mask.NoiseParams);
+                else if (mask.MaskType == 4) m = EvaluateShoulderNoise(mask.ShoulderParams, mask.NoiseParams, progress, signedDistance, roadWidth);
+                return math.saturate(m * mask.Strength);
+            }
         }
     }
 }

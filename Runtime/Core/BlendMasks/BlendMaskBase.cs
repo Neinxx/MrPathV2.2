@@ -163,6 +163,10 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         public bool UseAsymmetricEdges;
         public float EdgeLow;
         public float EdgeHigh;
+        public float Period;
+        public float Jitter;
+        public int Invert;
+        public int Variant;
     }
 
     [StructLayout(LayoutKind.Sequential)]

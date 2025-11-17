@@ -7,6 +7,9 @@ static const int MASK_TYPE_SHOULDER = 1;
 static const int MASK_TYPE_NOISE = 2;
 static const int MASK_TYPE_GRADIENT = 3;
 static const int MASK_TYPE_SHOULDER_NOISE = 4;
+static const int NOISE_VARIANT_FBM = 0;
+static const int NOISE_VARIANT_STRIPE = 1;
+static const int NOISE_VARIANT_WORLEY = 2;
 
 // --- GPU 结构体（与 Runtime/Core/MaskAtlasGenerator.cs 完全对齐） ---
 struct GpuShoulderMaskParams {
@@ -39,7 +42,10 @@ struct GpuNoiseMaskParams {
     int    UseAsymmetricEdges;
     float  EdgeLow;
     float  EdgeHigh;
-    float  Pad1;               // 对齐填充
+    float  Period;
+    float  Jitter;
+    int    Invert;
+    int    Variant;
 };
 
 struct GpuMaskParams {
@@ -115,21 +121,58 @@ inline float EvaluateNoise(float progress, float signedDistance, float roadWidth
     float2 m = uv * float2(max(p.NoiseScale.x, 1e-6), max(p.NoiseScale.y, 1e-6));
     m = rotate2(m, p.RotationRad);
     m += float2(p.Seed * 17.0, p.Seed * 29.0);
-
-    float amplitude = 1.0;
-    float frequency = 1.0;
-    float sum = 0.0;
-    float norm = 0.0;
-    int   oct = max(p.Octaves, 1);
-    [loop] for(int i = 0; i < oct; ++i)
+    float n01 = 0.0;
+    if(p.Variant == NOISE_VARIANT_FBM)
     {
-        float s = SampleNoiseLUT(m * frequency);
-        sum += s * amplitude;
-        norm += amplitude;
-        frequency *= max(1.0, p.Lacunarity);
-        amplitude *= saturate(p.Gain);
+        float amplitude = 1.0;
+        float frequency = 1.0;
+        float sum = 0.0;
+        float norm = 0.0;
+        int   oct = max(p.Octaves, 1);
+        [loop] for(int i = 0; i < oct; ++i)
+        {
+            float s = SampleNoiseLUT(m * frequency);
+            sum += s * amplitude;
+            norm += amplitude;
+            frequency *= max(1.0, p.Lacunarity);
+            amplitude *= saturate(p.Gain);
+        }
+        n01 = (norm > 1e-5) ? (sum / norm) : 0.0;
     }
-    float n01 = (norm > 1e-5) ? (sum / norm) : 0.0;
+    else if(p.Variant == NOISE_VARIANT_STRIPE)
+    {
+        float phase = m.x * p.Period + SampleNoiseLUT(m) * p.Jitter;
+        n01 = 0.5 * (sin(phase) + 1.0);
+    }
+    else if(p.Variant == NOISE_VARIANT_WORLEY)
+    {
+        float px = m.x * p.Period;
+        float py = m.y * p.Period;
+        float ix = floor(px);
+        float iy = floor(py);
+        float fx = px - ix;
+        float fy = py - iy;
+        float dmin = 1e9;
+        for(int dy = 0; dy <= 1; ++dy)
+        {
+            for(int dx = 0; dx <= 1; ++dx)
+            {
+                float cx = ix + dx;
+                float cy = iy + dy;
+                float h = SampleNoiseLUT(float2(cx * 0.071, cy * 0.113));
+                float jx = frac(h * 1.618);
+                float jy = frac(h * 2.414);
+                jx = lerp(0.5, jx, p.Jitter);
+                jy = lerp(0.5, jy, p.Jitter);
+                float vx = dx + jx - fx;
+                float vy = dy + jy - fy;
+                float d = sqrt(vx * vx + vy * vy);
+                dmin = (d < dmin) ? d : dmin;
+            }
+        }
+        n01 = saturate(dmin);
+        if(p.Invert != 0) n01 = 1.0 - n01;
+    }
 
     float pre = saturate(n01 * p.Strength) * p.OverallScale;
     if(p.UseAsymmetricEdges != 0)

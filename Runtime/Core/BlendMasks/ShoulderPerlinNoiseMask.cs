@@ -1,4 +1,5 @@
 using MrPathV2.Runtime.Core.Noise;
+using MrPathV2.Runtime.Core.NoiseRuntime;
 using UnityEngine;
 
 namespace MrPathV2.Runtime.Core.BlendMasks
@@ -50,6 +51,9 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         [Range(0f, 1f)] public float edgeLow = 0.25f;
         [Range(0f, 1f)] public float edgeHigh = 0.75f;
 
+        private float _scaleX, _scaleY, _cos, _sin, _lac, _gain, _seedX, _seedY;
+        private int _oct;
+
         private void OnValidate()
         {
             if (uniformScale) noiseScale.y = noiseScale.x;
@@ -64,58 +68,47 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             shoulderWidthRatio = Mathf.Clamp(shoulderWidthRatio, 0f, 0.5f);
             shoulderPositionRatio = Mathf.Clamp01(shoulderPositionRatio);
             edgeFalloff = Mathf.Clamp(edgeFalloff, 0f, 0.3f);
+            EnsurePrecomputed();
+            MaskChangeEvents.RaiseChanged(this);
+        }
+
+        private bool _ready;
+
+        private void EnsurePrecomputed()
+        {
+            _scaleX = noiseScale.x;
+            _scaleY = noiseScale.y;
+            var rad = rotationDeg * Mathf.Deg2Rad;
+            _cos = Mathf.Cos(rad);
+            _sin = Mathf.Sin(rad);
+            _oct = Mathf.Max(1, octaves);
+            _lac = Mathf.Max(1f, lacunarity);
+            _gain = Mathf.Clamp01(gain);
+            var sx = Mathf.Abs(Mathf.Sin(seed * 12.9898f) * 43758.5453f);
+            var sy = Mathf.Abs(Mathf.Sin(seed * 78.233f) * 12345.678f);
+            _seedX = sx - Mathf.Floor(sx);
+            _seedY = sy - Mathf.Floor(sy);
+            _ready = true;
         }
 
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
-            // 1) 计算噪声（基于米制 tiling，再乘无量纲 noiseScale 并旋转）
-            var u = TransformPosition(horizontalPosition, worldWidth, pathLength);
-            var v = TransformPathPosition(pathProgress, pathLength);
+            if (strength <= 0f || shoulderStrength <= 0f) return 0f;
+            if (!enableLeftShoulder && !enableRightShoulder) return 0f;
+            if (!_ready) EnsurePrecomputed();
 
-            var scale = uniformScale ? new Vector2(noiseScale.x, noiseScale.x) : noiseScale;
-            var uv = new Vector2(u * Mathf.Max(1e-5f, scale.x), v * Mathf.Max(1e-5f, scale.y));
-            var rad = rotationDeg * Mathf.Deg2Rad;
-            var cos = Mathf.Cos(rad);
-            var sin = Mathf.Sin(rad);
-            var ruv = new Vector2(uv.x * cos - uv.y * sin, uv.x * sin + uv.y * cos);
-
-            // 用 seed 产生确定性的偏移，保证随机但可复现
-            var sx = Mathf.Abs(Mathf.Sin(seed * 12.9898f) * 43758.5453f);
-            var sy = Mathf.Abs(Mathf.Sin(seed * 78.233f) * 12345.678f);
-            var seedOffset = new Vector2(sx - Mathf.Floor(sx), sy - Mathf.Floor(sy));
-            ruv += seedOffset;
-
-            // fBm 采样（Perlin 多层叠加）
-            var amplitude = 1f;
-            var frequency = 1f;
-            var sum = 0f;
-            var norm = 0f;
-            for (var i = 0; i < octaves; i++)
-            {
-                var s = NoiseLutProvider.Sample01(ruv.x * frequency, ruv.y * frequency);
-                sum += s * amplitude;
-                norm += amplitude;
-                frequency *= Mathf.Max(1f, lacunarity);
-                amplitude *= Mathf.Clamp01(gain);
-            }
-            var noise01 = norm > 1e-5f ? sum / norm : 0f; // 0..1
-
-            // 2) 计算两条路肩的形状权重，仅在路肩区域内返回>0
             var halfRoad = worldWidth * 0.5f;
             var inset = Mathf.Clamp01(shoulderPositionRatio) * halfRoad;
             var leftCenter = -halfRoad + inset;
             var rightCenter = halfRoad - inset;
             var stripeHalf = Mathf.Max(1e-5f, shoulderWidthRatio * worldWidth * 0.5f);
             var falloffWorld = Mathf.Max(1e-5f, edgeFalloff * worldWidth);
+            var distFromCenter = horizontalPosition * halfRoad;
 
-            var distFromCenter = horizontalPosition * halfRoad; // -halfRoad..halfRoad（世界单位）
             float StripeWeight(float center)
             {
                 var d = Mathf.Abs(distFromCenter - center);
-                if (falloffWorld <= 1e-6f)
-                {
-                    return d <= stripeHalf ? 1f : 0f;
-                }
+                if (falloffWorld <= 1e-6f) return d <= stripeHalf ? 1f : 0f;
                 var t = 1f - Mathf.Clamp01((d - stripeHalf) / falloffWorld);
                 return Mathf.Clamp01(t);
             }
@@ -123,34 +116,25 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             var wLeft = enableLeftShoulder ? StripeWeight(leftCenter) : 0f;
             var wRight = enableRightShoulder ? StripeWeight(rightCenter) : 0f;
             var shoulderShape = Mathf.Max(wLeft, wRight) * shoulderStrength;
+            if (shoulderShape <= 0f) return 0f;
 
-            // 3) 噪声仅在路肩内生效：形状 × 噪声 × procedural 强度
-            var raw = shoulderShape * Mathf.Clamp01(noise01 * Mathf.Max(0f, strength));
-
-            // 4) 应用平滑（支持非对称阈值），并做整体缩放
-            float ApplyCombinedSmoothing(float value)
+            var u = TransformPosition(horizontalPosition, worldWidth, pathLength);
+            var v = TransformPathPosition(pathProgress, pathLength);
+            var p = new NoiseParamsDto
             {
-                // 统一先整体缩放
-                value *= overallScale;
+                ScaleX = uniformScale ? _scaleX : noiseScale.x,
+                ScaleY = uniformScale ? _scaleX : _scaleY,
+                Cos = _cos,
+                Sin = _sin,
+                Octaves = _oct,
+                Lacunarity = _lac,
+                Gain = _gain,
+                SeedX = _seedX,
+                SeedY = _seedY
+            };
+            var noise01 = NoiseEvalUtils.EvaluateFbm01(p, u, v);
 
-                if (useAsymmetricEdges)
-                {
-                    var e0 = Mathf.Clamp01(edgeLow);
-                    var e1 = Mathf.Clamp01(edgeHigh);
-                    if (e1 < e0)
-                    {
-                        var t2 = e0;
-                        e0 = e1;
-                        e1 = t2;
-                    }
-                    if (value <= e0) return 0f;
-                    if (value >= e1) return 1f;
-                    var tt = (value - e0) / Mathf.Max(1e-6f, e1 - e0);
-                    var sm = tt * tt * (3f - 2f * tt);
-                    return Mathf.Clamp01(sm);
-                }
-                return ApplySmoothing(value);
-            }
+            var raw = shoulderShape * Mathf.Clamp01(noise01 * Mathf.Max(0f, strength));
 
             return Mathf.Clamp01(ApplyCombinedSmoothing(raw));
         }
@@ -194,6 +178,27 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             dst.NoiseParams.EdgeLow = edgeLow;
             dst.NoiseParams.EdgeHigh = edgeHigh;
         }
+
+        private float ApplyCombinedSmoothing(float value)
+        {
+            value *= overallScale;
+            if (useAsymmetricEdges)
+            {
+                var e0 = Mathf.Clamp01(edgeLow);
+                var e1 = Mathf.Clamp01(edgeHigh);
+                if (e1 < e0)
+                {
+                    var t2 = e0;
+                    e0 = e1;
+                    e1 = t2;
+                }
+                if (value <= e0) return 0f;
+                if (value >= e1) return 1f;
+                var tt = (value - e0) / Mathf.Max(1e-6f, e1 - e0);
+                var sm = tt * tt * (3f - 2f * tt);
+                return Mathf.Clamp01(sm);
+            }
+            return ApplySmoothing(value);
+        }
     }
 }
-

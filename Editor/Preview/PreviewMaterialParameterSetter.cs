@@ -49,7 +49,6 @@ namespace MrPathV2.Editor.Preview
             // Depth test, path sample count and other common properties
             if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.ZTest))
                 _mMaterial.SetInt(PreviewShaderContracts.Properties.ZTest, _mProfile.enableDepthTest ? 4 : 8);
-            _mMaterial.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
 
             // 注意：不在此处重置 AcrossScale/MeshRepeat，避免覆盖外部提供的正确重复系数
         }
@@ -310,7 +309,6 @@ namespace MrPathV2.Editor.Preview
         /// </summary>
         private void SetCommonStylizedParameters()
         {
-            _mMaterial.SetFloat(PreviewShaderContracts.Properties.PathSamples, 64f);
             _mMaterial.SetFloat(PreviewShaderContracts.Properties.LayerIndex, 0f);
 
             if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.ZTest))
