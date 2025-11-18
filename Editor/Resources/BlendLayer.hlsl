@@ -18,13 +18,17 @@ inline float4 ApplyBlend(float4 baseColor, float4 layerColor, float blendMode, f
 
 	float3 overrideRgb = lerp(baseColor.rgb, layerColor.rgb, layerAlpha);
 	float3 lerpRgb = lerp(baseColor.rgb, layerColor.rgb, layerAlpha);
+	float3 olLow = 2.0 * baseColor.rgb * layerColor.rgb;
+	float3 olHigh = 1.0 - 2.0 * (1.0 - baseColor.rgb) * (1.0 - layerColor.rgb);
+	float3 overlayRgb = lerp(olLow, olHigh, step(0.5, baseColor.rgb));
 
 	float4 outColor;
 	// 统一 Alpha 规则：src-over 累积，保证视觉稳定
 	outColor.a = saturate(baseColor.a + (1.0 - baseColor.a) * layerAlpha);
 	// 选择 RGB 路径
 	bool useLerp = (abs(blendMode - 1.0) < 0.5);
-	outColor.rgb = useLerp ? lerpRgb : overrideRgb;
+	bool useOverlay = (abs(blendMode - 2.0) < 0.5);
+	outColor.rgb = useOverlay ? overlayRgb : (useLerp ? lerpRgb : overrideRgb);
 	return saturate(outColor);
 }
 

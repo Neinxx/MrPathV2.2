@@ -1,6 +1,7 @@
 using UnityEngine;
 using MrPathV2.Runtime.Core.NoiseRuntime;
 using MrPathV2.Runtime.Core.NoiseRuntime.Variants;
+using MrPathV2.Runtime.Core.BlendMasks;
 
 namespace MrPathV2.Runtime.Core.BlendMasks.Composition
 {
@@ -17,6 +18,10 @@ namespace MrPathV2.Runtime.Core.BlendMasks.Composition
         {
             if (NoiseVariantRegistry.TryGetCpu(VariantId, out var e)) return e.Evaluate(baseDto, u, v, variantDto);
             return 0.5f;
+        }
+        protected virtual void OnValidate()
+        {
+            MaskChangeEvents.RaiseChanged(null);
         }
     }
 }
