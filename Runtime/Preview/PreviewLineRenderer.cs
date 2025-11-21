@@ -116,6 +116,10 @@ namespace MrPathV2.Runtime.Preview
         private Vector3[] _pointsExact;
         private List<Vector3> _polyBuffer;
         private Vector3[] _polyExact;
+        private readonly Stack<List<LineSegment>> _listPool = new Stack<List<LineSegment>>();
+        private int _maxCacheEntries = 256;
+        private int _maxPoolLists = 256;
+        private int _maxArraySize = 1 << 18;
 
         #endregion
 
@@ -204,8 +208,7 @@ namespace MrPathV2.Runtime.Preview
         /// </summary>
         public void SetUseGpu(bool enabled)
         {
-            // 统一禁用GPU：无论输入如何，均保持CPU渲染
-            _useGpu = false;
+            _useGpu = enabled && SystemInfo.supportsComputeShaders;
         }
 
         /// <summary>
@@ -483,7 +486,7 @@ namespace MrPathV2.Runtime.Preview
                     var key = (style.color, dash);
                     if (!_dashedGroupsCache.TryGetValue(key, out var list))
                     {
-                        list = new List<LineSegment>(64);
+                        list = RentList(64);
                         _dashedGroupsCache[key] = list;
                     }
                     list.Add(line);
@@ -495,7 +498,7 @@ namespace MrPathV2.Runtime.Preview
                     var key = (style.color, Mathf.Max(0.5f, style.thickness));
                     if (!_aaGroupsCache.TryGetValue(key, out var list))
                     {
-                        list = new List<LineSegment>(64);
+                        list = RentList(64);
                         _aaGroupsCache[key] = list;
                     }
                     list.Add(line);
@@ -505,7 +508,7 @@ namespace MrPathV2.Runtime.Preview
                 // 普通线（DrawLines 可批量）
                 if (!_simpleGroupsCache.TryGetValue(style.color, out var slist))
                 {
-                    slist = new List<LineSegment>(128);
+                    slist = RentList(128);
                     _simpleGroupsCache[style.color] = slist;
                 }
                 slist.Add(line);
@@ -618,6 +621,7 @@ namespace MrPathV2.Runtime.Preview
                     }
                 }
             }
+            TrimCachesIfNeeded();
 #endif
         }
 
@@ -921,9 +925,12 @@ namespace MrPathV2.Runtime.Preview
         private void InitializeGpuResources()
         {
 #if UNITY_EDITOR
-            // CPU-only 模式：不创建任何GPU资源，确保渲染路径简洁稳定
-            _gpuMat = null;
-            _unitQuad = null;
+            var shader = Shader.Find("MrPath/PreviewLineGPU");
+            if (shader)
+            {
+                _gpuMat = new Material(shader);
+                _unitQuad = BuildUnitQuad();
+            }
             _segmentBuffer = null;
 #endif
         }
@@ -1006,9 +1013,68 @@ namespace MrPathV2.Runtime.Preview
                     else UnityEngine.Object.Destroy(_unitQuad);
                     _unitQuad = null;
                 }
+                ClearAndPoolCaches();
             }
             catch { /* ignore */ }
         }
         #endregion
+
+        private List<LineSegment> RentList(int capacity)
+        {
+            if (_listPool.Count > 0)
+            {
+                var l = _listPool.Pop();
+                return l;
+            }
+            return new List<LineSegment>(capacity);
+        }
+
+        private void ReturnList(List<LineSegment> list)
+        {
+            list.Clear();
+            if (_listPool.Count < _maxPoolLists)
+                _listPool.Push(list);
+        }
+
+        private void TrimCachesIfNeeded()
+        {
+            if (_simpleGroupsCache.Count > _maxCacheEntries) TrimDict(_simpleGroupsCache, _simpleGroupsCache.Count - _maxCacheEntries);
+            if (_aaGroupsCache.Count > _maxCacheEntries) TrimDict(_aaGroupsCache, _aaGroupsCache.Count - _maxCacheEntries);
+            if (_dashedGroupsCache.Count > _maxCacheEntries) TrimDict(_dashedGroupsCache, _dashedGroupsCache.Count - _maxCacheEntries);
+            if (_pointsBuffer != null && _pointsBuffer.Length > _maxArraySize) _pointsBuffer = new Vector3[_maxArraySize];
+            if (_pointsExact != null && _pointsExact.Length > _maxArraySize) _pointsExact = new Vector3[_maxArraySize];
+            if (_polyExact != null && _polyExact.Length > _maxArraySize) _polyExact = new Vector3[_maxArraySize];
+        }
+
+        private void ClearAndPoolCaches()
+        {
+            PoolDict(_simpleGroupsCache);
+            PoolDict(_aaGroupsCache);
+            PoolDict(_dashedGroupsCache);
+        }
+
+        private void PoolDict<TKey>(Dictionary<TKey, List<LineSegment>> dict)
+        {
+            foreach (var kv in dict) ReturnList(kv.Value);
+            dict.Clear();
+        }
+
+        private void TrimDict<TKey>(Dictionary<TKey, List<LineSegment>> dict, int removeCount)
+        {
+            if (removeCount <= 0) return;
+            var toRemove = new List<TKey>(removeCount);
+            int i = 0;
+            foreach (var kv in dict)
+            {
+                if (i >= _maxCacheEntries) toRemove.Add(kv.Key);
+                i++;
+            }
+            for (var k = 0; k < toRemove.Count; k++)
+            {
+                var key = toRemove[k];
+                if (dict.TryGetValue(key, out var list)) ReturnList(list);
+                dict.Remove(key);
+            }
+        }
     }
 }

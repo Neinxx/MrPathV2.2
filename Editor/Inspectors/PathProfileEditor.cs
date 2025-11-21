@@ -38,6 +38,11 @@ namespace MrPathV2.Editor.Inspectors
         private Toggle _showMeshToggle;
         private SliderInt _smoothnessSlider;
         private Toggle _snappingToggle;
+        private Toggle _enableEdgeNoiseToggle;
+        private FloatField _edgeNoiseAmplitudeField;
+        private Slider _edgeNoisePeriodSlider;
+        private Slider _edgeNoiseJitterSlider;
+        private FloatField _edgeNoiseSeedField;
 
         // 订阅的 Profile 实例引用，用于解除订阅
         private PathProfile _subscribedProfile;
@@ -145,6 +150,11 @@ namespace MrPathV2.Editor.Inspectors
             _rootElement.Q<CurveField>("CrossSectionCurveField");
             _rootElement.Q<CurveField>("FalloffShapeCurveField");
             _longitudinalSegmentsSlider = _rootElement.Q<SliderInt>("LongitudinalSegmentsField");
+            _enableEdgeNoiseToggle = _rootElement.Q<Toggle>("EnableEdgeNoiseToggleField");
+            _edgeNoiseAmplitudeField = _rootElement.Q<FloatField>("EdgeNoiseAmplitudeField");
+            _edgeNoisePeriodSlider = _rootElement.Q<Slider>("EdgeNoisePeriodField");
+            _edgeNoiseJitterSlider = _rootElement.Q<Slider>("EdgeNoiseJitterField");
+            _edgeNoiseSeedField = _rootElement.Q<FloatField>("EdgeNoiseSeedField");
         }
 
         /// <summary>
@@ -162,6 +172,11 @@ namespace MrPathV2.Editor.Inspectors
             if (_opaquePreviewToggle != null) _opaquePreviewToggle.bindingPath = nameof(PathProfile.opaquePreview);
             if (_recipeField != null) _recipeField.bindingPath = nameof(PathProfile.roadRecipe);
             if (_longitudinalSegmentsSlider != null) _longitudinalSegmentsSlider.bindingPath = nameof(PathProfile.longitudinalSegments);
+            if (_enableEdgeNoiseToggle != null) _enableEdgeNoiseToggle.bindingPath = nameof(PathProfile.enableEdgeNoise);
+            if (_edgeNoiseAmplitudeField != null) _edgeNoiseAmplitudeField.bindingPath = nameof(PathProfile.edgeNoiseAmplitude);
+            if (_edgeNoisePeriodSlider != null) _edgeNoisePeriodSlider.bindingPath = nameof(PathProfile.edgeNoisePeriod);
+            if (_edgeNoiseJitterSlider != null) _edgeNoiseJitterSlider.bindingPath = nameof(PathProfile.edgeNoiseJitter);
+            if (_edgeNoiseSeedField != null) _edgeNoiseSeedField.bindingPath = nameof(PathProfile.edgeNoiseSeed);
         }
 
         /// <summary>
@@ -196,6 +211,7 @@ namespace MrPathV2.Editor.Inspectors
 
             // 地形吸附 Toggle：控制其他控件的启用状态
             _snappingToggle?.RegisterValueChangedCallback(OnSnappingToggled);
+            _enableEdgeNoiseToggle?.RegisterValueChangedCallback(OnEnableEdgeNoiseToggled);
         }
 
         // --- 具体的事件处理方法 (Event Handlers) ---
@@ -211,6 +227,14 @@ namespace MrPathV2.Editor.Inspectors
             var enabled = evt.newValue;
             _heightOffsetField?.SetEnabled(enabled);
             _smoothnessSlider?.SetEnabled(enabled);
+        }
+        private void OnEnableEdgeNoiseToggled(ChangeEvent<bool> evt)
+        {
+            var enabled = evt.newValue;
+            _edgeNoiseAmplitudeField?.SetEnabled(enabled);
+            _edgeNoisePeriodSlider?.SetEnabled(enabled);
+            _edgeNoiseJitterSlider?.SetEnabled(enabled);
+            _edgeNoiseSeedField?.SetEnabled(enabled);
         }
         // --- 复合视图集成 ---
         private void InitializeCompositeView()
@@ -244,6 +268,11 @@ namespace MrPathV2.Editor.Inspectors
             var isSnappingEnabled = _snappingToggle.value;
             _heightOffsetField?.SetEnabled(isSnappingEnabled);
             _smoothnessSlider?.SetEnabled(isSnappingEnabled);
+            var isEdgeNoiseEnabled = _enableEdgeNoiseToggle != null && _enableEdgeNoiseToggle.value;
+            _edgeNoiseAmplitudeField?.SetEnabled(isEdgeNoiseEnabled);
+            _edgeNoisePeriodSlider?.SetEnabled(isEdgeNoiseEnabled);
+            _edgeNoiseJitterSlider?.SetEnabled(isEdgeNoiseEnabled);
+            _edgeNoiseSeedField?.SetEnabled(isEdgeNoiseEnabled);
         }
 
         // 当 ProfileModified 被触发（来自 OnValidate 或 Recipe 变更）时，仅重绘

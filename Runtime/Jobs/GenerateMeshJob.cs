@@ -41,7 +41,24 @@ namespace MrPathV2.Runtime.Jobs
             var offset = right * (signedT * Profile.RoadWidth * 0.5f);
 
             // 高性能预览：移除截面竖向抬升，保持网格平整
-            Vertices[index] = spinePoint + offset;
+            var basePos = spinePoint + offset;
+
+            // 风格化：为两侧边缘加入横向噪声扰动
+            if (Profile.EnableEdgeNoise && Profile.EdgeNoiseAmplitude > 1e-6f && (j == 0 || j == Segments - 1))
+            {
+                float totalLen1 = math.max(1e-5f, AccumulatedDistances[Spine.Length - 1]);
+                var pathProgress = AccumulatedDistances[i] / totalLen1; // 0..1
+                var edgeSign = (j == Segments - 1) ? 1f : -1f;
+                // 生成可重复且可控的抖动项
+                var h = math.sin(Profile.EdgeNoiseSeed * 12.9898f + i * 78.233f + j * 37.719f);
+                var jitter = (math.abs(h) - math.floor(math.abs(h))) * Profile.EdgeNoiseJitter; // 0..jitter
+                var phase = pathProgress * Profile.EdgeNoisePeriod + jitter;
+                var n = math.sin(phase * 6.2831853f); // 2π
+                var delta = right * edgeSign * n * Profile.EdgeNoiseAmplitude;
+                basePos += delta;
+            }
+
+            Vertices[index] = basePos;
 
             // 统一UV语义：网格UV直接输出归一化 Across/Along，不再乘平铺次数
             var u = t; // 0..1 左->右

@@ -2,6 +2,10 @@
 
 using System.Collections.Generic;
 using MrPathV2.Runtime.Interfaces;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace MrPathV2.Runtime.Core
@@ -96,30 +100,26 @@ namespace MrPathV2.Runtime.Core
                 // --- 步骤 3: 迭代松弛平滑 (Iterative Relaxation) ---
                 if (profile.smoothness > 0)
                 {
-                    // 我们使用一个临时数组来存储每次迭代的结果，避免原地修改导致错误
-                    var smoothedHeights = new float[pointCount];
-
+                    var src = new NativeArray<float>(pointCount, Allocator.TempJob);
+                    var dst = new NativeArray<float>(pointCount, Allocator.TempJob);
+                    var terr = new NativeArray<float>(terrainHeights, Allocator.TempJob);
+                    for (var i = 0; i < pointCount; i++) src[i] = worldPoints[i].y;
                     for (var iter = 0; iter < profile.smoothness; iter++)
                     {
-                        for (var i = 0; i < pointCount; i++)
+                        var job = new RelaxHeightsJob
                         {
-                            // 将每个点的高度设置为其邻居的平均高度
-                            if (i > 0 && i < pointCount - 1)
-                            {
-                                smoothedHeights[i] = (worldPoints[i - 1].y + worldPoints[i + 1].y) / 2f;
-                            }
-                            else
-                            {
-                                smoothedHeights[i] = worldPoints[i].y; // 保持端点不变
-                            }
-                        }
-
-                        // 将平滑后的结果应用回 worldPoints，但要确保不穿地
-                        for (var i = 0; i < pointCount; i++)
-                        {
-                            worldPoints[i].y = Mathf.Max(smoothedHeights[i], terrainHeights[i]);
-                        }
+                            Src = src,
+                            Dst = dst,
+                            Terrain = terr
+                        };
+                        var handle = job.Schedule(pointCount, 64);
+                        handle.Complete();
+                        var tmp = src; src = dst; dst = tmp;
                     }
+                    for (var i = 0; i < pointCount; i++) worldPoints[i].y = src[i];
+                    if (src.IsCreated) src.Dispose();
+                    if (dst.IsCreated) dst.Dispose();
+                    if (terr.IsCreated) terr.Dispose();
                 }
 
                 // --- 步骤 4: 应用最终的高度偏移 ---
@@ -136,6 +136,24 @@ namespace MrPathV2.Runtime.Core
                 var worldNormals = GetSurfaceNormals(worldPoints, heightProvider);
 
                 return new PathSpine(worldPoints, worldTangents, worldNormals, localSpine.Timestamps);
+            }
+        }
+
+        [BurstCompile]
+        private struct RelaxHeightsJob : IJobParallelFor
+        {
+            [ReadOnly] public NativeArray<float> Src;
+            [WriteOnly] public NativeArray<float> Dst;
+            [ReadOnly] public NativeArray<float> Terrain;
+            public void Execute(int i)
+            {
+                if (i == 0 || i == Src.Length - 1)
+                {
+                    Dst[i] = math.max(Src[i], Terrain[i]);
+                    return;
+                }
+                var avg = 0.5f * (Src[i - 1] + Src[i + 1]);
+                Dst[i] = math.max(avg, Terrain[i]);
             }
         }
 

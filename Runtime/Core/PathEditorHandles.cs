@@ -19,8 +19,51 @@ namespace MrPathV2.Runtime.Core
             var camera = SceneView.currentDrawingSceneView.camera;
             if (camera == null) return;
 
+            // 检测相机是否移动，以降低采样分辨率与避免重型绘制造成卡顿
+            const float movePosThreshold = 0.001f;
+            const float moveRotThreshold = 0.001f;
+            var camPos = camera.transform.position;
+            var camRot = camera.transform.rotation;
+            if (__PathEditorHandlesCameraCache._lastCamSet && ((camPos - __PathEditorHandlesCameraCache._lastCamPos).sqrMagnitude > movePosThreshold || Quaternion.Angle(camRot, __PathEditorHandlesCameraCache._lastCamRot) > moveRotThreshold))
+            {
+                context.IsCameraMoving = true;
+            }
+            else
+            {
+                context.IsCameraMoving = false;
+            }
+            __PathEditorHandlesCameraCache._lastCamPos = camPos;
+            __PathEditorHandlesCameraCache._lastCamRot = camRot;
+            __PathEditorHandlesCameraCache._lastCamSet = true;
+
             var strategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
             if (strategy == null) return;
+
+            if (context.LineRenderer != null)
+            {
+                if (context.IsCameraMoving)
+                {
+                    context.LineRenderer.SetUseGpu(true);
+                    context.LineRenderer.SetDefaultStyle(PreviewLineRenderer.LineType.PathCurve, new PreviewLineRenderer.LineStyle
+                    {
+                        color = new Color(0.2f, 0.8f, 1f, 0.6f),
+                        thickness = 1f,
+                        dashed = false,
+                        antiAliased = false
+                    });
+                }
+                else
+                {
+                    context.LineRenderer.SetUseGpu(false);
+                    context.LineRenderer.SetDefaultStyle(PreviewLineRenderer.LineType.PathCurve, new PreviewLineRenderer.LineStyle
+                    {
+                        color = new Color(0.2f, 0.8f, 1f, 0.8f),
+                        thickness = 3f,
+                        dashed = false,
+                        antiAliased = true
+                    });
+                }
+            }
 
             UpdateHoverState(ref context, strategy);
             strategy.DrawHandles(ref context);
@@ -107,11 +150,14 @@ namespace MrPathV2.Runtime.Core
         {
             var creator = context.Creator;
             if (creator == null) return;
+            if (context.IsCameraMoving) return;
+            var evt = Event.current;
+            if (evt == null || evt.type != EventType.MouseMove) return;
 
             context.HoveredSegmentIndex = -1;
             context.HoveredPathT = -1;
 
-            var resolution = (context.IsDragging || context.IsCameraMoving) ? 12 : 40;
+            var resolution = context.IsDragging ? 12 : 40;
             const float pickThreshold = 12f;
             var pickThresholdSqr = pickThreshold * pickThreshold;
 
@@ -162,3 +208,11 @@ namespace MrPathV2.Runtime.Core
     }
 }
 #endif
+
+// 静态缓存相机状态（编辑器域）
+static class __PathEditorHandlesCameraCache
+{
+    internal static bool _lastCamSet;
+    internal static UnityEngine.Vector3 _lastCamPos;
+    internal static UnityEngine.Quaternion _lastCamRot;
+}

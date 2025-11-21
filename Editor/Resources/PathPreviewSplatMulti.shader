@@ -15,7 +15,7 @@ Shader "MrPath/PathPreviewSplatMulti"
 
         [Header(Control Textures)]
         // NOTE : These control textures are NOT used by the fixed shader logic,
-        // which now correctly uses the Mask LUT or Vertex Colors. They are kept for property compatibility.
+        // which now correctly uses the Mask LUT or Vertex Colors.  They are kept for property compatibility.
         _Control0("Control 0 (RGBA)", 2D) = "red" {}
         _Control1("Control 1 (RGBA)", 2D) = "black" {}
         _Control2("Control 2 (RGBA)", 2D) = "black" {}
@@ -321,6 +321,8 @@ Shader "MrPath/PathPreviewSplatMulti"
             float SampleWeightForLayer(float2 worldUV, float across, float progress, int layerIndex)
             {
                 float weight = 0.0;
+                float blendMode = _LayerBlendModes[layerIndex];
+                bool isAlphaClip = abs(blendMode - 7.0) < 0.5;
                 // 优先使用 GPU 权重
                 if(_UseSplatWeights > 0.5)
                 {
@@ -332,14 +334,14 @@ Shader "MrPath/PathPreviewSplatMulti"
                         float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
                         half4  rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
                         weight = (channel == 0) ? rgba.r : (channel == 1) ? rgba.g : (channel == 2) ? rgba.b : rgba.a;
-                        // 统一与 CPU 路径的强度与阈值塑形：
-                        // 强度：整体缩放权重
                         weight *= _MaskStrength;
-                        // 阈值：仅在阈值>0时进行软门限塑形，保证边缘清晰（与 Atlas 构建效果一致）
                         if(_MaskThreshold > 0.0001)
                         {
-                            // 线性从阈值到1映射；与 CPU 构建阶段的 shaping 保持一致性
                             weight = saturate((weight - _MaskThreshold) / max(1.0 - _MaskThreshold, 0.0001));
+                        }
+                        if(_OpaquePreview > 0.5 || isAlphaClip)
+                        {
+                            weight = step(_MaskThreshold, weight);
                         }
                         return weight;
                     }
@@ -355,7 +357,10 @@ Shader "MrPath/PathPreviewSplatMulti"
                     layerIndex,
                     _PathSamples,
                     _AtlasInvHeight) * _MaskStrength;
-                // CPU 路径的阈值塑形已在 Atlas 构建阶段完成，这里只保持缩放并返回
+                if(_OpaquePreview > 0.5 || isAlphaClip)
+                {
+                    weight = step(_MaskThreshold, weight);
+                }
                 return weight;
             }
 
@@ -379,47 +384,29 @@ Shader "MrPath/PathPreviewSplatMulti"
 
                 // 初始完全透明
                 half4 finalColor = half4(0, 0, 0, 0);
-
                 int   maxLayers = min(_LayerCount, 16);
-                float compositeAlpha = 0.0; // 汇总各层归一化权重 * 不透明度
-
-                // 统一路径：采样所有层权重并归一化，不区分来源（GPU 或 MaskAtlas）
-                float weights[16];
-                float total = 0.0;
-                for(int i = 0; i < maxLayers; i++)
+                float remaining = 1.0;
+                float compositeAlpha = 0.0;
+                [unroll(16)]
+                for(int j = 15; j >= 0; j--)
                 {
-                    float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
-                    weights[i] = w;
-                    total += w;
-                }
-
-                float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
-
-                // 使用不同循环变量名以避免 D3D FXC 在同一作用域内报重名冲突
-                for(int j = 0; j < maxLayers; j++)
-                {
-                    float weight = (invTotal > 0.0) ? saturate(weights[j] * invTotal) : 0.0;
-                    if(weight < 0.0004) continue;
-
+                    if(j >= maxLayers) continue;
+                    float maskW = SampleWeightForLayer(input.worldUV, across, pathProgress, j);
+                    float layerOpacity = GetLayerOpacity(j);
+                    float selfAlpha = saturate(maskW * layerOpacity);
+                    float contribute = min(selfAlpha, remaining);
+                    if(contribute < 0.0004) continue;
                     float2 layerTiling = GetLayerTiling(j);
                     float2 layerOffset = GetLayerOffset(j);
-                    // 应用偏移：与风格化 Shader 的 _LayerTiling.xy + _LayerTiling.zw 一致
                     float2 layerUV = input.worldUV * layerTiling + layerOffset;
                     half4  layerColor = SampleLayerTexture(j, layerUV);
                     layerColor *= GetLayerTint(j);
-                    layerColor.a *= weight;
-
-                    float layerOpacity = GetLayerOpacity(j);
-                    float blendMode = GetLayerBlendMode(j);
-                    float blendOpacity = layerOpacity;
-
-                    finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
-                    compositeAlpha += weight * layerOpacity;
+                    finalColor.rgb = lerp(finalColor.rgb, layerColor.rgb, contribute);
+                    remaining = max(0.0, remaining - contribute);
+                    compositeAlpha += contribute;
+                    if(remaining <= 0.0001) break;
                 }
-
-                // 透明度与滑块结合：按合成权重驱动显示强度，避免因颜色暗导致过度透明
                 finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(compositeAlpha) * saturate(_PreviewAlpha);
-                //  finalColor.a = (_OpaquePreview > 0.5) ? 1.0 : saturate(finalColor.a) * saturate(_PreviewAlpha);
                 return finalColor;
             }
             ENDHLSL

@@ -106,6 +106,7 @@ namespace MrPathV2.Editor.Preview
             var tint = GetTerrainLayerTint(tLayer);
             var opacity = Mathf.Clamp01(roadLayer.opacity * recipe.masterOpacity);
 
+            var maskForPreview = (roadLayer.layerMask != null && roadLayer.maskEnabled) ? roadLayer.layerMask : null;
             return new PreviewPipelineUtility.PreviewLayerInfo(
                 tex,
                 tiling,
@@ -113,7 +114,7 @@ namespace MrPathV2.Editor.Preview
                 tint,
                 opacity,
                 roadLayer.blendMode,
-                roadLayer.layerMask);
+                maskForPreview);
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Unity.Burst;
+using MrPathV2.Runtime.Core;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -168,7 +169,8 @@ namespace MrPathV2.Runtime.Jobs
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
                 if (!ValidateSplatIndex(splatIndex)) continue;
                 var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
-                var clipGate = OpaquePainting ? (maskAlpha >= AlphaClipThreshold ? 1f : 0f) : 1f;
+                var isAlphaClip = Recipe.BlendModes.IsCreated && layerIndex >= 0 && layerIndex < Recipe.BlendModes.Length && Recipe.BlendModes[layerIndex] == (int)BlendMode.AlphaClip;
+                var clipGate = (OpaquePainting || isAlphaClip) ? (maskAlpha >= AlphaClipThreshold ? 1f : 0f) : 1f;
                 var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length ? math.saturate(Recipe.Opacities[layerIndex]) : 1f;
                 var selfAlpha = math.saturate(maskAlpha * strength * clipGate);
                 var contribute = math.min(selfAlpha, remaining);
@@ -209,7 +211,8 @@ namespace MrPathV2.Runtime.Jobs
                 var splatIndex = Recipe.TerrainLayerIndices[layerIndex];
                 if (!ValidateSplatIndex(splatIndex)) continue;
                 var maskAlpha = math.saturate(GetMaskValue(layerIndex, normalizedDist, pathProgress));
-                var clipGate = OpaquePainting ? (maskAlpha >= AlphaClipThreshold ? 1f : 0f) : 1f;
+                var isAlphaClip = Recipe.BlendModes.IsCreated && layerIndex >= 0 && layerIndex < Recipe.BlendModes.Length && Recipe.BlendModes[layerIndex] == (int)BlendMode.AlphaClip;
+                var clipGate = (OpaquePainting || isAlphaClip) ? (maskAlpha >= AlphaClipThreshold ? 1f : 0f) : 1f;
                 var strength = Recipe.Opacities.IsCreated && layerIndex >= 0 && layerIndex < Recipe.Opacities.Length ? math.saturate(Recipe.Opacities[layerIndex]) : 1f;
                 var selfAlpha = math.saturate(maskAlpha * strength * clipGate);
                 var contribute = math.min(selfAlpha, remaining);

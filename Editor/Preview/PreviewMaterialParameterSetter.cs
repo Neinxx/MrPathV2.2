@@ -42,7 +42,7 @@ namespace MrPathV2.Editor.Preview
 
             // Mask strength and threshold (linked with opaque preview)
             _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskStrength, master);
-            var maskThreshold = isOpaque ? 0.2f : 0.0f;
+            var maskThreshold = isOpaque ? MrPathV2.Runtime.Core.Constants.MaskConstants.DefaultAlphaClipThreshold : 0.0f;
             if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MaskThreshold))
                 _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThreshold);
 
@@ -325,7 +325,7 @@ namespace MrPathV2.Editor.Preview
                 _mMaterial.SetFloat(PreviewShaderContracts.Properties.OpaquePreview, _mProfile.opaquePreview ? 1f : 0f);
 
             // Set mask threshold for single-layer stylized preview to ensure clear edges
-            var maskThresholdStylized = _mProfile.opaquePreview ? 0.2f : 0.0f;
+            var maskThresholdStylized = _mProfile.opaquePreview ? MrPathV2.Runtime.Core.Constants.MaskConstants.DefaultAlphaClipThreshold : 0.0f;
             if (_mMaterial.HasProperty(PreviewShaderContracts.Properties.MaskThreshold))
                 _mMaterial.SetFloat(PreviewShaderContracts.Properties.MaskThreshold, maskThresholdStylized);
 

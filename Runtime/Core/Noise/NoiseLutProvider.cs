@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using MrPathV2.Runtime.Core.Resources;
 using Object = UnityEngine.Object;
 
 namespace MrPathV2.Runtime.Core.Noise
@@ -33,7 +34,7 @@ namespace MrPathV2.Runtime.Core.Noise
             // 1) 尝试 Compute Shader 生成（仅在硬件支持且内核存在时）
             if (SystemInfo.supportsComputeShaders)
             {
-                var cs = Resources.Load<ComputeShader>("NoiseLUT");
+                var cs = ResourceProvider.LoadComputeShader("NoiseLUT");
                 // 使用 HasKernel 防止无效内核索引错误
                 if (cs != null && cs.HasKernel("BuildNoiseLUT"))
                 {

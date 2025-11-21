@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: EdgePerlinNoiseMask
   m_EditorClassIdentifier: 
   smooth: 1
-  tiling: {x: 2, y: 4.22}
+  tiling: {x: 3.6, y: 3.68}
   offset: {x: 0, y: 0}
   overallScale: 1.104
   strength: 1
@@ -27,7 +27,7 @@ MonoBehaviour:
   rotationDeg: 66
   octaves: 5
   lacunarity: 2.69
-  gain: 0.5
+  gain: 0.649
   useAsymmetricEdges: 0
   edgeLow: 0.25
   edgeHigh: 0.75

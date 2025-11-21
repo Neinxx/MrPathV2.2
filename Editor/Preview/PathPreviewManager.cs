@@ -117,6 +117,7 @@ namespace MrPathV2.Editor.Preview
 
             try
             {
+                _mLine.SetUseGpu(GpuPreview.IsEnabled);
                 UpdateSpineAndMesh(creator, heightProvider);
                 FinalizeMesh();
                 SetupMaterialParameters(creator);

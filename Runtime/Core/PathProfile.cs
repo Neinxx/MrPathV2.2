@@ -47,6 +47,18 @@ namespace MrPathV2.Runtime.Core
         [Tooltip("不透明预览：开启后预览为完全不透明，不与地形颜色混合。")]
         public bool opaquePreview;
 
+        [Header("风格化边缘噪声")]
+        [Tooltip("是否启用预览网格两侧边缘的噪声扰动（仅影响预览网格外形）")]
+        public bool enableEdgeNoise = true;
+        [Tooltip("边缘噪声的最大横向扰动幅度（米）")]
+        [Range(0f, 2f)] public float edgeNoiseAmplitude = 0.15f;
+        [Tooltip("沿路径的噪声周期（每单位进度的周期数，数值越大波纹越密")]
+        [Range(0.1f, 64f)] public float edgeNoisePeriod = 8f;
+        [Tooltip("噪声抖动强度（0..1）")]
+        [Range(0f, 1f)] public float edgeNoiseJitter = 0.2f;
+        [Tooltip("边缘噪声的种子值")]
+        public float edgeNoiseSeed = 123f;
+
         [Header("遮罩采样")]
         [Tooltip("沿路径方向的遮罩采样密度（每多少米采一行）。数值越小，沿途越平滑但Atlas越高。")]
         [Min(0.1f)] public float maskMetersPerSample = 0.75f;
@@ -164,17 +176,17 @@ namespace MrPathV2.Runtime.Core
             var keys = curve.keys;
             const int firstIdx = 0;
             var lastIdx = keys.Length - 1;
-            
+
             // 判断目标时间更靠近起点还是终点
             var targetIsStart = targetTime <= (keys[firstIdx].time + keys[lastIdx].time) * 0.5f;
-            
+
             if (targetIsStart)
             {
                 // 移动第一个关键帧到目标时间
                 var key = curve.keys[firstIdx];
                 key.time = targetTime;
                 curve.MoveKey(firstIdx, key);
-                
+
                 // 清理可能产生的重复关键帧（保留新的首端点）
                 RemoveDuplicateKeysAfterFirst(curve, targetTime);
             }
@@ -184,7 +196,7 @@ namespace MrPathV2.Runtime.Core
                 var key = curve.keys[lastIdx];
                 key.time = targetTime;
                 curve.MoveKey(lastIdx, key);
-                
+
                 // 清理可能产生的重复关键帧（保留新的末端点）
                 RemoveDuplicateKeysBeforeLast(curve, targetTime);
             }

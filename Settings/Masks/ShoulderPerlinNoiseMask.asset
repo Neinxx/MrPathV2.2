@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e917453ea2a135b4ba2f9ba9429c4c84, type: 3}
   m_Name: ShoulderPerlinNoiseMask
   m_EditorClassIdentifier: 
-  smooth: 1
-  tiling: {x: 0.97, y: -0.99}
+  smooth: 0.594
+  tiling: {x: 0.97, y: 1.42}
   offset: {x: 0, y: 0}
   overallScale: 1
   strength: 1

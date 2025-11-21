@@ -427,6 +427,8 @@ namespace MrPathV2.Editor.Preview
                     {
                         try
                         {
+                            // 启用/禁用状态影响预览
+                            hash = hash * 31 + (rl.maskEnabled ? 1 : 0);
                             // General parameters
                             hash = hash * 31 + mask.GetType().FullName.GetHashCode();
                             hash = hash * 31 + mask.smooth.GetHashCode();

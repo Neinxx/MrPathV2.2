@@ -9,7 +9,7 @@
                 <ui:Label text="Core Settings" class="group-header" />
                 <ui:VisualElement class="field-row" style="flex-direction: column; padding-left: 0; padding-right: 0;">
                     <uie:EnumField label="CurveType" value="Center" name="CurveTypeField" binding-path="curveType" style="padding-left: 9px; padding-right: 6px; margin-bottom: 4px; margin-left: 5px; margin-right: 5px; min-height: 20px;" />
-                    <uie:FloatField label="Mesh Width" binding-path="meshWith" name="MeshWithField" class="compact-field" style="flex-shrink: 1; padding-left: 9px; padding-right: 6px; min-height: 20px; margin-top: 1px; margin-bottom: 4px;" />
+                    <uie:FloatField label="Mesh Width" binding-path="roadWidth" name="MeshWithField" class="compact-field" style="flex-shrink: 1; padding-left: 9px; padding-right: 6px; min-height: 20px; margin-top: 1px; margin-bottom: 4px;" />
                 </ui:VisualElement>
                 <ui:VisualElement name="CurveTypeField" />
             </ui:GroupBox>
@@ -39,6 +39,14 @@
                 <ui:Toggle label="ShowPreviewMesh" name="ShowMeshToggleField" binding-path="showPreviewMesh" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: center; margin-left: 5px; margin-right: 5px; align-items: center; margin-top: 1px; margin-bottom: 4px; min-height: 20px;" />
                 <ui:Toggle label="EnableDepthTest" name="EnableDepthTestToggleField" value="false" binding-path="enableDepthTest" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; position: relative; justify-content: flex-start; margin-right: 5px; margin-left: 5px; align-items: stretch; margin-top: 1px; margin-bottom: 4px; flex-direction: row; min-height: 20px;" />
                 <ui:Toggle label="EpaquePreview" name="OpaquePreviewToggleField" value="false" binding-path="opaquePreview" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; justify-content: space-around; flex-wrap: nowrap; flex-direction: row; margin-right: 5px; padding-right: 6px; align-items: stretch; opacity: 1; overflow: visible; margin-left: 5px; margin-top: 1px; margin-bottom: 4px; min-height: 20px;" />
+            </ui:GroupBox>
+            <ui:GroupBox name="EdgeNoise" class="settings-group" style="flex-grow: 1; flex-shrink: 1; justify-content: space-around; flex-basis: auto; height: auto; min-height: 130px; max-height: none;">
+                <ui:Label text="Edge Noise" class="group-header" />
+                <ui:Toggle label="EnableEdgeNoise" name="EnableEdgeNoiseToggleField" binding-path="enableEdgeNoise" class="preview-toggle" style="flex-shrink: 1; flex-grow: 0; height: 16px; padding-left: 9px; padding-right: 6px; margin-top: 1px; margin-bottom: 4px; margin-left: 5px; margin-right: 5px; min-height: 20px;" />
+                <uie:FloatField label="Amplitude" name="EdgeNoiseAmplitudeField" binding-path="edgeNoiseAmplitude" style="margin-bottom: 4px; padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-top: 1px; min-height: 20px;" />
+                <ui:Slider label="Period" name="EdgeNoisePeriodField" binding-path="edgeNoisePeriod" low-value="0.1" high-value="64" style="padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-bottom: 4px; min-height: 20px;" />
+                <ui:Slider label="Jitter" name="EdgeNoiseJitterField" binding-path="edgeNoiseJitter" low-value="0" high-value="1" style="padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-bottom: 4px; min-height: 20px;" />
+                <uie:FloatField label="Seed" name="EdgeNoiseSeedField" binding-path="edgeNoiseSeed" style="margin-bottom: 4px; padding-left: 9px; padding-right: 6px; margin-left: 5px; margin-right: 5px; margin-top: 1px; min-height: 20px;" />
             </ui:GroupBox>
         </ui:VisualElement>
         <ui:GroupBox name="PreviewSection" class="preview-group" style="flex-grow: 1; flex-shrink: 1; align-items: stretch; background-color: rgba(35, 35, 35, 0.16); flex-direction: column; justify-content: flex-start;">

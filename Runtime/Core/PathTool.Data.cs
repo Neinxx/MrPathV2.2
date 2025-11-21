@@ -17,7 +17,8 @@ namespace MrPathV2.Runtime.Core
         Overlay,
         Screen,
         Lerp,
-        Additive
+        Additive,
+        AlphaClip
     }
 
     #endregion

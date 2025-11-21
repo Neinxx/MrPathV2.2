@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using MrPathV2.Runtime.Core.BlendMasks;
 using MrPathV2.Runtime.Core.Noise;
 using UnityEngine;
+using MrPathV2.Runtime.Core.Resources;
 using Object = UnityEngine.Object;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using MrPathV2.Runtime.Jobs;
 
 namespace MrPathV2.Runtime.Core
 {
@@ -64,7 +67,7 @@ namespace MrPathV2.Runtime.Core
 
                 var layerCount = layers.Count;
                 var width = Mathf.Clamp(baseResolution, 16, 2048);
-                var pathSamples = DefaultPathSamples;
+                var pathSamples = SuggestPathSamples(pathLength);
                 var height = layerCount * pathSamples;
 
                 var needCreate = reuse == null || reuse.width != width || reuse.height != height || reuse.format != TextureFormat.R8;
@@ -97,7 +100,7 @@ namespace MrPathV2.Runtime.Core
 
                 // Try GPU path (compute shader in Resources: MaskAtlas.compute)
                 var supportsCompute = SystemInfo.supportsComputeShaders;
-                var cs = supportsCompute && allGpuSupported ? Resources.Load<ComputeShader>("MaskAtlas") : null;
+                var cs = supportsCompute && allGpuSupported ? ResourceProvider.LoadComputeShader("MaskAtlas") : null;
                 if (cs != null && cs.HasKernel("BuildAtlas"))
                 {
                     try
@@ -193,7 +196,7 @@ namespace MrPathV2.Runtime.Core
                 }
 
                 var supportsCompute = SystemInfo.supportsComputeShaders;
-                var cs = supportsCompute && allGpuSupported ? Resources.Load<ComputeShader>("MaskAtlas") : null;
+                var cs = supportsCompute && allGpuSupported ? ResourceProvider.LoadComputeShader("MaskAtlas") : null;
                 if (cs != null && cs.HasKernel("BuildAtlas"))
                 {
                     try
@@ -391,8 +394,8 @@ namespace MrPathV2.Runtime.Core
                 PositionRatio = dto.ShoulderParams.PositionRatio,
                 ShoulderStrength = dto.ShoulderParams.ShoulderStrength,
                 EdgeFalloff = dto.ShoulderParams.EdgeFalloff,
-                EnableLeftShoulder = dto.ShoulderParams.EnableLeftShoulder ? 1 : 0,
-                EnableRightShoulder = dto.ShoulderParams.EnableRightShoulder ? 1 : 0,
+                EnableLeftShoulder = dto.ShoulderParams.EnableLeftShoulder,
+                EnableRightShoulder = dto.ShoulderParams.EnableRightShoulder,
                 Tiling = dto.ShoulderParams.Tiling,
                 Offset = dto.ShoulderParams.Offset,
                 OverallScale = dto.ShoulderParams.OverallScale,
@@ -424,6 +427,86 @@ namespace MrPathV2.Runtime.Core
             };
 
             return gpuMask;
+        }
+
+        public static ComputeBuffer BuildLayerParamsBuffer(StylizedRoadRecipe recipe, Dictionary<TerrainLayer, int> terrainLayerMap)
+        {
+            var layers = recipe ? recipe.GetLayers().Where(l => l != null && l.enabled).ToArray() : Array.Empty<RoadLayer>();
+            var arr = new LayerParams[layers.Length];
+            for (var i = 0; i < layers.Length; i++)
+            {
+                var rl = layers[i];
+                var splatIndex = rl.contentLayer != null && terrainLayerMap != null && terrainLayerMap.TryGetValue(rl.contentLayer, out var idx) ? idx : int.MaxValue;
+                arr[i] = new LayerParams
+                {
+                    blend_mode = MapBlendMode(rl.blendMode),
+                    opacity = Mathf.Clamp01(rl.opacity * (recipe ? recipe.masterOpacity : 1f)),
+                    texture_index = 0u,
+                    terrain_layer_splat_index = (uint)splatIndex,
+                    tiling_offset = new Vector4(1, 1, 0, 0),
+                    tint_color = Color.white,
+                    mask_params = PackMaskParams(rl.layerMask)
+                };
+            }
+            var buf = new ComputeBuffer(arr.Length, Marshal.SizeOf(typeof(LayerParams)), ComputeBufferType.Structured);
+            buf.SetData(arr);
+            return buf;
+        }
+
+        private static uint MapBlendMode(Runtime.Core.BlendMode m)
+        {
+            if (m == Runtime.Core.BlendMode.AlphaClip) return 7u;
+            if (m == Runtime.Core.BlendMode.Overlay) return 2u;
+            if (m == Runtime.Core.BlendMode.Lerp) return 1u;
+            return 0u;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LayerParams
+        {
+            public uint blend_mode;
+            public float opacity;
+            public uint texture_index;
+            public uint terrain_layer_splat_index;
+            public Vector4 tiling_offset;
+            public Color tint_color;
+            public GpuMaskParams mask_params;
+        }
+
+        public static ComputeBuffer BuildSliceRecipeMaskBuffer(RecipeData recipeData, int alphamapLayerCount)
+        {
+            var sliceCount = (alphamapLayerCount + 3) / 4;
+            var arr = new uint[sliceCount];
+            for (var s = 0; s < sliceCount; s++)
+            {
+                var bits = 0u;
+                for (var c = 0; c < 4; c++)
+                {
+                    var idx = s * 4 + c;
+                    var isRecipe = false;
+                    for (var k = 0; k < recipeData.Length; k++)
+                    {
+                        if (recipeData.TerrainLayerIndices[k] == idx) { isRecipe = true; break; }
+                    }
+                    if (isRecipe) bits |= (1u << c);
+                }
+                arr[s] = bits;
+            }
+            var buf = new ComputeBuffer(arr.Length, sizeof(uint), ComputeBufferType.Structured);
+            buf.SetData(arr);
+            return buf;
+        }
+
+        public static Dictionary<TerrainLayer, int> BuildTerrainLayerMap(TerrainData td)
+        {
+            var dict = new Dictionary<TerrainLayer, int>();
+            var tls = td.terrainLayers;
+            for (var i = 0; i < tls.Length; i++)
+            {
+                var tl = tls[i];
+                if (tl) dict[tl] = i;
+            }
+            return dict;
         }
 
         // GPU param structs (must match HLSL in BlendMaskLibrary.hlsl)
@@ -551,8 +634,12 @@ namespace MrPathV2.Runtime.Core
                 var c = math.cos(p.RotationRad);
                 var mx = c * m.x - s * m.y;
                 var my = s * m.x + c * m.y;
-                mx += p.Seed * 17f;
-                my += p.Seed * 29f;
+                var sx = math.abs(math.sin(p.Seed * 12.9898f) * 43758.5453f);
+                var sy = math.abs(math.sin(p.Seed * 78.233f) * 12345.678f);
+                var seedX = sx - math.floor(sx);
+                var seedY = sy - math.floor(sy);
+                mx += seedX;
+                my += seedY;
                 var n01 = 0f;
                 if (p.Variant == 0)
                 {
@@ -584,6 +671,20 @@ namespace MrPathV2.Runtime.Core
                     var iy = (int)math.floor(py);
                     var fx = px - ix;
                     var fy = py - iy;
+                    float HashFloat2(int x, int y)
+                    {
+                        uint ux = (uint)x;
+                        uint uy = (uint)y;
+                        uint h = ux * 374761393u + uy * 668265263u;
+                        h ^= h >> 17;
+                        h *= 0xed5ad4bbu;
+                        h ^= h >> 11;
+                        h *= 0xac4c1b51u;
+                        h ^= h >> 15;
+                        h *= 0x31848babu;
+                        h ^= h >> 14;
+                        return (h & 0xFFFFFF) / (float)0x1000000; // 0..1
+                    }
                     var dmin = 1e9f;
                     for (var dy = 0; dy <= 1; dy++)
                     {
@@ -591,9 +692,9 @@ namespace MrPathV2.Runtime.Core
                         {
                             var cx = ix + dx;
                             var cy = iy + dy;
-                            var h = SampleLut(new float2(cx * 0.071f, cy * 0.113f));
-                            var jx = math.frac(h * 1.618f);
-                            var jy = math.frac(h * 2.414f);
+                            var h = HashFloat2(cx, cy);
+                            var jx = (h * 1.618f) - math.floor(h * 1.618f);
+                            var jy = (h * 2.414f) - math.floor(h * 2.414f);
                             jx = math.lerp(0.5f, jx, p.Jitter);
                             jy = math.lerp(0.5f, jy, p.Jitter);
                             var vx = dx + jx - fx;
@@ -652,13 +753,13 @@ namespace MrPathV2.Runtime.Core
             {
                 var shoulderVal = EvaluateShoulder(signedDistance, roadWidth, sp);
                 var noiseVal = EvaluateNoise(progress, signedDistance, roadWidth, np);
-                var pre = math.saturate(shoulderVal * noiseVal);
-                if (sp.Smooth <= 1e-5f) return pre * sp.OverallScale;
+                var pre = math.saturate(shoulderVal * noiseVal) * sp.OverallScale;
+                if (sp.Smooth <= 1e-5f) return math.saturate(pre);
                 var edge0 = sp.Smooth * 0.5f;
                 var edge1 = 1f - sp.Smooth * 0.5f;
                 var tt = math.saturate((pre - edge0) / math.max(1e-6f, edge1 - edge0));
                 var sm = tt * tt * (3f - 2f * tt);
-                return math.saturate(sm * sp.OverallScale);
+                return math.saturate(sm);
             }
 
             private float EvaluateMask(GpuMaskParams mask, float progress, float signedDistance, float roadWidth)

@@ -1,4 +1,5 @@
 using MrPathV2.Runtime.Core.Noise;
+using MrPathV2.Runtime.Core.NoiseRuntime;
 using UnityEngine;
 // for GpuMaskParamsData
 
@@ -38,6 +39,11 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         [Range(0f, 1f)] [Tooltip("上阈值（Edge2）。建议 > EdgeLow。")]
         public float edgeHigh = 0.75f;
 
+        private float _scaleX, _scaleY, _cos, _sin, _seedX, _seedY;
+        private int _oct;
+        private float _lac, _gain;
+        private bool _ready;
+
         private void OnValidate()
         {
             if (uniformScale) noiseScale.y = noiseScale.x;
@@ -49,62 +55,55 @@ namespace MrPathV2.Runtime.Core.BlendMasks
                 edgeLow = edgeHigh;
                 edgeHigh = t;
             }
+            _ready = false;
         }
 
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
+            if (strength <= 0f) return 0f;
+            if (!_ready) EnsurePrecomputed();
+
             var u = TransformPosition(horizontalPosition, worldWidth, pathLength);
             var v = TransformPathPosition(pathProgress, pathLength);
 
-            var scale = uniformScale ? new Vector2(noiseScale.x, noiseScale.x) : noiseScale;
-            var uv = new Vector2(u * Mathf.Max(1e-5f, scale.x), v * Mathf.Max(1e-5f, scale.y));
-            var rad = rotationDeg * Mathf.Deg2Rad;
-            var cos = Mathf.Cos(rad);
-            var sin = Mathf.Sin(rad);
-            var ruv = new Vector2(uv.x * cos - uv.y * sin, uv.x * sin + uv.y * cos);
+            var p = new NoiseParamsDto
+            {
+                ScaleX = uniformScale ? _scaleX : noiseScale.x,
+                ScaleY = uniformScale ? _scaleX : _scaleY,
+                Cos = _cos,
+                Sin = _sin,
+                Octaves = _oct,
+                Lacunarity = _lac,
+                Gain = _gain,
+                SeedX = _seedX,
+                SeedY = _seedY
+            };
+            var noise01 = NoiseEvalUtils.EvaluateFbm01(p, u, v);
+            var raw = Mathf.Clamp01(noise01 * Mathf.Max(0f, strength));
+            return ApplyNoiseSmoothing(raw);
+        }
 
+        private void EnsurePrecomputed()
+        {
+            _scaleX = noiseScale.x;
+            _scaleY = noiseScale.y;
+            var rad = rotationDeg * Mathf.Deg2Rad;
+            _cos = Mathf.Cos(rad);
+            _sin = Mathf.Sin(rad);
+            _oct = Mathf.Max(1, octaves);
+            _lac = Mathf.Max(1f, lacunarity);
+            _gain = Mathf.Clamp01(gain);
             var sx = Mathf.Abs(Mathf.Sin(seed * 12.9898f) * 43758.5453f);
             var sy = Mathf.Abs(Mathf.Sin(seed * 78.233f) * 12345.678f);
-            var seedOffset = new Vector2(sx - Mathf.Floor(sx), sy - Mathf.Floor(sy));
-            ruv += seedOffset;
-
-            var amplitude = 1f;
-            var frequency = 1f;
-            var sum = 0f;
-            var norm = 0f;
-            for (var i = 0; i < octaves; i++)
-            {
-                var s = NoiseLutProvider.Sample01(ruv.x * frequency, ruv.y * frequency);
-                sum += s * amplitude;
-                norm += amplitude;
-                frequency *= Mathf.Max(1f, lacunarity);
-                amplitude *= Mathf.Clamp01(gain);
-            }
-            var noise = norm > 1e-5f ? sum / norm : 0f;
-
-            var rawValue = noise * strength;
-            return ApplyNoiseSmoothing(Mathf.Clamp01(rawValue));
+            _seedX = sx - Mathf.Floor(sx);
+            _seedY = sy - Mathf.Floor(sy);
+            _ready = true;
         }
 
         private float ApplyNoiseSmoothing(float maskValue)
         {
             maskValue *= overallScale;
-            if (useAsymmetricEdges)
-            {
-                var e0 = Mathf.Clamp01(edgeLow);
-                var e1 = Mathf.Clamp01(edgeHigh);
-                if (e1 < e0)
-                {
-                    var t = e0;
-                    e0 = e1;
-                    e1 = t;
-                }
-                if (maskValue <= e0) return 0f;
-                if (maskValue >= e1) return 1f;
-                var t2 = (maskValue - e0) / Mathf.Max(1e-6f, e1 - e0);
-                var smoothed2 = t2 * t2 * (3f - 2f * t2);
-                return Mathf.Clamp01(smoothed2);
-            }
+            if (useAsymmetricEdges) return ApplyAsymmetricSmoothing(maskValue, edgeLow, edgeHigh);
             return ApplySmoothing(maskValue);
         }
 

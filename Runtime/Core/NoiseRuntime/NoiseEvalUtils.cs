@@ -1,10 +1,68 @@
 using MrPathV2.Runtime.Core.Noise;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace MrPathV2.Runtime.Core.NoiseRuntime
 {
+    public interface INoiseSampler
+    {
+        float Sample01(float u, float v);
+    }
+
     public static class NoiseEvalUtils
     {
+        private static INoiseSampler s_Sampler;
+        private static float[] s_LutData;
+        private static int s_LutSize;
+
+        public static void SetSampler(INoiseSampler sampler)
+        {
+            s_Sampler = sampler;
+        }
+
+        private static void EnsureCpuCache()
+        {
+            if (s_Sampler != null) return;
+            if (s_LutData != null && s_LutSize > 0) return;
+            var tex = NoiseLutProvider.GetOrCreateLut();
+            if (tex == null) return;
+            var colors = tex.GetPixels();
+            s_LutSize = tex.width;
+            s_LutData = new float[colors.Length];
+            for (var i = 0; i < colors.Length; i++) s_LutData[i] = colors[i].r;
+        }
+
+        private static float Sample01(float u, float v)
+        {
+            if (s_Sampler != null) return s_Sampler.Sample01(u, v);
+            EnsureCpuCache();
+            if (s_LutData == null || s_LutSize <= 0) return NoiseLutProvider.Sample01(u, v);
+            var stx = u - Mathf.Floor(u);
+            var sty = v - Mathf.Floor(v);
+            var sx = stx * s_LutSize - 0.5f;
+            var sy = sty * s_LutSize - 0.5f;
+            var i0x = (int)Mathf.Floor(sx);
+            var i0y = (int)Mathf.Floor(sy);
+            var fx = sx - i0x;
+            var fy = sy - i0y;
+            int Wrap(int a)
+            {
+                var w = a % s_LutSize;
+                return w < 0 ? w + s_LutSize : w;
+            }
+            var w0x = Wrap(i0x);
+            var w0y = Wrap(i0y);
+            var w1x = Wrap(i0x + 1);
+            var w1y = Wrap(i0y + 1);
+            var c00 = s_LutData[w0x + w0y * s_LutSize];
+            var c10 = s_LutData[w1x + w0y * s_LutSize];
+            var c01 = s_LutData[w0x + w1y * s_LutSize];
+            var c11 = s_LutData[w1x + w1y * s_LutSize];
+            var cx0 = Mathf.Lerp(c00, c10, fx);
+            var cx1 = Mathf.Lerp(c01, c11, fx);
+            return Mathf.Lerp(cx0, cx1, fy);
+        }
+
         public static float EvaluateFbm01(in NoiseParamsDto p, float u, float v)
         {
             var x = u * math.max(1e-5f, p.ScaleX);
@@ -20,7 +78,7 @@ namespace MrPathV2.Runtime.Core.NoiseRuntime
             var g = math.clamp(p.Gain, 0f, 1f);
             for (var i = 0; i < oct; i++)
             {
-                var s = NoiseLutProvider.Sample01(rx * freq, ry * freq);
+                var s = Sample01(rx * freq, ry * freq);
                 sum += s * amp;
                 norm += amp;
                 freq *= lac;
@@ -69,7 +127,7 @@ namespace MrPathV2.Runtime.Core.NoiseRuntime
             var y = v * math.max(1e-5f, scaleY);
             var rx = x * cos - y * sin;
             var ry = x * sin + y * cos;
-            var phase = rx * period + NoiseLutProvider.Sample01(rx, ry) * jitter;
+            var phase = rx * period + Sample01(rx, ry) * jitter;
             var s = 0.5f * (math.sin(phase) + 1f);
             return s;
         }

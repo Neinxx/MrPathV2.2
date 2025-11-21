@@ -39,8 +39,8 @@ namespace MrPathV2.Runtime.Core.BlendMasks.Composition
             dst.ShoulderParams.PositionRatio = positionRatio;
             dst.ShoulderParams.ShoulderStrength = shoulderStrength;
             dst.ShoulderParams.EdgeFalloff = edgeFalloff;
-            dst.ShoulderParams.EnableLeftShoulder = enableLeft;
-            dst.ShoulderParams.EnableRightShoulder = enableRight;
+            dst.ShoulderParams.EnableLeftShoulder = enableLeft ? 1 : 0;
+            dst.ShoulderParams.EnableRightShoulder = enableRight ? 1 : 0;
         }
     }
 }

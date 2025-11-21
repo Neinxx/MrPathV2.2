@@ -116,22 +116,7 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         private float ApplyCombinedSmoothing(float value)
         {
             value *= overallScale;
-            if (useAsymmetricEdges)
-            {
-                var e0 = Mathf.Clamp01(edgeLow);
-                var e1 = Mathf.Clamp01(edgeHigh);
-                if (e1 < e0)
-                {
-                    var t2 = e0;
-                    e0 = e1;
-                    e1 = t2;
-                }
-                if (value <= e0) return 0f;
-                if (value >= e1) return 1f;
-                var tt = (value - e0) / Mathf.Max(1e-6f, e1 - e0);
-                var sm = tt * tt * (3f - 2f * tt);
-                return Mathf.Clamp01(sm);
-            }
+            if (useAsymmetricEdges) return ApplyAsymmetricSmoothing(value, edgeLow, edgeHigh);
             return ApplySmoothing(value);
         }
 
@@ -142,8 +127,8 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             dst.ShoulderParams.ShoulderWidthRatio = edgeBandWidthRatio;
             dst.ShoulderParams.ShoulderStrength = 1.0f;
             dst.ShoulderParams.EdgeFalloff = edgeFalloff;
-            dst.ShoulderParams.EnableLeftShoulder = enableLeftEdge;
-            dst.ShoulderParams.EnableRightShoulder = enableRightEdge;
+            dst.ShoulderParams.EnableLeftShoulder = enableLeftEdge ? 1 : 0;
+            dst.ShoulderParams.EnableRightShoulder = enableRightEdge ? 1 : 0;
             dst.ShoulderParams.Tiling = tiling;
             dst.ShoulderParams.Offset = offset;
             dst.ShoulderParams.OverallScale = overallScale;

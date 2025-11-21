@@ -53,6 +53,11 @@ namespace MrPathV2.Runtime.Jobs
             [ReadOnly] public readonly bool ForceHorizontal;
             [ReadOnly] public readonly bool OpaquePreview; // 是否启用不透明绘制（与预览开关保持一致）
             [ReadOnly] public int CrossSectionSegments;
+            [ReadOnly] public readonly bool EnableEdgeNoise;
+            [ReadOnly] public readonly float EdgeNoiseAmplitude;
+            [ReadOnly] public readonly float EdgeNoisePeriod;
+            [ReadOnly] public readonly float EdgeNoiseJitter;
+            [ReadOnly] public readonly float EdgeNoiseSeed;
 
             private NativeArray<float> _bakedCrossSection;
             private NativeArray<float> _bakedFalloff;
@@ -68,6 +73,11 @@ namespace MrPathV2.Runtime.Jobs
                 ForceHorizontal = profile.forceHorizontal;
                 OpaquePreview = profile != null && profile.opaquePreview;
                 CrossSectionSegments = profile.crossSectionSegments;
+                EnableEdgeNoise = profile.enableEdgeNoise;
+                EdgeNoiseAmplitude = profile.edgeNoiseAmplitude;
+                EdgeNoisePeriod = profile.edgeNoisePeriod;
+                EdgeNoiseJitter = profile.edgeNoiseJitter;
+                EdgeNoiseSeed = profile.edgeNoiseSeed;
 
                 _bakedCrossSection = NativeArrayExtensions.CreateTracked<float>(BakeResolution, allocator);
                 _bakedFalloff = NativeArrayExtensions.CreateTracked<float>(BakeResolution, allocator);

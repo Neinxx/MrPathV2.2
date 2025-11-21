@@ -36,13 +36,13 @@ namespace MrPathV2.Editor.Settings
         /// </summary>
         private static void DrawGUI(string searchContext)
         {
-            // 从 EditorPrefs 读取当前值
-            var current = false; // 强制关闭，保持UI与状态一致
-            EditorGUILayout.ToggleLeft("启用 GPU 实时预览 (未开放)", current);
-            EditorGUILayout.HelpBox("GPU预览未开放，当前版本仅支持CPU预览。", MessageType.Info);
-            // 清理偏好键（若存在旧值）
-            if (EditorPrefs.GetBool(PrefKey, false))
-                EditorPrefs.SetBool(PrefKey, false);
+            var current = EditorPrefs.GetBool(PrefKey, false);
+            var next = EditorGUILayout.ToggleLeft("启用 GPU 实时预览（实验性）", current);
+            if (next != current)
+            {
+                EditorPrefs.SetBool(PrefKey, next);
+            }
+            EditorGUILayout.HelpBox("在支持 ComputeShader 的环境下启用 GPU 线渲染。失败将自动回退到CPU。", MessageType.Info);
         }
     }
 
@@ -55,12 +55,7 @@ namespace MrPathV2.Editor.Settings
 
         // 将键名集中到一个地方，避免魔法字符串散落
         private const string GpuPreviewSettingsPrefKey = "MrPath_EnableGpuPreview";
-        static GpuPreviewBootstrap()
-        {
-            // GPU预览未开放：强制关闭并清理偏好
-            if (EditorPrefs.GetBool(GpuPreviewSettingsPrefKey, false))
-                EditorPrefs.SetBool(GpuPreviewSettingsPrefKey, false);
-        }
+        static GpuPreviewBootstrap() { /* 保持默认值，不强制覆盖 */ }
     }
 
 
@@ -69,13 +64,10 @@ namespace MrPathV2.Editor.Settings
     public static class GpuPreview
     {
         private const string PrefKey = "MrPath_EnableGpuPreview";
-
-        static GpuPreview()
+        public static bool IsEnabled
         {
-            // 初始化时强制关闭
-            if (EditorPrefs.GetBool(PrefKey, false))
-                EditorPrefs.SetBool(PrefKey, false);
+            get => EditorPrefs.GetBool(PrefKey, false);
+            set => EditorPrefs.SetBool(PrefKey, value);
         }
-        // 移除菜单项：避免误导操作。
     }
 }

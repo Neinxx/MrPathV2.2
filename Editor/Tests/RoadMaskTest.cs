@@ -38,7 +38,7 @@ namespace MrPathV2.Editor.Tests
             Debug.Log("[RoadMaskTest] 验证着色器属性...");
 
             // 检查计算着色器是否存在
-            var computeShader = Resources.Load<ComputeShader>("PaintSplatmapCompute");
+            var computeShader = MrPathV2.Runtime.Core.Resources.ResourceProvider.LoadComputeShader("PaintSplatmapCompute");
             if (computeShader == null)
             {
                 Debug.LogError("[RoadMaskTest] 未找到 PaintSplatmapCompute 计算着色器");

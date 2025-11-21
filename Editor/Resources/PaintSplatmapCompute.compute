@@ -1,4 +1,5 @@
 #pragma kernel paint_terrain
+#pragma kernel init_splat_roi
 // 涓洪伩鍏嶅湪 OpenGLES3 涓婂洜 RWTexture2DArray<float4> 绫诲瀷/鏍煎紡闄愬埗瀵艰嚧 HLSLcc 璀﹀憡锛屾帓闄?gles3 缂栬瘧鐩爣銆?
 // GLES3 璁惧灏嗕娇鐢?CPU 鎴栧叾瀹冨悗澶囪矾寰勮繘琛屽湴褰㈢粯鍒躲€?
 #pragma exclude_renderers gles3
@@ -9,6 +10,8 @@
 
 // Constants
 #define FLT_INF 3.402823466e+38f
+// BlendMode constants aligned with Runtime/Core/PathTool.Data.cs
+#define BLEND_MODE_ALPHA_CLIP 7u
 
 // Structs (must be defined before use)
 struct layer_params {
@@ -35,6 +38,10 @@ StructuredBuffer<RoadPixelInfo> road_pixel_info;
 // 新增：每 slice 的配方通道掩码（bit0..bit3 映射到 RGBA），由 CPU 预计算
 StructuredBuffer<uint>         slice_recipe_mask;
 
+StructuredBuffer<float>        cpu_alphamaps_roi;
+uint                           roi_width;
+uint                           roi_height;
+
 // Textures - 淇敼涓篺loat4鏍煎紡浠ュ吋瀹笹LES3
 RWTexture2DArray<float4> splat_weights; // 浣跨敤float4鏇夸唬unorm float4
 Texture2D<float>         road_mask;
@@ -59,6 +66,7 @@ float  mask_threshold;
 float  edge_width_world;
 uint   use_road_mask; // 褰撲负1鏃跺惎鐢?road_mask 闂ㄦ帶锛涗负0鏃朵笉閲囨牱閬僵锛屾寜ROI涓庤窛绂荤粯鍒?
 uint   use_road_pixel_info; // 1: 使用 road_pixel_info 缓冲提供的像素信息，0: 仅用几何计算
+uint   opaque_painting;
 
 // Helper function to calculate squared distance
 float distance_sq(float2 a, float2 b)
@@ -219,6 +227,27 @@ inline float ApplyMaskThreshold(float value, float threshold)
 }
 
 [numthreads(8, 8, 1)]
+void init_splat_roi(uint3 id : SV_DispatchThreadID)
+{
+    uint2 roiCoord = uint2(id.xy);
+    if(roiCoord.x >= roi_width || roiCoord.y >= roi_height) return;
+    uint2 pixel_coord = roiCoord + alphamap_offset;
+    uint index = roiCoord.y * roi_width + roiCoord.x;
+    for(uint li = 0u; li < alphamap_layer_count; li++)
+    {
+        float v = cpu_alphamaps_roi[index * alphamap_layer_count + li];
+        uint slice = li / 4u;
+        uint ch = li % 4u;
+        float4 cur = clamp_to_linear(splat_weights[uint3(pixel_coord, slice)]);
+        if(ch == 0u) cur.r = v;
+        else if(ch == 1u) cur.g = v;
+        else if(ch == 2u) cur.b = v;
+        else cur.a = v;
+        splat_weights[uint3(pixel_coord, slice)] = clamp_to_linear(cur);
+    }
+}
+
+[numthreads(8, 8, 1)]
 void paint_terrain(uint3 id : SV_DispatchThreadID)
 {
     uint2 pixel_coord = uint2(id.xy) + alphamap_offset;
@@ -319,9 +348,11 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 
         // 复用已计算的 world_pos，避免重复计算与带宽浪费
         float2 world_pos2 = world_pos;
-        float  mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
+		float  mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
 		float  mask_shaped = ApplyMaskThreshold(mask_value, mask_threshold);
-		float  self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate;
+        bool   is_alpha_clip = (layer.blend_mode == BLEND_MODE_ALPHA_CLIP);
+        float  clip_gate = (is_alpha_clip || (opaque_painting == 1)) ? ((mask_value >= mask_threshold) ? 1.0 : 0.0) : 1.0;
+		float  self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate * clip_gate;
 		float  contribute = min(self_alpha, remaining);
 		if(contribute > 1e-6)
 		{
@@ -332,8 +363,8 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 	}
 
 	// 姝ラ3锛氭寜鍓╀綑閲忕缉鏀鹃潪閰嶆柟灞傦紙淇濇寔鍏剁浉瀵规瘮渚嬶級锛屼娇 sum(others)=1-sum_recipe（slice 向量化写入）
-	float target_others = saturate(1.0 - sum_recipe);
-	float scale = (others_sum > 1e-6) ? target_others / others_sum : 0.0;
+    float target_others = (opaque_painting == 1) ? 0.0 : saturate(1.0 - sum_recipe);
+    float scale = (others_sum > 1e-6) ? target_others / others_sum : 0.0;
 	if(scale < 1.0 - 1e-6)
 	{
         [loop]
@@ -367,7 +398,9 @@ void paint_terrain(uint3 id : SV_DispatchThreadID)
 		float2 world_pos2 = world_pos;
 		float  mask_value = EvaluateMask(layer.mask_params, world_pos2, progress, signed_distance, road_width);
 		float  mask_shaped = ApplyMaskThreshold(mask_value, mask_threshold);
-		float  self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate;
+        bool   is_alpha_clip = (layer.blend_mode == BLEND_MODE_ALPHA_CLIP);
+        float  clip_gate = (is_alpha_clip || (opaque_painting == 1)) ? ((mask_value >= mask_threshold) ? 1.0 : 0.0) : 1.0;
+		float  self_alpha = saturate(layer.opacity * edgeFactor * mask_shaped) * maskGate * clip_gate;
 		float  contribute = min(self_alpha, remaining);
 
 		// 统一有序覆盖策略：直接写入该图层的贡献值

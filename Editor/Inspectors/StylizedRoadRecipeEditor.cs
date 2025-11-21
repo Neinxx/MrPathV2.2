@@ -337,7 +337,7 @@ namespace MrPathV2.Editor.Inspectors
             if (maskSlot == null) return;
 
             UpdateMaskSlot(layer, maskIcon, maskName);
-            ToggleSlotEmptyClass(maskSlot, layer.layerMask == null);
+            ToggleSlotEmptyClass(maskSlot, layer.layerMask == null || !layer.maskEnabled);
             SetClearButtonState(maskClear, layer.layerMask != null);
             
             maskSlot.RegisterCallback<MouseDownEvent>(evt =>
@@ -356,6 +356,24 @@ namespace MrPathV2.Editor.Inspectors
             if (maskClear is not null)
             {
                 maskClear.clicked += ClearMask;
+            }
+
+            // 绑定 UXML 中现有的遮罩启用开关（优先使用用户提供的ID）
+            var maskToggle = row.Q<Toggle>("MaskEnabled") ?? row.Q<Toggle>("EnableMask");
+            if (maskToggle != null)
+            {
+                maskToggle.value = layer.maskEnabled;
+                maskToggle.RegisterValueChangedCallback(ev =>
+                {
+                    layer.maskEnabled = ev.newValue;
+                    ToggleSlotEmptyClass(maskSlot, layer.layerMask == null || !layer.maskEnabled);
+                    UpdateMaskSlot(layer, maskIcon, maskName);
+                    if (_recipe != null)
+                    {
+                        EditorUtility.SetDirty(_recipe);
+                        _recipe.RaiseRecipeChanged();
+                    }
+                });
             }
             return;
 
@@ -414,7 +432,11 @@ namespace MrPathV2.Editor.Inspectors
 
         private static void UpdateMaskSlot(RoadLayer layer, VisualElement icon, Label name)
         {
-            if (name != null) name.text = layer.layerMask ? layer.layerMask.name : "Take a mask to begin";
+            if (name != null)
+            {
+                if (layer.layerMask == null) name.text = "Take a mask to begin";
+                else name.text = layer.maskEnabled ? layer.layerMask.name : $"{layer.layerMask.name} (Disabled)";
+            }
             if (icon == null) return;
             var tex = layer.layerMask ? AssetPreview.GetMiniThumbnail(layer.layerMask) : null;
             icon.style.backgroundImage = tex != null ? new StyleBackground(tex) : null;
@@ -435,12 +457,14 @@ namespace MrPathV2.Editor.Inspectors
                 var maskName = row.Q<Label>("MaskName");
                 var contentClear = row.Q<Button>("ClearLayerButton");
                 var maskClear = row.Q<Button>("ClearMaskButton");
+                var maskToggle = row.Q<Toggle>("MaskEnabled") ?? row.Q<Toggle>("EnableMask");
                 UpdateContentSlot(layer, layerIcon, layerName);
                 UpdateMaskSlot(layer, maskIcon, maskName);
                 ToggleSlotEmptyClass(layerIcon?.parent ?? row, layer.contentLayer == null);
-                ToggleSlotEmptyClass(maskIcon?.parent ?? row, layer.layerMask == null);
+                ToggleSlotEmptyClass(maskIcon?.parent ?? row, layer.layerMask == null || !layer.maskEnabled);
                 SetClearButtonState(contentClear, layer.contentLayer != null);
                 SetClearButtonState(maskClear, layer.layerMask != null);
+                if (maskToggle != null) maskToggle.SetValueWithoutNotify(layer.maskEnabled);
             }
         }
 

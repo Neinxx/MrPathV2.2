@@ -6,6 +6,7 @@ using MrPathV2.Runtime.Core;
 using UnityEditor;
 #endif
 using UnityEngine;
+using MrPathV2.Runtime.Core.Resources;
 using UnityEngine.Serialization;
 
 // 保留以兼容可能的 Task 用法（若不需要可后续移除）
@@ -102,7 +103,7 @@ namespace MrPathV2.Runtime.Settings
         ///     从Resources目录加载PathStrategyRegistry实例
         /// </summary>
         /// <returns>加载的实例，如果失败则返回null</returns>
-        private static PathStrategyRegistry LoadFromResources() => Resources.Load<PathStrategyRegistry>("PathStrategyRegistry");
+        private static PathStrategyRegistry LoadFromResources() => ResourceProvider.LoadAsset<PathStrategyRegistry>("PathStrategyRegistry");
 
         /// <summary>
         ///     在编辑器中查找PathStrategyRegistry实例

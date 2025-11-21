@@ -52,6 +52,7 @@ namespace MrPathV2.Runtime.Core.BlendMasks
 
         public override float Evaluate(float horizontalPosition, float pathProgress, float worldWidth, float pathLength)
         {
+            if (strength <= 0f) return 0f;
             if (!_ready) EnsurePrecomputed();
             var u = TransformPosition(horizontalPosition, worldWidth, pathLength) + _seedX;
             var v = TransformPathPosition(pathProgress, pathLength) + _seedY;
@@ -61,22 +62,7 @@ namespace MrPathV2.Runtime.Core.BlendMasks
                 _cos, _sin, period, jitter);
             var raw = Mathf.Clamp01(s * Mathf.Max(0f, strength));
             var value = raw * overallScale;
-            if (useAsymmetricEdges)
-            {
-                var e0 = Mathf.Clamp01(edgeLow);
-                var e1 = Mathf.Clamp01(edgeHigh);
-                if (e1 < e0)
-                {
-                    var t = e0;
-                    e0 = e1;
-                    e1 = t;
-                }
-                if (value <= e0) return 0f;
-                if (value >= e1) return 1f;
-                var tt = (value - e0) / Mathf.Max(1e-6f, e1 - e0);
-                var sm = tt * tt * (3f - 2f * tt);
-                return Mathf.Clamp01(sm);
-            }
+            if (useAsymmetricEdges) return ApplyAsymmetricSmoothing(value, edgeLow, edgeHigh);
             return ApplySmoothing(value);
         }
 

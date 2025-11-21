@@ -10,6 +10,7 @@ namespace MrPathV2.Runtime.Core
         // 名称与启用状态
         public string name = "Layer";
         public bool enabled = true;
+        public bool maskEnabled = true;
 
         // 混合模式与不透明度（纯数据）
         public BlendMode blendMode = BlendMode.Normal;
@@ -26,6 +27,7 @@ namespace MrPathV2.Runtime.Core
         {
             name = $"Layer {index}",
             enabled = true,
+            maskEnabled = true,
             opacity = 1f,
             blendMode = BlendMode.Normal,
             contentLayer = null,

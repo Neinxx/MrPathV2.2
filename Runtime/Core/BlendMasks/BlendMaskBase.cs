@@ -108,6 +108,23 @@ namespace MrPathV2.Runtime.Core.BlendMasks
             return Mathf.Clamp01(smoothed);
         }
 
+        protected float ApplyAsymmetricSmoothing(float value, float low, float high)
+        {
+            var e0 = Mathf.Clamp01(low);
+            var e1 = Mathf.Clamp01(high);
+            if (e1 < e0)
+            {
+                var t = e0;
+                e0 = e1;
+                e1 = t;
+            }
+            if (value <= e0) return 0f;
+            if (value >= e1) return 1f;
+            var tt = (value - e0) / Mathf.Max(1e-6f, e1 - e0);
+            var sm = tt * tt * (3f - 2f * tt);
+            return Mathf.Clamp01(sm);
+        }
+
         #endregion
 
         #region Evaluate API
@@ -128,53 +145,5 @@ namespace MrPathV2.Runtime.Core.BlendMasks
         public virtual float Evaluate(float horizontalPosition, float worldWidth, float pathLength) => Evaluate(horizontalPosition, 0.5f, worldWidth, pathLength);
 
         #endregion
-    }
-
-// 在类定义之前添加以下结构体定义
-    [StructLayout(LayoutKind.Sequential)]
-    public struct GpuShoulderMaskParamsData
-    {
-        public float ShoulderWidthRatio;
-        public float PositionRatio; // 新增：路肩中心相对边缘的位移比例 (0..1)
-        public float ShoulderStrength;
-        public float EdgeFalloff;
-        public bool EnableLeftShoulder;
-        public bool EnableRightShoulder;
-        public Vector2 Tiling;
-        public Vector2 Offset;
-        public float OverallScale;
-        public float Smooth;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct GpuNoiseMaskParamsData
-    {
-        public float Strength;
-        public float Seed;
-        public Vector2 Tiling;
-        public Vector2 Offset;
-        public float OverallScale;
-        public float Smooth;
-        public Vector2 NoiseScale;
-        public float RotationRad;
-        public int Octaves;
-        public float Lacunarity;
-        public float Gain;
-        public bool UseAsymmetricEdges;
-        public float EdgeLow;
-        public float EdgeHigh;
-        public float Period;
-        public float Jitter;
-        public int Invert;
-        public int Variant;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct GpuMaskParamsData
-    {
-        public int MaskType;
-        public float Strength;
-        public GpuNoiseMaskParamsData NoiseParams;
-        public GpuShoulderMaskParamsData ShoulderParams;
     }
 }
