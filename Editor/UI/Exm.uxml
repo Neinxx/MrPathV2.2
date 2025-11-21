@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements"
+         xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements"
+         noNamespaceSchemaLocation="../../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <uie:ObjectField label="Object Field"/>
+    <uie:LayerMaskField label="LayerMask"/>
+    <uie:GradientField label="Gradient"/>
+    <uie:TagField label="Tag" value="Player"/>
+    <uie:ObjectField label="Object Field"/>
+    <uie:RectField label="Rect"/>
+    <uie:IntegerField label="Int Field" value="42"/>
+    <ui:RadioButtonGroup label="Radio Button Group" value="-1"/>
+    <ui:Slider picking-mode="Ignore" label="Slider" value="42" high-value="100"/>
+    <ui:ListView focusable="true"/>
+    <ui:ScrollView/>
+    <ui:Scroller high-value="100" direction="Horizontal" value="42"/>
+    <ui:ProgressBar value="22" title="my-progress"/>
+</ui:UXML>

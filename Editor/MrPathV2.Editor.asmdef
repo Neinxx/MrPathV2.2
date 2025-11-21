@@ -1,0 +1,19 @@
+{
+  "name": "MrPathV2.Editor",
+  "references": [
+    "MrPathV2.Runtime",
+    "Unity.Mathematics",
+    "Unity.Collections",
+    "Unity.Jobs",
+    "Unity.Burst"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -1,0 +1,695 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using MrPathV2.Editor.Terrain;
+using MrPathV2.Runtime.Core;
+using MrPathV2.Runtime.Core.BlendMasks;
+using MrPathV2.Runtime.Preview;
+using UnityEngine;
+using Object = UnityEngine.Object;
+
+
+// CPU-only：移除 GPU 预览缓存别名与依赖
+
+namespace MrPathV2.Editor.Preview
+{
+    /// <summary>
+    ///     Wraps a single instanced material used by preview mesh rendering and keeps it up-to-date with the current
+    ///     profile/template.
+    ///     Supports PathPreviewSplatMulti shader (multi-layer preview).
+    /// </summary>
+    public sealed class PreviewMaterialManager : IDisposable
+    {
+
+        // Cached combined mask LUT (RGBA channels for up to 4 layers)
+        // private Texture2D _maskLUT;
+        private static Texture2D m_TransparentPrevTex; // 1x1 RGBA(0,0,0,0)
+        private readonly List<Material> m_CachedList = new List<Material>(1);
+        private bool m_ArrayFallbackWarned;
+        private bool m_Dirty = true;
+        private bool m_Disposed;
+        private ShaderFlavor m_Flavor = ShaderFlavor.Unknown;
+
+        private int m_LastHash = -1;
+
+        // Future: cached 2D mask atlas
+        private Texture2D m_MaskAtlas;
+
+        // 旧的纹理数组缓存键机制与可复用命令缓冲已不再使用，移除以保持类的纯净
+
+        // Record path length for building MaskAtlas
+        private float m_PathLength = -1f;
+        // 使用专用管理器复用并缓存 Texture2DArray，避免每帧重建
+        private PreviewTextureArrayManager m_TexArrayMgr;
+
+        public Material Current { get; private set; }
+
+        // Public parameter push: uniformly control common preview properties
+        private void PushCommonPreviewParams(PathProfile profile, int layerCount, float alpha)
+        {
+            if (Current == null) return;
+
+            var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
+            parameterSetter.SetCommonPreviewParameters(layerCount, alpha);
+        }
+
+        // Layer parameter push: array form (tiling/opacity/blend), and prefer to bind Texture2DArray
+        private int PushLayerParams(PathProfile profile)
+        {
+            if (Current == null) return 0;
+
+            var recipe = profile.roadRecipe;
+            var layers = recipe?.GetLayers();
+            var layerCount = layers?.Count ?? 0;
+            if (layerCount == 0) layerCount = 1; // At least one layer
+
+            var isMultiLayerShader = Current.shader.name.Contains("PathPreviewSplatMulti");
+            var maxLayers = isMultiLayerShader ? 16 : 4;
+
+            var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
+            var processedLayerCount = parameterSetter.SetLayerParametersAsArrays(maxLayers, layers);
+            if (processedLayerCount == 0)
+            {
+                // 提前返回：无有效图层时，确保禁用数组路径并返回
+                if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray))
+                    Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
+                if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
+                    Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+                return 0;
+            }
+
+#if UNITY_EDITOR
+            // CPU-only：保留索引数组接口，默认-1表示未绑定，避免GPU路径依赖
+            var layerCountForIndices = isMultiLayerShader ? Mathf.Min(maxLayers, layerCount) : Mathf.Min(4, layerCount);
+            var splatIndicesArr = new float[maxLayers];
+            for (var i = 0; i < maxLayers; i++) splatIndicesArr[i] = -1f;
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerSplatIndicesArr))
+                Current.SetFloatArray(PreviewShaderContracts.Properties.LayerSplatIndicesArr, splatIndicesArr);
+#endif
+
+            // Collect textures for trying to build Texture2DArray
+            var texList = new List<Texture2D>();
+            var sliceCount = 0;
+            int width = -1, height = -1;
+            var textureHashBuilder = new StringBuilder();
+
+            for (var i = 0; i < Mathf.Min(maxLayers, layerCount); i++)
+            {
+                TerrainLayer tl = null;
+                if (layers != null && i < layers.Count)
+                {
+                    var rl = layers[i];
+                    if (rl != null && rl.enabled)
+                    {
+                        tl = rl.contentLayer;
+                    }
+                }
+
+                // Try to collect array textures
+                var tex = tl && tl.diffuseTexture ? tl.diffuseTexture : null;
+                if (tex)
+                {
+                    texList.Add(tex);
+                    sliceCount++;
+                    if (width < 0)
+                    {
+                        width = tex.width;
+                        height = tex.height;
+                    }
+                    // Add texture hash to cache key
+                    textureHashBuilder.Append(tex.GetInstanceID()).Append(",");
+                }
+                else
+                {
+                    // If any layer is missing a texture, abandon the array approach (use the old per-layer push)
+                    sliceCount = -1;
+                    textureHashBuilder.Append("null,");
+                }
+            }
+
+            // Prefer array path: as long as all layers have textures (sizes can be inconsistent, GPU Blit automatically scales to the first texture size)
+            var canUseArray = sliceCount > 0;
+
+            // 复用单例管理器，避免每帧构造导致缓存丢失
+            var textureHashes = textureHashBuilder.ToString();
+            if (canUseArray)
+            {
+                m_TexArrayMgr ??= new PreviewTextureArrayManager();
+                var success = m_TexArrayMgr.TryCreateAndBindTextureArray(Current, texList, width, height, textureHashes);
+                if (!success)
+                {
+                    HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
+                }
+            }
+            else
+            {
+                HandleFallbackTextureBinding(maxLayers, layerCount, layers, profile, parameterSetter);
+            }
+
+            return processedLayerCount;
+        }
+
+        private void HandleFallbackTextureBinding(int maxLayers, int layerCount, IReadOnlyList<RoadLayer> layers, PathProfile profile, PreviewMaterialParameterSetter parameterSetter)
+        {
+            if (!m_ArrayFallbackWarned)
+            {
+                Debug.LogWarning("[PreviewMaterialManager] Texture2DArray not available or missing textures, fallback to per-layer binding.");
+                m_ArrayFallbackWarned = true;
+            }
+            if (Current.HasProperty(PreviewShaderContracts.Properties.UseLayerTexArray))
+                Current.SetFloat(PreviewShaderContracts.Properties.UseLayerTexArray, 0f);
+            if (Current.HasProperty(PreviewShaderContracts.Properties.LayerTextures))
+                Current.SetTexture(PreviewShaderContracts.Properties.LayerTextures, null);
+
+            var maxLayersToBind = Mathf.Min(maxLayers, layerCount);
+            for (var i = 0; i < maxLayersToBind; i++)
+            {
+                TerrainLayer tl = null;
+                if (layers != null && i < layers.Count)
+                {
+                    var rl = layers[i];
+                    if (rl != null && rl.enabled)
+                    {
+                        tl = rl.contentLayer;
+                    }
+                }
+                parameterSetter.SetLayerParameters(i, tl);
+            }
+        }
+
+        public List<Material> GetRenderMaterials()
+        {
+            if (m_Dirty)
+            {
+                m_CachedList.Clear();
+                if (Current) m_CachedList.Add(Current);
+                m_Dirty = false;
+            }
+            return m_CachedList;
+        }
+
+#if UNITY_EDITOR
+        /// <summary>
+        ///     Sets the Terrain associated with the current preview (used to get cached alphamap RenderTextureArray from
+        ///     <see cref="Gpu Preview Cache" />)
+        /// </summary>
+        /// <param name="terrain">Target Terrain</param>
+        public void SetTargetTerrain(UnityEngine.Terrain terrain)
+        {
+            m_TargetTerrain = terrain;
+        }
+#endif
+
+        // New: for external push of path length and Mesh repeat parameters
+        public void SetPathLength(float length)
+        {
+            m_PathLength = length;
+        }
+
+        public void SetMeshRepeats(float across, float along)
+        {
+            if (!Current) return;
+            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAcross))
+                Current.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAcross, Mathf.Max(1e-4f, across));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.MeshRepeatAlong))
+                Current.SetFloat(PreviewShaderContracts.Properties.MeshRepeatAlong, Mathf.Max(1e-4f, along));
+        }
+
+        /// <summary>
+        ///     绑定预览 ROI 边界到材质（世界坐标 XZ）。
+        /// </summary>
+        public void SetPreviewBounds(Vector4 boundsXZ)
+        {
+            if (!Current) return;
+            if (Current.HasProperty(PreviewShaderContracts.Properties.PreviewBounds))
+            {
+                Current.SetVector(PreviewShaderContracts.Properties.PreviewBounds, boundsXZ);
+            }
+        }
+
+        // Restore Update method (removed by previous edit), keep material refresh and GPU binding logic
+        public void Update(PathProfile profile, Material template, float previewAlpha)
+        {
+            if (m_Disposed) return;
+
+            if (!m_Subscribed)
+            {
+                MaskChangeEvents.Changed += OnMaskChanged;
+                m_Subscribed = true;
+            }
+
+            if (profile == null || template == null)
+            {
+                Clear();
+                return;
+            }
+
+            var newHash = CalculateHash(profile, template, previewAlpha);
+            var needRefresh = newHash != m_LastHash || Current == null || m_ForceRefresh;
+            m_LastHash = newHash;
+
+            if (needRefresh)
+            {
+                EnsureMaterial(template);
+                RefreshMaterial(profile, previewAlpha);
+                m_ForceRefresh = false;
+            }
+
+            // CPU-only：不进行GPU实时预览绑定
+
+            m_Dirty = true;
+        }
+
+        private bool m_ForceRefresh;
+        private bool m_Subscribed;
+
+        private void OnMaskChanged(BlendMaskBase obj)
+        {
+            m_ForceRefresh = true;
+        }
+
+        private void ApplySplat(PathProfile profile, float alpha)
+        {
+            if (Current == null) return;
+
+            // Push layer parameters (including array/fallback)
+            var layerCount = PushLayerParams(profile);
+            // Push common preview parameters (opacity, threshold, depth, etc.)
+            PushCommonPreviewParams(profile, layerCount, alpha);
+            // 为多层预览同样绑定透明的上一帧结果，避免默认 blackTexture 的 Alpha=1 造成二次绘制黑块
+            if (Current.HasProperty(PreviewShaderContracts.Properties.PrevResultTex))
+            {
+                Current.SetTexture(PreviewShaderContracts.Properties.PrevResultTex, EnsureTransparentPrevTex());
+            }
+            // Prepare mask texture (MaskAtlas or GPU weights)
+            // CPU-only：始终使用 MaskAtlas 并推送Terrain参数
+            SetupMaskTextures(profile);
+            PushCpuTerrainParameters();
+        }
+
+        /// <summary>
+        ///     Generates or updates the mask atlas texture that stores per-layer mask weights.
+        ///     This replaces the legacy 1D RGBA LUT system and supports an arbitrary number of layers.
+        /// </summary>
+        private void SetupMaskTextures(PathProfile profile)
+        {
+            if (Current == null) return;
+
+            var maskAtlasGenerator = new PreviewMaskAtlasGenerator(Current, profile, m_PathLength);
+            m_MaskAtlas = maskAtlasGenerator.GenerateMaskAtlas(m_MaskAtlas);
+        }
+
+        private void ApplyStylized(PathProfile profile)
+        {
+            if (Current == null) return;
+
+            var layersList = profile.roadRecipe?.GetLayers();
+            var layer = layersList != null && layersList.Count > 0 ? layersList[0]?.contentLayer : null;
+
+            var parameterSetter = new PreviewMaterialParameterSetter(Current, profile);
+            parameterSetter.SetStylizedParameters(layer);
+
+            // Key: Provide transparent previous frame result for stylized preview to avoid default blackTexture Alpha=1 causing entire rectangle
+            if (Current.HasProperty(PreviewShaderContracts.Properties.PrevResultTex))
+            {
+                Current.SetTexture(PreviewShaderContracts.Properties.PrevResultTex, EnsureTransparentPrevTex());
+            }
+
+            // Ensure single-layer preview can also get mask texture (layer 0) to apply transparency gradient
+            SetupMaskTextures(profile);
+
+#if UNITY_EDITOR
+            // Stylized 的 CPU 预览同样需要 Terrain 参数用于世界坐标与地形 UV 的换算
+            PushCpuTerrainParameters();
+#endif
+        }
+
+        private enum ShaderFlavor
+        {
+            Splat,
+            Stylized,
+            Unknown
+        }
+
+        // New: GPU preview related properties
+#if UNITY_EDITOR
+        private UnityEngine.Terrain m_TargetTerrain;
+
+        /// <summary>
+        ///     Global switch: GPU实时预览总开关（CPU-only，始终为false）。
+        /// </summary>
+        public static bool EnableGpuPreview => false;
+#endif
+
+        #region Utilities
+
+        private static ShaderFlavor DetectFlavor(Shader shader)
+        {
+            if (shader == null) return ShaderFlavor.Unknown;
+            var name = shader.name;
+            return name.Contains("StylizedRoadBlend") ? ShaderFlavor.Stylized :
+                name.Contains("PathPreviewSplatMulti") ? ShaderFlavor.Splat : ShaderFlavor.Unknown;
+        }
+
+        private static int CalculateHash(PathProfile profile, Material template, float alpha)
+        {
+            unchecked
+            {
+                var hash = 17;
+                // Basic references and display options
+                hash = hash * 31 + (template?.GetHashCode() ?? 0);
+                hash = hash * 31 + alpha.GetHashCode();
+                if (profile != null)
+                {
+                    hash = hash * 31 + profile.enableDepthTest.GetHashCode();
+                    hash = hash * 31 + profile.opaquePreview.GetHashCode();
+                    hash = hash * 31 + profile.roadWidth.GetHashCode();
+                }
+
+                // Lightweight hash: collect RoadRecipe / Layers / TerrainLayer / Mask key fields
+                var recipe = profile?.roadRecipe;
+                if (recipe == null) return hash;
+
+                hash = hash * 31 + recipe.masterOpacity.GetHashCode();
+                var layers = recipe.GetLayers();
+                var count = layers != null ? layers.Count : 0;
+                hash = hash * 31 + count.GetHashCode();
+                if (layers == null || count == 0) return hash;
+
+                for (var i = 0; i < count; i++)
+                {
+                    var rl = layers[i];
+                    if (rl == null)
+                    {
+                        hash = hash * 31 + 0;
+                        continue;
+                    }
+
+                    // RoadLayer basic fields
+                    hash = hash * 31 + rl.enabled.GetHashCode();
+                    hash = hash * 31 + rl.opacity.GetHashCode();
+                    hash = hash * 31 + rl.blendMode.GetHashCode();
+
+                    // TerrainLayer key fields (affecting texture and tiling, tint)
+                    var tl = rl.contentLayer;
+                    if (tl)
+                    {
+                        try
+                        {
+                            hash = hash * 31 + tl.GetInstanceID();
+                            var tex = tl.diffuseTexture;
+                            hash = hash * 31 + (tex ? tex.GetInstanceID() : 0);
+                            var sz = tl.tileSize;
+                            var off = tl.tileOffset;
+                            hash = hash * 31 + sz.x.GetHashCode();
+                            hash = hash * 31 + sz.y.GetHashCode();
+                            hash = hash * 31 + off.x.GetHashCode();
+                            hash = hash * 31 + off.y.GetHashCode();
+#if UNITY_2019_1_OR_NEWER
+                            var max = tl.diffuseRemapMax;
+                            hash = hash * 31 + max.x.GetHashCode();
+                            hash = hash * 31 + max.y.GetHashCode();
+                            hash = hash * 31 + max.z.GetHashCode();
+#endif
+                        }
+                        catch
+                        { /* Avoid exceptions causing refresh failure */
+                        }
+                    }
+                    else
+                    {
+                        hash = hash * 31 + 0;
+                    }
+
+                    // Mask key fields (different parameters for different types)
+                    var mask = rl.layerMask;
+                    if (mask)
+                    {
+                        try
+                        {
+                            // 启用/禁用状态影响预览
+                            hash = hash * 31 + (rl.maskEnabled ? 1 : 0);
+                            // General parameters
+                            hash = hash * 31 + mask.GetType().FullName.GetHashCode();
+                            hash = hash * 31 + mask.smooth.GetHashCode();
+                            hash = hash * 31 + mask.tiling.x.GetHashCode();
+                            hash = hash * 31 + mask.tiling.y.GetHashCode();
+                            hash = hash * 31 + mask.offset.x.GetHashCode();
+                            hash = hash * 31 + mask.offset.y.GetHashCode();
+                            hash = hash * 31 + mask.overallScale.GetHashCode();
+
+                            // Procedural base class (Strength/Seed)
+                            if (mask is ProceduralMaskBase proc)
+                            {
+                                hash = hash * 31 + proc.strength.GetHashCode();
+                                hash = hash * 31 + proc.seed.GetHashCode();
+                            }
+
+                            // Noise classes
+                            if (mask is NoiseMask noise)
+                            {
+                                hash = hash * 31 + noise.noiseScale.x.GetHashCode();
+                                hash = hash * 31 + noise.noiseScale.y.GetHashCode();
+                                hash = hash * 31 + noise.uniformScale.GetHashCode();
+                                hash = hash * 31 + noise.rotationDeg.GetHashCode();
+                                hash = hash * 31 + noise.octaves.GetHashCode();
+                                hash = hash * 31 + noise.lacunarity.GetHashCode();
+                                hash = hash * 31 + noise.gain.GetHashCode();
+                                hash = hash * 31 + noise.useAsymmetricEdges.GetHashCode();
+                                hash = hash * 31 + noise.edgeLow.GetHashCode();
+                                hash = hash * 31 + noise.edgeHigh.GetHashCode();
+                            }
+                        if (mask is PerlinNoiseMask pnoise)
+                        {
+                            hash = hash * 31 + pnoise.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + pnoise.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + pnoise.uniformScale.GetHashCode();
+                            hash = hash * 31 + pnoise.rotationDeg.GetHashCode();
+                            hash = hash * 31 + pnoise.octaves.GetHashCode();
+                            hash = hash * 31 + pnoise.lacunarity.GetHashCode();
+                            hash = hash * 31 + pnoise.gain.GetHashCode();
+                            hash = hash * 31 + pnoise.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + pnoise.edgeLow.GetHashCode();
+                            hash = hash * 31 + pnoise.edgeHigh.GetHashCode();
+                        }
+                        // Shoulder Perlin Noise mask
+                        if (mask is ShoulderPerlinNoiseMask spn)
+                        {
+                            // Shoulder shape
+                            hash = hash * 31 + spn.shoulderWidthRatio.GetHashCode();
+                            hash = hash * 31 + spn.shoulderPositionRatio.GetHashCode();
+                            hash = hash * 31 + spn.shoulderStrength.GetHashCode();
+                            hash = hash * 31 + spn.edgeFalloff.GetHashCode();
+                            hash = hash * 31 + spn.enableLeftShoulder.GetHashCode();
+                            hash = hash * 31 + spn.enableRightShoulder.GetHashCode();
+                            // Noise params
+                            hash = hash * 31 + spn.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + spn.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + spn.uniformScale.GetHashCode();
+                            hash = hash * 31 + spn.rotationDeg.GetHashCode();
+                            hash = hash * 31 + spn.octaves.GetHashCode();
+                            hash = hash * 31 + spn.lacunarity.GetHashCode();
+                            hash = hash * 31 + spn.gain.GetHashCode();
+                            hash = hash * 31 + spn.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + spn.edgeLow.GetHashCode();
+                            hash = hash * 31 + spn.edgeHigh.GetHashCode();
+                        }
+                        // Shoulder mask
+                        if (mask is ShoulderMask shoulder)
+                        {
+                            hash = hash * 31 + shoulder.shoulderWidthRatio.GetHashCode();
+                            hash = hash * 31 + shoulder.shoulderStrength.GetHashCode();
+                            hash = hash * 31 + shoulder.edgeFalloff.GetHashCode();
+                            hash = hash * 31 + shoulder.enableLeftShoulder.GetHashCode();
+                            hash = hash * 31 + shoulder.enableRightShoulder.GetHashCode();
+                        }
+                        // EdgePerlinNoiseMask
+                        if (mask is EdgePerlinNoiseMask edge)
+                        {
+                            hash = hash * 31 + edge.edgeBandWidthRatio.GetHashCode();
+                            hash = hash * 31 + edge.edgeFalloff.GetHashCode();
+                            hash = hash * 31 + edge.enableLeftEdge.GetHashCode();
+                            hash = hash * 31 + edge.enableRightEdge.GetHashCode();
+                            hash = hash * 31 + edge.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + edge.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + edge.uniformScale.GetHashCode();
+                            hash = hash * 31 + edge.rotationDeg.GetHashCode();
+                            hash = hash * 31 + edge.octaves.GetHashCode();
+                            hash = hash * 31 + edge.lacunarity.GetHashCode();
+                            hash = hash * 31 + edge.gain.GetHashCode();
+                            hash = hash * 31 + edge.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + edge.edgeLow.GetHashCode();
+                            hash = hash * 31 + edge.edgeHigh.GetHashCode();
+                        }
+                        // StripeNoiseMask
+                        if (mask is StripeNoiseMask stripe)
+                        {
+                            hash = hash * 31 + stripe.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + stripe.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + stripe.uniformScale.GetHashCode();
+                            hash = hash * 31 + stripe.rotationDeg.GetHashCode();
+                            hash = hash * 31 + stripe.period.GetHashCode();
+                            hash = hash * 31 + stripe.jitter.GetHashCode();
+                            hash = hash * 31 + stripe.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + stripe.edgeLow.GetHashCode();
+                            hash = hash * 31 + stripe.edgeHigh.GetHashCode();
+                        }
+                        // WorleyNoiseMask
+                        if (mask is WorleyNoiseMask worley)
+                        {
+                            hash = hash * 31 + worley.noiseScale.x.GetHashCode();
+                            hash = hash * 31 + worley.noiseScale.y.GetHashCode();
+                            hash = hash * 31 + worley.uniformScale.GetHashCode();
+                            hash = hash * 31 + worley.rotationDeg.GetHashCode();
+                            hash = hash * 31 + worley.cellPeriod.GetHashCode();
+                            hash = hash * 31 + worley.jitter.GetHashCode();
+                            hash = hash * 31 + worley.invert.GetHashCode();
+                            hash = hash * 31 + worley.useAsymmetricEdges.GetHashCode();
+                            hash = hash * 31 + worley.edgeLow.GetHashCode();
+                            hash = hash * 31 + worley.edgeHigh.GetHashCode();
+                        }
+                        }
+                        catch
+                        { /* Ignore exceptions to ensure hash process robustness */
+                        }
+                    }
+                    else
+                    {
+                        hash = hash * 31 + 0;
+                    }
+                }
+
+                return hash;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (m_Disposed) return;
+            Clear();
+            if (m_Subscribed)
+            {
+                MaskChangeEvents.Changed -= OnMaskChanged;
+                m_Subscribed = false;
+            }
+            m_Disposed = true;
+        }
+
+        private void Clear()
+        {
+            ReleaseMaterial();
+            ReleaseMaskAtlas();
+            ReleaseLayerTexArray();
+            m_Dirty = true;
+        }
+
+        private void ReleaseMaterial()
+        {
+            if (Current != null)
+            {
+                Object.DestroyImmediate(Current);
+                Current = null;
+            }
+        }
+
+        private void ReleaseMaskAtlas()
+        {
+            if (m_MaskAtlas != null)
+            {
+                Object.DestroyImmediate(m_MaskAtlas);
+                m_MaskAtlas = null;
+            }
+        }
+
+        // New: release layer texture array to avoid resource leaks
+        private void ReleaseLayerTexArray()
+        {
+            if (m_TexArrayMgr != null)
+            {
+                // 交由管理器释放内部 RTArray 与命令缓冲
+                m_TexArrayMgr.Cleanup();
+                m_TexArrayMgr = null;
+            }
+            m_ArrayFallbackWarned = false;
+        }
+
+        /// <summary>
+        ///     Clean up all resources, including CommandBuffer
+        /// </summary>
+        public void Cleanup()
+        {
+            ReleaseLayerTexArray();
+        }
+
+        private bool EnsureMaterial(Material template)
+        {
+            if (!template) return false;
+            if (!Current || Current.shader != template.shader)
+            {
+                ReleaseMaterial();
+                Current = new Material(template)
+                {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                m_Flavor = DetectFlavor(Current.shader);
+                return true;
+            }
+            return false;
+        }
+
+        private void RefreshMaterial(PathProfile profile, float previewAlpha)
+        {
+            switch (m_Flavor)
+            {
+                case ShaderFlavor.Splat:
+                    ApplySplat(profile, previewAlpha);
+                    break;
+                case ShaderFlavor.Stylized:
+                    ApplyStylized(profile);
+                    break;
+                default:
+                    ApplySplat(profile, previewAlpha);
+                    break;
+            }
+        }
+
+#if UNITY_EDITOR
+        /// <summary>
+        ///     在 CPU 预览路径推送 Terrain 参数，保持与 GPU 预览一致的世界坐标采样。
+        /// </summary>
+        private void PushCpuTerrainParameters()
+        {
+            if (!Current) return;
+            if (!m_TargetTerrain) return;
+            var td = m_TargetTerrain.terrainData;
+            if (!td) return;
+
+            var pos = m_TargetTerrain.GetPosition();
+            var size = td.size;
+            if (Current.HasProperty(PreviewShaderContracts.Properties.TerrainPosition))
+                Current.SetVector(PreviewShaderContracts.Properties.TerrainPosition, new Vector4(pos.x, pos.z, 0f, 0f));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.TerrainSize))
+                Current.SetVector(PreviewShaderContracts.Properties.TerrainSize, new Vector4(size.x, size.z, 0f, 0f));
+            if (Current.HasProperty(PreviewShaderContracts.Properties.AlphamapResolution))
+            {
+                var res = td.alphamapResolution;
+                Current.SetVector(PreviewShaderContracts.Properties.AlphamapResolution, new Vector4(res, res, 0f, 0f));
+            }
+        }
+#endif
+
+        private static Texture2D EnsureTransparentPrevTex()
+        {
+            if (m_TransparentPrevTex) return m_TransparentPrevTex;
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
+            tex.name = "__PreviewTransparentPrevTex";
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            tex.SetPixel(0, 0, new Color(0f, 0f, 0f, 0f));
+            tex.Apply(false, false);
+            m_TransparentPrevTex = tex;
+            return m_TransparentPrevTex;
+        }
+
+        #endregion
+    }
+}

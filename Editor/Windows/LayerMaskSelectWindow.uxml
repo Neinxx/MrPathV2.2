@@ -1,0 +1,28 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements"
+         xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements"
+         noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    
+    <ui:GroupBox class="settings-group" style="flex-shrink: 1; flex-grow: 1; justify-content: space-between;">
+        <uie:ToolbarPopupSearchField focusable="true" name="ToolbarSearchField"
+                                     style="width: initial; flex-grow: 0; height: 17px; margin-left: 0; margin-right: 0; margin-bottom: 3px; opacity: 0.47;"/>
+        <ui:VisualElement style="flex-grow: 1; flex-direction: column; height: auto; min-height: auto;">
+            <ui:VisualElement name="MaskList" class="settings-group"
+                              style="flex-grow: 1; width: auto; height: 304px; min-height: 129px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; max-height: none;"/>
+        </ui:VisualElement>
+        <ui:VisualElement class="settings-group"
+                          style="flex-grow: 1; flex-direction: column; height: 500px; min-height: 300px; border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 4px; margin-bottom: 4px; max-height: initial;">
+            <ui:ScrollView name="MaskOSBox" mode="Vertical" style="flex-grow: 1; width: auto;"/>
+        </ui:VisualElement>
+        <ui:VisualElement
+                style="flex-direction: row; justify-content: space-between; align-items: center; margin-top: 0; margin-bottom: 0; min-height: 30px; flex-grow: 1; max-height: 30px; background-color: rgba(0, 0, 0, 0.11); margin-left: 0; margin-right: 0; height: 30px; border-left-width: 0; border-right-width: 0; border-top-width: 0; border-bottom-width: 0; border-top-left-radius: 9px; border-bottom-left-radius: 9px; border-top-right-radius: 9px; border-bottom-right-radius: 9px; padding-left: 4px; padding-right: 4px; padding-top: 4px; padding-bottom: 1px;">
+            <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]"
+                              name="MaskDropDownField"
+                              style="margin-right: 0; min-width: auto; max-width: none; width: 217px; flex-shrink: 1; flex-grow: 1;"/>
+            <ui:TextField picking-mode="Ignore" name="MaskName"
+                              binding-path="MaskName"
+                              style="width: auto; min-height: auto; flex-shrink: 1; flex-grow: 1; margin-right: 3px; max-height: none; margin-top: 0; margin-bottom: 0; opacity: 0.56; justify-content: space-between; -unity-text-align: middle-center; -unity-font-style: bold-and-italic; color: rgb(210, 210, 210); margin-left: 1px;"/>
+            <ui:Button text="M" display-tooltip-when-elided="true" name="CreateMask" binding-path="CreateMask"
+                       style="flex-shrink: 0; flex-grow: 0; min-height: 18px; width: 18px; margin-top: 0; margin-bottom: 0; max-height: 18px; white-space: normal; -unity-text-align: middle-center; opacity: 0.53; -unity-font-style: bold; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; font-size: 12px; color: rgb(164, 221, 154); background-color: rgb(47, 94, 52); border-top-left-radius: 55px; border-bottom-left-radius: 55px; border-top-right-radius: 55px; border-bottom-right-radius: 55px; height: 18px; margin-left: 0; margin-right: 0; min-width: 18px; max-width: 18px;"/>
+        </ui:VisualElement>
+    </ui:GroupBox>
+</ui:UXML>

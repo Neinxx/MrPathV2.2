@@ -1,0 +1,218 @@
+// PathEditorHandles.cs
+
+#if UNITY_EDITOR
+using MrPathV2.Runtime.Interfaces;
+using MrPathV2.Runtime.Preview;
+using MrPathV2.Runtime.Settings;
+using UnityEditor;
+using UnityEngine;
+
+namespace MrPathV2.Runtime.Core
+{
+    public static class PathEditorHandles
+    {
+        public static void Draw(ref HandleDrawContext context)
+        {
+            var creator = context.Creator;
+            if (creator == null || creator.profile == null || creator.pathData.KnotCount == 0) return;
+
+            var camera = SceneView.currentDrawingSceneView.camera;
+            if (camera == null) return;
+
+            // 检测相机是否移动，以降低采样分辨率与避免重型绘制造成卡顿
+            const float movePosThreshold = 0.001f;
+            const float moveRotThreshold = 0.001f;
+            var camPos = camera.transform.position;
+            var camRot = camera.transform.rotation;
+            if (__PathEditorHandlesCameraCache._lastCamSet && ((camPos - __PathEditorHandlesCameraCache._lastCamPos).sqrMagnitude > movePosThreshold || Quaternion.Angle(camRot, __PathEditorHandlesCameraCache._lastCamRot) > moveRotThreshold))
+            {
+                context.IsCameraMoving = true;
+            }
+            else
+            {
+                context.IsCameraMoving = false;
+            }
+            __PathEditorHandlesCameraCache._lastCamPos = camPos;
+            __PathEditorHandlesCameraCache._lastCamRot = camRot;
+            __PathEditorHandlesCameraCache._lastCamSet = true;
+
+            var strategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
+            if (strategy == null) return;
+
+            if (context.LineRenderer != null)
+            {
+                if (context.IsCameraMoving)
+                {
+                    context.LineRenderer.SetUseGpu(true);
+                    context.LineRenderer.SetDefaultStyle(PreviewLineRenderer.LineType.PathCurve, new PreviewLineRenderer.LineStyle
+                    {
+                        color = new Color(0.2f, 0.8f, 1f, 0.6f),
+                        thickness = 1f,
+                        dashed = false,
+                        antiAliased = false
+                    });
+                }
+                else
+                {
+                    context.LineRenderer.SetUseGpu(false);
+                    context.LineRenderer.SetDefaultStyle(PreviewLineRenderer.LineType.PathCurve, new PreviewLineRenderer.LineStyle
+                    {
+                        color = new Color(0.2f, 0.8f, 1f, 0.8f),
+                        thickness = 3f,
+                        dashed = false,
+                        antiAliased = true
+                    });
+                }
+            }
+
+            UpdateHoverState(ref context, strategy);
+            strategy.DrawHandles(ref context);
+            DrawInsertionPreviewHandle(ref context, camera, strategy.drawingStyle);
+        }
+
+        public static void DrawHandle(Vector3 localPos, int flatIndex, HandleStyle style, ref HandleDrawContext context, Camera camera)
+        {
+            var creator = context.Creator;
+            var worldPos = creator.transform.TransformPoint(localPos);
+
+            var isHovered = flatIndex == context.HoveredPointIndex;
+
+            var currentStrategy = PathStrategyRegistry.Instance.GetStrategy(creator.profile.curveType);
+            if (!currentStrategy || currentStrategy.drawingStyle == null)
+            {
+                Handles.color = Color.red;
+                Handles.SphereHandleCap(0, worldPos, Quaternion.identity, HandleUtility.GetHandleSize(worldPos) * 0.1f, EventType.Repaint);
+                return;
+            }
+            var hoverStyle = currentStrategy.drawingStyle.hoverStyle;
+
+            var finalStyle = isHovered ? hoverStyle : style;
+            var size = isHovered ? finalStyle.size * 1.2f : finalStyle.size;
+
+            var handleSize = HandleUtility.GetHandleSize(worldPos);
+            Handles.color = finalStyle.fillColor;
+            Handles.DrawSolidDisc(worldPos, camera.transform.forward, handleSize * size);
+            Handles.color = finalStyle.borderColor;
+            Handles.DrawWireDisc(worldPos, camera.transform.forward, handleSize * size, 2f);
+
+            Handles.color = Color.clear;
+            EditorGUI.BeginChangeCheck();
+            var newWorldPos = Handles.FreeMoveHandle(worldPos, Quaternion.identity, handleSize * size * 1.2f, Vector3.zero, Handles.RectangleHandleCap);
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(creator, "Move Path Point");
+
+                var finalPos = newWorldPos;
+                if (creator.profile && creator.profile.snapToTerrain && context.HeightProvider != null)
+                {
+                    finalPos.y = context.HeightProvider.GetHeight(finalPos);
+                }
+
+                creator.ExecuteCommand(new MovePointCommand(flatIndex, finalPos));
+            }
+        }
+
+        public struct HandleDrawContext
+        {
+            public PathCreator Creator;
+            public IHeightProvider HeightProvider;
+            public PathSpine? LatestSpine;
+            public bool IsDragging;
+            public int HoveredPointIndex;
+            public int HoveredSegmentIndex;
+            public float HoveredPathT;
+            public PreviewLineRenderer LineRenderer;
+            public float PreviewMaxPixelStep;
+            public bool UseSplinesStyle;
+            public bool DrawActiveSegmentOnly;
+            public int DragNeighborRange;
+            public bool IsCameraMoving;
+            public AdaptivePolylineCache PolylineCache;
+        }
+
+        private static void UpdateHoverState(ref HandleDrawContext context, PathStrategy strategy)
+        {
+            if (context.IsDragging) return;
+            context.HoveredPointIndex = -1;
+            strategy.UpdatePointHover(ref context);
+            if (context.HoveredPointIndex == -1)
+            {
+                UpdatePathHover(ref context);
+            }
+            else
+            {
+                context.HoveredSegmentIndex = -1;
+                context.HoveredPathT = -1;
+            }
+        }
+
+        private static void UpdatePathHover(ref HandleDrawContext context)
+        {
+            var creator = context.Creator;
+            if (creator == null) return;
+            if (context.IsCameraMoving) return;
+            var evt = Event.current;
+            if (evt == null || evt.type != EventType.MouseMove) return;
+
+            context.HoveredSegmentIndex = -1;
+            context.HoveredPathT = -1;
+
+            var resolution = context.IsDragging ? 12 : 40;
+            const float pickThreshold = 12f;
+            var pickThresholdSqr = pickThreshold * pickThreshold;
+
+            var currentEvent = Event.current;
+            if (currentEvent == null) return;
+            var mousePos = currentEvent.mousePosition;
+
+            int startSeg = 0, endSeg = creator.NumSegments;
+            if (context.DrawActiveSegmentOnly && context.HoveredSegmentIndex >= 0)
+            {
+                startSeg = Mathf.Max(0, context.HoveredSegmentIndex - context.DragNeighborRange);
+                endSeg = Mathf.Min(creator.NumSegments, context.HoveredSegmentIndex + context.DragNeighborRange + 1);
+            }
+
+            for (var seg = startSeg; seg < endSeg; seg++)
+            {
+                for (var j = 0; j < resolution; j++)
+                {
+                    var t = seg + (float)j / resolution;
+                    var worldPoint = creator.GetPointAt(t);
+                    var guiPoint = HandleUtility.WorldToGUIPoint(worldPoint);
+
+                    if ((guiPoint - mousePos).sqrMagnitude < pickThresholdSqr)
+                    {
+                        context.HoveredSegmentIndex = seg;
+                        context.HoveredPathT = t;
+                        return;
+                    }
+                }
+            }
+        }
+
+        private static void DrawInsertionPreviewHandle(ref HandleDrawContext context, Camera camera, PathDrawingStyle style)
+        {
+            var e = Event.current;
+            if (e.shift && !e.control && context.HoveredPathT > -1)
+            {
+                var previewPos = context.Creator.GetPointAt(context.HoveredPathT);
+                var handleSize = HandleUtility.GetHandleSize(previewPos);
+                var previewStyle = style.insertionPreviewStyle;
+
+                Handles.color = previewStyle.fillColor;
+                Handles.DrawSolidDisc(previewPos, camera.transform.forward, handleSize * previewStyle.size);
+                Handles.color = previewStyle.borderColor;
+                Handles.DrawWireDisc(previewPos, camera.transform.forward, handleSize * previewStyle.size, 1.5f);
+            }
+        }
+    }
+}
+#endif
+
+// 静态缓存相机状态（编辑器域）
+static class __PathEditorHandlesCameraCache
+{
+    internal static bool _lastCamSet;
+    internal static UnityEngine.Vector3 _lastCamPos;
+    internal static UnityEngine.Quaternion _lastCamRot;
+}

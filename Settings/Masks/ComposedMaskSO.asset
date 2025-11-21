@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1fa87a3939d172b44a409d7c5cf7587c, type: 3}
+  m_Name: ComposedMaskSO
+  m_EditorClassIdentifier: 
+  smooth: 0.1
+  tiling: {x: 2, y: 2}
+  offset: {x: 0, y: 0}
+  overallScale: 1
+  strength: 1
+  seed: 0
+  region: {fileID: 0}
+  noise: {fileID: 0}
+  modulators: []
+  noiseScale: {x: 1, y: 1}
+  uniformScale: 1
+  rotationDeg: 0
+  useAsymmetricEdges: 0
+  edgeLow: 0.25
+  edgeHigh: 0.75
