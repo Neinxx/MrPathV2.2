@@ -1,0 +1,161 @@
+/*
+  Buttons.uss — 统一按钮设计体系（轻量、现代、可复用）
+  - 不更改现有类名，避免破坏现有 UXML；
+  - 引入 :root 变量，统一尺寸、圆角、动效；
+  - 精简过度动画，移除高开销的 300s/全属性过渡；
+*/
+
+:root {
+    --btn-height: 30px;
+    --btn-radius: 6px;
+    --btn-border: 2px;
+    --btn-bg: rgb(70, 70, 70);
+    --btn-bg-hover: rgba(152, 32, 32, 0.83);
+    --btn-fg: rgb(230, 230, 230);
+    --btn-fg-accent: rgb(231, 136, 62);
+    --btn-border-color: rgb(65, 65, 65);
+    --btn-transition: 120ms;
+}
+
+/* 基础按钮（兼容 AnimatedButton） */
+.AnimatedButton {
+    background-color: var(--btn-bg);
+    color: var(--btn-fg);
+    width: auto;
+    height: var(--btn-height);
+    max-height: var(--btn-height);
+    min-height: 20px;
+    border-left-color: var(--btn-border-color);
+    border-right-color: var(--btn-border-color);
+    border-top-color: var(--btn-border-color);
+    border-bottom-color: var(--btn-border-color);
+    border-left-width: var(--btn-border);
+    border-right-width: var(--btn-border);
+    border-top-width: var(--btn-border);
+    border-bottom-width: var(--btn-border);
+    transition-property: background-color, color, opacity, transform;
+    transition-duration: var(--btn-transition);
+    transition-timing-function: ease-out;
+}
+
+.AnimatedButton:hover {
+    height: var(--btn-height);
+    max-height: var(--btn-height);
+    transform-origin: bottom;
+    transition-duration: var(--btn-transition);
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0);
+    background-color: var(--btn-bg-hover);
+    color: rgb(233, 37, 37);
+}
+
+.AnimatedButton:active {
+    background-color: rgba(231, 76, 60, 0);
+    height: var(--btn-height);
+    max-height: var(--btn-height);
+    border-left-color: rgb(153, 219, 107);
+    border-right-color: rgb(153, 219, 107);
+    border-top-color: rgb(153, 219, 107);
+    border-bottom-color: rgb(153, 219, 107);
+    border-left-width: var(--btn-border);
+    border-right-width: var(--btn-border);
+    border-top-width: var(--btn-border);
+    border-bottom-width: var(--btn-border);
+    transition-duration: var(--btn-transition);
+}
+
+.AnimatedBordeButton {
+    background-color: rgba(70, 70, 70, 0);
+    width: auto;
+    height: var(--btn-height);
+    max-height: var(--btn-height);
+    min-height: 20px;
+    border-left-color: var(--btn-border-color);
+    border-right-color: var(--btn-border-color);
+    border-top-color: var(--btn-border-color);
+    border-bottom-color: var(--btn-border-color);
+    border-left-width: var(--btn-border);
+    border-right-width: var(--btn-border);
+    border-top-width: var(--btn-border);
+    border-bottom-width: var(--btn-border);
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-right: 14px;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 14px;
+    -unity-font-style: bold;
+    transition-duration: var(--btn-transition);
+}
+
+.AnimatedBordeButton:hover {
+    background-color: rgba(70, 70, 70, 0);
+    height: var(--btn-height);
+    max-height: var(--btn-height);
+    border-left-color: var(--btn-fg-accent);
+    border-right-color: var(--btn-fg-accent);
+    border-top-color: var(--btn-fg-accent);
+    border-bottom-color: var(--btn-fg-accent);
+    border-left-width: var(--btn-border);
+    border-right-width: var(--btn-border);
+    border-top-width: var(--btn-border);
+    border-bottom-width: var(--btn-border);
+    margin-right: 14px;
+    margin-left: 14px;
+    -unity-font-style: bold;
+    color: var(--btn-fg-accent);
+}
+
+.AnimatedBordeButton:active {
+    background-color: rgba(70, 70, 70, 0);
+    height: var(--btn-height);
+    max-height: var(--btn-height);
+    border-left-color: var(--btn-border-color);
+    border-right-color: var(--btn-border-color);
+    border-top-color: var(--btn-border-color);
+    border-bottom-color: var(--btn-border-color);
+    transition-property: color;
+    transition-duration: var(--btn-transition);
+    color: rgba(210, 210, 210, 0.6);
+}
+
+.AnimatedDrapPoint {
+    transition-duration: var(--btn-transition);
+    background-color: rgb(65, 65, 65);
+}
+
+.AnimatedDrapPoint:hover {
+    background-color: rgb(8, 114, 180);
+    transition-duration: var(--btn-transition);
+    transition-property: background-color;
+}
+
+.AnimatedDrapPoint:active {
+    transition-duration: var(--btn-transition);
+    transition-timing-function: ease-out;
+    background-color: rgb(8, 114, 180);
+}
+
+/* 图标按钮基础（用于 clear-button 等小按钮） */
+.btn--icon, .clear-button {
+    min-width: 18px;
+    max-width: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    border-top-left-radius: 60px;
+    border-bottom-left-radius: 60px;
+    border-top-right-radius: 60px;
+    border-bottom-right-radius: 60px;
+    border-left-width: var(--btn-border);
+    border-right-width: var(--btn-border);
+    border-top-width: var(--btn-border);
+    border-bottom-width: var(--btn-border);
+    opacity: 0.8;
+    transition-property: opacity, background-color;
+    transition-duration: var(--btn-transition);
+}
+
+.btn--icon:hover, .clear-button:hover {
+    opacity: 1;
+}

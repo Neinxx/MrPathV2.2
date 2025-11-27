@@ -1,0 +1,455 @@
+Shader "MrPath/PathPreviewSplatMulti"
+{
+    Properties
+    {
+        _MaskAtlas ("Mask Atlas", 2D) = "white" {}
+        _AtlasInvHeight ("Atlas Inv Height", Float) = 1.0
+        [Header(Render State)]
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test", Float) = 8 // Default to Always (8). Use LEqual (4) for normal depth.
+        [Space]
+        _PreviewAlpha("Preview Alpha", Range(0, 1)) = 1.0
+        _MaskStrength("Mask Strength", Range(0, 4)) = 1
+        [Toggle] _OpaquePreview ("Opaque Preview", Float) = 0
+        // 新增：预览 ROI 边界（世界坐标 XZ）。按顺序：minX, minZ, maxX, maxZ
+        _PreviewBounds ("Preview Bounds XZ", Vector) = (0, 0, 0, 0)
+
+        [Header(Control Textures)]
+        // NOTE : These control textures are NOT used by the fixed shader logic,
+        // which now correctly uses the Mask LUT or Vertex Colors. They are kept for property compatibility.
+        _Control0("Control 0 (RGBA)", 2D) = "red" {}
+        _Control1("Control 1 (RGBA)", 2D) = "black" {}
+        _Control2("Control 2 (RGBA)", 2D) = "black" {}
+        _Control3("Control 3 (RGBA)", 2D) = "black" {}
+
+        [Header(Layer Count)]
+        _LayerCount("Layer Count", Int) = 4
+
+
+        [Header(Layers 0_3)]
+        _Layer0_Texture("Layer 0", 2D) = "white" {}
+        _Layer0_Tiling("Layer 0 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer0_Color("Layer 0 Color", Color) = (1, 1, 1, 1)
+        _Layer1_Texture("Layer 1", 2D) = "white" {}
+        _Layer1_Tiling("Layer 1 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer1_Color("Layer 1 Color", Color) = (1, 1, 1, 1)
+        _Layer2_Texture("Layer 2", 2D) = "white" {}
+        _Layer2_Tiling("Layer 2 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer2_Color("Layer 2 Color", Color) = (1, 1, 1, 1)
+        _Layer3_Texture("Layer 3", 2D) = "white" {}
+        _Layer3_Tiling("Layer 3 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer3_Color("Layer 3 Color", Color) = (1, 1, 1, 1)
+
+        [Header(Layers 4_15 Are Unused)]
+        _Layer4_Texture("Layer 4", 2D) = "white" {}
+        _Layer4_Tiling("Layer 4 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer4_Color("Layer 4 Color", Color) = (1, 1, 1, 1)
+        _Layer5_Texture("Layer 5", 2D) = "white" {}
+        _Layer5_Tiling("Layer 5 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer5_Color("Layer 5 Color", Color) = (1, 1, 1, 1)
+        _Layer6_Texture("Layer 6", 2D) = "white" {}
+        _Layer6_Tiling("Layer 6 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer6_Color("Layer 6 Color", Color) = (1, 1, 1, 1)
+        _Layer7_Texture("Layer 7", 2D) = "white" {}
+        _Layer7_Tiling("Layer 7 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer7_Color("Layer 7 Color", Color) = (1, 1, 1, 1)
+        _Layer8_Texture("Layer 8", 2D) = "white" {}
+        _Layer8_Tiling("Layer 8 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer8_Color("Layer 8 Color", Color) = (1, 1, 1, 1)
+        _Layer9_Texture("Layer 9", 2D) = "white" {}
+        _Layer9_Tiling("Layer 9 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer9_Color("Layer 9 Color", Color) = (1, 1, 1, 1)
+        _Layer10_Texture("Layer 10", 2D) = "white" {}
+        _Layer10_Tiling("Layer 10 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer10_Color("Layer 10 Color", Color) = (1, 1, 1, 1)
+        _Layer11_Texture("Layer 11", 2D) = "white" {}
+        _Layer11_Tiling("Layer 11 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer11_Color("Layer 11 Color", Color) = (1, 1, 1, 1)
+        _Layer12_Texture("Layer 12", 2D) = "white" {}
+        _Layer12_Tiling("Layer 12 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer12_Color("Layer 12 Color", Color) = (1, 1, 1, 1)
+        _Layer13_Texture("Layer 13", 2D) = "white" {}
+        _Layer13_Tiling("Layer 13 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer13_Color("Layer 13 Color", Color) = (1, 1, 1, 1)
+        _Layer14_Texture("Layer 14", 2D) = "white" {}
+        _Layer14_Tiling("Layer 14 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer14_Color("Layer 14 Color", Color) = (1, 1, 1, 1)
+        _Layer15_Texture("Layer 15", 2D) = "white" {}
+        _Layer15_Tiling("Layer 15 Tiling", Vector) = (1, 1, 0, 0)
+        _Layer15_Color("Layer 15 Color", Color) = (1, 1, 1, 1)
+
+        [Header(Path Masking)]
+        _AcrossScale ("Across Scale", Float) = 1
+        _MaskThreshold ("Mask Threshold", Range(0, 1)) = 0
+        _PathSamples("Path Samples", Float) = 64
+        _MeshRepeatAcross ("Mesh Repeat Across", Float) = 1
+        _MeshRepeatAlong ("Mesh Repeat Along", Float) = 1
+        [HideInInspector] _UseLayerTexArray ("Use Layer Tex Array", Float) = 0
+        [HideInInspector] _UseLayerParamsArray ("Use Layer Params Array", Float) = 0
+        [NoScaleOffset][HideInInspector] _LayerTextures ("Layer Textures", 2DArray) = "" {}
+    }
+
+    SubShader
+    {
+        Tags
+        {
+            "RenderType" = "Transparent"
+            "RenderPipeline" = "UniversalPipeline"
+            "Queue" = "Overlay+100"
+        }
+        LOD 100
+
+        Pass
+        {
+            Blend SrcAlpha OneMinusSrcAlpha
+            ZWrite Off
+            ZTest [_ZTest]
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            // REMOVED : Unused multi_compile directive
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            // 统一混合与 MaskAtlas 采样工具（提供 ApplyBlend 与 SampleMaskAtlas2D）
+            #include "BlendLayer.hlsl"
+
+            struct Attributes {
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                half4  color : COLOR;
+            };
+
+            struct Varyings {
+                float2 uv : TEXCOORD0;
+                float2 worldUV : TEXCOORD1;
+                half4  color : COLOR;
+                float4 positionHCS : SV_POSITION;
+            };
+
+            // Shared samplers to reduce register usage
+            SAMPLER(sampler_LinearRepeat);
+            SAMPLER(sampler_LinearClamp);
+
+            // Control textures (Unused in fixed logic, but declared to match properties)
+            TEXTURE2D(_Control0);
+            TEXTURE2D(_Control1);
+            TEXTURE2D(_Control2);
+            TEXTURE2D(_Control3);
+
+            // Layer textures 0 - 15 with shared  samplers
+            TEXTURE2D(_Layer0_Texture);
+            half4 _Layer0_Color;
+            TEXTURE2D(_Layer1_Texture);
+            half4 _Layer1_Color;
+            TEXTURE2D(_Layer2_Texture);
+            half4 _Layer2_Color;
+            TEXTURE2D(_Layer3_Texture);
+            half4 _Layer3_Color;
+            TEXTURE2D(_Layer4_Texture);
+            half4 _Layer4_Color;
+            TEXTURE2D(_Layer5_Texture);
+            half4 _Layer5_Color;
+            TEXTURE2D(_Layer6_Texture);
+            half4 _Layer6_Color;
+            TEXTURE2D(_Layer7_Texture);
+            half4 _Layer7_Color;
+            TEXTURE2D(_Layer8_Texture);
+            half4 _Layer8_Color;
+            TEXTURE2D(_Layer9_Texture);
+            half4 _Layer9_Color;
+            TEXTURE2D(_Layer10_Texture);
+            half4 _Layer10_Color;
+            TEXTURE2D(_Layer11_Texture);
+            half4 _Layer11_Color;
+            TEXTURE2D(_Layer12_Texture);
+            half4 _Layer12_Color;
+            TEXTURE2D(_Layer13_Texture);
+            half4 _Layer13_Color;
+            TEXTURE2D(_Layer14_Texture);
+            half4 _Layer14_Color;
+            TEXTURE2D(_Layer15_Texture);
+            half4 _Layer15_Color;
+            // 新增：统一的图层贴图数组（Texture2DArray），用于替代逐层采样
+            TEXTURE2D_ARRAY(_LayerTextures);
+
+            // Mask atlas and other properties
+            TEXTURE2D(_MaskAtlas);
+            // 新增：GPU 计算的地形权重数组
+            TEXTURE2D_ARRAY(_SplatWeights);
+            float _AtlasInvHeight;
+            float _MaskThreshold;
+            float _PreviewAlpha;
+            float _OpaquePreview;
+            float _MaskStrength;
+            float _AcrossScale;
+            float _MeshRepeatAcross;
+            float _MeshRepeatAlong;
+            int   _LayerCount;
+            float _PathSamples;
+
+            // New unified layer parameter arrays (populated from PreviewMaterialManager)
+            CBUFFER_START(UnityPerMaterial)
+                float4 _LayerTilings[16];
+                float  _LayerOpacities[16];
+                float  _LayerBlendModes[16];
+                float4 _LayerColors[16];
+                // 新增：GPU 权重采样所需的地形与映射参数
+                float2 _TerrainPosition;
+                float2 _TerrainSize;
+                float2 _AlphamapResolution;
+                float  _LayerSplatIndices[16];
+                float  _UseSplatWeights;
+                // 新增：是否使用图层贴图数组采样
+                float _UseLayerTexArray;
+                // 新增：是否使用图层参数数组（颜色等）
+                float _UseLayerParamsArray;
+                // 新增：ROI 边界（世界坐标 XZ 平面）
+                float4 _PreviewBounds;
+            CBUFFER_END
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output;
+                float3   worldPos = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionHCS = TransformWorldToHClip(worldPos);
+                output.uv = input.uv;
+                output.worldUV = worldPos.xz;
+                output.color = input.color;
+                return output;
+            }
+
+            // Removed legacy per-layer switch sampler; using array-based sampler below.
+            half4 SampleLayerTexture(int layerIndex, float2 uv)
+            {
+                // 统一本地变量以避免 FXC 报“潜在未初始化”警告
+                half4 result = half4(1, 1, 1, 1);
+                // 优先使用 Texture2DArray 采样，提升一致性与效率
+                if(_UseLayerTexArray > 0.5)
+                {
+                    result = SAMPLE_TEXTURE2D_ARRAY_LOD(_LayerTextures, sampler_LinearRepeat, uv, layerIndex, 0);
+                    return result;
+                }
+                // 回退到逐层纹理属性采样（用于编辑器无法构建数组或尺寸/格式不一致的情况）
+                switch(layerIndex)
+                {
+                case 0: result = SAMPLE_TEXTURE2D_LOD(_Layer0_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 1: result = SAMPLE_TEXTURE2D_LOD(_Layer1_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 2: result = SAMPLE_TEXTURE2D_LOD(_Layer2_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 3: result = SAMPLE_TEXTURE2D_LOD(_Layer3_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 4: result = SAMPLE_TEXTURE2D_LOD(_Layer4_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 5: result = SAMPLE_TEXTURE2D_LOD(_Layer5_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 6: result = SAMPLE_TEXTURE2D_LOD(_Layer6_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 7: result = SAMPLE_TEXTURE2D_LOD(_Layer7_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 8: result = SAMPLE_TEXTURE2D_LOD(_Layer8_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 9: result = SAMPLE_TEXTURE2D_LOD(_Layer9_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 10: result = SAMPLE_TEXTURE2D_LOD(_Layer10_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 11: result = SAMPLE_TEXTURE2D_LOD(_Layer11_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 12: result = SAMPLE_TEXTURE2D_LOD(_Layer12_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 13: result = SAMPLE_TEXTURE2D_LOD(_Layer13_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 14: result = SAMPLE_TEXTURE2D_LOD(_Layer14_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                case 15: result = SAMPLE_TEXTURE2D_LOD(_Layer15_Texture, sampler_LinearRepeat, uv, 0);
+                    break;
+                default: /* keep default white */ break;
+                }
+                return result;
+            }
+
+            float2 GetLayerTiling(int layerIndex)
+            {
+                return max(_LayerTilings[layerIndex].xy, float2(0.0001, 0.0001));
+            }
+
+            float GetLayerOpacity(int layerIndex)
+            {
+                return _LayerOpacities[layerIndex];
+            }
+
+            float GetLayerBlendMode(int layerIndex)
+            {
+                return _LayerBlendModes[layerIndex];
+            }
+
+            // 每层颜色（Tint）采样，匹配材质属性 _LayerN_Color
+            half4 GetLayerTint(int layerIndex)
+            {
+                // 优先使用数组：由编辑器统一推送，保证数据一致性
+                if(_UseLayerParamsArray > 0.5)
+                {
+                    return _LayerColors[layerIndex];
+                }
+                // 兼容旧材质：回退到逐层属性的 switch 实现
+                switch(layerIndex)
+                {
+                case 0: return _Layer0_Color;
+                case 1: return _Layer1_Color;
+                case 2: return _Layer2_Color;
+                case 3: return _Layer3_Color;
+                case 4: return _Layer4_Color;
+                case 5: return _Layer5_Color;
+                case 6: return _Layer6_Color;
+                case 7: return _Layer7_Color;
+                case 8: return _Layer8_Color;
+                case 9: return _Layer9_Color;
+                case 10: return _Layer10_Color;
+                case 11: return _Layer11_Color;
+                case 12: return _Layer12_Color;
+                case 13: return _Layer13_Color;
+                case 14: return _Layer14_Color;
+                case 15: return _Layer15_Color;
+                default: return half4(1, 1, 1, 1);
+                }
+            }
+
+            // Legacy BlendLayer replaced by shared ApplyBlend in BlendLayer.hlsl
+            #define BlendLayer(baseColor, layerColor, mode, opacity) ApplyBlend(baseColor, layerColor, mode, opacity)
+
+            // 根据可用性从 GPU _SplatWeights 或 2D MaskAtlas 采样权重
+            // maskWeight 语义说明：
+            // - 来自地形 splat 权重或路径 MaskAtlas 的每层原始权重，范围约 [0..1]。
+            // - 在片元级对所有层权重求和并归一化，使多层叠加时总量为 1，避免颜色与透明度耦合导致视觉偏暗。
+            // - 最终透明度由各层(归一化权重 × 图层不透明度)累加得到，再乘以 _PreviewAlpha；启用 _OpaquePreview 时强制 1。
+            float SampleWeightForLayer(float2 worldUV, float across, float progress, int layerIndex)
+            {
+                float weight = 0.0;
+                // 优先使用 GPU 权重
+                if(_UseSplatWeights > 0.5)
+                {
+                    int splatIndex = (int)round(_LayerSplatIndices[layerIndex]);
+                    if(splatIndex >= 0)
+                    {
+                        uint   slice = (uint)splatIndex / 4u;
+                        uint   channel = (uint)splatIndex % 4u;
+                        float2 terrainUV = saturate((worldUV - _TerrainPosition) / _TerrainSize);
+                        half4  rgba = SAMPLE_TEXTURE2D_ARRAY_LOD(_SplatWeights, sampler_LinearClamp, terrainUV, slice, 0);
+                        weight = (channel == 0) ? rgba.r : (channel == 1) ? rgba.g : (channel == 2) ? rgba.b : rgba.a;
+                        // 统一与 CPU 路径的强度与阈值塑形：
+                        // 强度：整体缩放权重
+                        weight *= _MaskStrength;
+                        // 阈值：仅在阈值>0时进行软门限塑形，保证边缘清晰（与 Atlas 构建效果一致）
+                        if(_MaskThreshold > 0.0001)
+                        {
+                            // 线性从阈值到1映射；与 CPU 构建阶段的 shaping 保持一致性
+                            weight = saturate((weight - _MaskThreshold) / max(1.0 - _MaskThreshold, 0.0001));
+                        }
+                        return weight;
+                    }
+                    // splatIndex 无效时保持 0
+                    return weight;
+                }
+                // 回退到 2D MaskAtlas
+                weight = SampleMaskAtlas2D(
+                    _MaskAtlas,
+                    sampler_LinearClamp,
+                    across,
+                    progress,
+                    layerIndex,
+                    max(_PathSamples, 1.0), // 最小值钳制，避免除法与行索引为零
+                    _AtlasInvHeight) * _MaskStrength;
+                // CPU 路径的阈值塑形已在 Atlas 构建阶段完成，这里只保持缩放并返回
+                return weight;
+            }
+
+            half4 frag(Varyings input) : SV_Target
+            {
+                // ROI 早退：严格与预览网格边界对齐，减少无效片元计算
+                // _PreviewBounds = (minX, minZ, maxX, maxZ)
+                float2 wuv = input.worldUV;
+                if(wuv.x < _PreviewBounds.x || wuv.x > _PreviewBounds.z ||
+                    wuv.y < _PreviewBounds.y || wuv.y > _PreviewBounds.w)
+                {
+                    return half4(0, 0, 0, 0);
+                }
+
+                // 拉伸到道路宽度：Across 不再重复，直接使用 0..1
+                float acrossPos01 = saturate(input.uv.x);
+                // 修复：去除居中对称的 abs 映射，改为左->右 0..1
+                // 防御性处理：避免 AcrossScale 为 0 导致 across 全黑
+                float across = saturate(acrossPos01 * max(_AcrossScale, 0.0001));
+                // 沿路径方向仍允许重复控制
+                float pathProgress = saturate(input.uv.y / max(_MeshRepeatAlong, 0.0001));
+
+                // 初始完全透明
+                half4 finalColor = half4(0, 0, 0, 0);
+
+                int   maxLayers = min(_LayerCount, 16);
+                // 提前返回：无层可绘制时立即透明退出
+                if(maxLayers <= 0)
+                {
+                    return finalColor;
+                }
+                float compositeAlpha = 0.0; // 汇总各层归一化权重 * 不透明度
+
+                // 统一路径：采样所有层权重并归一化，不区分来源（GPU 或 MaskAtlas）
+                float weights[16];
+                float total = 0.0;
+                // 动态循环：避免编译期固定展开到 16 次
+                [loop]
+                for(int i = 0; i < maxLayers; i++)
+                {
+                    float w = SampleWeightForLayer(input.worldUV, across, pathProgress, i);
+                    weights[i] = w;
+                    total += w;
+                }
+
+                // 提前返回：所有层权重总和为 0，则无需进入混合循环
+                if(total <= 0.0001)
+                {
+                    return finalColor; // 半透明预览场景返回完全透明
+                }
+
+                float invTotal = (total > 0.0001) ? (1.0 / total) : 0.0;
+
+                // 使用不同循环变量名以避免 D3D FXC 在同一作用域内报重名冲突
+                [loop]
+                for(int j = 0; j < maxLayers; j++)
+                {
+                    float weight = (invTotal > 0.0) ? saturate(weights[j] * invTotal) : 0.0;
+                    // 跳过极小权重，减少纹理采样与混合成本
+                    if(weight < 0.0004) continue;
+
+                    float2 layerTiling = GetLayerTiling(j);
+                    float2 layerUV = input.worldUV * layerTiling;
+                    half4  layerColor = SampleLayerTexture(j, layerUV);
+                    layerColor *= GetLayerTint(j);
+                    layerColor.a *= weight;
+
+                    float layerOpacity = GetLayerOpacity(j);
+                    float blendMode = GetLayerBlendMode(j);
+                    float blendOpacity = layerOpacity;
+
+                    finalColor = BlendLayer(finalColor, layerColor, blendMode, blendOpacity);
+                    compositeAlpha += weight * layerOpacity;
+                }
+
+                // 透明度与滑块结合：按合成权重驱动显示强度
+                // Opaque 预览：使用 clip 实现硬阈值裁剪，与地形绘制一致
+                if (_OpaquePreview > 0.5)
+                {
+                    clip(compositeAlpha - _MaskThreshold);
+                    finalColor.a = 1.0;
+                }
+                else
+                {
+                    finalColor.a = saturate(compositeAlpha) * saturate(_PreviewAlpha);
+                }
+                return finalColor;
+            }
+            ENDHLSL
+        }
+    }
+    FallBack "Hidden/Universal Render Pipeline/FallbackError"
+}

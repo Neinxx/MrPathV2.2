@@ -1,0 +1,38 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements"
+         xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements"
+         noNamespaceSchemaLocation="../../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="project://database/Assets/__temp/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor"/>
+    <uie:ToolbarPopupSearchField focusable="true" name="ToolbarPopupSearchField"
+                                 style="max-height: 16px; height: 16px; width: auto; margin-top: 4px; margin-left: 4px; margin-right: 4px; margin-bottom: 4px; padding-left: 3px; padding-right: 3px; padding-top: 3px; padding-bottom: 3px;"/>
+    <ui:VisualElement
+            style="height: 28px; flex-direction: row; background-color: rgba(0, 0, 0, 0.07); min-height: 28px; max-height: 28px; margin-left: 11px;">
+        <ui:Button text="All" display-tooltip-when-elided="true" name="All"
+                   style="min-width: 75px; color: rgb(204, 204, 204); background-color: rgb(43, 43, 43);"/>
+        <ui:Button text="Holded" display-tooltip-when-elided="true" name="Holded"
+                   style="min-width: 75px; background-color: rgb(43, 43, 43); color: rgb(106, 106, 106);"/>
+    </ui:VisualElement>
+    <ui:VisualElement
+            style="height: 4px; background-color: rgb(46, 46, 46); top: -5px; max-height: 4px; min-height: 4px;"/>
+    <ui:GroupBox name="LayerBox" class="settings-group"
+                 style="flex-shrink: 1; flex-grow: 1; margin-top: 0; margin-left: 3px; margin-right: 3px; margin-bottom: 0; border-top-left-radius: 0; border-top-right-radius: 0;"/>
+    <ui:GroupBox class="settings-group"
+                 style="flex-shrink: 1; height: 132px; background-color: rgb(51, 51, 51); margin-bottom: 3px; padding-bottom: 5px; max-height: 132px; min-height: 132px; justify-content: space-between; align-items: stretch; padding-left: 5px; padding-right: 5px; padding-top: 5px;">
+        <ui:VisualElement
+                style="flex-grow: 1; flex-direction: row; align-items: center; padding-left: 11px; padding-right: 4px; padding-top: 4px; padding-bottom: 4px; background-color: rgba(0, 0, 0, 0.07); border-top-left-radius: 8px; border-bottom-left-radius: 8px; border-top-right-radius: 8px; border-bottom-right-radius: 8px; height: auto;">
+            <ui:VisualElement name="IconBox"
+                              style="flex-grow: 0; width: 70px; height: 70px; background-color: rgba(0, 0, 0, 0); border-top-left-radius: 8px; border-bottom-left-radius: 8px; border-top-right-radius: 8px; border-bottom-right-radius: 8px; min-width: 70px; min-height: 70px; max-height: 70px; max-width: 70px;"/>
+            <ui:VisualElement style="flex-grow: 1; height: 66px; margin-left: 13px; justify-content: space-between;">
+                <ui:Label text="Label" display-tooltip-when-elided="true" name="Name"
+                          style="-unity-font-style: italic; color: rgba(210, 210, 210, 0.66);"/>
+                <ui:Label text="Label" display-tooltip-when-elided="true" name="Szie"
+                          style="-unity-font-style: italic; color: rgba(210, 210, 210, 0.66);"/>
+                <ui:Label text="Label" display-tooltip-when-elided="true" name="CoverTerrain"
+                          style="-unity-font-style: italic; color: rgba(210, 210, 210, 0.66);"/>
+                <ui:Label text="Label" display-tooltip-when-elided="true" name="Path"
+                          style="-unity-font-style: italic; color: rgba(210, 210, 210, 0.66);"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:Slider picking-mode="Ignore" label="Slider" value="42" high-value="100" name="IconScale"
+                   style="margin-bottom: 1px; justify-content: flex-end; align-items: center;"/>
+    </ui:GroupBox>
+</ui:UXML>

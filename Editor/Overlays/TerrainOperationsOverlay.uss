@@ -1,0 +1,119 @@
+/* 动态加载的操作按钮样式 */
+.terrain-op-button {
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    height: auto;
+    background-color: rgb(84, 84, 84); /* [cite: 7] */
+    color: rgb(219, 219, 219);
+    border-radius: 4px;
+    -unity-border-radius: 4px;
+    opacity: 1;
+    flex-grow: 0;
+    justify-content: flex-start;
+    /* [cite: 8] */
+    padding: 2px 2px 2px;
+    margin: 2px 2px 2px;
+}
+
+.terrain-op-button:hover {
+    background-color: rgb(80, 80, 80); /* [cite: 9] */
+}
+
+.terrain-op-button:active {
+    background-color: rgb(95, 95, 95);
+}
+
+/* 这些在您的 C# 中已被使用 (op.buttonColor)，
+   但这里是 USS 中定义的版本，也适用于 ClearAlpha
+*/
+.terrain-op-red {
+    background-color: rgb(153, 34, 34); /* [cite: 10] */
+}
+
+.terrain-op-green {
+    background-color: rgb(34, 153, 86);
+}
+
+/* (可选) 用于 C# 中添加的分隔符 */
+.separator {
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.3); /* [cite: 11] */
+    /* [cite: 12] */
+    margin: 3px 4px;
+}
+
+
+/* ============================================
+    从 UXML 迁移过来的样式 
+    ============================================
+*/
+
+#root {
+    flex-direction: column;
+    padding: 3px; /*  */
+    width: 183px;
+    /* 高度改为 auto (原 152px)，
+        使其可以随按钮数量动态伸缩 
+    */
+    height: auto;
+    flex-shrink: 0; /* [cite: 14] */
+    justify-content: flex-start;
+}
+
+#header {
+    unity-font-style: bold;
+    margin-bottom: 2px;
+    font-size: 20px;
+    -unity-text-align: middle-center;
+    -unity-font-style: bold;
+    color: rgb(253, 189, 126); /*  */
+    -unity-text-outline-width: 0;
+    -unity-text-outline-color: rgb(255, 255, 255);
+    text-shadow: 0 0 0 rgb(0, 0, 0);
+    flex-shrink: 1;
+    flex-grow: 0; /*  */
+    height: 28px;
+}
+
+#toolbarContainer {
+    flex-direction: row;
+    align-items: center;
+}
+
+#CpuOrGpu {
+    flex-grow: 1; /* <--- 允许下拉菜单填充空间 */
+    flex-shrink: 1; /*  */
+    background-color: rgba(0, 0, 0, 0.47);
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    background-image: none;
+    opacity: 0.66; /*  */
+}
+
+/* GPU预览功能已移除，以下样式不再需要：
+#gpuPreviewToggle {
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+*/
+
+#operationsContainerWrapper {
+    flex-grow: 0;
+    margin: 0 0 2px;
+    /* [cite: 19] */
+    padding: 4px;
+    flex-shrink: 1;
+    /* 高度改为 auto (原 49px) */
+    height: auto;
+    justify-content: center; /* [cite: 20] */
+}
+
+#operationsContainer {
+    flex-direction: column;
+    flex-grow: 0;
+    flex-shrink: 1;
+}
+
+/* #clearAlphaButtonWrapper 和 #clearAlphaButton
+    样式规则已被删除
+*/
