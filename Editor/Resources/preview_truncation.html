@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>StylizedRoadRecipe 截断平面预览（占位）</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    .box { border:1px solid #ccc; border-radius:8px; padding:16px; margin-top:16px; }
+    .legend { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+    .legend span { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; background:#f7f7f7; border-radius:999px; }
+    .chip { width:14px; height:14px; border-radius:2px; display:inline-block; }
+    canvas { border-radius:8px; border:1px solid #ddd; }
+  </style>
+  <script>
+    function drawPreview() {
+      const canvas = document.getElementById('c');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+
+      // 模拟 RGBA 权重（仅用于占位可视化）
+      const weights = [0.55, 0.25, 0.15, 0.05]; // R,G,B,A
+      const total = weights.reduce((a,b)=>a+b,0) || 1;
+      const nr = weights[0]/total, ng = weights[1]/total, nb = weights[2]/total, na = weights[3]/total;
+
+      // 以横向 -1..1 构建颜色分布（示意）
+      const grad = ctx.createLinearGradient(0,0,w,0);
+      const color = `rgba(${Math.round(255*nr)},${Math.round(255*ng)},${Math.round(255*nb)},${na.toFixed(2)})`;
+      grad.addColorStop(0, color);
+      grad.addColorStop(1, color);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,w,h);
+
+      // 中心轴（白线）
+      ctx.fillStyle = '#FFFFFFB3';
+      ctx.fillRect(Math.floor(w/2), 0, 1, h);
+
+      // 标题栏
+      ctx.fillStyle = '#0008';
+      ctx.fillRect(0,0,w,26);
+      ctx.fillStyle = '#fff';
+      ctx.font = '13px system-ui';
+      ctx.fillText(`RGBA 权重归一化示意: R=${nr.toFixed(2)} G=${ng.toFixed(2)} B=${nb.toFixed(2)} A=${na.toFixed(2)}`, 8, 18);
+    }
+    window.addEventListener('DOMContentLoaded', drawPreview);
+  </script>
+</head>
+<body>
+  <h1>StylizedRoadRecipe 属性面板 · 截断平面预览（占位）</h1>
+  <p>实际预览已集成在 Unity 的 StylizedRoadRecipe Inspector 中；此页面仅用于本地服务可视化验证。</p>
+  <div class="legend">
+    <span><i class="chip" style="background:#f33"></i> 红：Layer0</span>
+    <span><i class="chip" style="background:#3f3"></i> 绿：Layer1</span>
+    <span><i class="chip" style="background:#33f"></i> 蓝：Layer2</span>
+    <span><i class="chip" style="background:#ccc"></i> 透明：Layer3</span>
+  </div>
+  <div class="box">
+    <canvas id="c" width="640" height="180"></canvas>
+    <p>白线表示道路中心轴；横向为 -1..1 示例。Inspector 中显示的预览将动态按配方图层遮罩与混合模式生成。</p>
+  </div>
+</body>
+</html>
