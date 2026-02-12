@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/MrPathV2/Editor/Inspectors/PathCreatorEditor.uss?fileID=7433441132597879392&amp;guid=e09f71de0b8d0d842ab980b90f05d9ba&amp;type=3#PathCreatorEditor" />
+    <Style src="project://database/Assets/MrPathV2/Editor/Inspectors/PathProfileEditor.uss?fileID=7433441132597879392&amp;guid=036bccdb4eb9e0e40a55bc40ccb90145&amp;type=3#PathProfileEditor" />
+    <ui:VisualElement class="rootContainer root-container" style="flex-grow: 1; background-color: rgba(40, 40, 40, 0.12);">
+        <ui:VisualElement class="settings-group" style="margin-top: 1px; margin-bottom: 4px; padding-top: 0; padding-bottom: 0;">
+            <uie:PropertyField name="profileProperty" binding-path="profile" label="路径配置文件 (Profile)" style="height: auto; flex-grow: 0; padding-top: 0; margin-top: 1px; margin-bottom: 4px;" />
+        </ui:VisualElement>
+        <ui:VisualElement class="settings-group" style="margin-top: 1px; margin-bottom: 6px; padding-top: 0; padding-bottom: 0;">
+            <uie:PropertyField name="pathDataProperty" binding-path="pathData" label="路径数据" style="height: auto; padding-bottom: 9px; padding-left: 15px; padding-right: 12px;" />
+        </ui:VisualElement>
+        <ui:VisualElement name="profileMissingWarning" class="warningBox" style="flex-grow: 0; margin-top: 9px; margin-bottom: 9px;">
+            <ui:Button name="createProfileButton" text="快速创建默认 Profile" style="flex-shrink: 1; flex-grow: 1;" />
+        </ui:VisualElement>
+        <ui:VisualElement name="profileEmbeddedContainer" style="flex-grow: 1;" />
+        <ui:VisualElement name="recipeEmbeddedContainer" />
+    </ui:VisualElement>
+</ui:UXML>

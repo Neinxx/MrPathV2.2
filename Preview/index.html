@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stylized Road Recipe 预览说明</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, PingFang SC, Microsoft YaHei, sans-serif; margin: 32px; color: #222; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; background: #fafafa; }
+    ul { line-height: 1.8; }
+    code { background: #efefef; padding: 0 4px; border-radius: 4px; }
+  </style>
+  </head>
+<body>
+  <h1>Stylized Road Recipe 合成预览（说明）</h1>
+  <div class="card">
+    <p>Combined 模式已更新为真实颜色合成：</p>
+    <ul>
+      <li>每个 <code>Layer</code> 的 <code>TerrainLayer.diffuseTexture</code> 被采样为颜色。</li>
+      <li>对应 <code>Mask</code>（笔刷或旧 BlendMask）按灰度值裁剪该颜色，作为当前层对预览列的影响。</li>
+      <li>跨层按 <code>Opacity</code> 与 <code>BlendMode</code>（Normal/Multiply/Add/Overlay/Screen/Lerp/Additive）进行叠加。</li>
+      <li>切换贴图或笔刷参数会立即刷新预览。</li>
+    </ul>
+    <p>注意：预览为横向 1D 采样的示意图，用于快速把握配方视觉。</p>
+  </div>
+  <p style="margin-top:16px;color:#555">建议在 Unity Inspector 中比较通道视图与 Combined 视图的差异。</p>
+</body>
+</html>
