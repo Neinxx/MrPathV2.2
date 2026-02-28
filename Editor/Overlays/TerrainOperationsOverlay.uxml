@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/__temp/MrPathV2.2/Editor/Overlays/TerrainOperationsOverlay.uss?fileID=7433441132597879392&amp;guid=8c64c8cb499234c44b0cc473d98f4348&amp;type=3#TerrainOperationsOverlay" />
+    <ui:VisualElement name="root" style="flex-direction: column; padding: 3px; width: 183px; flex-shrink: 0; height: 152px; justify-content: flex-start;">
+        <ui:Label name="header" text="MR.PATH" style="unity-font-style: bold; margin-bottom: 2px; font-size: 20px; -unity-text-align: middle-center; -unity-font-style: bold; color: rgb(253, 189, 126); -unity-text-outline-width: 0; -unity-text-outline-color: rgb(255, 255, 255); text-shadow: 0 0 0 rgb(0, 0, 0); flex-shrink: 1; flex-grow: 0; height: 28px;" />
+        <ui:DropdownField index="-1" choices="System.Collections.Generic.List`1[System.String]" name="CpuOrGpu" style="flex-grow: 0; flex-shrink: 1; background-color: rgba(0, 0, 0, 0.47); -unity-font-style: bold; -unity-text-align: middle-center; background-image: none; opacity: 0.66;" />
+        <ui:VisualElement style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 1.5px; padding-left: 4px; padding-right: 4px; padding-top: 4px; padding-bottom: 4px; flex-shrink: 1; height: 49px; justify-content: center;">
+            <ui:VisualElement name="operationsContainer" style="flex-direction: column; flex-grow: 0; flex-shrink: 1;" />
+        </ui:VisualElement>
+        <ui:VisualElement style="margin-top: 1.5px; height: 34px; color: rgb(210, 210, 210); padding-left: 4px; padding-right: 4px; padding-top: 4px; padding-bottom: 4px;">
+            <ui:Button name="refreshButton" display-tooltip-when-elided="true" enable-rich-text="true" text="ClearAlpha" class="terrain-op-button" style="height: auto; margin-top: 2px; -unity-font-style: bold; color: rgb(219, 219, 219); -unity-font: url(&apos;project://database/Assets/ThirdParty/Fungus/EditorResources/Fonts/Amaranth/Amaranth-Bold.otf?fileID=12800000&amp;guid=64bd3e45f7a714f16b3c213f55f17fea&amp;type=3#Amaranth-Bold&apos;); background-color: rgb(65, 65, 65); margin-left: 2px; margin-right: 2px; margin-bottom: 2px; padding-left: 3px; padding-right: 3px; padding-top: 3px; padding-bottom: 3px; flex-shrink: 1;" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

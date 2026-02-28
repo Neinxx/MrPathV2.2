@@ -1,0 +1,142 @@
+#pragma kernel PaintTerrain
+
+#include "BlendingLibrary.hlsl"
+#include "BlendMaskLibrary.hlsl"
+#include "Common.hlsl"
+
+// Constants
+#define FLT_INF 3.402823466e+38f
+
+// Structs (must be defined before use)
+struct LayerParams
+{
+    int layerIndex;
+    float strength;
+    float4 blendSettings;
+    GpuMaskParams maskParams;
+};
+
+// Input buffers
+StructuredBuffer<LayerParams> LayerParamsBuffer;
+StructuredBuffer<float3> SpineData;
+
+// Textures
+RWTexture2DArray<unorm float4> AlphamapTextures;
+
+// Uniforms
+int _LayerCount;
+int _SpinePointCount;
+float _BrushSize;
+float _BrushStrength;
+float _FalloffDistance;
+float2 _TerrainSize;
+float2 _AlphamapResolution;
+int2 _TerrainOffset;
+int2 _AlphamapOffset;
+
+// Helper function to calculate squared distance
+float distanceSq(float2 a, float2 b)
+{
+    float2 diff = a - b;
+    return dot(diff, diff);
+}
+
+// Calculate distance and progress along the path
+float2 CalculateDistanceAndProgress(float2 worldPos, StructuredBuffer<float3> spineData, int spinePointCount)
+{
+    float minDistanceSq = FLT_INF;
+    float progress = 0.0f;
+    
+    for (int i = 0; i < spinePointCount - 1; i++)
+    {
+        float3 p1 = spineData[i];
+        float3 p2 = spineData[i + 1];
+        
+        float2 segmentStart = p1.xy;
+        float2 segmentEnd = p2.xy;
+        float2 segmentDir = segmentEnd - segmentStart;
+        float segmentLengthSq = dot(segmentDir, segmentDir);
+        
+        if (segmentLengthSq > 0.0001f)
+        {
+            float t = saturate(dot(worldPos - segmentStart, segmentDir) / segmentLengthSq);
+            float2 closestPoint = segmentStart + t * segmentDir;
+            float distSq = distanceSq(worldPos, closestPoint);
+            
+            if (distSq < minDistanceSq)
+            {
+                minDistanceSq = distSq;
+                progress = (float(i) + t) / float(spinePointCount - 1);
+            }
+        }
+    }
+    
+    return float2(sqrt(minDistanceSq), progress);
+}
+
+// Apply blending based on layer parameters
+void ApplyBlending(int2 pixelCoord, int layerIndex, float strength, float4 blendSettings, GpuMaskParams maskParams, float distance, float progress)
+{
+    // Calculate brush falloff
+    float falloff = 1.0f - saturate(distance / _FalloffDistance);
+    if (falloff <= 0.0f) return;
+    
+    // Evaluate mask
+    float2 worldPos = float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+    float maskValue = EvaluateMask(maskParams, worldPos, progress);
+    
+    // Calculate final strength
+    float finalStrength = strength * falloff * maskValue * _BrushStrength;
+    if (finalStrength <= 0.0f) return;
+    
+    // Get current alphamap values
+    uint alphamapIndex = (uint)layerIndex / 4u;
+    uint channelIndex = (uint)layerIndex % 4u;
+    
+    float4 currentAlpha = AlphamapTextures[int3(pixelCoord, alphamapIndex)];
+    
+    // Apply blending
+    if (channelIndex == 0) currentAlpha.r = saturate(currentAlpha.r + finalStrength);
+    else if (channelIndex == 1) currentAlpha.g = saturate(currentAlpha.g + finalStrength);
+    else if (channelIndex == 2) currentAlpha.b = saturate(currentAlpha.b + finalStrength);
+    else if (channelIndex == 3) currentAlpha.a = saturate(currentAlpha.a + finalStrength);
+    
+    // Normalize to ensure sum doesn't exceed 1.0
+    float sum = currentAlpha.r + currentAlpha.g + currentAlpha.b + currentAlpha.a;
+    if (sum > 1.0f)
+    {
+        currentAlpha /= sum;
+    }
+    
+    AlphamapTextures[int3(pixelCoord, alphamapIndex)] = currentAlpha;
+}
+
+[numthreads(8, 8, 1)]
+void PaintTerrain(uint3 id : SV_DispatchThreadID)
+{
+    int2 pixelCoord = int2(id.xy) + _AlphamapOffset;
+    
+    // Check bounds
+    if (pixelCoord.x >= _AlphamapResolution.x || pixelCoord.y >= _AlphamapResolution.y)
+        return;
+    
+    // Convert to world position
+    float2 worldPos = float2(pixelCoord) * _TerrainSize / _AlphamapResolution;
+    worldPos += float2(_TerrainOffset) * _TerrainSize;
+    
+    // Calculate distance and progress along the path
+    float2 distanceAndProgress = CalculateDistanceAndProgress(worldPos, SpineData, _SpinePointCount);
+    float distance = distanceAndProgress.x;
+    float progress = distanceAndProgress.y;
+    
+    // Skip if too far from path
+    if (distance > _FalloffDistance)
+        return;
+    
+    // Apply each layer
+    for (int layerIdx = 0; layerIdx < _LayerCount; layerIdx++)
+    {
+        LayerParams layer = LayerParamsBuffer[layerIdx];
+        ApplyBlending(pixelCoord, layer.layerIndex, layer.strength, layer.blendSettings, layer.maskParams, distance, progress);
+    }
+}
