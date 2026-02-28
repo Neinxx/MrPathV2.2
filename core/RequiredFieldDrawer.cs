@@ -2,7 +2,6 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-using PathTool.Data; // 如果将 RequiredFieldAttribute 放入命名空间
 
 /// <summary>
 /// 标记字段为必填项的特性
@@ -26,7 +25,7 @@ public class RequiredFieldDrawer : PropertyDrawer
             propertyRect.height -= ErrorLabelHeight;
 
             // 定义错误标签的区域
-            Rect errorRect = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+            Rect errorRect = new(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
 
             // 绘制醒目的错误提示
             EditorGUI.HelpBox(errorRect, $"{label.text} is required!", MessageType.Error);

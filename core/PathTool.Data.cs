@@ -3,8 +3,9 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace PathTool.Data
+namespace MrPathV2
 {
+
     #region 枚举定义
 
     public enum CurveType { Bezier, CatmullRom }

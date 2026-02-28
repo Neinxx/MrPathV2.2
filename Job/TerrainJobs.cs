@@ -29,15 +29,15 @@ public struct ModifyHeightsJob : IJobParallelFor
         int x_coord = index % heightmapRes;
         float normX = x_coord / (float)(heightmapRes - 1);
         float normZ = y_coord / (float)(heightmapRes - 1);
-        Vector2 worldPos2D = new Vector2(normX * heightmapSize.x + terrainPos.x, normZ * heightmapSize.y + terrainPos.z);
+        Vector2 worldPos2D = new(normX * heightmapSize.x + terrainPos.x, normZ * heightmapSize.y + terrainPos.z);
 
         // 2. 寻找最近线段
         float minSqrDist2D = float.MaxValue;
         int closestSegmentIndex = -1;
         for (int i = 0; i < spinePoints.Length - 1; i++)
         {
-            Vector2 p1 = new Vector2(spinePoints[i].x, spinePoints[i].z);
-            Vector2 p2 = new Vector2(spinePoints[i + 1].x, spinePoints[i + 1].z);
+            Vector2 p1 = new(spinePoints[i].x, spinePoints[i].z);
+            Vector2 p2 = new(spinePoints[i + 1].x, spinePoints[i + 1].z);
             Vector2 nearestPt2D = FindNearestPointOnLineSegment2D(p1, p2, worldPos2D);
             float sqrDist2D = (worldPos2D - nearestPt2D).sqrMagnitude;
             if (sqrDist2D < minSqrDist2D)
@@ -55,8 +55,8 @@ public struct ModifyHeightsJob : IJobParallelFor
         // 3. 精确插值
         Vector3 p_start = spinePoints[closestSegmentIndex];
         Vector3 p_end = spinePoints[closestSegmentIndex + 1];
-        Vector2 p_start_2D = new Vector2(p_start.x, p_start.z);
-        Vector2 p_end_2D = new Vector2(p_end.x, p_end.z);
+        Vector2 p_start_2D = new(p_start.x, p_start.z);
+        Vector2 p_end_2D = new(p_end.x, p_end.z);
         Vector2 pointOnSpine2D = FindNearestPointOnLineSegment2D(p_start_2D, p_end_2D, worldPos2D);
         float segmentLength2D = (p_end_2D - p_start_2D).magnitude;
         float t = segmentLength2D > 0.001f ? (pointOnSpine2D - p_start_2D).magnitude / segmentLength2D : 0;
@@ -66,7 +66,7 @@ public struct ModifyHeightsJob : IJobParallelFor
         Vector3 right = Vector3.Cross(tangent, normal).normalized;
 
         // 4. 计算横截面位置
-        Vector3 worldPos3D = new Vector3(worldPos2D.x, pointOnSpine.y, worldPos2D.y);
+        Vector3 worldPos3D = new(worldPos2D.x, pointOnSpine.y, worldPos2D.y);
         Vector3 vecToPoint = worldPos3D - pointOnSpine;
         float lateralDist = Vector3.Dot(vecToPoint, right);
 
