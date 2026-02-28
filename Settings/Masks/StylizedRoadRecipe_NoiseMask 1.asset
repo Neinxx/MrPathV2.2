@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d72981b9d17d7d54cb8ac00f20f096e7, type: 3}
+  m_Name: StylizedRoadRecipe_NoiseMask 1
+  m_EditorClassIdentifier: 
+  strength: 0
+  tiling: {x: 12.78, y: 6.02}
+  offset: {x: 4.9, y: 0}
+  seed: 5.85
+  scale: 11.24
